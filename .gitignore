@@ -11,9 +11,22 @@ dist/
 build/
 .next/
 out/
+*.tsbuildinfo
+next-env.d.ts
+
+# generated (Prisma client, etc.)
+.prisma/
+**/generated/
+
+# turborepo / caches
+.turbo/
+coverage/
 
 # logs
 *.log
+
+# session/handoff state (Claude Code)
+.remember/
 
 # OS / editor
 .DS_Store

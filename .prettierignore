@@ -1,0 +1,15 @@
+node_modules
+dist
+.next
+out
+build
+pnpm-lock.yaml
+packages/db/prisma/migrations
+**/.prisma
+
+# Source-of-truth brain files + prompts: hand-authored, do NOT reflow (tables, line breaks).
+PROJECT.md
+ARCHITECTURE.md
+DECISIONS.md
+SCORING.md
+prompts/

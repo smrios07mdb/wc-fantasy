@@ -1,0 +1,787 @@
+// WC Fantasy — PostgreSQL schema (ARCHITECTURE.md §4).
+//
+// Conventions:
+//   * Prisma fields are camelCase, mapped to snake_case DB columns via @map / @@map (§4 names).
+//   * ALL timestamps are `timestamptz` (UTC). "League-local" exists only for the FAAB clock +
+//     display (ARCHITECTURE.md §8) and is stored as a plain HH:mm string on `league`.
+//   * Raw feed inputs upsert on natural keys; scores are a PURE FUNCTION of stored inputs, so any
+//     score is recomputable (ARCHITECTURE.md §3). A `dirty` flag + the `recompute_dirty` table
+//     drive the (later) recompute sweeper.
+//
+// Invariants that Prisma cannot express live in the raw-SQL migration
+// `migrations/*_invariants/migration.sql` and are cited inline below:
+//   1. partial unique active ownership index on roster_player
+//   2. row-level security on faab_bid (sealed sealed bids)
+//   3. lineup_slot lock trigger (editable only while locked_at IS NULL)
+//   4. CHECK constraints (faab_budget >= 0, bid amount >= 0, add != drop, ...)
+//   5. frozen-period seam (period.frozen_at + a documented gate for the recompute sweeper)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Enums (string values MUST match packages/shared/src/enums.ts)
+// ────────────────────────────────────────────────────────────────────────────
+
+enum Position {
+  GK
+  DEF
+  MID
+  FWD
+}
+
+enum LeagueStatus {
+  draft
+  group
+  playoff
+  complete
+}
+
+enum PeriodKind {
+  group_md
+  knockout_round
+}
+
+enum PeriodStatus {
+  pending
+  open
+  closed
+}
+
+enum DraftStatus {
+  pending
+  active
+  paused
+  complete
+}
+
+enum BidStatus {
+  pending
+  won
+  lost
+  voided_refunded
+}
+
+enum FaabBatchStatus {
+  pending
+  processing
+  complete
+  failed
+}
+
+enum RatingSource {
+  balldontlie
+  scrape
+  manual
+}
+
+enum MatchStatus {
+  scheduled
+  in_progress
+  completed
+  postponed
+  abandoned
+}
+
+enum StandingScope {
+  group_stage
+  playoff
+  overall
+}
+
+enum RecomputeScope {
+  player_match
+  manager_period
+  standing
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// League / managers / users
+// ────────────────────────────────────────────────────────────────────────────
+
+model League {
+  id                 String       @id @default(uuid())
+  name               String
+  seasonYear         Int          @default(2026) @map("season_year")
+  /// IANA tz, e.g. "America/New_York". Drives the league-local FAAB clock + display only.
+  timezone           String       @default("UTC")
+  /// League-local HH:mm the daily pre-dawn FAAB batch runs (must precede the day's 1st kickoff).
+  faabBatchLocalTime String       @default("06:00") @map("faab_batch_local_time")
+  /// Hours after a wave's last FT a period stays restatable; then `period.frozen_at` is stamped.
+  resultFreezeHours  Int          @default(6) @map("result_freeze_hours")
+  /// Commissioner-set per-pick draft timer (seconds). Adjustable pre-draft.
+  draftPickSeconds   Int          @default(90) @map("draft_pick_seconds")
+  status             LeagueStatus @default(draft)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  managers    Manager[]
+  periods     Period[]
+  draft       Draft?
+  faabBatches FaabBatch[]
+  faabBids    FaabBid[]
+  rosters     RosterPlayer[]
+  standings   Standing[]
+  allowlist   AllowlistEmail[]
+
+  @@map("league")
+}
+
+model Manager {
+  id                  String   @id @default(uuid())
+  leagueId            String   @map("league_id")
+  /// → app_user (Supabase auth user). Nullable until a real user claims the manager slot.
+  userId              String?  @map("user_id")
+  displayName         String   @map("display_name")
+  isCommissioner      Boolean  @default(false) @map("is_commissioner")
+  /// Snake-draft slot (1..N), set at draft setup.
+  draftSlot           Int?     @map("draft_slot")
+  /// FAAB budget; resets to a fresh 100 at the group→playoff transition. CHECK (>= 0) in raw SQL.
+  faabBudget          Int      @default(100) @map("faab_budget")
+  /// Rolling waiver order (1..N per league); seeded once by reverse draft order, mutated by
+  /// move-to-bottom. UNIQUENESS is DB-enforced via @@unique([leagueId, waiverOrderPosition]) below
+  /// (a plain, non-deferrable unique index — guards against a dup from a batch bug, draft seeding,
+  /// or a manual SQL touch). Multiple NULLs are allowed (unseeded managers don't collide).
+  /// CONTIGUITY (1..N, no gaps) is NOT expressible as a constraint, so it is the only
+  /// transaction-level invariant owned by the single writer (the FAAB batch). Because the unique
+  /// index is non-deferrable, move-to-bottom must use a TWO-PHASE reassignment to avoid transient
+  /// collisions: (1) shift affected managers into a disjoint temp range in one UPDATE (e.g. negate),
+  /// (2) write the final contiguous 1..N in a second UPDATE.
+  /// TODO(prompt-NN: FAAB batch): implement the two-phase reorder in the claim transaction; not here.
+  waiverOrderPosition Int?     @map("waiver_order_position")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league               League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user                 AppUser?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  rosters              RosterPlayer[]
+  lineupSlots          LineupSlot[]
+  draftPicks           DraftPick[]
+  draftQueue           DraftQueue[]
+  faabBids             FaabBid[]
+  scoreManagerPeriods  ScoreManagerPeriod[]
+  standings            Standing[]
+  currentDraftPointer  Draft[]             @relation("DraftCurrentManager")
+
+  @@unique([leagueId, userId])
+  @@unique([leagueId, draftSlot])
+  // Uniqueness half of the rolling waiver order (contiguity is a batch-transaction invariant).
+  @@unique([leagueId, waiverOrderPosition], map: "manager_waiver_order_uq")
+  @@index([leagueId])
+  @@map("manager")
+}
+
+/// Mirror of Supabase `auth.users`. Identity lives in Supabase; this row is the app-side handle.
+model AppUser {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  displayName String?  @map("display_name")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  managers     Manager[]
+  manualStats  ManualStatPlayerMatch[]
+  claimedEmail AllowlistEmail?
+
+  @@map("app_user")
+}
+
+/// Email allowlist gate for joining (ARCHITECTURE.md §6 — private by allowlist).
+model AllowlistEmail {
+  id              String    @id @default(uuid())
+  leagueId        String    @map("league_id")
+  email           String
+  invitedByUserId String?   @map("invited_by_user_id")
+  claimedByUserId String?   @unique @map("claimed_by_user_id")
+  claimedAt       DateTime? @map("claimed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  league        League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  claimedByUser AppUser? @relation(fields: [claimedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([leagueId, email])
+  @@index([email])
+  @@map("allowlist_email")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Football reference (mirrored from the feed; upsert on balldontlie_*_id)
+// ────────────────────────────────────────────────────────────────────────────
+
+model FifaStage {
+  id              String   @id @default(uuid())
+  balldontlieId   Int?     @unique @map("balldontlie_stage_id")
+  name            String
+  /// Ordinal for sorting stages (group stage → R32 → … → Final).
+  ordering        Int?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  groups  FifaGroup[]
+  matches FifaMatch[]
+
+  @@map("fifa_stage")
+}
+
+model FifaGroup {
+  id            String   @id @default(uuid())
+  balldontlieId Int?     @unique @map("balldontlie_group_id")
+  name          String
+  stageId       String?  @map("stage_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  stage   FifaStage?  @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  teams   FifaTeam[]
+  matches FifaMatch[]
+
+  @@map("fifa_group")
+}
+
+model FifaTeam {
+  id            String   @id @default(uuid())
+  balldontlieId Int?     @unique @map("balldontlie_team_id")
+  name          String
+  abbreviation  String?
+  country       String?
+  groupId       String?  @map("group_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  group       FifaGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  players     Player[]
+  homeMatches FifaMatch[]      @relation("HomeTeam")
+  awayMatches FifaMatch[]      @relation("AwayTeam")
+  teamStats   StatTeamMatch[]
+
+  @@map("fifa_team")
+}
+
+model Player {
+  id            String   @id @default(uuid())
+  balldontlieId Int      @unique @map("balldontlie_player_id")
+  firstName     String?  @map("first_name")
+  lastName      String?  @map("last_name")
+  displayName   String   @map("display_name")
+  position      Position
+  teamId        String?  @map("team_id")
+  country       String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  team FifaTeam? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  // ownership / lineups / draft
+  rosters     RosterPlayer[]
+  lineupSlots LineupSlot[]
+  draftPicks  DraftPick[]
+  draftQueue  DraftQueue[]
+
+  // raw + derived per-match layers
+  statLines       StatPlayerMatch[]
+  ratingLines     RatingPlayerMatch[]
+  manualStatLines ManualStatPlayerMatch[]
+  scoreLines      ScorePlayerMatch[]
+  shots           ShotMatch[]
+
+  // match events (four distinct roles a player can hold on one event)
+  eventsAsPlayer EventMatch[] @relation("EventPlayer")
+  eventsAsAssist EventMatch[] @relation("EventAssist")
+  eventsAsIn     EventMatch[] @relation("EventPlayerIn")
+  eventsAsOut    EventMatch[] @relation("EventPlayerOut")
+
+  // FAAB bids referencing this player
+  bidsAsAdd  FaabBid[] @relation("BidAdd")
+  bidsAsDrop FaabBid[] @relation("BidDrop")
+
+  @@index([teamId])
+  @@index([position])
+  @@map("player")
+}
+
+model FifaMatch {
+  id            String      @id @default(uuid())
+  balldontlieId Int         @unique @map("balldontlie_match_id")
+  /// Kickoff in UTC.
+  kickoffAt     DateTime    @map("kickoff_at") @db.Timestamptz(6)
+  status        MatchStatus @default(scheduled)
+  stageId       String?     @map("stage_id")
+  groupId       String?     @map("group_id")
+  /// Knockout round label (R32/R16/QF/SF/Final), null for group games.
+  round         String?
+  homeTeamId    String?     @map("home_team_id")
+  awayTeamId    String?     @map("away_team_id")
+  homeScore     Int?        @map("home_score")
+  awayScore     Int?        @map("away_score")
+  homeScoreEt   Int?        @map("home_score_et")
+  awayScoreEt   Int?        @map("away_score_et")
+  homeScorePens Int?        @map("home_score_pens")
+  awayScorePens Int?        @map("away_score_pens")
+  homeFormation String?     @map("home_formation")
+  awayFormation String?     @map("away_formation")
+  referee       String?
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  stage    FifaStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  group    FifaGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  homeTeam FifaTeam?  @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull)
+  awayTeam FifaTeam?  @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull)
+
+  playerStats StatPlayerMatch[]
+  teamStats   StatTeamMatch[]
+  events      EventMatch[]
+  shots       ShotMatch[]
+  ratings     RatingPlayerMatch[]
+  manualStats ManualStatPlayerMatch[]
+  scores      ScorePlayerMatch[]
+
+  @@index([kickoffAt])
+  @@index([status])
+  @@map("fifa_match")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Roster / lineups (lock timestamps live here)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Ownership. INVARIANT 1: partial unique (league_id, player_id) WHERE dropped_at IS NULL — a
+/// player is owned by at most one active manager per league. Enforced in the raw-SQL migration.
+///
+/// SEAM — roster cap: a manager's active roster is capped (15 group-stage 2/5/5/3; ≈9 = 7+2 in
+/// playoffs, see @app/shared SQUAD_COMPOSITION / PLAYOFF_ROSTER). This is a per-manager COUNT, so
+/// it CANNOT be a single-row CHECK. TODO(prompt-NN: draft + FAAB batch): enforce the cap inside the
+/// atomic draft-pick / claim transaction (count active rows for the manager before adding).
+model RosterPlayer {
+  id         String    @id @default(uuid())
+  leagueId   String    @map("league_id")
+  managerId  String    @map("manager_id")
+  playerId   String    @map("player_id")
+  acquiredAt DateTime  @default(now()) @map("acquired_at") @db.Timestamptz(6)
+  /// NULL = active ownership. Set when the player is dropped/cut.
+  droppedAt  DateTime? @map("dropped_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league  League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, playerId])
+  @@index([managerId])
+  @@map("roster_player")
+}
+
+/// Per-period lineup arrangement. Rows for future periods = "set multiple lineups in advance".
+/// INVARIANT 3: a slot is editable ONLY while locked_at IS NULL (lock-on-play). A DB trigger in the
+/// raw-SQL migration rejects edits to player/role/is_starter once locked_at is set, and the lock is
+/// a monotonic one-way latch (born unlocked; never unlocked/born-locked via the normal write path).
+///
+/// SEAM — ownership rule: a manager may only field a player they ACTIVELY own (a roster_player with
+/// dropped_at IS NULL in this league). This spans two tables (no FK can express it), so it is NOT
+/// enforced here. TODO(prompt-NN: set-lineup write path): validate active ownership (+ formation
+/// legality from @app/shared FORMATION_BOUNDS) inside the lineup-write transaction.
+model LineupSlot {
+  id        String    @id @default(uuid())
+  managerId String    @map("manager_id")
+  periodId  String    @map("period_id")
+  playerId  String    @map("player_id")
+  role      Position
+  isStarter Boolean   @default(false) @map("is_starter")
+  /// NULL = still swappable. Set at kickoff (starter) or entry minute (sub). UTC.
+  lockedAt  DateTime? @map("locked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([managerId, periodId, playerId])
+  @@index([periodId])
+  @@index([playerId])
+  @@map("lineup_slot")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Periods (Theme C scoring windows)
+// ────────────────────────────────────────────────────────────────────────────
+
+model Period {
+  id        String       @id @default(uuid())
+  leagueId  String       @map("league_id")
+  kind      PeriodKind
+  /// Display label: MD1…, R32… .
+  label     String
+  opensAt   DateTime?    @map("opens_at") @db.Timestamptz(6)
+  closesAt  DateTime?    @map("closes_at") @db.Timestamptz(6)
+  /// Knockout rounds only: how many managers are eliminated this round (≈2 tapering to 1).
+  cutCount  Int?         @map("cut_count")
+  /// INVARIANT 5: set ~result_freeze_hours after the wave's last FT. After this, restatement is
+  /// commissioner-only — the recompute sweeper gates on this column (logic is a later prompt).
+  frozenAt  DateTime?    @map("frozen_at") @db.Timestamptz(6)
+  status    PeriodStatus @default(pending)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league      League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  lineupSlots LineupSlot[]
+  scores      ScoreManagerPeriod[]
+
+  @@unique([leagueId, label])
+  @@index([leagueId])
+  // Supports the recompute sweeper's frozen-period gate (created in the invariants migration).
+  @@index([frozenAt], map: "period_frozen_at_idx")
+  @@map("period")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Draft (infra; rules locked in Theme C — snake, config timer, autopick queue→best-available)
+// ────────────────────────────────────────────────────────────────────────────
+
+model Draft {
+  id               String      @id @default(uuid())
+  leagueId         String      @unique @map("league_id")
+  status           DraftStatus @default(pending)
+  currentPickNo    Int?        @map("current_pick_no")
+  currentManagerId String?     @map("current_manager_id")
+  /// Server-authoritative per-pick deadline (UTC); length from league.draft_pick_seconds.
+  pickDeadlineAt   DateTime?   @map("pick_deadline_at") @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league         League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  currentManager Manager?  @relation("DraftCurrentManager", fields: [currentManagerId], references: [id], onDelete: SetNull)
+  picks          DraftPick[]
+
+  @@map("draft")
+}
+
+model DraftPick {
+  id        String    @id @default(uuid())
+  draftId   String    @map("draft_id")
+  pickNo    Int       @map("pick_no")
+  managerId String    @map("manager_id")
+  playerId  String?   @map("player_id")
+  madeAt    DateTime? @map("made_at") @db.Timestamptz(6)
+  /// True when filled by the autopick timer (queue → best-available).
+  isAuto    Boolean   @default(false) @map("is_auto")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  draft   Draft   @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  player  Player? @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@unique([draftId, pickNo])
+  @@index([managerId])
+  @@map("draft_pick")
+}
+
+/// Ordered autopick preference list per manager (the "ordered player_ids" of §4, normalized so
+/// player_id keeps referential integrity and `position` keeps the order).
+model DraftQueue {
+  id        String   @id @default(uuid())
+  managerId String   @map("manager_id")
+  playerId  String   @map("player_id")
+  /// 0-based rank in the queue; lower = picked first.
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([managerId, position])
+  @@unique([managerId, playerId])
+  @@map("draft_queue")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// FAAB / waivers (Theme D)
+// ────────────────────────────────────────────────────────────────────────────
+
+model FaabBatch {
+  id        String          @id @default(uuid())
+  leagueId  String          @map("league_id")
+  /// When the daily pre-dawn batch runs (UTC).
+  runAt     DateTime        @map("run_at") @db.Timestamptz(6)
+  status    FaabBatchStatus @default(pending)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  bids   FaabBid[]
+
+  @@index([leagueId, runAt])
+  @@map("faab_batch")
+}
+
+/// Sealed blind bid. INVARIANT 2: row-level security (raw-SQL migration) — a manager can read only
+/// their OWN `pending` bids; everyone reads outcomes after the batch.
+/// INVARIANT 4 (partial): amount >= 0 and player_add != player_drop are CHECK constraints; the
+/// atomic no-double-spend / valid-drop processing transaction is a later prompt.
+model FaabBid {
+  id           String    @id @default(uuid())
+  leagueId     String    @map("league_id")
+  managerId    String    @map("manager_id")
+  playerAddId  String    @map("player_add_id")
+  /// Every claim is add-X / drop-Y once the roster is full; nullable for the reinforcement-trim
+  /// case where a slot is open. TODO(prompt-NN): enforce add+drop pairing in the FAAB transaction.
+  playerDropId String?   @map("player_drop_id")
+  amount       Int
+  submittedAt  DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  batchId      String?   @map("batch_id")
+  status       BidStatus @default(pending)
+  note         String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league     League     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  manager    Manager    @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  playerAdd  Player     @relation("BidAdd", fields: [playerAddId], references: [id], onDelete: Cascade)
+  playerDrop Player?    @relation("BidDrop", fields: [playerDropId], references: [id], onDelete: SetNull)
+  batch      FaabBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, status])
+  @@index([managerId])
+  @@index([batchId])
+  @@map("faab_bid")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Raw feed layer (recompute inputs; upsert-keyed). `dirty` flags drive the recompute sweeper.
+// ────────────────────────────────────────────────────────────────────────────
+
+/// PK (match_id, player_id). The FIFAPlayerMatchStats fields the scoring model consumes; extra
+/// feed fields land in `extra` (JSON). Upserted on re-poll (self-correcting).
+model StatPlayerMatch {
+  matchId             String   @map("match_id")
+  playerId            String   @map("player_id")
+  minutesPlayed       Int?     @map("minutes_played")
+  goals               Int?
+  assists             Int?
+  keyPasses           Int?     @map("key_passes")
+  dribblesAttempted   Int?     @map("dribbles_attempted")
+  dribblesCompleted   Int?     @map("dribbles_completed")
+  duelsWon            Int?     @map("duels_won")
+  duelsLost           Int?     @map("duels_lost")
+  passesTotal         Int?     @map("passes_total")
+  passesAccurate      Int?     @map("passes_accurate")
+  longBallsTotal      Int?     @map("long_balls_total")
+  longBallsAccurate   Int?     @map("long_balls_accurate")
+  wasFouled           Int?     @map("was_fouled")
+  clearances          Int?
+  interceptions       Int?
+  tacklesWon          Int?     @map("tackles_won")
+  blockedShots        Int?     @map("blocked_shots")
+  saves               Int?
+  savesInsideBox      Int?     @map("saves_inside_box")
+  punches             Int?
+  highClaims          Int?     @map("high_claims")
+  possessionLost      Int?     @map("possession_lost")
+  /// Any additional FIFAPlayerMatchStats fields not promoted to columns.
+  extra               Json?
+  /// Recompute marker: true when this input changed and the score is stale.
+  dirty               Boolean  @default(true)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match  FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, playerId])
+  @@index([dirty])
+  @@map("stat_player_match")
+}
+
+/// One row per feed match event (goal, card, substitution, …). Keyed by the feed event id.
+model EventMatch {
+  id              String   @id @default(uuid())
+  balldontlieId   Int      @unique @map("balldontlie_event_id")
+  matchId         String   @map("match_id")
+  incidentType    String   @map("incident_type")
+  incidentClass   String?  @map("incident_class")
+  timeMinute      Int?     @map("time_minute")
+  addedTime       Int?     @map("added_time")
+  /// 1H / 2H / ET / PEN, etc.
+  period          String?
+  playerId        String?  @map("player_id")
+  assistPlayerId  String?  @map("assist_player_id")
+  playerInId      String?  @map("player_in_id")
+  playerOutId     String?  @map("player_out_id")
+  rescinded       Boolean  @default(false)
+  extra           Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match     FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player    Player?   @relation("EventPlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  assist    Player?   @relation("EventAssist", fields: [assistPlayerId], references: [id], onDelete: SetNull)
+  playerIn  Player?   @relation("EventPlayerIn", fields: [playerInId], references: [id], onDelete: SetNull)
+  playerOut Player?   @relation("EventPlayerOut", fields: [playerOutId], references: [id], onDelete: SetNull)
+
+  @@index([matchId])
+  @@index([incidentType])
+  @@map("event_match")
+}
+
+/// Shots (penalty detection: situation=penalty → missed/saved derivations). Keyed by feed shot id.
+model ShotMatch {
+  id            String   @id @default(uuid())
+  balldontlieId Int      @unique @map("balldontlie_shot_id")
+  matchId       String   @map("match_id")
+  playerId      String?  @map("player_id")
+  shotType      String?  @map("shot_type")
+  situation     String?
+  isPenalty     Boolean  @default(false) @map("is_penalty")
+  minute        Int?
+  extra         Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match  FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player?   @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([matchId])
+  @@map("shot_match")
+}
+
+/// PK (match_id, team_id). Team aggregates (incl. team-level offsides).
+model StatTeamMatch {
+  matchId      String   @map("match_id")
+  teamId       String   @map("team_id")
+  offsides     Int?
+  shotsBlocked Int?     @map("shots_blocked")
+  possession   Float?
+  extra        Json?
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team  FifaTeam  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, teamId])
+  @@map("stat_team_match")
+}
+
+/// PK (match_id, player_id, source). The resolver reads this by source priority
+/// [manual, scrape, balldontlie] — Sofascore `scrape` primary, `balldontlie` fallback.
+model RatingPlayerMatch {
+  matchId   String       @map("match_id")
+  playerId  String       @map("player_id")
+  source    RatingSource
+  rating    Float?
+  dirty     Boolean      @default(true)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match  FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, playerId, source])
+  @@index([dirty])
+  @@map("rating_player_match")
+}
+
+/// PK (match_id, player_id). Feed-gap fields entered by the operator (Cowork): penalty won/committed,
+/// plus any other manual values. Read by the scoring function alongside the raw layer.
+model ManualStatPlayerMatch {
+  matchId          String   @map("match_id")
+  playerId         String   @map("player_id")
+  penaltyWon       Int      @default(0) @map("penalty_won")
+  penaltyCommitted Int      @default(0) @map("penalty_committed")
+  /// Other operator-entered values not promoted to columns.
+  extra            Json?
+  reason           String?
+  enteredByUserId  String?  @map("entered_by_user_id")
+  dirty            Boolean  @default(true)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match     FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  enteredBy AppUser?  @relation(fields: [enteredByUserId], references: [id], onDelete: SetNull)
+
+  @@id([matchId, playerId])
+  @@index([dirty])
+  @@map("manual_stat_player_match")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Derived layer (recomputable — pure function of the raw + manual + rating + role)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// PK (match_id, player_id). `points` is an integer (SCORING.md buckets round down).
+/// `breakdownJson` is the per-category audit trail.
+model ScorePlayerMatch {
+  matchId       String   @map("match_id")
+  playerId      String   @map("player_id")
+  points        Int      @default(0)
+  breakdownJson Json     @map("breakdown_json")
+  computedAt    DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  match  FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, playerId])
+  @@map("score_player_match")
+}
+
+/// PK (manager_id, period_id). Aggregation over the manager's LOCKED lineup slots for the period.
+model ScoreManagerPeriod {
+  managerId     String   @map("manager_id")
+  periodId      String   @map("period_id")
+  points        Int      @default(0)
+  breakdownJson Json?    @map("breakdown_json")
+  computedAt    DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  period  Period  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@id([managerId, periodId])
+  @@index([periodId])
+  @@map("score_manager_period")
+}
+
+/// All-play-all standings derived across managers. Unique per (league, manager, scope).
+model Standing {
+  id           String        @id @default(uuid())
+  leagueId     String        @map("league_id")
+  managerId    String        @map("manager_id")
+  scope        StandingScope
+  allPlayAllW  Int           @default(0) @map("all_play_all_w")
+  allPlayAllL  Int           @default(0) @map("all_play_all_l")
+  totalPoints  Int           @default(0) @map("total_points")
+  seed         Int?
+  computedAt   DateTime      @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  league  League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, managerId, scope])
+  @@index([leagueId, scope])
+  @@map("standing")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Recompute plumbing — the sweeper reads dirty markers (ARCHITECTURE.md §3). No bus at this scale.
+// ────────────────────────────────────────────────────────────────────────────
+
+model RecomputeDirty {
+  id          String         @id @default(uuid())
+  scope       RecomputeScope
+  matchId     String?        @map("match_id")
+  playerId    String?        @map("player_id")
+  managerId   String?        @map("manager_id")
+  periodId    String?        @map("period_id")
+  leagueId    String?        @map("league_id")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// NULL until the sweeper processes it.
+  processedAt DateTime?      @map("processed_at") @db.Timestamptz(6)
+
+  @@index([scope, processedAt])
+  @@map("recompute_dirty")
+}
