@@ -1,0 +1,21 @@
+# deps
+node_modules/
+
+# secrets / env
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+build/
+.next/
+out/
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
