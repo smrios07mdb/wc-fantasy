@@ -13,10 +13,14 @@ One unified model. Sofascore-inspired, position-balanced, high-scoring. No miles
 5. The **rating line applies only to players who received a match rating** (i.e., who played).
 
 ## ⚠️ Data dependency
-Values below assume a **Sofascore-grade feed**, including the proprietary **player match rating**.
-The rating is only available from Sofascore data. The final data-source choice is pending
-(see DECISIONS.md → Data source). If the rating is unavailable, that single line is dropped or
-replaced with a proxy; the rest of the model is provider-agnostic given sufficient stat granularity.
+Values below assume a **Sofascore-grade feed**, including the proprietary **Sofascore player match
+rating**, to which this ladder is calibrated.
+**Update (Architecture thread):** BALLDONTLIE's WC feed *also* exposes a **native per-match `rating`**
+(0–10), but its provenance is unknown — so **Sofascore (scraped) remains the PRIMARY rating source**,
+and BALLDONTLIE's rating is the **automatic fallback** when the scrape is missing for a player-match
+(applied to the same ladder; commissioner-overridable). The rest of the model is provider-agnostic
+given sufficient stat granularity. See DECISIONS.md → Data source, and the per-line feed mapping in
+**ARCHITECTURE.md §7**.
 
 ## 1. Performance Rating — all who play — AMPLIFIED ladder
 | Sofascore rating | Points |
@@ -55,7 +59,7 @@ replaced with a proxy; the rest of the model is provider-agnostic given sufficie
 | Shots blocked | +1 / 2 | outfield |
 | Interceptions | +1 / 3 | outfield |
 | Tackles won | +1 / 3 | outfield |
-| Clearance off the line | +2 | all |
+| ~~Clearance off the line~~ → **dropped** (not in feed) | ~~+2~~ | all |
 
 ## 5. Goalkeeping — GK / role played
 | Stat | Rate |
@@ -64,7 +68,7 @@ replaced with a proxy; the rest of the model is provider-agnostic given sufficie
 | Save outside box | +1 / 3 |
 | Penalty saved | +5 |
 | Punches + high claims | +1 / 2 |
-| Successful run-out | +1 each |
+| ~~Successful run-out~~ → **dropped** (not in feed) | ~~+1 each~~ |
 
 ## 6. Role outcomes — GK / DEF (role played)
 | Stat | Value |
@@ -86,10 +90,35 @@ replaced with a proxy; the rest of the model is provider-agnostic given sufficie
 | Second yellow (min 0–29 / 30–59 / 60–90) | −3 / −2 / −1 |
 | Red card (min 0–29 / 30–59 / 60–90) | −4 / −3 / −2 |
 | Own goal | −2 |
-| Offsides | −1 / 2 |
-| Dispossessed | −1 / 3 |
+| ~~Offsides~~ → **dropped** (player-level n/a; only team-level exists) | ~~−1 / 2~~ |
+| ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 3 |
 
 ## Balance reference
 Monster games ≈ **23–26** across all positions (forward hat-trick edges highest). Floors:
 GK/DEF reliable (~14), MID/FWD lower and more variable. Tune the rating ladder first if total
 scoring needs to move — it's the position-neutral lever.
+
+---
+
+## ⚠️ Feed availability (verified vs BALLDONTLIE WC OpenAPI — Architecture thread)
+Scoring **values above are unchanged.** This addendum only records how each line is fed. Full
+field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 derive · 🟠 manual · ❌ drop.
+
+- **🟣 Rating (§1):** **Sofascore scrape = primary** (the ladder's calibration target); BALLDONTLIE's
+  native `rating` = automatic fallback (provenance unknown). Resolver `[manual, scrape, balldontlie]`.
+- **✅ Native / direct (BALLDONTLIE):** minutes (§2), goals/assists (§3), key passes, dribbles,
+  duels, passing, long balls, was fouled, clearances, shots blocked (defensive — confirmed),
+  interceptions, tackles won (§4), saves inside box, punches + high claims (§5), yellow & red cards
+  with minute (§8).
+- **🟡 Derived:** save outside box (`saves − saves_inside_box`); penalty saved & penalty missed
+  (from `match_shots` + on-pitch keeper); clean sheet & goals conceded (minutes + match score /
+  event minutes); second yellow (card events + minute); own goal (`match_events` own-goal class).
+- **🟠 Manual tag (Cowork — no feed field):** **penalty won (+2)**, **penalty committed (−2)**.
+  A few per tournament; operator tags the player when a penalty is awarded.
+- **❌ Dropped (no feed field; rare / low magnitude):** **clearance off the line (+2)**,
+  **successful run-out (+1 each)**, **player-level offsides (−1/2)** (only team-level offsides
+  exists; can't attribute to a player).
+- **🟡 Proxy:** **dispossessed (−1/3)** → `possession_lost` (broader than Sofascore "dispossessed",
+  so slightly over-counts; accepted).
+- **⚠️ Confirm during the GOAT trial:** whether `duels_won` includes aerials (affects the duel
+  bucket); own-goal `incident_class` label; that `match_shots.situation` flags `penalty` reliably.
