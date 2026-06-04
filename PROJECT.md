@@ -56,22 +56,31 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
-dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection
-(Theme C) ✅ (210 tests; recompute chain now end-to-end raw→`score_player_match`→`score_manager_period`→`standing`,
-idempotent; `selectGuillotineCuts` receives the cumulative-tournament total as a **pre-built map** —
-assembly of that map is deferred to the transition/FAAB prompt). · Prompt 05a — BALLDONTLIE ingestion +
-polling scheduler + lock-on-play (`locked_at`) ✅ (253 tests; real `@app/feed` HTTP client + new
-`@app/ingest` package (pure map/lock/mode + `IngestStore`) + worker four-mode loop driving the existing
-`sweep`; **match→period pinned via a new structural `fifa_match.period_id` FK** — set from round/matchday,
-never kickoff time; window-inference retired; **single-league assumption stated** in ARCHITECTURE §4;
-`kickoff_lock_fallback` column + poller-silent alert wired. IO boundary is typecheck-only — a live
-DB/feed smoke-test + applying the migration are go-live work). · Prompt 05b — isolated Sofascore rating
-scraper (`source='scrape'`, the PRIMARY rating) + the one-time BALLDONTLIE-vs-Sofascore fallback
-comparison ✅ (283 tests; new pure `@app/scrape` (extraction / stored-id `resolveTarget` / population
-`keyMatch` / settle target-selection / comparison math + `ScrapeStore`) + edge `apps/scraper` (Playwright
-behind an injected launcher, isolated settle loop, populate + compare CLIs); **does NOT import
-`@app/ingest`** — the `stat_player_match.dirty` no-clobber invariant was hoisted into `@app/db`; identity
-is **stored-Sofascore-id-only at scrape time**, populated by the verified keyMatch pass; the resolver
-prefers the scrape with ZERO resolver change. Go-live: `pnpm add playwright`, confirm the selector/URL,
-apply the `sofascore_*_id` migration, run the populate + compare CLIs). **Prompt 05 (BALLDONTLIE + lock +
-Sofascore) is now complete.** All themes remain LOCKED; build is downstream of decisions.
+dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection ✅ ·
+**Prompt 05 — ingestion + locking, COMPLETE ✅** [05a BALLDONTLIE polling + raw layer + lock-on-play
+(`locked_at`); 05b isolated Sofascore scraper + rating-fallback comparison] (283 tests). Key build
+facts: match→period resolved by an explicit, structural `fifa_match.period_id` (window-inference
+retired; single-league assumption, documented); the player-match dirty invariant is hardened + hoisted
+to `@app/db` (`STAT_DIRTY_UPDATE` / `markStatPlayerDirty`, imported by ingestion + scraper); the
+scraper is a physically isolated `packages/scrape` + `apps/scraper` (no `@app/ingest` import) resolving
+identity by **stored Sofascore IDs only** at scrape time, populated by a verified one-time `keyMatch`
+pass (auto-writes unambiguous, flags the rest). **Go-live (post-launch — balldontlie carries the
+rating until then):** apply the pending migrations (`period_id`, `kickoff_lock_fallback`, the
+`recompute_scope` enum-retire, `sofascore_ids`); confirm the BALLDONTLIE base-path/auth header;
+implement `loadSofaIndex` (the Sofascore index source — currently stubbed `[]`) + `pnpm add playwright`
+& wire the launcher; smoke-test ingestion against the GOAT trial + a real Supabase. · **Prompt 06 —
+server-authoritative draft controller (engine), COMPLETE ✅** (327 tests). New pure `packages/draft`
+(`@app/draft`): snake order (`managerForPick`), roster legality (the 2/5/5/3 caps via `@app/shared`),
+and autopick selection (queue → best-available, both filtered to available + position-legal) + a
+store-backed controller (`startDraft` / `submitPick` / `tickDraft` + completion at 15×N) behind a thin
+`DraftStore` port (Memory + Prisma impls). The ONE transaction (guarded pick + `roster_player`
+ownership + pointer advance) lives in `commitPick`; it is idempotent (monotonic `current_pick_no`
+latch) and backstopped by the `draft_pick` and `roster_player` active-ownership uniques. A worker tick
+hook (`tickActiveDrafts`) drives timer-expiry autopicks; `pick_deadline_at` is the only timer source of
+truth. **SEAM:** the best-available **default-ranking source is injected** — `getDefaultRanking`
+returns `[]` with a `// TODO(confirm):` (no `player.default_rank` column exists), so autopick relies on
+each manager's queue until a real ranking is wired. Realtime broadcast + the draft-room UI + auth are
+explicitly out of scope (the deferred next deliverable). **Next: the user-facing critical path** (the
+WC opens June 11) — auth + the draft-room UI + Realtime (subscribe to the controller's state, call
+`submitPick`), a minimal lineup-setting flow, and deploy. The draft is the binding pre-kickoff
+deadline. All themes remain LOCKED; build is downstream of decisions.

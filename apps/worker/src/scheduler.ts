@@ -2,6 +2,7 @@ import { config } from "./config";
 import { log } from "./logger";
 import { feed, ingestStore } from "./wiring";
 import { runRecomputeSweep } from "./recompute";
+import { tickActiveDrafts } from "./draft";
 import {
   decideMatchModes,
   pollerSilentMatches,
@@ -124,6 +125,18 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
 
       const result = await runRecomputeSweep();
       log.debug("scheduler.swept", { ...result });
+
+      // Draft timer: autopick any active draft whose pick_deadline_at has expired (server-authoritative,
+      // ARCHITECTURE.md §5). Its own try/catch so a draft failure never aborts ingestion/recompute.
+      try {
+        const draftTicks = await tickActiveDrafts(now);
+        const autopicks = draftTicks.filter((t) => t.acted).length;
+        if (draftTicks.length > 0) {
+          log.debug("scheduler.draftTicked", { drafts: draftTicks.length, autopicks });
+        }
+      } catch (err) {
+        log.error("draft.tick.error", { message: (err as Error).message });
+      }
     } catch (err) {
       log.error("scheduler.tick.error", { message: (err as Error).message });
     } finally {

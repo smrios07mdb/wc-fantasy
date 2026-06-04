@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@app/db": "workspace:*",
+    "@app/draft": "workspace:*",
     "@app/feed": "workspace:*",
     "@app/ingest": "workspace:*",
     "@app/recompute": "workspace:*",

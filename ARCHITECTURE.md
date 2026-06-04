@@ -251,6 +251,8 @@ not by hopeful application code:
     path resolves a target by **STORED id ONLY** — never live name-matching — because the resolver
     prefers `scrape` over `balldontlie`, so a wrong id would feed a wrong PRIMARY rating (worse than no
     row). A missing id → no `scrape` row → balldontlie fallback.
+  - **Note (Prompt 05a/05b):** the player-match dirty invariant (`STAT_DIRTY_UPDATE` /
+    `markStatPlayerDirty`) lives in `@app/db`, imported by both ingestion (05a) and the scraper (05b).
 
 **Roster / lineups (lock timestamps live here)**
 - `roster_player` — manager_id, player_id, acquired_at, dropped_at. **Ownership**; unique
@@ -328,6 +330,16 @@ authoritative in Postgres and **broadcast on change**.
 - **Rules now locked (Theme C):** **snake** order; per-pick timer = `league.draft_pick_seconds`
   (commissioner-set/adjustable); **autopick on expiry** = highest-ranked available from the
   manager's `draft_queue`, else best-available. This layer just enforces them.
+- **Engine built (Prompt 06):** the controller is the pure `@app/draft` — `managerForPick` (snake),
+  2/5/5/3 roster legality, `selectAutopick` (queue → best-available, filtered to available +
+  position-legal) — plus a store-backed `startDraft` / `submitPick` / `tickDraft` (+ completion at
+  15×N) behind a thin `DraftStore` port (Memory + Prisma impls). The ONE transaction — the guarded
+  pick + `roster_player` ownership + pointer advance — is `commitPick`; it is idempotent (a monotonic
+  `current_pick_no` latch) and backstopped by the `draft_pick` and `roster_player` active-ownership
+  uniques. A worker tick hook (`tickActiveDrafts`) fires expiry autopicks. The **default-ranking
+  source for "best-available" is an injected SEAM** (`getDefaultRanking` → `[]` + `// TODO(confirm):`;
+  no `player.default_rank` column exists). Realtime broadcast + the draft-room UI + auth remain
+  deferred — the controller exposes state + `submitPick` / `tickDraft` for them to call.
 
 ### Live "vs the field" screen
 - Subscribe to the relevant `score_manager_period` / `standing` rows; when the recompute sweeper
