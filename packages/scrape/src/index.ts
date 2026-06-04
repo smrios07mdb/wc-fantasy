@@ -11,3 +11,6 @@ export * from "./resolveTarget";
 export * from "./keyMatch";
 export * from "./target";
 export * from "./compare";
+export * from "./browser";
+export * from "./store";
+export { MemoryScrapeStore } from "./memoryStore";
