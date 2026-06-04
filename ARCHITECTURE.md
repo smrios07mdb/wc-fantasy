@@ -219,6 +219,11 @@ not by hopeful application code:
 - `manager` — id, league_id, user_id (-> Supabase auth), display_name, is_commissioner,
   draft_slot, **faab_budget** (reset to 100 at playoff transition), **waiver_order_position**
   (rolling; seeded once by reverse draft order, mutated by move-to-bottom, carried into playoffs).
+  - **`waiver_order_position` enforcement (locked — scaffold thread):** the **DB owns uniqueness** via a
+    plain `@@unique([league_id, waiver_order_position])` (non-deferrable — vanilla Prisma, no drift). The
+    **FAAB batch owns contiguity** (1..N, no gaps — not expressible as a constraint) and runs
+    move-to-bottom as a **two-phase reassignment** (shift the affected rows to a disjoint temp range,
+    then write the final 1..N), keeping the plain unique satisfied at every checkpoint.
 - `app_user` — Supabase auth user; allowlist gate for joining.
 
 **Football reference (mirrored from feed)**

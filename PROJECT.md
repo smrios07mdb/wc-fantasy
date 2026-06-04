@@ -53,3 +53,25 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 | D. FAAB & Waivers | ✅ LOCKED — $100 (resets to a fresh $100 at the playoffs; single budget across knockout rounds); daily pre-dawn blind-bid batch + $0 free-agency fallthrough; per-player kickoff void+refund; rolling waiver-order tiebreak (seeded once by reverse draft order, carried forward into the playoffs — no re-seed; move-to-bottom only when the tiebreak is used); reinforcement = same FAAB cycle on the playoff field |
 | E. World Cup attrition | ✅ RESOLVED — folded into the playoff transition + FAAB (reinforcement now fully specified in Theme D) |
 | Architecture & stack | ✅ LOCKED (see ARCHITECTURE.md) — TypeScript/Next.js, Postgres via Supabase (+ Auth + Realtime), Render compute (web + workers + cron), polling ingestion, recompute scoring pipeline, lock-on-play live consumer; live "vs the field" screen + draft-room infra specified (draft *rules* now locked in Theme C) |
+
+## Implementation progress (build log)
+Decisions are all locked (table above). This tracks the **build** — each Claude Code prompt is a
+discrete, verified step. Detailed operational tracking lives in Cowork; this is the brain-level
+checkpoint so any thread knows where the code stands.
+
+| Prompt | Scope | Status |
+|---|---|---|
+| 01 — scaffold + schema | pnpm monorepo skeleton; complete Prisma schema (27 tables); invariants enforced in the **DB** (partial-unique active ownership, `faab_bid` RLS, `lineup_slot` lock latch, plain `@@unique` waiver uniqueness, CHECK constraints, `frozen_at` seam); typed `NotImplemented` stubs for scoring + feed | ✅ DONE & committed (migrations `init → invariants → manager_waiver_order_unique`; install / typecheck / migrate-deploy / invariant tests / build / lint all green) |
+| 02 — scoring engine | `packages/scoring` pure functions — `scorePlayerMatch` (all of SCORING.md incl. the amendments) + `scoreManagerPeriod` aggregation; exhaustive tests; no IO | **NEXT** |
+
+### Open `TODO(prompt-NN)` seams left by the scaffold (tracked so none is lost)
+- **Scoring math** → Prompt 02 (this one).
+- **Recompute sweeper** — dirty-flag → player → manager-period → standing; honor the `frozen_at` gate.
+- **All-play-all standings + seeding + guillotine** logic (Theme C) — pure, but its own prompt.
+- **Ingestion** — BALLDONTLIE poller (schedule / pre-match / live / settle) with idempotent upserts; the isolated **Sofascore scraper** (primary rating); the rating **resolver** `[manual, scrape, balldontlie]`.
+- **FAAB batch** transaction (add/drop pairing, highest-bid-first, void+refund on kicked-off, move-to-bottom tiebreak) — **incl. waiver contiguity via the two-phase reassignment** (uniqueness is now DB-enforced).
+- **Draft controller / autopick** — snake; `draft_pick_seconds` server timer; queue → best-available.
+- **Lock-on-play setter** — starter → kickoff, sub → entry minute; + the per-match kickoff-lock fallback.
+- **Commissioner override** for abandoned/postponed matches — a **scoped** `SET LOCAL app.lock_override` (or dedicated role) trigger exemption; **never** a blanket service-role bypass.
+- **Roster-cap** + **lineup → active-ownership / formation** validation in the relevant write transactions.
+- **Realtime** (draft room + vs-the-field), **auth UI**, the **vs-the-field** screen.
