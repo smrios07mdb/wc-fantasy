@@ -6,3 +6,5 @@
  * stays IO-free and unit-testable with fixtures.
  */
 export * from "./map";
+export * from "./lock";
+export * from "./mode";
