@@ -338,8 +338,10 @@ authoritative in Postgres and **broadcast on change**.
   `current_pick_no` latch) and backstopped by the `draft_pick` and `roster_player` active-ownership
   uniques. A worker tick hook (`tickActiveDrafts`) fires expiry autopicks. The **default-ranking
   source for "best-available" is an injected SEAM** (`getDefaultRanking` → `[]` + `// TODO(confirm):`;
-  no `player.default_rank` column exists). Realtime broadcast + the draft-room UI + auth remain
-  deferred — the controller exposes state + `submitPick` / `tickDraft` for them to call.
+  no `player.default_rank` column exists). Realtime broadcast + the draft-room UI remain deferred — the
+  controller exposes state + `submitPick` / `tickDraft` for them to call. **Auth + the identity gate
+  landed in Prompt 06's hand-off prompt (07):** `POST /api/draft/pick` now resolves the session manager
+  and rejects 401/403 BEFORE calling the unchanged `submitPick` (see §6).
 
 ### Live "vs the field" screen
 - Subscribe to the relevant `score_manager_period` / `standing` rows; when the recompute sweeper
@@ -368,6 +370,23 @@ Minimal, for a private league of friends.
 - **Private by allowlist:** only invited emails (or an invite/join code) can join the league.
 - **Roles:** an `is_commissioner` flag gates the admin/override surface (the Cowork operator).
 - Nothing heavier is warranted.
+
+- **Built (Prompt 07):** the auth-decision core is the pure `@app/auth` — `isEmailAllowed` (the
+  allowlist gate, case-insensitive, a `// TODO(confirm):`), `resolveSessionManager` (session →
+  `{ manager, isCommissioner }` / `no-session` / `not-allowlisted` / `no-manager`, matching `manager.user_id`
+  by the Supabase uid **or** the linked `app_user.email` so it is robust to the unpinned link ceremony),
+  and `canActAsManager` (scope-gated: `self` = strict self-match; `admin` = commissioner override) + a
+  typed `AuthError` family — all DB/Supabase/clock/env-free (a `purity.test.ts` proves it). The edges
+  live in `apps/web`: `@supabase/ssr` server + browser clients (separate from Prisma; server authz reads
+  `getUser()`, **never** `getSession()`) + a session-refresh middleware; `getSessionManager` /
+  `requireManager` (the **reusable** gate every later authenticated route will use — lineup-set, FAAB,
+  admin); the minimal magic-link sign-in / `/auth/callback` (exchange code → enforce the allowlist:
+  a non-allowlisted email is signed out + denied, never admitted) / sign-out; and the first consumer
+  `POST /api/draft/pick` (401/403 BEFORE the controller; `submitPick` unchanged). Google OAuth is
+  config-gated/seamed. **SEAMS (`// TODO(confirm):`):** the `manager.user_id` provisioning ceremony
+  (commissioner pre-provisions + links vs. seeded; whether `app_user.id` is the Supabase uid — managed
+  via DB for now, **no** self-serve manager wizard) + email case-sensitivity. The polished auth UI +
+  the draft-room UI + Supabase Realtime remain the deferred Design+Code deliverable.
 
 ---
 
