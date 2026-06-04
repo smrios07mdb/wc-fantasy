@@ -65,6 +65,13 @@ polling scheduler + lock-on-play (`locked_at`) ✅ (253 tests; real `@app/feed` 
 `sweep`; **match→period pinned via a new structural `fifa_match.period_id` FK** — set from round/matchday,
 never kickoff time; window-inference retired; **single-league assumption stated** in ARCHITECTURE §4;
 `kickoff_lock_fallback` column + poller-silent alert wired. IO boundary is typecheck-only — a live
-DB/feed smoke-test + applying the migration are go-live work). **next: Prompt 05b — isolated Sofascore
-scraper (`source='scrape'`) + the one-time BALLDONTLIE-vs-Sofascore rating comparison.** All themes
-remain LOCKED; build is downstream of decisions.
+DB/feed smoke-test + applying the migration are go-live work). · Prompt 05b — isolated Sofascore rating
+scraper (`source='scrape'`, the PRIMARY rating) + the one-time BALLDONTLIE-vs-Sofascore fallback
+comparison ✅ (283 tests; new pure `@app/scrape` (extraction / stored-id `resolveTarget` / population
+`keyMatch` / settle target-selection / comparison math + `ScrapeStore`) + edge `apps/scraper` (Playwright
+behind an injected launcher, isolated settle loop, populate + compare CLIs); **does NOT import
+`@app/ingest`** — the `stat_player_match.dirty` no-clobber invariant was hoisted into `@app/db`; identity
+is **stored-Sofascore-id-only at scrape time**, populated by the verified keyMatch pass; the resolver
+prefers the scrape with ZERO resolver change. Go-live: `pnpm add playwright`, confirm the selector/URL,
+apply the `sofascore_*_id` migration, run the populate + compare CLIs). **Prompt 05 (BALLDONTLIE + lock +
+Sofascore) is now complete.** All themes remain LOCKED; build is downstream of decisions.

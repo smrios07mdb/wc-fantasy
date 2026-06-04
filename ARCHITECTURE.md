@@ -244,6 +244,13 @@ not by hopeful application code:
     lock-on-play (default); `true` reverts the match to kickoff-locking when live appearance data is
     missing (see §3 Lock-on-play fallback). The operator UI that flips it is a later prompt; the
     poller-silent alert tells the operator when to flip it.
+  - **`sofascore_match_id` (`fifa_match`) + `sofascore_player_id` (`player`) (Prompt 05b) — stored
+    Sofascore ids** for the isolated scraper's identity resolution. Nullable, `@unique` (mirror
+    `balldontlie_*_id`); populated by a **verified one-time `keyMatch` pass** (auto-writes only the
+    unambiguous date+codes / team+normalized-name matches; flags the rest for manual entry). The scrape
+    path resolves a target by **STORED id ONLY** — never live name-matching — because the resolver
+    prefers `scrape` over `balldontlie`, so a wrong id would feed a wrong PRIMARY rating (worse than no
+    row). A missing id → no `scrape` row → balldontlie fallback.
 
 **Roster / lineups (lock timestamps live here)**
 - `roster_player` — manager_id, player_id, acquired_at, dropped_at. **Ownership**; unique
