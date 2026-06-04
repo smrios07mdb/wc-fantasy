@@ -277,6 +277,10 @@ model Player {
   position      Position
   teamId        String?  @map("team_id")
   country       String?
+  /// Best-available draft ranking (1-based, lower = better; NULL = unranked, sorts last). Drives the
+  /// autopick "best-available" fallback (@app/draft `getDefaultRanking`) + the draft-room pool ordering.
+  /// Populated by the provisioning ranking step (from a feed rating or a manual list); NULL until then.
+  defaultRank   Int?     @map("default_rank")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -307,6 +311,7 @@ model Player {
 
   @@index([teamId])
   @@index([position])
+  @@index([defaultRank])
   @@map("player")
 }
 

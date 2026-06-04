@@ -1,0 +1,25 @@
+{
+  "_README": "Copy to provision.config.json (gitignored) and fill in real values. Then: `pnpm --filter @app/worker provision provision`. After friends sign in via magic-link, `... provision bind`. Optionally `... provision rank provision.ranking.json`. Secrets (DB URL) come from the env, never this file.",
+  "league": {
+    "name": "WC Fantasy League",
+    "timezone": "America/New_York",
+    "draftPickSeconds": 90,
+    "seasonYear": 2026,
+    "resultFreezeHours": 6,
+    "faabBatchLocalTime": "06:00"
+  },
+  "groupMatchdays": ["MD1", "MD2", "MD3"],
+  "knockoutRounds": [
+    { "label": "R32", "cutCount": 2 },
+    { "label": "R16", "cutCount": 2 },
+    { "label": "QF", "cutCount": 1 },
+    { "label": "SF", "cutCount": 1 },
+    { "label": "Final", "cutCount": 1 }
+  ],
+  "managers": [
+    { "email": "you@example.com", "displayName": "You", "isCommissioner": true, "draftSlot": 1 },
+    { "email": "friend2@example.com", "displayName": "Friend Two", "draftSlot": 2 },
+    { "email": "friend3@example.com", "displayName": "Friend Three", "draftSlot": 3 }
+  ],
+  "extraAllowlist": []
+}

@@ -83,11 +83,12 @@ export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoom
   ]);
 
   const ownedIds = ownedRows.map((r) => r.playerId);
-  // The undrafted pool. No `player.default_rank` column exists yet (the @app/draft autopick SEAM), so the
-  // pool is ordered alphabetically — an HONEST default, not a fabricated projection ranking.
+  // The undrafted pool, BEST-AVAILABLE first: ranked players by `default_rank` (1 = best), then the
+  // unranked alphabetically (Postgres sorts NULLs last). This mirrors the autopick fallback order
+  // (@app/draft `getDefaultRanking`), so the "Best available" list and an expired-timer autopick agree.
   const availableRows = await prisma.player.findMany({
     where: ownedIds.length > 0 ? { id: { notIn: ownedIds } } : {},
-    orderBy: [{ displayName: "asc" }],
+    orderBy: [{ defaultRank: { sort: "asc", nulls: "last" } }, { displayName: "asc" }],
     select: PLAYER_SELECT,
   });
 
