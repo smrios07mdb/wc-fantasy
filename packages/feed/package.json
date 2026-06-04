@@ -16,5 +16,8 @@
   },
   "dependencies": {
     "@app/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5"
   }
 }

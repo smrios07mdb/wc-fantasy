@@ -1,11 +1,8 @@
 /**
- * @app/feed — BALLDONTLIE FIFA World Cup client.
- *
- * STUB: typed signatures for the six endpoints the worker polls (ARCHITECTURE.md §3). No HTTP
- * yet — every method throws NotImplemented. Implementing it must NOT change these signatures
- * (polling, cursor pagination, idempotent upserts land in a later prompt).
+ * @app/feed — BALLDONTLIE FIFA World Cup client. Real HTTP over the six polled endpoints
+ * (ARCHITECTURE.md §3): cursor pagination + a configurable rate limit. The transport is injected so
+ * tests drive it with recorded fixtures (no network). No DB here — pure transport + parse.
  */
-import { NotImplementedError } from "@app/shared";
 import type {
   Paginated,
   FIFAMatch,
@@ -17,8 +14,12 @@ import type {
   MatchListParams,
   MatchScopedParams,
 } from "./types";
+import type { FetchLike } from "./http";
+import { buildClient } from "./client";
 
 export * from "./types";
+export * from "./http";
+export * from "./rateLimiter";
 
 /** The polling surface, one method per endpoint we consume. */
 export interface FeedClient {
@@ -32,27 +33,15 @@ export interface FeedClient {
 
 export interface FeedClientConfig {
   apiKey: string;
-  /** Defaults to https://api.balldontlie.io when implemented. */
+  /** Defaults to https://api.balldontlie.io. */
   baseUrl?: string;
+  /** Injected transport (defaults to the global `fetch`). Tests pass a fixture-backed transport. */
+  transport?: FetchLike;
+  /** Rate cap (req/min). Default 5 = the 48h dev trial; a paid GOAT key is 600. */
+  requestsPerMinute?: number;
 }
 
-/**
- * Build a BALLDONTLIE FIFA WC client. Stub: methods throw until polling is implemented.
- */
-export function createBalldontlieClient(_config: FeedClientConfig): FeedClient {
-  const notImplemented = (endpoint: string): never => {
-    throw new NotImplementedError(
-      `feed.${endpoint}`,
-      "TODO(prompt-NN): BALLDONTLIE polling + cursor pagination (ARCHITECTURE.md §3)",
-    );
-  };
-
-  return {
-    matches: () => notImplemented("matches"),
-    matchLineups: () => notImplemented("matchLineups"),
-    matchEvents: () => notImplemented("matchEvents"),
-    playerMatchStats: () => notImplemented("playerMatchStats"),
-    teamMatchStats: () => notImplemented("teamMatchStats"),
-    matchShots: () => notImplemented("matchShots"),
-  };
+/** Build a BALLDONTLIE FIFA WC client (real HTTP + cursor pagination + rate limit). */
+export function createBalldontlieClient(config: FeedClientConfig): FeedClient {
+  return buildClient(config);
 }
