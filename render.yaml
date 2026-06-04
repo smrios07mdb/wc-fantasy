@@ -1,0 +1,110 @@
+# Render Blueprint — WC Fantasy (runbook A6 / B1 / B3).
+#
+# Two vendors only: Render (compute) + Supabase (Postgres / Auth / Realtime). This file describes the
+# SERVICES + their NON-secret env. Every secret (DATABASE_URL, DIRECT_URL, the Supabase keys, the
+# BALLDONTLIE key) is `sync: false` — set in the Render dashboard, NEVER committed (ARCHITECTURE §8).
+#
+# Set `region` on each service to match your Supabase region (runbook A1: "one region near the league").
+# `virginia` (US-East) suits an America/New_York league + a US-East Supabase project — change as needed.
+#
+# The Sofascore scraper worker (Section B) is intentionally OMITTED — the league launches on the
+# BALLDONTLIE fallback and flips the scrape on once stats land (Prompt 05b isolation).
+
+services:
+  # ── Next.js app (UI + API routes, incl. the gated POST /api/draft/pick) ──────────────────────────
+  - type: web
+    name: wc-fantasy-web
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @app/web build
+    # Apply pending Prisma migrations ONCE per deploy, before the new version goes live. Prisma Migrate
+    # needs the DIRECT (non-pooled) Supabase connection — DIRECT_URL, not the pooled DATABASE_URL.
+    preDeployCommand: pnpm db:migrate:deploy
+    startCommand: pnpm --filter @app/web start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL # pooled (PgBouncer, Supabase :6543) — app runtime
+        sync: false
+      - key: DIRECT_URL # direct (:5432) — Prisma Migrate (preDeployCommand)
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY # server-only; bypasses RLS — never NEXT_PUBLIC_
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED
+        value: "false"
+
+  # ── Background worker: boots index.ts = the ingestion scheduler AND the draft ticker together ─────
+  - type: worker
+    name: wc-fantasy-worker
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @app/worker start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: BALLDONTLIE_API_KEY
+        sync: false
+      - key: BALLDONTLIE_BASE_URL
+        value: https://api.balldontlie.io
+      - key: BALLDONTLIE_RPM # 600 = paid GOAT; 5 = the 48h trial
+        value: "600"
+      - key: WORKER_TICK_MS # ingestion scheduler cadence
+        value: "60000"
+      - key: WORKER_DRAFT_TICK_MS # draft clock — its own short cadence (server-authoritative timer)
+        value: "2000"
+      - key: LOG_LEVEL
+        value: info
+
+  # ── Cron: daily FAAB batch (plumbing live now; the clearing logic is a later prompt) ──────────────
+  - type: cron
+    name: wc-fantasy-faab-batch
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    # 06:00 America/New_York. The World Cup window (Jun–Jul) is EDT (UTC-4), so 06:00 EDT = 10:00 UTC.
+    # (Render cron is fixed UTC; outside DST, 06:00 EST = 11:00 UTC. The batch job reads
+    # league.faab_batch_local_time for the precise local cutoff — this cron is only the trigger cadence.)
+    schedule: "0 10 * * *"
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @app/worker job:faab
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  # ── Cron: period-close check (plumbing live now; the freeze/close logic is a later prompt) ────────
+  - type: cron
+    name: wc-fantasy-period-close
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    # Hourly — stamp period.frozen_at ~result_freeze_hours after a wave's last FT (§2). Adjust as needed.
+    schedule: "0 * * * *"
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @app/worker job:period-close
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: info

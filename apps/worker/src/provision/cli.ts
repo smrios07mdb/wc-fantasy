@@ -4,9 +4,10 @@
  * DB edge with no unit test (it needs a live DB); the pure plan is fully unit-tested. SECRETS NEVER live
  * here — the config holds only names/emails/timer; the DB URL comes from the env (Render/Supabase).
  *
- *   pnpm --filter @app/worker provision provision   # league + periods + managers (userId NULL) + allowlist
+ *   pnpm --filter @app/worker provision provision   # league + periods + managers + allowlist + pending draft
  *   pnpm --filter @app/worker provision bind         # link each manager to the app_user created at sign-in
  *   pnpm --filter @app/worker provision rank <file>  # populate player.default_rank from a best-first id list
+ *   pnpm --filter @app/worker provision draft         # START the draft via the controller's startDraft
  *   pnpm --filter @app/worker provision status       # print current provisioning state
  *
  * Config path: $PROVISION_CONFIG, else <repo-root>/provision.config.json (see provision.config.example.json).
@@ -16,6 +17,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { prisma } from "@app/db";
+import { startDraft, DraftNotReadyError } from "@app/draft";
+import { createPrismaDraftStore } from "@app/draft/prisma";
 import {
   buildDefaultRankUpdates,
   buildProvisionPlan,
@@ -122,7 +125,56 @@ async function provision(): Promise<void> {
         ? " (waiver order reseeded)"
         : " (waiver order left as-is; league not in draft)"),
   );
-  console.log("Done. Next: friends sign in via magic-link, then run `provision bind`.");
+
+  // 5. The PENDING draft row — a benign placeholder, NOT a started server-authoritative draft. It exists
+  //    only so the controller's startDraft (via `provision draft`) can ACTIVATE it. `update: {}` never
+  //    touches an already-started draft, so re-running provision is safe.
+  await prisma.draft.upsert({
+    where: { leagueId: league.id },
+    create: { leagueId: league.id },
+    update: {},
+  });
+  console.log("draft: pending row ready.");
+
+  console.log(
+    "Done. Next: friends sign in via magic-link → `provision bind`, then `provision draft` to start.",
+  );
+}
+
+/**
+ * Start the draft — the commissioner's go-live. Calls the UNCHANGED controller `startDraft` (which
+ * activates the pending row server-authoritatively: pick 1 on the clock, pick_deadline_at = now +
+ * draft_pick_seconds, the first snake manager). We do NOT hand-insert an active draft row.
+ */
+async function startDraftCmd(): Promise<void> {
+  const league = await findLeague();
+  if (!league) {
+    console.error("No league — run `provision provision` first.");
+    process.exit(1);
+  }
+  const draft = await prisma.draft.findUnique({ where: { leagueId: league.id } });
+  if (!draft) {
+    console.error("No draft row — run `provision provision` first.");
+    process.exit(1);
+  }
+  const store = createPrismaDraftStore(prisma);
+  try {
+    const res = await startDraft(store, draft.id, new Date());
+    if (res.started) {
+      console.log(
+        "Draft STARTED — pick 1 is on the clock (pick_deadline_at = now + draft_pick_seconds).",
+      );
+      console.log("The worker draft ticker now enforces the deadline (autopick on expiry).");
+    } else {
+      console.log("Draft was not pending (already started or complete) — no change.");
+    }
+  } catch (err) {
+    if (err instanceof DraftNotReadyError) {
+      console.error(`Cannot start: ${err.message}. (Did you provision managers with draft slots?)`);
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 async function bind(): Promise<void> {
@@ -217,11 +269,14 @@ async function main(): Promise<void> {
     case "rank":
       await rank();
       break;
+    case "draft":
+      await startDraftCmd();
+      break;
     case "status":
       await status();
       break;
     default:
-      console.error("Usage: provision <provision|bind|rank|status>");
+      console.error("Usage: provision <provision|bind|rank|draft|status>");
       process.exit(1);
   }
   await prisma.$disconnect();
