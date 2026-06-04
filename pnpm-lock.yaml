@@ -133,6 +133,22 @@ importers:
         specifier: ^22.10.5
         version: 22.19.19
 
+  packages/ingest:
+    dependencies:
+      '@app/db':
+        specifier: workspace:*
+        version: link:../db
+      '@app/feed':
+        specifier: workspace:*
+        version: link:../feed
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+
   packages/recompute:
     dependencies:
       '@app/db':
