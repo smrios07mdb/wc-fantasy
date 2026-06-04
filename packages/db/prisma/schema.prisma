@@ -316,6 +316,16 @@ model FifaMatch {
   groupId       String?     @map("group_id")
   /// Knockout round label (R32/R16/QF/SF/Final), null for group games.
   round         String?
+  /// Structural fantasy-period link (ARCHITECTURE.md §3 / Prompt 05a). Set at schedule-sync from the
+  /// fixture's STRUCTURAL round/matchday — NEVER from kickoff-time inference (a postponement reorders
+  /// kickoffs and would corrupt a time-derived matchday). Single source of truth: locking, the
+  /// recompute dirty-walk, and period-close all read it. NULL until the matching period row is seeded.
+  /// TODO(confirm): assumes one league per fixture-period (the single-league product). Multi-league
+  /// would need a per-league match→period link rather than a single FK.
+  periodId      String?     @map("period_id")
+  /// Per-match lock-on-play fallback (Theme B / §3). false = lock-on-play (default); true = revert to
+  /// kickoff-locking when live appearance data is missing. The operator UI that flips it is a later prompt.
+  kickoffLockFallback Boolean @default(false) @map("kickoff_lock_fallback")
   homeTeamId    String?     @map("home_team_id")
   awayTeamId    String?     @map("away_team_id")
   homeScore     Int?        @map("home_score")
@@ -332,6 +342,7 @@ model FifaMatch {
 
   stage    FifaStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   group    FifaGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  period   Period?    @relation(fields: [periodId], references: [id], onDelete: SetNull)
   homeTeam FifaTeam?  @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull)
   awayTeam FifaTeam?  @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull)
 
@@ -345,6 +356,7 @@ model FifaMatch {
 
   @@index([kickoffAt])
   @@index([status])
+  @@index([periodId])
   @@map("fifa_match")
 }
 
@@ -434,6 +446,7 @@ model Period {
   league      League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   lineupSlots LineupSlot[]
   scores      ScoreManagerPeriod[]
+  matches     FifaMatch[]
 
   @@unique([leagueId, label])
   @@index([leagueId])

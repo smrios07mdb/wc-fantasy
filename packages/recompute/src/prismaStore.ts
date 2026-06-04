@@ -173,16 +173,16 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
     },
 
     async getAffectedManagerPeriods(matchId, playerId): Promise<ManagerPeriodRef[]> {
+      // Match→period is the structural `fifa_match.period_id` (Prompt 05a), no longer kickoff-window
+      // inference. A (match, player) affects exactly the manager-periods whose lineup_slot is in this
+      // match's period and lists this player.
       const match = await prisma.fifaMatch.findUnique({
         where: { id: matchId },
-        select: { kickoffAt: true },
+        select: { periodId: true },
       });
-      if (!match) return [];
+      if (!match?.periodId) return [];
       const slots = await prisma.lineupSlot.findMany({
-        where: {
-          playerId,
-          period: { opensAt: { lte: match.kickoffAt }, closesAt: { gte: match.kickoffAt } },
-        },
+        where: { playerId, periodId: match.periodId },
         select: { managerId: true, periodId: true },
       });
       const seen = new Set<string>();
@@ -214,34 +214,24 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
     },
 
     async getManagerPeriodSlots(managerId, periodId): Promise<SlotScore[]> {
-      const period = await prisma.period.findUnique({
-        where: { id: periodId },
-        select: { opensAt: true, closesAt: true },
-      });
       const slots = await prisma.lineupSlot.findMany({
         where: { managerId, periodId },
         select: { playerId: true, isStarter: true },
       });
       const out: SlotScore[] = [];
       for (const slot of slots) {
-        let score: ScoreBreakdown | null = null;
-        if (period?.opensAt && period.closesAt) {
-          // A player plays at most ONE match per period window (a group-MD wave / knockout round), so
-          // this normally resolves a single row. `orderBy` keeps it DETERMINISTIC regardless — without
-          // it, a window that ever held 2+ scored matches for one player would let findFirst return a
-          // DB-arbitrary row, silently breaking "recompute is a pure function of stored inputs" (§4).
-          // TODO(prompt-NN): the match→period link is window-inferred (no period_id on fifa_match); a
-          // future schema could pin it exactly. The MemoryStore models the exact (player,period)→match link.
-          const row = await prisma.scorePlayerMatch.findFirst({
-            where: {
-              playerId: slot.playerId,
-              match: { kickoffAt: { gte: period.opensAt, lte: period.closesAt } },
-            },
-            orderBy: { match: { kickoffAt: "asc" } },
-            select: { breakdownJson: true },
-          });
-          if (row) score = row.breakdownJson as unknown as ScoreBreakdown;
-        }
+        // A player plays at most ONE match per period, resolved by the structural `fifa_match.period_id`
+        // (Prompt 05a retired the kickoff-window inference). `orderBy` keeps it DETERMINISTIC if a period
+        // ever held 2+ scored matches for one player, so "recompute is a pure function of stored inputs"
+        // (§4) holds regardless. The MemoryStore models the exact (player,period)→match link.
+        const row = await prisma.scorePlayerMatch.findFirst({
+          where: { playerId: slot.playerId, match: { periodId } },
+          orderBy: { match: { kickoffAt: "asc" } },
+          select: { breakdownJson: true },
+        });
+        const score: ScoreBreakdown | null = row
+          ? (row.breakdownJson as unknown as ScoreBreakdown)
+          : null;
         out.push({ isStarter: slot.isStarter, score });
       }
       return out;
