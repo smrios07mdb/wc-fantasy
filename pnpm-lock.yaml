@@ -180,6 +180,25 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/scrape:
+    dependencies:
+      '@app/db':
+        specifier: workspace:*
+        version: link:../db
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@app/recompute':
+        specifier: workspace:*
+        version: link:../recompute
+      '@app/scoring':
+        specifier: workspace:*
+        version: link:../scoring
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+
   packages/shared: {}
 
 packages:
