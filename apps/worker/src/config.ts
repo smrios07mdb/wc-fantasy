@@ -22,4 +22,10 @@ export const config = {
   maxTicks: process.env.WORKER_MAX_TICKS ? intEnv("WORKER_MAX_TICKS", 0) : null,
   balldontlieApiKey: process.env.BALLDONTLIE_API_KEY ?? "",
   balldontlieBaseUrl: process.env.BALLDONTLIE_BASE_URL ?? "https://api.balldontlie.io",
+  /** BALLDONTLIE rate cap (req/min). Default 5 = the 48h dev trial; set 600 for a paid GOAT key. */
+  balldontlieRpm: intEnv("BALLDONTLIE_RPM", 5),
+  /** A live match with no successful live poll within this many ms raises the poller-silent alert (§8). */
+  pollerSilentGraceMs: intEnv("POLLER_SILENT_GRACE_MS", 5 * 60_000),
+  /** Run schedule-sync (the global fixture pull) every N ticks (≈hourly at a 60s tick). */
+  scheduleSyncEveryTicks: intEnv("WORKER_SCHEDULE_SYNC_EVERY_TICKS", 60),
 } as const;

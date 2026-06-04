@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript (ESM, strict), pnpm workspace, Prisma/PostgreSQL, Vitest 4 (fixtures + `vi.useFakeTimers()`), Node ≥20 global `fetch`.
 
 **Locked constraints (do NOT violate):**
+
 - Do NOT change `@app/scoring`, the recompute adapter/resolver/engine/`sweep`/standings **signatures**. The ONLY sanctioned recompute edit is repointing the two window-inference query bodies in `prismaStore.ts` at `period_id`.
 - `rating_player_match` writes are `source='balldontlie'` ONLY. No `source='scrape'`, no scraper, no rating comparison (Prompt 05b).
 - `locked_at` governs swap-editability ONLY; it must never enter the scoring path.
@@ -20,6 +21,7 @@
 ## File Structure
 
 **Create:**
+
 - `packages/db/prisma/migrations/20260604120000_match_period_and_lock_fallback/migration.sql` — additive: `fifa_match.period_id` FK + index, `fifa_match.kickoff_lock_fallback` bool.
 - `packages/feed/src/http.ts` — `FetchLike` type + `httpJson` transport wrapper + `BalldontlieHttpError`.
 - `packages/feed/src/rateLimiter.ts` — pure min-interval throttle (injected clock + sleep).
@@ -38,6 +40,7 @@
 - `packages/ingest/src/map.test.ts`, `lock.test.ts`, `mode.test.ts`, `store.test.ts`, `ingest.test.ts`
 
 **Modify:**
+
 - `packages/db/prisma/schema.prisma` — `FifaMatch` gains `periodId`/`period` relation + `kickoffLockFallback`; `Period` gains `matches FifaMatch[]` back-relation.
 - `packages/feed/src/types.ts` — extend (optional, tolerated) nested ref fields; add `FetchLike`-friendly nothing-breaking. Add `RateLimitConfig`/transport to `FeedClientConfig` (in `index.ts`).
 - `packages/feed/src/index.ts` — re-export `client.ts`/`http.ts`/`rateLimiter.ts`; `FeedClientConfig` gains `transport?`, `requestsPerMinute?`.
@@ -53,6 +56,7 @@
 ## Task 0: Schema — pin `fifa_match.period_id` + `kickoff_lock_fallback`, repoint recompute reads
 
 **Files:**
+
 - Modify: `packages/db/prisma/schema.prisma` (`FifaMatch` ~309-349; `Period` ~417-443)
 - Create: `packages/db/prisma/migrations/20260604120000_match_period_and_lock_fallback/migration.sql`
 - Modify: `packages/recompute/src/prismaStore.ts:175-197` (`getAffectedManagerPeriods`), `:216-248` (`getManagerPeriodSlots`)
@@ -176,6 +180,7 @@ git commit -m "feat(db,recompute): pin fifa_match.period_id (structural) + kicko
 ## Task 1: Feed client — rate limiter (pure, fake-timer tested)
 
 **Files:**
+
 - Create: `packages/feed/src/rateLimiter.ts`
 - Test: `packages/feed/src/rateLimiter.test.ts`
 
@@ -283,6 +288,7 @@ git commit -m "feat(feed): min-interval rate limiter (injected clock; fake-timer
 ## Task 2: Feed client — HTTP transport + cursor pagination
 
 **Files:**
+
 - Create: `packages/feed/src/http.ts`, `packages/feed/src/client.ts`
 - Modify: `packages/feed/src/index.ts` (extend `FeedClientConfig`, re-export, replace stub)
 - Create: `packages/feed/src/__fixtures__/` JSON, `packages/feed/src/feed.test.ts`
@@ -326,11 +332,21 @@ describe("createBalldontlieClient", () => {
     const transport: FetchLike = (url) => {
       urls.push(url);
       if (url.includes("cursor=2")) {
-        return Promise.resolve(json({ data: [{ id: 20, match_id: 7, incident_type: "goal" }], meta: {} }));
+        return Promise.resolve(
+          json({ data: [{ id: 20, match_id: 7, incident_type: "goal" }], meta: {} }),
+        );
       }
       return Promise.resolve(
         json({
-          data: [{ id: 10, match_id: 7, incident_type: "substitution", player_in_id: 99, time_minute: 61 }],
+          data: [
+            {
+              id: 10,
+              match_id: 7,
+              incident_type: "substitution",
+              player_in_id: 99,
+              time_minute: 61,
+            },
+          ],
           meta: { next_cursor: 2 },
         }),
       );
@@ -357,7 +373,8 @@ describe("createBalldontlieClient", () => {
   });
 
   it("throws BalldontlieHttpError on a non-ok response", async () => {
-    const transport: FetchLike = () => Promise.resolve({ ok: false, status: 429, json: () => Promise.resolve({}) });
+    const transport: FetchLike = () =>
+      Promise.resolve({ ok: false, status: 429, json: () => Promise.resolve({}) });
     const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
     await expect(client.matches()).rejects.toThrow(/HTTP 429/);
   });
@@ -377,8 +394,17 @@ Expected: FAIL (stub throws NotImplemented).
 import { createRateLimiter, type RateLimiter } from "./rateLimiter";
 import { BalldontlieHttpError, type FetchLike } from "./http";
 import type {
-  Paginated, CursorMeta, FIFAMatch, FIFAMatchLineup, FIFAMatchEvent,
-  FIFAPlayerMatchStats, FIFATeamMatchStats, FIFAShot, MatchListParams, MatchScopedParams, ListParams,
+  Paginated,
+  CursorMeta,
+  FIFAMatch,
+  FIFAMatchLineup,
+  FIFAMatchEvent,
+  FIFAPlayerMatchStats,
+  FIFATeamMatchStats,
+  FIFAShot,
+  MatchListParams,
+  MatchScopedParams,
+  ListParams,
 } from "./types";
 import type { FeedClient, FeedClientConfig } from "./index";
 
@@ -409,7 +435,11 @@ function snakeParams(p: ListParams & Record<string, unknown>): Record<string, un
   return { ...rest, cursor, per_page: perPage };
 }
 
-async function getPage<T>(b: Built, endpoint: string, params: Record<string, unknown>): Promise<Paginated<T>> {
+async function getPage<T>(
+  b: Built,
+  endpoint: string,
+  params: Record<string, unknown>,
+): Promise<Paginated<T>> {
   await b.limiter.acquire();
   const url = `${b.baseUrl}${API_PREFIX}/${endpoint}${toQuery(params)}`;
   const res = await b.transport(url, { method: "GET", headers: { Authorization: b.apiKey } });
@@ -419,7 +449,11 @@ async function getPage<T>(b: Built, endpoint: string, params: Record<string, unk
 }
 
 /** Follow `meta.next_cursor` to exhaustion, returning all rows. */
-async function getAll<T>(b: Built, endpoint: string, params: Record<string, unknown>): Promise<Paginated<T>> {
+async function getAll<T>(
+  b: Built,
+  endpoint: string,
+  params: Record<string, unknown>,
+): Promise<Paginated<T>> {
   const all: T[] = [];
   let cursor: number | string | null | undefined = params.cursor as number | string | undefined;
   let lastMeta: CursorMeta = {};
@@ -444,12 +478,22 @@ export function buildClient(config: FeedClientConfig): FeedClient {
     }),
   };
   return {
-    matches: (p?: MatchListParams) => getAll<FIFAMatch>(b, "matches", snakeParams({ ...(p ?? {}) })),
-    matchLineups: (p: MatchScopedParams) => getAll<FIFAMatchLineup>(b, "match_lineups", snakeParams({ ...p, match_id: p.matchId })),
-    matchEvents: (p: MatchScopedParams) => getAll<FIFAMatchEvent>(b, "match_events", snakeParams({ ...p, match_id: p.matchId })),
-    playerMatchStats: (p: MatchScopedParams) => getAll<FIFAPlayerMatchStats>(b, "player_match_stats", snakeParams({ ...p, match_id: p.matchId })),
-    teamMatchStats: (p: MatchScopedParams) => getAll<FIFATeamMatchStats>(b, "team_match_stats", snakeParams({ ...p, match_id: p.matchId })),
-    matchShots: (p: MatchScopedParams) => getAll<FIFAShot>(b, "match_shots", snakeParams({ ...p, match_id: p.matchId })),
+    matches: (p?: MatchListParams) =>
+      getAll<FIFAMatch>(b, "matches", snakeParams({ ...(p ?? {}) })),
+    matchLineups: (p: MatchScopedParams) =>
+      getAll<FIFAMatchLineup>(b, "match_lineups", snakeParams({ ...p, match_id: p.matchId })),
+    matchEvents: (p: MatchScopedParams) =>
+      getAll<FIFAMatchEvent>(b, "match_events", snakeParams({ ...p, match_id: p.matchId })),
+    playerMatchStats: (p: MatchScopedParams) =>
+      getAll<FIFAPlayerMatchStats>(
+        b,
+        "player_match_stats",
+        snakeParams({ ...p, match_id: p.matchId }),
+      ),
+    teamMatchStats: (p: MatchScopedParams) =>
+      getAll<FIFATeamMatchStats>(b, "team_match_stats", snakeParams({ ...p, match_id: p.matchId })),
+    matchShots: (p: MatchScopedParams) =>
+      getAll<FIFAShot>(b, "match_shots", snakeParams({ ...p, match_id: p.matchId })),
   };
 }
 ```
@@ -466,8 +510,15 @@ export function buildClient(config: FeedClientConfig): FeedClient {
  * tests drive it with recorded fixtures (no network). No DB here — pure transport + parse.
  */
 import type {
-  Paginated, FIFAMatch, FIFAMatchLineup, FIFAMatchEvent, FIFAPlayerMatchStats,
-  FIFATeamMatchStats, FIFAShot, MatchListParams, MatchScopedParams,
+  Paginated,
+  FIFAMatch,
+  FIFAMatchLineup,
+  FIFAMatchEvent,
+  FIFAPlayerMatchStats,
+  FIFATeamMatchStats,
+  FIFAShot,
+  MatchListParams,
+  MatchScopedParams,
 } from "./types";
 import type { FetchLike } from "./http";
 import { buildClient } from "./client";
@@ -519,6 +570,7 @@ git commit -m "feat(feed): real BALLDONTLIE HTTP client — injected transport, 
 ## Task 3: `@app/ingest` scaffold + pure feed→row mappers (`map.ts`)
 
 **Files:**
+
 - Create: `packages/ingest/package.json`, `packages/ingest/tsconfig.json`, `packages/ingest/src/index.ts`
 - Create: `packages/ingest/src/map.ts`, `packages/ingest/src/map.test.ts`
 
@@ -551,19 +603,45 @@ git commit -m "feat(feed): real BALLDONTLIE HTTP client — injected transport, 
 - [ ] **Step 2: `tsconfig.json`** (identical to feed/recompute):
 
 ```json
-{ "extends": "../../tsconfig.base.json", "compilerOptions": { "rootDir": "src" }, "include": ["src"] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src" },
+  "include": ["src"]
+}
 ```
 
 - [ ] **Step 3: Write failing tests** (`map.test.ts`) covering: stat passthrough (all 22 columns coalesced to row), `is_penalty` derived from `situation`, `incident_class` carried verbatim, knockout `derivePeriodLabel`, group `derivePeriodLabel` returning null when no matchday:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { mapStatLine, mapEvent, mapShot, mapTeamStat, mapMatchRow, mapRating, derivePeriodLabel } from "./map";
+import {
+  mapStatLine,
+  mapEvent,
+  mapShot,
+  mapTeamStat,
+  mapMatchRow,
+  mapRating,
+  derivePeriodLabel,
+} from "./map";
 
 describe("mapStatLine", () => {
   it("maps every consumed column and leaves absent fields null", () => {
-    const row = mapStatLine({ match_id: 1, player_id: 2, minutes_played: 90, goals: 1, saves: 3, saves_inside_box: 2 });
-    expect(row).toMatchObject({ matchBdlId: 1, playerBdlId: 2, minutesPlayed: 90, goals: 1, saves: 3, savesInsideBox: 2 });
+    const row = mapStatLine({
+      match_id: 1,
+      player_id: 2,
+      minutes_played: 90,
+      goals: 1,
+      saves: 3,
+      saves_inside_box: 2,
+    });
+    expect(row).toMatchObject({
+      matchBdlId: 1,
+      playerBdlId: 2,
+      minutesPlayed: 90,
+      goals: 1,
+      saves: 3,
+      savesInsideBox: 2,
+    });
     expect(row.assists).toBeNull();
     expect(row.possessionLost).toBeNull();
   });
@@ -571,30 +649,75 @@ describe("mapStatLine", () => {
 
 describe("mapShot", () => {
   it("derives is_penalty from situation==='penalty' and preserves shot_type/situation", () => {
-    const pen = mapShot({ id: 5, match_id: 1, player_id: 2, shot_type: "goal", situation: "penalty", minute: 30 });
-    expect(pen).toMatchObject({ bdlId: 5, isPenalty: true, shotType: "goal", situation: "penalty", minute: 30 });
-    const open = mapShot({ id: 6, match_id: 1, player_id: 2, shot_type: "save", situation: "open_play" });
+    const pen = mapShot({
+      id: 5,
+      match_id: 1,
+      player_id: 2,
+      shot_type: "goal",
+      situation: "penalty",
+      minute: 30,
+    });
+    expect(pen).toMatchObject({
+      bdlId: 5,
+      isPenalty: true,
+      shotType: "goal",
+      situation: "penalty",
+      minute: 30,
+    });
+    const open = mapShot({
+      id: 6,
+      match_id: 1,
+      player_id: 2,
+      shot_type: "save",
+      situation: "open_play",
+    });
     expect(open.isPenalty).toBe(false);
   });
 });
 
 describe("mapEvent", () => {
   it("carries incident_class through verbatim (no pre-collapsing)", () => {
-    const e = mapEvent({ id: 9, match_id: 1, incident_type: "card", incident_class: "yellowRed", time_minute: 75, added_time: 2, player_id: 4 });
-    expect(e).toMatchObject({ bdlId: 9, incidentType: "card", incidentClass: "yellowRed", timeMinute: 75, addedTime: 2 });
+    const e = mapEvent({
+      id: 9,
+      match_id: 1,
+      incident_type: "card",
+      incident_class: "yellowRed",
+      time_minute: 75,
+      added_time: 2,
+      player_id: 4,
+    });
+    expect(e).toMatchObject({
+      bdlId: 9,
+      incidentType: "card",
+      incidentClass: "yellowRed",
+      timeMinute: 75,
+      addedTime: 2,
+    });
   });
 });
 
 describe("derivePeriodLabel", () => {
   it("maps a knockout round to its canonical label", () => {
-    expect(derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", round: "Round of 32" })).toEqual({ kind: "knockout_round", label: "R32" });
-    expect(derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", round: "Final" })).toEqual({ kind: "knockout_round", label: "Final" });
+    expect(
+      derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", round: "Round of 32" }),
+    ).toEqual({ kind: "knockout_round", label: "R32" });
+    expect(
+      derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", round: "Final" }),
+    ).toEqual({ kind: "knockout_round", label: "Final" });
   });
   it("returns null for a group game with no usable matchday (TODO(confirm))", () => {
     expect(derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", group: "A" })).toBeNull();
   });
   it("maps a group matchday when the feed provides one", () => {
-    expect(derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", group: "A", matchday: 2 } as never)).toEqual({ kind: "group_md", label: "MD2" });
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        group: "A",
+        matchday: 2,
+      } as never),
+    ).toEqual({ kind: "group_md", label: "MD2" });
   });
 });
 ```
@@ -612,83 +735,151 @@ describe("derivePeriodLabel", () => {
  */
 import type { PeriodKind } from "@app/shared";
 import type {
-  FIFAMatch, FIFAMatchEvent, FIFAPlayerMatchStats, FIFAShot, FIFATeamMatchStats,
+  FIFAMatch,
+  FIFAMatchEvent,
+  FIFAPlayerMatchStats,
+  FIFAShot,
+  FIFATeamMatchStats,
 } from "@app/feed";
 
-const n = (v: number | null | undefined): number | null => (v ?? null);
-const s = (v: string | null | undefined): string | null => (v ?? null);
+const n = (v: number | null | undefined): number | null => v ?? null;
+const s = (v: string | null | undefined): string | null => v ?? null;
 
 export interface StatLineRow {
-  matchBdlId: number; playerBdlId: number;
-  minutesPlayed: number | null; goals: number | null; assists: number | null; keyPasses: number | null;
-  dribblesAttempted: number | null; dribblesCompleted: number | null; duelsWon: number | null; duelsLost: number | null;
-  passesTotal: number | null; passesAccurate: number | null; longBallsTotal: number | null; longBallsAccurate: number | null;
-  wasFouled: number | null; clearances: number | null; interceptions: number | null; tacklesWon: number | null;
-  blockedShots: number | null; saves: number | null; savesInsideBox: number | null; punches: number | null;
-  highClaims: number | null; possessionLost: number | null;
+  matchBdlId: number;
+  playerBdlId: number;
+  minutesPlayed: number | null;
+  goals: number | null;
+  assists: number | null;
+  keyPasses: number | null;
+  dribblesAttempted: number | null;
+  dribblesCompleted: number | null;
+  duelsWon: number | null;
+  duelsLost: number | null;
+  passesTotal: number | null;
+  passesAccurate: number | null;
+  longBallsTotal: number | null;
+  longBallsAccurate: number | null;
+  wasFouled: number | null;
+  clearances: number | null;
+  interceptions: number | null;
+  tacklesWon: number | null;
+  blockedShots: number | null;
+  saves: number | null;
+  savesInsideBox: number | null;
+  punches: number | null;
+  highClaims: number | null;
+  possessionLost: number | null;
 }
 
 export function mapStatLine(f: FIFAPlayerMatchStats): StatLineRow {
   return {
-    matchBdlId: f.match_id, playerBdlId: f.player_id,
-    minutesPlayed: n(f.minutes_played), goals: n(f.goals), assists: n(f.assists), keyPasses: n(f.key_passes),
-    dribblesAttempted: n(f.dribbles_attempted), dribblesCompleted: n(f.dribbles_completed),
-    duelsWon: n(f.duels_won), duelsLost: n(f.duels_lost),
-    passesTotal: n(f.passes_total), passesAccurate: n(f.passes_accurate),
-    longBallsTotal: n(f.long_balls_total), longBallsAccurate: n(f.long_balls_accurate),
-    wasFouled: n(f.was_fouled), clearances: n(f.clearances), interceptions: n(f.interceptions),
-    tacklesWon: n(f.tackles_won), blockedShots: n(f.blocked_shots), saves: n(f.saves),
-    savesInsideBox: n(f.saves_inside_box), punches: n(f.punches), highClaims: n(f.high_claims),
+    matchBdlId: f.match_id,
+    playerBdlId: f.player_id,
+    minutesPlayed: n(f.minutes_played),
+    goals: n(f.goals),
+    assists: n(f.assists),
+    keyPasses: n(f.key_passes),
+    dribblesAttempted: n(f.dribbles_attempted),
+    dribblesCompleted: n(f.dribbles_completed),
+    duelsWon: n(f.duels_won),
+    duelsLost: n(f.duels_lost),
+    passesTotal: n(f.passes_total),
+    passesAccurate: n(f.passes_accurate),
+    longBallsTotal: n(f.long_balls_total),
+    longBallsAccurate: n(f.long_balls_accurate),
+    wasFouled: n(f.was_fouled),
+    clearances: n(f.clearances),
+    interceptions: n(f.interceptions),
+    tacklesWon: n(f.tackles_won),
+    blockedShots: n(f.blocked_shots),
+    saves: n(f.saves),
+    savesInsideBox: n(f.saves_inside_box),
+    punches: n(f.punches),
+    highClaims: n(f.high_claims),
     possessionLost: n(f.possession_lost),
   };
 }
 
 /** The native BALLDONTLIE rating → rating_player_match(source='balldontlie'). null when absent. */
-export function mapRating(f: FIFAPlayerMatchStats): { matchBdlId: number; playerBdlId: number; rating: number | null } {
+export function mapRating(f: FIFAPlayerMatchStats): {
+  matchBdlId: number;
+  playerBdlId: number;
+  rating: number | null;
+} {
   return { matchBdlId: f.match_id, playerBdlId: f.player_id, rating: n(f.rating) };
 }
 
 export interface EventRowIn {
-  bdlId: number; matchBdlId: number; incidentType: string; incidentClass: string | null;
-  timeMinute: number | null; addedTime: number | null; period: string | null;
-  playerBdlId: number | null; assistPlayerBdlId: number | null; playerInBdlId: number | null;
-  playerOutBdlId: number | null; rescinded: boolean;
+  bdlId: number;
+  matchBdlId: number;
+  incidentType: string;
+  incidentClass: string | null;
+  timeMinute: number | null;
+  addedTime: number | null;
+  period: string | null;
+  playerBdlId: number | null;
+  assistPlayerBdlId: number | null;
+  playerInBdlId: number | null;
+  playerOutBdlId: number | null;
+  rescinded: boolean;
 }
 
 export function mapEvent(f: FIFAMatchEvent): EventRowIn {
   return {
-    bdlId: f.id, matchBdlId: f.match_id, incidentType: f.incident_type,
+    bdlId: f.id,
+    matchBdlId: f.match_id,
+    incidentType: f.incident_type,
     incidentClass: s(f.incident_class), // carried VERBATIM (adapter keys 2nd-yellow vs red off it)
-    timeMinute: n(f.time_minute), addedTime: n(f.added_time), period: s(f.period),
-    playerBdlId: n(f.player_id), assistPlayerBdlId: n(f.assist_player_id),
-    playerInBdlId: n(f.player_in_id), playerOutBdlId: n(f.player_out_id),
+    timeMinute: n(f.time_minute),
+    addedTime: n(f.added_time),
+    period: s(f.period),
+    playerBdlId: n(f.player_id),
+    assistPlayerBdlId: n(f.assist_player_id),
+    playerInBdlId: n(f.player_in_id),
+    playerOutBdlId: n(f.player_out_id),
     rescinded: f.rescinded ?? false,
   };
 }
 
 export interface ShotRowIn {
-  bdlId: number; matchBdlId: number; playerBdlId: number | null;
-  shotType: string | null; situation: string | null; isPenalty: boolean; minute: number | null;
+  bdlId: number;
+  matchBdlId: number;
+  playerBdlId: number | null;
+  shotType: string | null;
+  situation: string | null;
+  isPenalty: boolean;
+  minute: number | null;
 }
 
 const PENALTY = "penalty"; // TODO(confirm): exact match_shots.situation token for a penalty (live data)
 export function mapShot(f: FIFAShot): ShotRowIn {
   const situation = s(f.situation);
   return {
-    bdlId: f.id, matchBdlId: f.match_id, playerBdlId: n(f.player_id),
-    shotType: s(f.shot_type), situation,
+    bdlId: f.id,
+    matchBdlId: f.match_id,
+    playerBdlId: n(f.player_id),
+    shotType: s(f.shot_type),
+    situation,
     isPenalty: (situation ?? "").toLowerCase() === PENALTY,
     minute: n(f.minute),
   };
 }
 
 export interface TeamStatRowIn {
-  matchBdlId: number; teamBdlId: number; offsides: number | null; shotsBlocked: number | null; possession: number | null;
+  matchBdlId: number;
+  teamBdlId: number;
+  offsides: number | null;
+  shotsBlocked: number | null;
+  possession: number | null;
 }
 export function mapTeamStat(f: FIFATeamMatchStats): TeamStatRowIn {
   return {
-    matchBdlId: f.match_id, teamBdlId: f.team_id,
-    offsides: n(f.offsides), shotsBlocked: n(f.shots_blocked), possession: n(f.possession),
+    matchBdlId: f.match_id,
+    teamBdlId: f.team_id,
+    offsides: n(f.offsides),
+    shotsBlocked: n(f.shots_blocked),
+    possession: n(f.possession),
   };
 }
 
@@ -704,30 +895,53 @@ export function normalizeStatus(raw: string): FeedMatchStatus {
 }
 
 export interface MatchRowIn {
-  bdlId: number; kickoffAtIso: string; status: FeedMatchStatus;
-  round: string | null; group: string | null; stage: string | null;
-  homeTeamBdlId: number | null; awayTeamBdlId: number | null;
-  homeScore: number | null; awayScore: number | null;
-  homeScoreEt: number | null; awayScoreEt: number | null;
-  homeScorePens: number | null; awayScorePens: number | null;
-  homeFormation: string | null; awayFormation: string | null; referee: string | null;
+  bdlId: number;
+  kickoffAtIso: string;
+  status: FeedMatchStatus;
+  round: string | null;
+  group: string | null;
+  stage: string | null;
+  homeTeamBdlId: number | null;
+  awayTeamBdlId: number | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeScoreEt: number | null;
+  awayScoreEt: number | null;
+  homeScorePens: number | null;
+  awayScorePens: number | null;
+  homeFormation: string | null;
+  awayFormation: string | null;
+  referee: string | null;
 }
 
 export function mapMatchRow(f: FIFAMatch): MatchRowIn {
   return {
-    bdlId: f.id, kickoffAtIso: f.datetime, status: normalizeStatus(f.status),
-    round: s(f.round), group: s(f.group), stage: s(f.stage),
-    homeTeamBdlId: n(f.home_team_id), awayTeamBdlId: n(f.away_team_id),
-    homeScore: n(f.home_score), awayScore: n(f.away_score),
-    homeScoreEt: n(f.home_score_et), awayScoreEt: n(f.away_score_et),
-    homeScorePens: n(f.home_score_pens), awayScorePens: n(f.away_score_pens),
-    homeFormation: s(f.home_formation), awayFormation: s(f.away_formation), referee: s(f.referee),
+    bdlId: f.id,
+    kickoffAtIso: f.datetime,
+    status: normalizeStatus(f.status),
+    round: s(f.round),
+    group: s(f.group),
+    stage: s(f.stage),
+    homeTeamBdlId: n(f.home_team_id),
+    awayTeamBdlId: n(f.away_team_id),
+    homeScore: n(f.home_score),
+    awayScore: n(f.away_score),
+    homeScoreEt: n(f.home_score_et),
+    awayScoreEt: n(f.away_score_et),
+    homeScorePens: n(f.home_score_pens),
+    awayScorePens: n(f.away_score_pens),
+    homeFormation: s(f.home_formation),
+    awayFormation: s(f.away_formation),
+    referee: s(f.referee),
   };
 }
 
 const KNOCKOUT: Array<[RegExp, string]> = [
-  [/roundof32|r32/, "R32"], [/roundof16|r16/, "R16"],
-  [/quarter|qf/, "QF"], [/semi|sf/, "SF"], [/final/, "Final"],
+  [/roundof32|r32/, "R32"],
+  [/roundof16|r16/, "R16"],
+  [/quarter|qf/, "QF"],
+  [/semi|sf/, "SF"],
+  [/final/, "Final"],
 ];
 
 /**
@@ -738,7 +952,8 @@ const KNOCKOUT: Array<[RegExp, string]> = [
 export function derivePeriodLabel(f: FIFAMatch): { kind: PeriodKind; label: string } | null {
   const round = (f.round ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
   if (round) {
-    for (const [re, label] of KNOCKOUT) if (re.test(round)) return { kind: "knockout_round", label };
+    for (const [re, label] of KNOCKOUT)
+      if (re.test(round)) return { kind: "knockout_round", label };
   }
   // Group: look for an explicit matchday integer (loose field — confirm exact key on live data).
   const md = (f as Record<string, unknown>)["matchday"];
@@ -798,7 +1013,9 @@ describe("lockInstantFromSub", () => {
     expect(lock).toEqual({ playerBdlId: 7, lockedAt: new Date("2026-06-10T19:03:00Z") }); // +63 min
   });
   it("returns null for an event with no player_in", () => {
-    expect(lockInstantFromSub({ playerInBdlId: null, timeMinute: 61, addedTime: null }, kickoff)).toBeNull();
+    expect(
+      lockInstantFromSub({ playerInBdlId: null, timeMinute: 61, addedTime: null }, kickoff),
+    ).toBeNull();
   });
 });
 ```
@@ -826,8 +1043,13 @@ export interface PlayerLock {
 }
 
 /** Every official-XI starter locks at kickoff (played from minute 1). */
-export function lockInstantsFromLineup(entries: readonly LineupAppearance[], kickoffAt: Date): PlayerLock[] {
-  return entries.filter((e) => e.isStarter).map((e) => ({ playerBdlId: e.playerBdlId, lockedAt: kickoffAt }));
+export function lockInstantsFromLineup(
+  entries: readonly LineupAppearance[],
+  kickoffAt: Date,
+): PlayerLock[] {
+  return entries
+    .filter((e) => e.isStarter)
+    .map((e) => ({ playerBdlId: e.playerBdlId, lockedAt: kickoffAt }));
 }
 
 export interface SubEvent {
@@ -840,11 +1062,14 @@ export interface SubEvent {
 export function lockInstantFromSub(sub: SubEvent, kickoffAt: Date): PlayerLock | null {
   if (sub.playerInBdlId == null) return null;
   const minutes = (sub.timeMinute ?? 0) + (sub.addedTime ?? 0);
-  return { playerBdlId: sub.playerInBdlId, lockedAt: new Date(kickoffAt.getTime() + minutes * 60_000) };
+  return {
+    playerBdlId: sub.playerInBdlId,
+    lockedAt: new Date(kickoffAt.getTime() + minutes * 60_000),
+  };
 }
 ```
 
-> NOTE: the **fallback** (kickoff-lock mode) does not need a new pure function — it is "run `lockInstantsFromLineup` over the *fantasy-listed starters* at kickoff and skip sub-locking." That branch lives in the orchestration (Task 7) reading `fifa_match.kickoff_lock_fallback`; the pure primitive above is reused. Locking from a `Date` arg keeps `lock.ts` clock-free.
+> NOTE: the **fallback** (kickoff-lock mode) does not need a new pure function — it is "run `lockInstantsFromLineup` over the _fantasy-listed starters_ at kickoff and skip sub-locking." That branch lives in the orchestration (Task 7) reading `fifa_match.kickoff_lock_fallback`; the pure primitive above is reused. Locking from a `Date` arg keeps `lock.ts` clock-free.
 
 - [ ] **Step 4: Run → pass.** **Step 5: Commit**
 
@@ -874,27 +1099,62 @@ describe("decideMatchModes", () => {
   const now = new Date("2026-06-10T19:00:00Z");
 
   it("a match in_progress → live", () => {
-    const m: ModeMatch = { ...base, bdlId: 10, status: "in_progress", kickoffMs: T("2026-06-10T18:00:00Z"), hasRating: false, lineupPulled: false };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 10,
+      status: "in_progress",
+      kickoffMs: T("2026-06-10T18:00:00Z"),
+      hasRating: false,
+      lineupPulled: false,
+    };
     expect(decideMatchModes([m], now).find((a) => a.bdlId === 10)?.mode).toBe("live");
   });
 
   it("a scheduled match past kickoff with no lineup yet → pre_match", () => {
-    const m: ModeMatch = { ...base, bdlId: 11, status: "scheduled", kickoffMs: T("2026-06-10T18:59:00Z"), hasRating: false, lineupPulled: false };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 11,
+      status: "scheduled",
+      kickoffMs: T("2026-06-10T18:59:00Z"),
+      hasRating: false,
+      lineupPulled: false,
+    };
     expect(decideMatchModes([m], now).find((a) => a.bdlId === 11)?.mode).toBe("pre_match");
   });
 
   it("a completed match with no rating yet → settle", () => {
-    const m: ModeMatch = { ...base, bdlId: 12, status: "completed", kickoffMs: T("2026-06-10T17:00:00Z"), hasRating: false, lineupPulled: true };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 12,
+      status: "completed",
+      kickoffMs: T("2026-06-10T17:00:00Z"),
+      hasRating: false,
+      lineupPulled: true,
+    };
     expect(decideMatchModes([m], now).find((a) => a.bdlId === 12)?.mode).toBe("settle");
   });
 
   it("a completed match with a rating and stale FT → idle (dropped)", () => {
-    const m: ModeMatch = { ...base, bdlId: 13, status: "completed", kickoffMs: T("2026-06-09T17:00:00Z"), hasRating: true, lineupPulled: true };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 13,
+      status: "completed",
+      kickoffMs: T("2026-06-09T17:00:00Z"),
+      hasRating: true,
+      lineupPulled: true,
+    };
     expect(decideMatchModes([m], now).find((a) => a.bdlId === 13)).toBeUndefined();
   });
 
   it("a far-future scheduled match → idle (dropped)", () => {
-    const m: ModeMatch = { ...base, bdlId: 14, status: "scheduled", kickoffMs: T("2026-06-12T18:00:00Z"), hasRating: false, lineupPulled: false };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 14,
+      status: "scheduled",
+      kickoffMs: T("2026-06-12T18:00:00Z"),
+      hasRating: false,
+      lineupPulled: false,
+    };
     expect(decideMatchModes([m], now).find((a) => a.bdlId === 14)).toBeUndefined();
   });
 });
@@ -902,13 +1162,27 @@ describe("decideMatchModes", () => {
 describe("pollerSilentMatches", () => {
   it("flags an in_progress match whose last successful live poll is older than the grace window", () => {
     const now = new Date("2026-06-10T19:10:00Z");
-    const m: ModeMatch = { ...base, bdlId: 20, status: "in_progress", kickoffMs: T("2026-06-10T18:00:00Z"), hasRating: false, lineupPulled: true };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 20,
+      status: "in_progress",
+      kickoffMs: T("2026-06-10T18:00:00Z"),
+      hasRating: false,
+      lineupPulled: true,
+    };
     const last = new Map<number, number>([[20, T("2026-06-10T19:00:00Z")]]); // 10 min ago
     expect(pollerSilentMatches([m], last, now, 5 * 60_000).map((x) => x.bdlId)).toEqual([20]);
   });
   it("does not flag when a recent poll succeeded", () => {
     const now = new Date("2026-06-10T19:10:00Z");
-    const m: ModeMatch = { ...base, bdlId: 21, status: "in_progress", kickoffMs: T("2026-06-10T18:00:00Z"), hasRating: false, lineupPulled: true };
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 21,
+      status: "in_progress",
+      kickoffMs: T("2026-06-10T18:00:00Z"),
+      hasRating: false,
+      lineupPulled: true,
+    };
     const last = new Map<number, number>([[21, T("2026-06-10T19:08:00Z")]]);
     expect(pollerSilentMatches([m], last, now, 5 * 60_000)).toEqual([]);
   });
@@ -1024,15 +1298,26 @@ export interface RefMatchResult {
 export interface IngestStore {
   // reference rows
   upsertTeamByBdlId(bdlId: number, name: string | null): Promise<string>;
-  upsertPlayerByBdlId(bdlId: number, fields: { displayName: string | null; position: string | null; teamBdlId: number | null }): Promise<string>;
+  upsertPlayerByBdlId(
+    bdlId: number,
+    fields: { displayName: string | null; position: string | null; teamBdlId: number | null },
+  ): Promise<string>;
   /** Upsert fifa_match on balldontlie id; set the structural period_id (resolved from `periodLabel`). */
-  upsertMatch(row: MatchRowIn, periodId: string | null, opts: { kickoffLockFallback?: boolean }): Promise<RefMatchResult>;
+  upsertMatch(
+    row: MatchRowIn,
+    periodId: string | null,
+    opts: { kickoffLockFallback?: boolean },
+  ): Promise<RefMatchResult>;
   /** Resolve a structural {kind,label} to the league period id, or null if not seeded. */
   resolvePeriodId(label: { kind: string; label: string } | null): Promise<string | null>;
 
   // raw layer (idempotent; mark dirty)
   upsertStatLine(row: StatLineRow): Promise<void>;
-  upsertRatingBalldontlie(matchBdlId: number, playerBdlId: number, rating: number | null): Promise<void>;
+  upsertRatingBalldontlie(
+    matchBdlId: number,
+    playerBdlId: number,
+    rating: number | null,
+  ): Promise<void>;
   upsertEvent(row: EventRowIn): Promise<void>;
   upsertShot(row: ShotRowIn): Promise<void>;
   upsertTeamStat(row: TeamStatRowIn): Promise<void>;
@@ -1043,7 +1328,16 @@ export interface IngestStore {
   setLockedAt(matchBdlId: number, playerBdlId: number, lockedAt: Date): Promise<void>;
 
   // scheduler reads
-  listSchedulableMatches(): Promise<Array<{ bdlId: number; status: string; kickoffMs: number; hasRating: boolean; lineupPulled: boolean; kickoffLockFallback: boolean }>>;
+  listSchedulableMatches(): Promise<
+    Array<{
+      bdlId: number;
+      status: string;
+      kickoffMs: number;
+      hasRating: boolean;
+      lineupPulled: boolean;
+      kickoffLockFallback: boolean;
+    }>
+  >;
 }
 ```
 
@@ -1094,25 +1388,61 @@ export class MemoryIngestStore implements IngestStore {
   private dirty = new Set<string>();
   private locks = new Map<string, Date>();
   private periods = new Map<string, string>(); // `${kind}:${label}` → periodId
-  private matches: Array<{ bdlId: number; status: string; kickoffMs: number; hasRating: boolean; lineupPulled: boolean; kickoffLockFallback: boolean }> = [];
+  private matches: Array<{
+    bdlId: number;
+    status: string;
+    kickoffMs: number;
+    hasRating: boolean;
+    lineupPulled: boolean;
+    kickoffLockFallback: boolean;
+  }> = [];
 
   // seeding / assertions
-  seedPeriod(kind: string, label: string, id: string): void { this.periods.set(`${kind}:${label}`, id); }
-  seedSchedulable(m: { bdlId: number; status: string; kickoffMs: number; hasRating?: boolean; lineupPulled?: boolean; kickoffLockFallback?: boolean }): void {
+  seedPeriod(kind: string, label: string, id: string): void {
+    this.periods.set(`${kind}:${label}`, id);
+  }
+  seedSchedulable(m: {
+    bdlId: number;
+    status: string;
+    kickoffMs: number;
+    hasRating?: boolean;
+    lineupPulled?: boolean;
+    kickoffLockFallback?: boolean;
+  }): void {
     this.matches.push({ hasRating: false, lineupPulled: false, kickoffLockFallback: false, ...m });
   }
-  statLines(): StatLineRow[] { return [...this.stats.values()]; }
-  allEvents(): EventRowIn[] { return [...this.events.values()]; }
-  isDirty(m: number, p: number): boolean { return this.dirty.has(pk(m, p)); }
-  clearDirty(m: number, p: number): void { this.dirty.delete(pk(m, p)); }
-  lockedAt(m: number, p: number): Date | undefined { return this.locks.get(pk(m, p)); }
-  ratingFor(m: number, p: number): number | null | undefined { return this.ratings.get(pk(m, p)); }
+  statLines(): StatLineRow[] {
+    return [...this.stats.values()];
+  }
+  allEvents(): EventRowIn[] {
+    return [...this.events.values()];
+  }
+  isDirty(m: number, p: number): boolean {
+    return this.dirty.has(pk(m, p));
+  }
+  clearDirty(m: number, p: number): void {
+    this.dirty.delete(pk(m, p));
+  }
+  lockedAt(m: number, p: number): Date | undefined {
+    return this.locks.get(pk(m, p));
+  }
+  ratingFor(m: number, p: number): number | null | undefined {
+    return this.ratings.get(pk(m, p));
+  }
 
-  upsertTeamByBdlId(bdlId: number): Promise<string> { return Promise.resolve(`team-${bdlId}`); }
-  upsertPlayerByBdlId(bdlId: number): Promise<string> { return Promise.resolve(`player-${bdlId}`); }
-  upsertMatch(row: MatchRowIn): Promise<RefMatchResult> { return Promise.resolve({ matchId: `match-${row.bdlId}` }); }
+  upsertTeamByBdlId(bdlId: number): Promise<string> {
+    return Promise.resolve(`team-${bdlId}`);
+  }
+  upsertPlayerByBdlId(bdlId: number): Promise<string> {
+    return Promise.resolve(`player-${bdlId}`);
+  }
+  upsertMatch(row: MatchRowIn): Promise<RefMatchResult> {
+    return Promise.resolve({ matchId: `match-${row.bdlId}` });
+  }
   resolvePeriodId(label: { kind: string; label: string } | null): Promise<string | null> {
-    return Promise.resolve(label ? (this.periods.get(`${label.kind}:${label.label}`) ?? null) : null);
+    return Promise.resolve(
+      label ? (this.periods.get(`${label.kind}:${label.label}`) ?? null) : null,
+    );
   }
   upsertStatLine(row: StatLineRow): Promise<void> {
     this.stats.set(pk(row.matchBdlId, row.playerBdlId), row);
@@ -1120,14 +1450,33 @@ export class MemoryIngestStore implements IngestStore {
     return Promise.resolve();
   }
   upsertRatingBalldontlie(m: number, p: number, rating: number | null): Promise<void> {
-    this.ratings.set(pk(m, p), rating); this.dirty.add(pk(m, p)); return Promise.resolve();
+    this.ratings.set(pk(m, p), rating);
+    this.dirty.add(pk(m, p));
+    return Promise.resolve();
   }
-  upsertEvent(row: EventRowIn): Promise<void> { this.events.set(row.bdlId, row); return Promise.resolve(); }
-  upsertShot(row: ShotRowIn): Promise<void> { this.shots.set(row.bdlId, row); return Promise.resolve(); }
-  upsertTeamStat(row: TeamStatRowIn): Promise<void> { this.teamStats.set(pk(row.matchBdlId, row.teamBdlId), row); return Promise.resolve(); }
-  markPlayersDirty(m: number, ps: readonly number[]): Promise<void> { for (const p of ps) this.dirty.add(pk(m, p)); return Promise.resolve(); }
-  setLockedAt(m: number, p: number, at: Date): Promise<void> { this.locks.set(pk(m, p), at); return Promise.resolve(); }
-  listSchedulableMatches(): Promise<typeof this.matches> { return Promise.resolve(this.matches); }
+  upsertEvent(row: EventRowIn): Promise<void> {
+    this.events.set(row.bdlId, row);
+    return Promise.resolve();
+  }
+  upsertShot(row: ShotRowIn): Promise<void> {
+    this.shots.set(row.bdlId, row);
+    return Promise.resolve();
+  }
+  upsertTeamStat(row: TeamStatRowIn): Promise<void> {
+    this.teamStats.set(pk(row.matchBdlId, row.teamBdlId), row);
+    return Promise.resolve();
+  }
+  markPlayersDirty(m: number, ps: readonly number[]): Promise<void> {
+    for (const p of ps) this.dirty.add(pk(m, p));
+    return Promise.resolve();
+  }
+  setLockedAt(m: number, p: number, at: Date): Promise<void> {
+    this.locks.set(pk(m, p), at);
+    return Promise.resolve();
+  }
+  listSchedulableMatches(): Promise<typeof this.matches> {
+    return Promise.resolve(this.matches);
+  }
 }
 ```
 
@@ -1174,9 +1523,20 @@ const kickoff = new Date("2026-06-10T18:00:00Z");
 describe("ingestLineups (pre-match)", () => {
   it("locks every official-XI starter at kickoff", async () => {
     const feed = fakeFeed({
-      matchLineups: () => Promise.resolve({ data: [{ match_id: 50, entries: [
-        { player_id: 1, is_starter: true }, { player_id: 2, is_starter: true }, { player_id: 3, is_starter: false },
-      ] }], meta: {} }),
+      matchLineups: () =>
+        Promise.resolve({
+          data: [
+            {
+              match_id: 50,
+              entries: [
+                { player_id: 1, is_starter: true },
+                { player_id: 2, is_starter: true },
+                { player_id: 3, is_starter: false },
+              ],
+            },
+          ],
+          meta: {},
+        }),
     });
     const store = new MemoryIngestStore();
     await ingestLineups(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
@@ -1189,10 +1549,26 @@ describe("ingestLineups (pre-match)", () => {
 describe("ingestLive", () => {
   it("upserts events/stats and locks the substitute at his entry minute; marks players dirty", async () => {
     const feed = fakeFeed({
-      matchEvents: () => Promise.resolve({ data: [
-        { id: 900, match_id: 50, incident_type: "substitution", player_in_id: 7, player_out_id: 2, time_minute: 61, added_time: 1 },
-      ], meta: {} }),
-      playerMatchStats: () => Promise.resolve({ data: [{ match_id: 50, player_id: 7, minutes_played: 30, rating: 7.1 }], meta: {} }),
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 900,
+              match_id: 50,
+              incident_type: "substitution",
+              player_in_id: 7,
+              player_out_id: 2,
+              time_minute: 61,
+              added_time: 1,
+            },
+          ],
+          meta: {},
+        }),
+      playerMatchStats: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, player_id: 7, minutes_played: 30, rating: 7.1 }],
+          meta: {},
+        }),
     });
     const store = new MemoryIngestStore();
     await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
@@ -1203,9 +1579,20 @@ describe("ingestLive", () => {
 
   it("under kickoff-lock fallback, does NOT lock an entering substitute", async () => {
     const feed = fakeFeed({
-      matchEvents: () => Promise.resolve({ data: [
-        { id: 901, match_id: 50, incident_type: "substitution", player_in_id: 7, time_minute: 61, added_time: 0 },
-      ], meta: {} }),
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 901,
+              match_id: 50,
+              incident_type: "substitution",
+              player_in_id: 7,
+              time_minute: 61,
+              added_time: 0,
+            },
+          ],
+          meta: {},
+        }),
     });
     const store = new MemoryIngestStore();
     await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: true });
@@ -1234,10 +1621,17 @@ export interface MatchCtx {
 }
 
 /** Pre-match: pull the confirmed XI and lock every official starter at kickoff. */
-export async function ingestLineups(feed: FeedClient, store: IngestStore, ctx: MatchCtx): Promise<void> {
+export async function ingestLineups(
+  feed: FeedClient,
+  store: IngestStore,
+  ctx: MatchCtx,
+): Promise<void> {
   const res = await feed.matchLineups({ matchId: ctx.bdlId });
   for (const lineup of res.data) {
-    const entries: LineupAppearance[] = lineup.entries.map((e) => ({ playerBdlId: e.player_id, isStarter: e.is_starter }));
+    const entries: LineupAppearance[] = lineup.entries.map((e) => ({
+      playerBdlId: e.player_id,
+      isStarter: e.is_starter,
+    }));
     for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt)) {
       await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
     }
@@ -1245,7 +1639,11 @@ export async function ingestLineups(feed: FeedClient, store: IngestStore, ctx: M
 }
 
 /** Live: upsert events/stats/shots/team stats, mark players dirty, and lock entering subs at their minute. */
-export async function ingestLive(feed: FeedClient, store: IngestStore, ctx: MatchCtx): Promise<void> {
+export async function ingestLive(
+  feed: FeedClient,
+  store: IngestStore,
+  ctx: MatchCtx,
+): Promise<void> {
   const [events, stats, shots, teamStats] = await Promise.all([
     feed.matchEvents({ matchId: ctx.bdlId }),
     feed.playerMatchStats({ matchId: ctx.bdlId }),
@@ -1292,7 +1690,11 @@ export async function ingestLive(feed: FeedClient, store: IngestStore, ctx: Matc
 }
 
 /** Settle: re-pull stats + shots + the rating until values stabilize (same writes as live, no sub-locking). */
-export async function ingestSettle(feed: FeedClient, store: IngestStore, ctx: MatchCtx): Promise<void> {
+export async function ingestSettle(
+  feed: FeedClient,
+  store: IngestStore,
+  ctx: MatchCtx,
+): Promise<void> {
   const [stats, shots] = await Promise.all([
     feed.playerMatchStats({ matchId: ctx.bdlId }),
     feed.matchShots({ matchId: ctx.bdlId }),
@@ -1346,17 +1748,21 @@ type Db = PrismaClient;
 export function createPrismaIngestStore(prisma: Db): IngestStore {
   // resolve a BDL match id → internal id (cache-free; small N)
   const matchIdFor = async (bdlId: number): Promise<string | null> =>
-    (await prisma.fifaMatch.findUnique({ where: { balldontlieId: bdlId }, select: { id: true } }))?.id ?? null;
+    (await prisma.fifaMatch.findUnique({ where: { balldontlieId: bdlId }, select: { id: true } }))
+      ?.id ?? null;
   const playerIdFor = async (bdlId: number): Promise<string | null> =>
-    (await prisma.player.findUnique({ where: { balldontlieId: bdlId }, select: { id: true } }))?.id ?? null;
+    (await prisma.player.findUnique({ where: { balldontlieId: bdlId }, select: { id: true } }))
+      ?.id ?? null;
 
   const enqueuePlayerMatchDirty = async (matchId: string, playerId: string): Promise<void> => {
     // events/shots/team have no row-level dirty col; the player_match marker drives the sweep.
     // (stat/rating/manual upserts already set dirty=true; this is for the others.)
     const exists = await prisma.recomputeDirty.findFirst({
-      where: { scope: "player_match", matchId, playerId, processedAt: null }, select: { id: true },
+      where: { scope: "player_match", matchId, playerId, processedAt: null },
+      select: { id: true },
     });
-    if (!exists) await prisma.recomputeDirty.create({ data: { scope: "player_match", matchId, playerId } });
+    if (!exists)
+      await prisma.recomputeDirty.create({ data: { scope: "player_match", matchId, playerId } });
   };
 
   return {
@@ -1371,29 +1777,55 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
     },
 
     async upsertPlayerByBdlId(bdlId, fields): Promise<string> {
-      const teamId = fields.teamBdlId != null
-        ? (await prisma.fifaTeam.findUnique({ where: { balldontlieId: fields.teamBdlId }, select: { id: true } }))?.id ?? null
-        : null;
+      const teamId =
+        fields.teamBdlId != null
+          ? ((
+              await prisma.fifaTeam.findUnique({
+                where: { balldontlieId: fields.teamBdlId },
+                select: { id: true },
+              })
+            )?.id ?? null)
+          : null;
       const position = (fields.position ?? "MID") as Position; // TODO(confirm): feed position vocabulary
       const row = await prisma.player.upsert({
         where: { balldontlieId: bdlId },
-        create: { balldontlieId: bdlId, displayName: fields.displayName ?? `Player ${bdlId}`, position, teamId },
-        update: { ...(fields.displayName ? { displayName: fields.displayName } : {}), ...(teamId ? { teamId } : {}) },
+        create: {
+          balldontlieId: bdlId,
+          displayName: fields.displayName ?? `Player ${bdlId}`,
+          position,
+          teamId,
+        },
+        update: {
+          ...(fields.displayName ? { displayName: fields.displayName } : {}),
+          ...(teamId ? { teamId } : {}),
+        },
         select: { id: true },
       });
       return row.id;
     },
 
     async upsertMatch(row, periodId, opts): Promise<RefMatchResult> {
-      const homeTeamId = row.homeTeamBdlId != null ? await this.upsertTeamByBdlId(row.homeTeamBdlId, null) : null;
-      const awayTeamId = row.awayTeamBdlId != null ? await this.upsertTeamByBdlId(row.awayTeamBdlId, null) : null;
+      const homeTeamId =
+        row.homeTeamBdlId != null ? await this.upsertTeamByBdlId(row.homeTeamBdlId, null) : null;
+      const awayTeamId =
+        row.awayTeamBdlId != null ? await this.upsertTeamByBdlId(row.awayTeamBdlId, null) : null;
       const data = {
-        kickoffAt: new Date(row.kickoffAtIso), status: row.status, round: row.round,
-        homeTeamId, awayTeamId, homeScore: row.homeScore, awayScore: row.awayScore,
-        homeScoreEt: row.homeScoreEt, awayScoreEt: row.awayScoreEt,
-        homeScorePens: row.homeScorePens, awayScorePens: row.awayScorePens,
-        homeFormation: row.homeFormation, awayFormation: row.awayFormation, referee: row.referee,
-        periodId, kickoffLockFallback: opts.kickoffLockFallback ?? false,
+        kickoffAt: new Date(row.kickoffAtIso),
+        status: row.status,
+        round: row.round,
+        homeTeamId,
+        awayTeamId,
+        homeScore: row.homeScore,
+        awayScore: row.awayScore,
+        homeScoreEt: row.homeScoreEt,
+        awayScoreEt: row.awayScoreEt,
+        homeScorePens: row.homeScorePens,
+        awayScorePens: row.awayScorePens,
+        homeFormation: row.homeFormation,
+        awayFormation: row.awayFormation,
+        referee: row.referee,
+        periodId,
+        kickoffLockFallback: opts.kickoffLockFallback ?? false,
       };
       const m = await prisma.fifaMatch.upsert({
         where: { balldontlieId: row.bdlId },
@@ -1407,7 +1839,10 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
     async resolvePeriodId(label): Promise<string | null> {
       if (!label) return null;
       // Single-league assumption (one matching period). TODO(confirm): multi-league needs a per-league link.
-      const p = await prisma.period.findFirst({ where: { kind: label.kind as never, label: label.label }, select: { id: true } });
+      const p = await prisma.period.findFirst({
+        where: { kind: label.kind as never, label: label.label },
+        select: { id: true },
+      });
       return p?.id ?? null;
     },
 
@@ -1416,17 +1851,34 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       const playerId = await playerIdFor(row.playerBdlId);
       if (!matchId || !playerId) return; // ref rows must exist first (lineups/schedule-sync upsert them)
       const data = {
-        minutesPlayed: row.minutesPlayed, goals: row.goals, assists: row.assists, keyPasses: row.keyPasses,
-        dribblesAttempted: row.dribblesAttempted, dribblesCompleted: row.dribblesCompleted,
-        duelsWon: row.duelsWon, duelsLost: row.duelsLost, passesTotal: row.passesTotal, passesAccurate: row.passesAccurate,
-        longBallsTotal: row.longBallsTotal, longBallsAccurate: row.longBallsAccurate, wasFouled: row.wasFouled,
-        clearances: row.clearances, interceptions: row.interceptions, tacklesWon: row.tacklesWon,
-        blockedShots: row.blockedShots, saves: row.saves, savesInsideBox: row.savesInsideBox,
-        punches: row.punches, highClaims: row.highClaims, possessionLost: row.possessionLost, dirty: true,
+        minutesPlayed: row.minutesPlayed,
+        goals: row.goals,
+        assists: row.assists,
+        keyPasses: row.keyPasses,
+        dribblesAttempted: row.dribblesAttempted,
+        dribblesCompleted: row.dribblesCompleted,
+        duelsWon: row.duelsWon,
+        duelsLost: row.duelsLost,
+        passesTotal: row.passesTotal,
+        passesAccurate: row.passesAccurate,
+        longBallsTotal: row.longBallsTotal,
+        longBallsAccurate: row.longBallsAccurate,
+        wasFouled: row.wasFouled,
+        clearances: row.clearances,
+        interceptions: row.interceptions,
+        tacklesWon: row.tacklesWon,
+        blockedShots: row.blockedShots,
+        saves: row.saves,
+        savesInsideBox: row.savesInsideBox,
+        punches: row.punches,
+        highClaims: row.highClaims,
+        possessionLost: row.possessionLost,
+        dirty: true,
       };
       await prisma.statPlayerMatch.upsert({
         where: { matchId_playerId: { matchId, playerId } },
-        create: { matchId, playerId, ...data }, update: data,
+        create: { matchId, playerId, ...data },
+        update: data,
       });
     },
 
@@ -1445,31 +1897,69 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       const matchId = await matchIdFor(row.matchBdlId);
       if (!matchId) return;
       const playerId = row.playerBdlId != null ? await playerIdFor(row.playerBdlId) : null;
-      const assistPlayerId = row.assistPlayerBdlId != null ? await playerIdFor(row.assistPlayerBdlId) : null;
+      const assistPlayerId =
+        row.assistPlayerBdlId != null ? await playerIdFor(row.assistPlayerBdlId) : null;
       const playerInId = row.playerInBdlId != null ? await playerIdFor(row.playerInBdlId) : null;
       const playerOutId = row.playerOutBdlId != null ? await playerIdFor(row.playerOutBdlId) : null;
       const data = {
-        matchId, incidentType: row.incidentType, incidentClass: row.incidentClass,
-        timeMinute: row.timeMinute, addedTime: row.addedTime, period: row.period,
-        playerId, assistPlayerId, playerInId, playerOutId, rescinded: row.rescinded,
+        matchId,
+        incidentType: row.incidentType,
+        incidentClass: row.incidentClass,
+        timeMinute: row.timeMinute,
+        addedTime: row.addedTime,
+        period: row.period,
+        playerId,
+        assistPlayerId,
+        playerInId,
+        playerOutId,
+        rescinded: row.rescinded,
       };
-      await prisma.eventMatch.upsert({ where: { balldontlieId: row.bdlId }, create: { balldontlieId: row.bdlId, ...data }, update: data });
+      await prisma.eventMatch.upsert({
+        where: { balldontlieId: row.bdlId },
+        create: { balldontlieId: row.bdlId, ...data },
+        update: data,
+      });
     },
 
     async upsertShot(row: ShotRowIn): Promise<void> {
       const matchId = await matchIdFor(row.matchBdlId);
       if (!matchId) return;
       const playerId = row.playerBdlId != null ? await playerIdFor(row.playerBdlId) : null;
-      const data = { matchId, playerId, shotType: row.shotType, situation: row.situation, isPenalty: row.isPenalty, minute: row.minute };
-      await prisma.shotMatch.upsert({ where: { balldontlieId: row.bdlId }, create: { balldontlieId: row.bdlId, ...data }, update: data });
+      const data = {
+        matchId,
+        playerId,
+        shotType: row.shotType,
+        situation: row.situation,
+        isPenalty: row.isPenalty,
+        minute: row.minute,
+      };
+      await prisma.shotMatch.upsert({
+        where: { balldontlieId: row.bdlId },
+        create: { balldontlieId: row.bdlId, ...data },
+        update: data,
+      });
     },
 
     async upsertTeamStat(row: TeamStatRowIn): Promise<void> {
       const matchId = await matchIdFor(row.matchBdlId);
-      const teamId = (await prisma.fifaTeam.findUnique({ where: { balldontlieId: row.teamBdlId }, select: { id: true } }))?.id ?? null;
+      const teamId =
+        (
+          await prisma.fifaTeam.findUnique({
+            where: { balldontlieId: row.teamBdlId },
+            select: { id: true },
+          })
+        )?.id ?? null;
       if (!matchId || !teamId) return;
-      const data = { offsides: row.offsides, shotsBlocked: row.shotsBlocked, possession: row.possession };
-      await prisma.statTeamMatch.upsert({ where: { matchId_teamId: { matchId, teamId } }, create: { matchId, teamId, ...data }, update: data });
+      const data = {
+        offsides: row.offsides,
+        shotsBlocked: row.shotsBlocked,
+        possession: row.possession,
+      };
+      await prisma.statTeamMatch.upsert({
+        where: { matchId_teamId: { matchId, teamId } },
+        create: { matchId, teamId, ...data },
+        update: data,
+      });
     },
 
     async markPlayersDirty(matchBdlId, playerBdlIds): Promise<void> {
@@ -1482,7 +1972,10 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
     },
 
     async setLockedAt(matchBdlId, playerBdlId, lockedAt): Promise<void> {
-      const match = await prisma.fifaMatch.findUnique({ where: { balldontlieId: matchBdlId }, select: { periodId: true } });
+      const match = await prisma.fifaMatch.findUnique({
+        where: { balldontlieId: matchBdlId },
+        select: { periodId: true },
+      });
       const playerId = await playerIdFor(playerBdlId);
       if (!match?.periodId || !playerId) return; // no period seeded → leave unlocked (TODO(confirm))
       // Monotonic latch: only set when currently NULL (the DB trigger also rejects re-locks).
@@ -1492,17 +1985,31 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       });
     },
 
-    async listSchedulableMatches(): Promise<Array<{ bdlId: number; status: string; kickoffMs: number; hasRating: boolean; lineupPulled: boolean; kickoffLockFallback: boolean }>> {
+    async listSchedulableMatches(): Promise<
+      Array<{
+        bdlId: number;
+        status: string;
+        kickoffMs: number;
+        hasRating: boolean;
+        lineupPulled: boolean;
+        kickoffLockFallback: boolean;
+      }>
+    > {
       const rows = await prisma.fifaMatch.findMany({
         where: { status: { in: ["scheduled", "in_progress", "completed"] } },
         select: {
-          balldontlieId: true, status: true, kickoffAt: true, kickoffLockFallback: true,
+          balldontlieId: true,
+          status: true,
+          kickoffAt: true,
+          kickoffLockFallback: true,
           ratings: { where: { source: "balldontlie" }, select: { matchId: true }, take: 1 },
           _count: { select: { events: true } },
         },
       });
       return rows.map((r) => ({
-        bdlId: r.balldontlieId, status: r.status, kickoffMs: r.kickoffAt.getTime(),
+        bdlId: r.balldontlieId,
+        status: r.status,
+        kickoffMs: r.kickoffAt.getTime(),
         hasRating: r.ratings.length > 0,
         lineupPulled: r._count.events > 0 || r.status !== "scheduled", // proxy: any event/lock means we pulled
         kickoffLockFallback: r.kickoffLockFallback,
@@ -1531,6 +2038,7 @@ git commit -m "feat(ingest): Prisma-backed IngestStore (idempotent upserts, dirt
 ## Task 9: Worker — async mode-dispatch tick + sweep + poller-silent alert + fallback
 
 **Files:**
+
 - Modify: `apps/worker/src/config.ts`, `apps/worker/src/wiring.ts`, `apps/worker/src/scheduler.ts`, `.env.example`
 
 - [ ] **Step 1: `config.ts`** — add fields:
@@ -1575,25 +2083,44 @@ import { config } from "./config";
 import { log } from "./logger";
 import { feed, ingestStore } from "./wiring";
 import { runRecomputeSweep } from "./recompute";
-import { decideMatchModes, pollerSilentMatches, ingestLineups, ingestLive, ingestSettle, type ModeMatch } from "@app/ingest";
+import {
+  decideMatchModes,
+  pollerSilentMatches,
+  ingestLineups,
+  ingestLive,
+  ingestSettle,
+  type ModeMatch,
+} from "@app/ingest";
 
-export interface SchedulerHandle { stop: () => void; }
+export interface SchedulerHandle {
+  stop: () => void;
+}
 
 export function startScheduler(onDrained?: () => void): SchedulerHandle {
-  log.info("scheduler.start", { tickMs: config.tickMs, maxTicks: config.maxTicks, rpm: config.balldontlieRpm });
+  log.info("scheduler.start", {
+    tickMs: config.tickMs,
+    maxTicks: config.maxTicks,
+    rpm: config.balldontlieRpm,
+  });
   const lastLivePoll = new Map<number, number>();
   let ticks = 0;
   let running = false;
   let stopped = false;
 
   async function tick(): Promise<void> {
-    if (running) { log.debug("scheduler.skip", { reason: "overlap" }); return; }
+    if (running) {
+      log.debug("scheduler.skip", { reason: "overlap" });
+      return;
+    }
     running = true;
     try {
       const rows = await ingestStore.listSchedulableMatches();
       const matches: ModeMatch[] = rows.map((r) => ({
-        bdlId: r.bdlId, status: r.status as ModeMatch["status"], kickoffMs: r.kickoffMs,
-        hasRating: r.hasRating, lineupPulled: r.lineupPulled,
+        bdlId: r.bdlId,
+        status: r.status as ModeMatch["status"],
+        kickoffMs: r.kickoffMs,
+        hasRating: r.hasRating,
+        lineupPulled: r.lineupPulled,
       }));
       const now = new Date();
 
@@ -1602,15 +2129,30 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
         log.warn("poller.silent", { matchBdlId: a.bdlId }); // operator flips kickoff_lock_fallback
       }
 
-      const ctxByBdl = new Map(rows.map((r) => [r.bdlId, { bdlId: r.bdlId, kickoffAt: new Date(r.kickoffMs), kickoffLockFallback: r.kickoffLockFallback }]));
+      const ctxByBdl = new Map(
+        rows.map((r) => [
+          r.bdlId,
+          {
+            bdlId: r.bdlId,
+            kickoffAt: new Date(r.kickoffMs),
+            kickoffLockFallback: r.kickoffLockFallback,
+          },
+        ]),
+      );
       for (const action of decideMatchModes(matches, now)) {
         const ctx = ctxByBdl.get(action.bdlId)!;
         try {
           if (action.mode === "pre_match") await ingestLineups(feed, ingestStore, ctx);
-          else if (action.mode === "live") { await ingestLive(feed, ingestStore, ctx); lastLivePoll.set(action.bdlId, now.getTime()); }
-          else if (action.mode === "settle") await ingestSettle(feed, ingestStore, ctx);
+          else if (action.mode === "live") {
+            await ingestLive(feed, ingestStore, ctx);
+            lastLivePoll.set(action.bdlId, now.getTime());
+          } else if (action.mode === "settle") await ingestSettle(feed, ingestStore, ctx);
         } catch (err) {
-          log.error("ingest.error", { matchBdlId: action.bdlId, mode: action.mode, message: (err as Error).message });
+          log.error("ingest.error", {
+            matchBdlId: action.bdlId,
+            mode: action.mode,
+            message: (err as Error).message,
+          });
         }
       }
 
@@ -1622,14 +2164,24 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
       running = false;
       ticks += 1;
       if (config.maxTicks !== null && ticks >= config.maxTicks) {
-        stopped = true; clearInterval(timer); log.info("scheduler.drained", { ticks }); onDrained?.();
+        stopped = true;
+        clearInterval(timer);
+        log.info("scheduler.drained", { ticks });
+        onDrained?.();
       }
     }
   }
 
-  const timer: ReturnType<typeof setInterval> = setInterval(() => { void tick(); }, config.tickMs);
+  const timer: ReturnType<typeof setInterval> = setInterval(() => {
+    void tick();
+  }, config.tickMs);
 
-  return { stop: () => { if (!stopped) clearInterval(timer); log.info("scheduler.stop", { ticks }); } };
+  return {
+    stop: () => {
+      if (!stopped) clearInterval(timer);
+      log.info("scheduler.stop", { ticks });
+    },
+  };
 }
 ```
 
@@ -1686,10 +2238,12 @@ git commit -m "test(ingest): contract — dirty write sweeps to standing; frozen
 - [ ] **Step 1: Purity grep** — assert the pure modules are clock/network/env-free:
 
 Run:
+
 ```bash
 cd "/Users/sergiorios/Documents/World Cup Fantasy"
 grep -nE "Date\\.now|new Date\\(|fetch\\(|process\\.env" packages/ingest/src/map.ts packages/ingest/src/lock.ts packages/ingest/src/mode.ts && echo "IMPURE — FIX" || echo "PURE ✓"
 ```
+
 Expected: `PURE ✓` (no matches). (`new Date(iso)` is allowed ONLY where a kickoff/ISO is parsed — it must NOT appear in map/lock/mode; lock/mode receive `Date`/number, never construct `now`.)
 
 - [ ] **Step 2: Full gate suite.**
@@ -1724,6 +2278,7 @@ git commit -m "docs(prompt-05a): handoff — ingestion + locking + scheduler; TO
 - **TODO(confirm) enum items (incident_class, situation=penalty, duels aerials, blocked_shots defensive, feed status/position vocab, API path/auth, group matchday):** encoded as constants/comments across Tasks 2,3,8. ✓
 
 ## Open `// TODO(confirm):` carried for first live data
+
 1. `match_events.incident_class` own-goal / second-yellow-vs-red strings.
 2. `match_shots.situation` penalty token (`mapShot` `PENALTY` const).
 3. `duels_won` aerial inclusion; `blocked_shots` defensive (30s sanity check).

@@ -7,7 +7,7 @@
  */
 import type { PrismaClient, MatchStatus, PeriodKind, Position } from "@app/db";
 import type { IngestStore, SchedulableMatch } from "./store";
-import type { MatchRowIn, StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
+import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
 
 type Db = PrismaClient;
 

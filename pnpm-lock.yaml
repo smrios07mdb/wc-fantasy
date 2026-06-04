@@ -87,6 +87,9 @@ importers:
       '@app/feed':
         specifier: workspace:*
         version: link:../../packages/feed
+      '@app/ingest':
+        specifier: workspace:*
+        version: link:../../packages/ingest
       '@app/recompute':
         specifier: workspace:*
         version: link:../../packages/recompute
