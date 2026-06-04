@@ -4,8 +4,8 @@
  * ONLY — it never enters scoring. Starters lock at kickoff (any official-XI appearance); subs lock at
  * their effective entry minute; players who never appear are simply absent (caller leaves locked_at null).
  *
- * Time is passed in as a `Date` (kickoff) so this module is clock-free — no `Date.now`/`new Date()` of
- * the wall clock; the only `new Date(...)` here derives an offset FROM the given kickoff.
+ * The kickoff instant is passed in, so this module never reads the wall clock — it stays
+ * deterministic. The only Date it constructs is a fixed offset derived FROM that injected kickoff.
  */
 export interface LineupAppearance {
   playerBdlId: number;

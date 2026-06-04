@@ -5,17 +5,23 @@ import { runRecomputeSweep } from "./recompute";
 import {
   decideMatchModes,
   pollerSilentMatches,
+  anyMatchInLiveWindow,
   ingestSchedule,
   ingestLineups,
   ingestLive,
   ingestSettle,
   type ModeMatch,
   type MatchCtx,
+  type SchedulableMatch,
 } from "@app/ingest";
 
 export interface SchedulerHandle {
   stop: () => void;
 }
+
+/** How early before kickoff and how long after to keep schedule-sync on the tight (every-tick) cadence. */
+const LIVE_WINDOW_PRE_MS = 15 * 60_000;
+const LIVE_WINDOW_POST_MS = 3 * 60 * 60_000;
 
 /**
  * The ingestion scheduler (ARCHITECTURE.md §3). Each tick: read `fifa_match`, choose per-match modes
@@ -46,24 +52,37 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
     }
     running = true;
     try {
-      // Schedule-sync (global fixture pull) on a slow cadence — and always on the first tick to bootstrap.
-      if (ticks === 0 || ticks % config.scheduleSyncEveryTicks === 0) {
-        try {
-          await ingestSchedule(feed, ingestStore);
-        } catch (err) {
-          log.error("ingest.schedule.error", { message: (err as Error).message });
-        }
-      }
-
-      const rows = await ingestStore.listSchedulableMatches();
-      const now = new Date();
-      const matches: ModeMatch[] = rows.map((r) => ({
+      const toModeMatch = (r: SchedulableMatch): ModeMatch => ({
         bdlId: r.bdlId,
         status: r.status as ModeMatch["status"],
         kickoffMs: r.kickoffMs,
         hasRating: r.hasRating,
         lineupPulled: r.lineupPulled || pulledLineups.has(r.bdlId),
-      }));
+      });
+
+      let rows = await ingestStore.listSchedulableMatches();
+      const now = new Date();
+
+      // Schedule-sync (global fixture pull): the slow cadence (and the bootstrap first tick), PLUS every
+      // tick while any fixture is in its match window — so a kicked-off match flips to in_progress (and
+      // its subs start locking) promptly instead of waiting up to an hour (ARCHITECTURE.md §8).
+      const onSlowCadence = ticks === 0 || ticks % config.scheduleSyncEveryTicks === 0;
+      const inWindow = anyMatchInLiveWindow(
+        rows.map(toModeMatch),
+        now,
+        LIVE_WINDOW_PRE_MS,
+        LIVE_WINDOW_POST_MS,
+      );
+      if (onSlowCadence || inWindow) {
+        try {
+          await ingestSchedule(feed, ingestStore);
+          rows = await ingestStore.listSchedulableMatches();
+        } catch (err) {
+          log.error("ingest.schedule.error", { message: (err as Error).message });
+        }
+      }
+
+      const matches: ModeMatch[] = rows.map(toModeMatch);
 
       // Poller-silent alert (§8): a live match with no recent successful live poll → operator flips fallback.
       for (const a of pollerSilentMatches(matches, lastLivePoll, now, config.pollerSilentGraceMs)) {

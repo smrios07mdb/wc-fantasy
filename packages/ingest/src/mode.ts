@@ -52,6 +52,21 @@ export function decideMatchModes(matches: readonly ModeMatch[], now: Date): Matc
   return out;
 }
 
+/**
+ * True when any fixture's kickoff sits within [now - postMs, now + preMs] — its "match window". The
+ * worker tightens schedule-sync to this window so a just-kicked-off match flips to in_progress (and its
+ * subs start locking) promptly, instead of waiting for the slow hourly sync (ARCHITECTURE.md §8).
+ */
+export function anyMatchInLiveWindow(
+  matches: readonly ModeMatch[],
+  now: Date,
+  preMs: number,
+  postMs: number,
+): boolean {
+  const t = now.getTime();
+  return matches.some((m) => m.kickoffMs - preMs <= t && t <= m.kickoffMs + postMs);
+}
+
 /** Matches in a live window whose last successful live poll is older than `graceMs` (or never). §8. */
 export function pollerSilentMatches(
   matches: readonly ModeMatch[],

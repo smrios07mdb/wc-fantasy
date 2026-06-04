@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { decideMatchModes, pollerSilentMatches, type ModeMatch } from "./mode";
+import {
+  decideMatchModes,
+  pollerSilentMatches,
+  anyMatchInLiveWindow,
+  type ModeMatch,
+} from "./mode";
 
 const T = (iso: string) => new Date(iso).getTime();
 const base = { hasRating: false, lineupPulled: false };
@@ -97,5 +102,32 @@ describe("pollerSilentMatches", () => {
     };
     const last = new Map<number, number>([[21, T("2026-06-10T19:08:00Z")]]);
     expect(pollerSilentMatches([m], last, now, 5 * 60_000)).toEqual([]);
+  });
+});
+
+describe("anyMatchInLiveWindow", () => {
+  const PRE = 15 * 60_000;
+  const POST = 3 * 60 * 60_000;
+
+  it("is true when a fixture's kickoff is within [now - post, now + pre]", () => {
+    const now = new Date("2026-06-10T19:00:00Z");
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 30,
+      status: "scheduled",
+      kickoffMs: T("2026-06-10T18:30:00Z"),
+    };
+    expect(anyMatchInLiveWindow([m], now, PRE, POST)).toBe(true);
+  });
+
+  it("is false when every fixture is far from now", () => {
+    const now = new Date("2026-06-10T19:00:00Z");
+    const m: ModeMatch = {
+      ...base,
+      bdlId: 31,
+      status: "scheduled",
+      kickoffMs: T("2026-06-12T18:00:00Z"),
+    };
+    expect(anyMatchInLiveWindow([m], now, PRE, POST)).toBe(false);
   });
 });
