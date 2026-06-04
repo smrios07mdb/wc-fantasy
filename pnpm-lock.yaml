@@ -148,6 +148,12 @@ importers:
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      '@app/recompute':
+        specifier: workspace:*
+        version: link:../recompute
+      '@app/scoring':
+        specifier: workspace:*
+        version: link:../scoring
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.19

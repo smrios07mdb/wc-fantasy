@@ -24,6 +24,8 @@
     "@app/shared": "workspace:*"
   },
   "devDependencies": {
+    "@app/recompute": "workspace:*",
+    "@app/scoring": "workspace:*",
     "@types/node": "^22.10.5"
   }
 }
