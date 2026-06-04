@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-accent="cobalt" data-density="compact">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design System — World Cup Fantasy</title>
+<link rel="stylesheet" href="ds/ds.css">
+<style>
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 96px; }
+  .topbar { position: sticky; top: 0; z-index: 40; background: color-mix(in srgb, var(--surface-0) 88%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--hairline); }
+  .topbar-in { max-width: 1120px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brandmark { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: var(--text-on-accent); font-family: var(--font-display); font-weight: 800; }
+  section { margin-top: 56px; scroll-margin-top: 80px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .sec-head .n { font-family: var(--font-mono); color: var(--accent); font-size: 13px; font-weight: 700; }
+  .sec-sub { color: var(--text-secondary); max-width: 64ch; margin: 0 0 22px; }
+  .grid { display: grid; gap: 14px; }
+  .swatch { border-radius: var(--r-md); border: 1px solid var(--hairline); overflow: hidden; background: var(--surface-1); }
+  .swatch .chip-c { height: 56px; }
+  .swatch .meta { padding: 8px 10px; }
+  .swatch .meta b { display: block; font-size: var(--fs-sm); }
+  .swatch .meta code { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+  .panel { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: 20px; }
+  .panel-2 { background: var(--surface-1); border: 1px solid var(--hairline); border-radius: var(--r-lg); padding: 16px; }
+  .lbl { font-size: var(--fs-micro); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; }
+  .specimen { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--hairline); }
+  .specimen:last-child { border-bottom: none; }
+  .specimen .spec-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .pitch-mini { aspect-ratio: 3/4; background: repeating-linear-gradient(var(--pitch-1) 0 14px, var(--pitch-2) 14px 28px); border-radius: var(--r-md); border: 1px solid var(--hairline-strong); position: relative; overflow: hidden; }
+  .pitch-mini::before { content:""; position:absolute; inset: 8px; border:1px solid rgba(255,255,255,0.18); border-radius: 6px; }
+  .slot { position: absolute; transform: translate(-50%,-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .slot .disc { width: 38px; height: 38px; border-radius: 50%; background: var(--surface-1); border: 2px solid var(--hairline-strong); display: grid; place-items: center; font-weight: 800; box-shadow: var(--e1); }
+  .slot.is-empty .disc { background: rgba(255,255,255,0.06); border-style: dashed; color: var(--text-tertiary); }
+  .vmini { display:flex; flex-direction: column; gap: 8px; }
+  .vmrow { display:flex; align-items:center; gap:10px; padding:8px 10px; background: var(--surface-2); border:1px solid var(--hairline); border-radius: var(--r-md); }
+  .vmrow .nm { flex:1; font-weight:600; font-size: var(--fs-sm); }
+  .vmrow .sc { font-family: var(--font-display); font-weight:800; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .toolbtn { display:inline-flex; gap:6px; align-items:center; }
+  .seg { display:inline-flex; background: var(--surface-2); border:1px solid var(--hairline); border-radius: var(--r-md); padding: 3px; gap:2px; }
+  .seg button { border:none; background:transparent; color: var(--text-secondary); font-weight:600; font-size: var(--fs-sm); padding:6px 12px; border-radius: var(--r-sm); cursor:pointer; }
+  .seg button.on { background: var(--surface-4); color: var(--text-primary); }
+  .nav-jump { display:flex; gap:6px; flex-wrap:wrap; }
+  .nav-jump a { font-size: var(--fs-sm); color: var(--text-secondary); padding: 4px 10px; border-radius: var(--r-pill); background: var(--surface-2); border:1px solid var(--hairline); }
+  .nav-jump a:hover { color: var(--text-primary); background: var(--surface-3); }
+  .twocol { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px){ .twocol{ grid-template-columns:1fr; } .topbar-in{ flex-wrap:wrap; } }
+  .scaletbl { width:100%; border-collapse: collapse; font-size: var(--fs-sm); }
+  .scaletbl td { padding: 7px 8px; border-bottom: 1px solid var(--hairline); font-variant-numeric: tabular-nums; }
+  .scaletbl td:first-child { font-family: var(--font-mono); color: var(--text-tertiary); font-size: 12px; white-space:nowrap; }
+  .ramp { display:flex; gap:0; border-radius: var(--r-md); overflow:hidden; border:1px solid var(--hairline); }
+  .ramp > div { flex:1; height:48px; }
+  /* Tweaks panel */
+  #tweaks { position: fixed; right: 18px; bottom: 18px; width: 264px; z-index: 90; background: var(--surface-1); border: 1px solid var(--hairline-strong); border-radius: var(--r-lg); box-shadow: var(--e3); display: none; overflow: hidden; }
+  #tweaks.show { display: block; }
+  .tw-head { display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; border-bottom: 1px solid var(--hairline); cursor: grab; }
+  .tw-head b { font-family: var(--font-display); font-size: 14px; }
+  .tw-x { background:none; border:none; color: var(--text-tertiary); cursor:pointer; font-size:18px; line-height:1; padding:2px 4px; border-radius:6px; }
+  .tw-x:hover { color: var(--text-primary); background: var(--surface-3); }
+  .tw-body { padding: 12px 14px 16px; display:flex; flex-direction:column; gap:14px; }
+  .tw-row .tw-lbl { font-size: var(--fs-micro); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color: var(--text-tertiary); margin-bottom:8px; }
+  .tw-swatches { display:flex; gap:8px; }
+  .tw-sw { width:34px; height:34px; border-radius:8px; border:2px solid var(--hairline); cursor:pointer; position:relative; transition: transform var(--dur-fast); }
+  .tw-sw:hover { transform: translateY(-1px); }
+  .tw-sw.on { border-color: var(--text-primary); box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent-ring); }
+  .tw-seg { display:flex; background: var(--surface-2); border:1px solid var(--hairline); border-radius: var(--r-md); padding:3px; gap:2px; }
+  .tw-seg button { flex:1; border:none; background:transparent; color: var(--text-secondary); font-weight:600; font-size: var(--fs-sm); padding:7px 8px; border-radius: var(--r-sm); cursor:pointer; }
+  .tw-seg button.on { background: var(--surface-4); color: var(--text-primary); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brandmark">
+      <div class="logo">W</div>
+      <div>
+        <div class="display" style="font-weight:800; font-size:16px; line-height:1;">World Cup Fantasy</div>
+        <div class="t-micro text-tertiary" style="letter-spacing:0.1em;">DESIGN SYSTEM · v1</div>
+      </div>
+    </div>
+    <div class="row gap-3">
+      <div class="seg" id="accentSeg">
+        <button data-accent="cobalt" class="on">Cobalt</button>
+        <button data-accent="green">Green</button>
+        <button data-accent="violet">Violet</button>
+      </div>
+      <div class="seg" id="themeSeg">
+        <button data-theme="dark" class="on">Dark</button>
+        <button data-theme="light">Light</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section style="margin-top:40px;">
+    <h1 class="t-display-l">The system behind a legible live-scores product.</h1>
+    <p class="sec-sub t-body-lg" style="max-width:72ch; margin-top:14px;">A dark-first, data-dense design language for a private World Cup fantasy league. Built so the three things that matter most — <b style="color:var(--text-primary)">the score</b>, <b style="color:var(--text-primary)">the lock status</b>, and <b style="color:var(--text-primary)">whose turn it is</b> — are never obscured. Sleeper-grade craft; when a flourish and a fact compete, the fact wins.</p>
+    <div class="nav-jump" style="margin-top:20px;">
+      <a href="#directions">Directions</a><a href="#color">Color</a><a href="#type">Type</a>
+      <a href="#space">Space &amp; elevation</a><a href="#motion">Motion</a><a href="#buttons">Buttons</a>
+      <a href="#forms">Forms</a><a href="#status">Status &amp; badges</a><a href="#players">Player cards</a>
+      <a href="#data">Data &amp; standings</a><a href="#overlays">Overlays &amp; states</a><a href="#tailwind">Tailwind handoff</a>
+    </div>
+  </section>
+
+  <!-- THEME JUSTIFICATION -->
+  <section>
+    <div class="sec-head"><span class="n">00</span><h2 class="t-h2">Why dark-first</h2></div>
+    <p class="sec-sub">Justified, not defaulted. Managers live on this app during evening match windows — a dark canvas reduces glare across a ~month of late kickoffs, suits OLED phones in a dark room, and makes the functional colors (live red, frozen steel, yet-to-play amber) read as <i>signals</i> against a calm neutral rather than competing with a bright field. Light theme is a first-class toggle for daytime and accessibility, shipped here in parallel.</p>
+  </section>
+
+  <!-- DIRECTIONS -->
+  <section id="directions">
+    <div class="sec-head"><span class="n">01</span><h2 class="t-h2">Visual directions</h2></div>
+    <p class="sec-sub">Three accent directions on the same dense surface — a “vs the field” mini-board. <b style="color:var(--text-primary)">Cobalt</b> is the system default; toggle the header (or Tweaks) to apply globally. The accent only ever marks <i>you</i> and primary actions — functional colors stay reserved for state.</p>
+    <div class="grid" style="grid-template-columns: repeat(3,1fr);">
+      <div class="panel-2" style="--accent:#4D8DFF; --accent-soft:rgba(77,141,255,0.16); --text-on-accent:#04101F;">
+        <div class="between" style="margin-bottom:12px;"><b class="display">Cobalt</b><span class="t-micro text-tertiary">default · calm</span></div>
+        <div class="vmini" id="dirA"></div>
+      </div>
+      <div class="panel-2" style="--accent:#2FD39A; --accent-soft:rgba(47,211,154,0.15); --text-on-accent:#052016;">
+        <div class="between" style="margin-bottom:12px;"><b class="display">Emerald</b><span class="t-micro text-tertiary">refined green</span></div>
+        <div class="vmini" id="dirB"></div>
+      </div>
+      <div class="panel-2" style="--accent:#8B7CFF; --accent-soft:rgba(139,124,255,0.18); --text-on-accent:#0C0726;">
+        <div class="between" style="margin-bottom:12px;"><b class="display">Violet</b><span class="t-micro text-tertiary">new suggestion</span></div>
+        <div class="vmini" id="dirC"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOR -->
+  <section id="color">
+    <div class="sec-head"><span class="n">02</span><h2 class="t-h2">Color tokens</h2></div>
+    <p class="sec-sub">Semantic surfaces &amp; text, one accent, and a reserved set of <b style="color:var(--text-primary)">functional</b> colors. Functional color is <i>never</i> the only signal — every state below also carries an icon and a label (see Status &amp; badges).</p>
+
+    <div class="lbl">Surface / elevation</div>
+    <div class="grid" style="grid-template-columns: repeat(6,1fr); margin-bottom:24px;">
+      <div class="swatch"><div class="chip-c" style="background:var(--surface-0)"></div><div class="meta"><b>surface-0</b><code>app bg</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--surface-1)"></div><div class="meta"><b>surface-1</b><code>cards</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--surface-2)"></div><div class="meta"><b>surface-2</b><code>rows/inputs</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--surface-3)"></div><div class="meta"><b>surface-3</b><code>hover/pop</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--surface-4)"></div><div class="meta"><b>surface-4</b><code>active</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--accent)"></div><div class="meta"><b>accent</b><code>primary</code></div></div>
+    </div>
+
+    <div class="lbl">Functional — each ships with icon + label</div>
+    <div class="grid" style="grid-template-columns: repeat(6,1fr);">
+      <div class="swatch"><div class="chip-c" style="background:var(--live)"></div><div class="meta"><b>live</b><code>on air</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--locked)"></div><div class="meta"><b>locked</b><code>frozen</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--ytp)"></div><div class="meta"><b>yet-to-play</b><code>still to come</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--win)"></div><div class="meta"><b>win</b><code></code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--loss)"></div><div class="meta"><b>loss</b><code></code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--draw)"></div><div class="meta"><b>draw</b><code></code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--elim)"></div><div class="meta"><b>eliminated</b><code>guillotine</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--refund)"></div><div class="meta"><b>refund</b><code>void bid</code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--danger)"></div><div class="meta"><b>danger</b><code></code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--success)"></div><div class="meta"><b>success</b><code></code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--info)"></div><div class="meta"><b>info</b><code></code></div></div>
+      <div class="swatch"><div class="chip-c" style="background:var(--pos-gk)"></div><div class="meta"><b>pos badges</b><code>GK/DEF/MID/FWD</code></div></div>
+    </div>
+  </section>
+
+  <!-- TYPE -->
+  <section id="type">
+    <div class="sec-head"><span class="n">03</span><h2 class="t-h2">Typography</h2></div>
+    <p class="sec-sub"><b style="color:var(--text-primary)">Schibsted Grotesk</b> for display &amp; scores, <b style="color:var(--text-primary)">Hanken Grotesk</b> for UI &amp; body, <b style="color:var(--text-primary)">JetBrains Mono</b> for timers &amp; raw stats. Tabular figures everywhere numbers line up in columns.</p>
+    <div class="twocol">
+      <div class="panel">
+        <div class="specimen"><span class="t-display-xl">112.4</span><span class="spec-meta">display-xl · 48/50 · 800</span></div>
+        <div class="specimen"><span class="t-display-l">Group Stage</span><span class="spec-meta">display-l · 36/40 · 700</span></div>
+        <div class="specimen"><span class="t-h1">On the clock</span><span class="spec-meta">h1 · 28/34 · 700</span></div>
+        <div class="specimen"><span class="t-h2">Set your lineup</span><span class="spec-meta">h2 · 22/28 · 700</span></div>
+        <div class="specimen"><span class="t-h3">Best available</span><span class="spec-meta">h3 · 18/24 · 600</span></div>
+        <div class="specimen"><span class="t-body-lg">Body large — fixtures &amp; detail.</span><span class="spec-meta">16/24</span></div>
+        <div class="specimen"><span class="t-body">Body — the workhorse size.</span><span class="spec-meta">14/20</span></div>
+        <div class="specimen"><span class="t-sm">Small — dense rows.</span><span class="spec-meta">13/18</span></div>
+        <div class="specimen"><span class="t-caption">Caption — hints &amp; meta.</span><span class="spec-meta">12/16</span></div>
+        <div class="specimen"><span class="t-label">Label · uppercase</span><span class="spec-meta">11/14 · 700</span></div>
+      </div>
+      <div class="panel">
+        <div class="lbl">Tabular figures (scores align)</div>
+        <table class="scaletbl num" style="margin-bottom:20px;">
+          <tr><td style="font-family:var(--font-sans)">Margaux</td><td class="num display" style="text-align:right;font-weight:800;font-size:18px">112.4</td><td class="num" style="text-align:right">9-2</td></tr>
+          <tr><td style="font-family:var(--font-sans)">Tomás</td><td class="num display" style="text-align:right;font-weight:800;font-size:18px">98.1</td><td class="num" style="text-align:right">7-4</td></tr>
+          <tr><td style="font-family:var(--font-sans)">Wei</td><td class="num display" style="text-align:right;font-weight:800;font-size:18px">104.0</td><td class="num" style="text-align:right">8-3</td></tr>
+        </table>
+        <div class="lbl">Mono — timer / FAAB clock</div>
+        <div class="mono" style="font-size:30px; font-weight:700;">00:23<span style="opacity:.5">.4</span></div>
+        <div class="mono text-secondary" style="margin-top:6px;">$100 · waiver #3 · 06:00 UTC</div>
+        <div class="lbl" style="margin-top:20px;">Numeric tone</div>
+        <p class="t-sm text-secondary" style="margin:0">Scores use display weight 800. Records, budgets and minutes use sans/mono with <code class="mono" style="font-size:11px">tabular-nums</code> so digits never shift width as they tick.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SPACE / RADIUS / ELEVATION -->
+  <section id="space">
+    <div class="sec-head"><span class="n">04</span><h2 class="t-h2">Spacing, radius &amp; elevation</h2></div>
+    <p class="sec-sub">A compact 4-based spacing scale (this is a dense app), four radii, and three elevation tiers that lean on surface + hairline before shadow.</p>
+    <div class="twocol">
+      <div class="panel">
+        <div class="lbl">Spacing scale</div>
+        <div class="stack gap-2">
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-1 · 4</span><div style="height:14px;width:4px;background:var(--accent)"></div></div>
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-2 · 8</span><div style="height:14px;width:8px;background:var(--accent)"></div></div>
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-3 · 12</span><div style="height:14px;width:12px;background:var(--accent)"></div></div>
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-4 · 16</span><div style="height:14px;width:16px;background:var(--accent)"></div></div>
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-6 · 24</span><div style="height:14px;width:24px;background:var(--accent)"></div></div>
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-8 · 32</span><div style="height:14px;width:32px;background:var(--accent)"></div></div>
+          <div class="row gap-3"><span class="spec-meta" style="width:64px">sp-12 · 48</span><div style="height:14px;width:48px;background:var(--accent)"></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="lbl">Radius &amp; elevation</div>
+        <div class="demo-row" style="margin-bottom:18px;">
+          <div style="width:60px;height:44px;background:var(--surface-3);border-radius:var(--r-sm)"></div>
+          <div style="width:60px;height:44px;background:var(--surface-3);border-radius:var(--r-md)"></div>
+          <div style="width:60px;height:44px;background:var(--surface-3);border-radius:var(--r-lg)"></div>
+          <div style="width:60px;height:44px;background:var(--surface-3);border-radius:var(--r-xl)"></div>
+          <div style="width:44px;height:44px;background:var(--surface-3);border-radius:var(--r-pill)"></div>
+        </div>
+        <div class="demo-row">
+          <div style="width:88px;height:52px;background:var(--surface-1);border:1px solid var(--hairline);border-radius:var(--r-md);box-shadow:var(--e1)"></div>
+          <div style="width:88px;height:52px;background:var(--surface-1);border:1px solid var(--hairline);border-radius:var(--r-md);box-shadow:var(--e2)"></div>
+          <div style="width:88px;height:52px;background:var(--surface-1);border:1px solid var(--hairline-strong);border-radius:var(--r-md);box-shadow:var(--e3)"></div>
+        </div>
+        <div class="row gap-6 t-caption text-tertiary" style="margin-top:8px;"><span style="width:88px">e1 row</span><span style="width:88px">e2 card</span><span style="width:88px">e3 overlay</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOTION -->
+  <section id="motion">
+    <div class="sec-head"><span class="n">05</span><h2 class="t-h2">Motion</h2></div>
+    <p class="sec-sub">Restrained and meaningful: a countdown tick, a score-change pulse, a pick-made transition. Durations 120/180/260ms; everything respects <code class="mono" style="font-size:12px">prefers-reduced-motion</code>.</p>
+    <div class="demo-row">
+      <div class="panel-2"><div class="lbl">Countdown tick</div><div class="countdown is-mine" id="mtTick" style="font-size:28px">00:08</div></div>
+      <div class="panel-2"><div class="lbl">Score pulse</div><div class="display" id="mtScore" style="font-size:28px;font-weight:800">86.2</div></div>
+      <div class="panel-2"><div class="lbl">Live</div><span class="pill pill-live"><span class="dot"></span>Live 67'</span></div>
+    </div>
+  </section>
+
+  <!-- BUTTONS -->
+  <section id="buttons">
+    <div class="sec-head"><span class="n">06</span><h2 class="t-h2">Buttons</h2><span class="text-tertiary t-sm">default · hover · focus · disabled · loading</span></div>
+    <div class="panel">
+      <div class="lbl">Variants</div>
+      <div class="demo-row" style="margin-bottom:18px;">
+        <button class="btn btn-primary">Draft player</button>
+        <button class="btn">Secondary</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-quiet">Quiet</button>
+        <button class="btn btn-danger">Drop</button>
+      </div>
+      <div class="lbl">Sizes &amp; states</div>
+      <div class="demo-row">
+        <button class="btn btn-primary btn-lg">Large</button>
+        <button class="btn btn-primary">Default</button>
+        <button class="btn btn-primary btn-sm">Small</button>
+        <button class="btn btn-primary" disabled>Disabled</button>
+        <button class="btn btn-primary"><span class="spinner"></span>Submitting…</button>
+        <button class="btn" style="box-shadow:var(--ring-focus)">Focus ring</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FORMS -->
+  <section id="forms">
+    <div class="sec-head"><span class="n">07</span><h2 class="t-h2">Inputs</h2><span class="text-tertiary t-sm">default · focus · error · disabled · tabs</span></div>
+    <div class="twocol">
+      <div class="panel">
+        <label class="field-label">Email</label>
+        <input class="input" placeholder="you@league.com" value="margaux@league.com">
+        <div class="field-hint">We’ll send a magic link — no password.</div>
+        <label class="field-label" style="margin-top:16px;">Bid amount</label>
+        <input class="input is-error" value="$140">
+        <div class="field-error">✕ Exceeds remaining FAAB ($100).</div>
+        <label class="field-label" style="margin-top:16px;">Disabled</label>
+        <input class="input" value="Locked field" disabled>
+      </div>
+      <div class="panel">
+        <div class="lbl">Segmented tabs</div>
+        <div class="tabs" style="margin-bottom:18px;">
+          <button class="tab is-active">All</button><button class="tab">GK</button>
+          <button class="tab">DEF</button><button class="tab">MID</button><button class="tab">FWD</button>
+        </div>
+        <div class="lbl">Underline tabs (screen headers)</div>
+        <div class="tabline">
+          <button class="tabline-item is-active">My team</button>
+          <button class="tabline-item">Standings</button>
+          <button class="tabline-item">Matchups</button>
+          <button class="tabline-item">Players</button>
+        </div>
+        <div class="lbl" style="margin-top:18px;">Filter chips</div>
+        <div class="demo-row">
+          <span class="chip is-active">Available</span><span class="chip">My watchlist</span><span class="chip">Injured</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATUS / BADGES -->
+  <section id="status">
+    <div class="sec-head"><span class="n">08</span><h2 class="t-h2">Status &amp; badges</h2></div>
+    <p class="sec-sub">The product’s identity lives here. Every state is <b style="color:var(--text-primary)">color + icon + word</b> so it survives color-blindness, glare and grayscale print.</p>
+    <div class="panel">
+      <div class="lbl">Lineup / match state</div>
+      <div class="demo-row" style="margin-bottom:18px;">
+        <span class="pill pill-live"><span class="dot"></span>Live 67'</span>
+        <span class="pill pill-locked"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Locked</span>
+        <span class="pill pill-ytp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Yet to play</span>
+        <span class="pill pill-elim"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 6l12 12M18 6 6 18"/></svg>Eliminated</span>
+        <span class="pill pill-refund"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Refunded</span>
+      </div>
+      <div class="lbl">Head-to-head outcome</div>
+      <div class="demo-row" style="margin-bottom:18px;">
+        <span class="pill pill-win">▲ Win</span><span class="pill pill-loss">▼ Loss</span><span class="pill pill-draw">— Draw</span>
+        <span class="row gap-1"><span class="wld wld-W">W</span><span class="wld wld-W">W</span><span class="wld wld-L">L</span><span class="wld wld-D">D</span><span class="wld wld-W">W</span></span>
+      </div>
+      <div class="lbl">Position badges</div>
+      <div class="demo-row" style="margin-bottom:18px;">
+        <span class="pos pos-GK">GK</span><span class="pos pos-DEF">DEF</span><span class="pos pos-MID">MID</span><span class="pos pos-FWD">FWD</span>
+      </div>
+      <div class="lbl">Presence avatars</div>
+      <div class="demo-row">
+        <span class="avatar avatar-md presence-ring" style="background:#7C5CFF">MK</span>
+        <span class="avatar avatar-md" style="background:#2E8B8B">Tó<span class="presence-dot is-online"></span></span>
+        <span class="avatar avatar-md" style="background:#B0823A">We<span class="presence-dot"></span></span>
+        <span class="avatar avatar-sm" style="background:#5C7CFF">JД</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLAYER CARDS + PITCH -->
+  <section id="players">
+    <div class="sec-head"><span class="n">09</span><h2 class="t-h2">Player card &amp; pitch slot</h2></div>
+    <div class="twocol">
+      <div class="panel">
+        <div class="lbl">Compact — swappable / locked / owned</div>
+        <div class="stack gap-2" style="margin-bottom:18px;">
+          <div class="pcard">
+            <span class="flag" style="background:linear-gradient(90deg,#0b6fb8 33%,#fff 33% 66%,#0b6fb8 66%)"></span>
+            <span class="pos pos-FWD">FWD</span>
+            <div class="stack" style="flex:1"><b class="t-sm">J. Álvarez</b><span class="t-caption text-tertiary">ARG · vs MEX</span></div>
+            <span class="pill pill-ytp" style="margin-right:6px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>19:00</span>
+            <b class="display num" style="font-size:16px">—</b>
+          </div>
+          <div class="pcard is-locked">
+            <span class="flag" style="background:linear-gradient(180deg,#000 33%,#d00 33% 66%,#ffce00 66%)"></span>
+            <span class="pos pos-MID">MID</span>
+            <div class="stack" style="flex:1"><b class="t-sm">J. Musiala</b><span class="t-caption text-tertiary">GER · Live 67'</span></div>
+            <span class="pill pill-locked" style="margin-right:6px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+            <b class="display num score-pulse" style="font-size:16px;color:var(--win)">14.2</b>
+          </div>
+          <div class="pcard is-owned">
+            <span class="flag" style="background:linear-gradient(180deg,#c60b1e 33%,#ffc400 33% 66%,#c60b1e 66%)"></span>
+            <span class="pos pos-DEF">DEF</span>
+            <div class="stack" style="flex:1"><b class="t-sm">D. Carvajal</b><span class="t-caption text-tertiary">Owned · Tomás</span></div>
+            <span class="t-caption text-tertiary">Rostered</span>
+          </div>
+        </div>
+        <div class="lbl">Expanded</div>
+        <div class="card-2" style="padding:14px;">
+          <div class="row gap-3" style="margin-bottom:10px;">
+            <span class="avatar avatar-lg" style="background:#1a3a6b">JÁ</span>
+            <div class="stack" style="flex:1"><div class="row gap-2"><b class="t-body-lg">Julián Álvarez</b><span class="pos pos-FWD">FWD</span></div><span class="t-caption text-tertiary">Argentina · #9 · acquired R3.4</span></div>
+            <div class="stack" style="text-align:right"><b class="display" style="font-size:24px">14.2</b><span class="t-micro text-tertiary">last match</span></div>
+          </div>
+          <div class="row gap-4 t-caption text-secondary" style="border-top:1px solid var(--hairline);padding-top:10px;">
+            <span><b class="num" style="color:var(--text-primary)">3</b> G</span><span><b class="num" style="color:var(--text-primary)">1</b> A</span><span><b class="num" style="color:var(--text-primary)">90'</b> min</span><span><b class="num" style="color:var(--text-primary)">8.4</b> rating</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="lbl">Formation pitch slots — filled / empty / locked</div>
+        <div class="pitch-mini" style="max-width:240px;margin:0 auto;">
+          <div class="slot" style="left:50%;top:88%"><div class="disc pos-GK" style="color:#04140E">PK</div><span class="t-micro">Pickford</span></div>
+          <div class="slot" style="left:22%;top:62%"><div class="disc">SM</div><span class="t-micro">Saliba</span></div>
+          <div class="slot is-empty" style="left:50%;top:62%"><div class="disc">+</div><span class="t-micro text-tertiary">DEF</span></div>
+          <div class="slot" style="left:78%;top:62%"><div class="disc" style="border-color:var(--locked);box-shadow:0 0 0 2px var(--locked-soft)">MU</div><span class="pill pill-locked" style="height:16px;padding:0 5px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span></div>
+          <div class="slot" style="left:30%;top:32%"><div class="disc">JB</div><span class="t-micro">Bellingham</span></div>
+          <div class="slot" style="left:70%;top:32%"><div class="disc" style="border-color:var(--live);box-shadow:0 0 0 2px var(--live-soft)">JÁ</div><span class="pill pill-live" style="height:16px;padding:0 5px"><span class="dot"></span></span></div>
+        </div>
+        <p class="t-caption text-tertiary" style="margin-top:12px;text-align:center;">Steel ring = locked · red ring = live · dashed = open slot</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA / STANDINGS -->
+  <section id="data">
+    <div class="sec-head"><span class="n">10</span><h2 class="t-h2">Data rows, standings &amp; budget</h2></div>
+    <div class="twocol">
+      <div class="panel" style="padding:0;overflow:hidden">
+        <table class="dtable">
+          <thead><tr><th style="width:28px">#</th><th>Manager</th><th class="num">Rec</th><th class="num">PF</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td><div class="row gap-2"><span class="avatar avatar-sm" style="background:#2E8B8B">Tó</span>Tomás</div></td><td class="num">9–2</td><td class="num">1142</td></tr>
+            <tr class="row-me"><td class="num">2</td><td><div class="row gap-2"><span class="avatar avatar-sm" style="background:#7C5CFF">MK</span>Margaux <span class="t-micro text-tertiary">(you)</span></div></td><td class="num">8–3</td><td class="num">1098</td></tr>
+            <tr><td class="num">3</td><td><div class="row gap-2"><span class="avatar avatar-sm" style="background:#B0823A">We</span>Wei</div></td><td class="num">8–3</td><td class="num">1071</td></tr>
+            <tr><td class="num">4</td><td><div class="row gap-2"><span class="avatar avatar-sm" style="background:#5C7CFF">Jð</span>Jordi</div></td><td class="num">6–5</td><td class="num">1004</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="lbl">FAAB budget meter</div>
+        <div class="stack gap-4">
+          <div><div class="between" style="margin-bottom:6px"><span class="t-sm">Healthy</span><b class="num t-sm">$78 / 100</b></div><div class="meter"><span style="width:78%"></span></div></div>
+          <div><div class="between" style="margin-bottom:6px"><span class="t-sm">Low</span><b class="num t-sm">$22 / 100</b></div><div class="meter is-low"><span style="width:22%"></span></div></div>
+          <div><div class="between" style="margin-bottom:6px"><span class="t-sm">Spent</span><b class="num t-sm">$0 / 100</b></div><div class="meter is-empty"><span style="width:4%"></span></div></div>
+        </div>
+        <div class="lbl" style="margin-top:20px">Position requirement progress</div>
+        <div class="row gap-3">
+          <div class="stack" style="align-items:center;gap:4px"><span class="pos pos-GK">GK</span><b class="num t-sm">2/2</b></div>
+          <div class="stack" style="align-items:center;gap:4px"><span class="pos pos-DEF">DEF</span><b class="num t-sm">4/5</b></div>
+          <div class="stack" style="align-items:center;gap:4px"><span class="pos pos-MID">MID</span><b class="num t-sm">5/5</b></div>
+          <div class="stack" style="align-items:center;gap:4px"><span class="pos pos-FWD">FWD</span><b class="num t-sm">2/3</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- OVERLAYS / STATES -->
+  <section id="overlays">
+    <div class="sec-head"><span class="n">11</span><h2 class="t-h2">Overlays &amp; system states</h2></div>
+    <div class="twocol">
+      <div class="panel">
+        <div class="lbl">Toasts</div>
+        <div class="stack gap-2" style="margin-bottom:18px">
+          <div class="toast toast-success"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg><div><b class="t-sm">Bid won — A. Saka for $34</b><div class="t-caption text-tertiary">FAAB now $44. Added to your bench.</div></div></div>
+          <div class="toast toast-warn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--ytp)" stroke-width="2.4"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><div><b class="t-sm">A starter is yet to play</b><div class="t-caption text-tertiary">Álvarez kicks off 19:00 — still swappable.</div></div></div>
+          <div class="toast toast-danger"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--refund)" stroke-width="2.4"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg><div><b class="t-sm">Bid voided &amp; refunded</b><div class="t-caption text-tertiary">Modrić had already kicked off. $40 returned.</div></div></div>
+        </div>
+        <div class="lbl">Inline alerts</div>
+        <div class="stack gap-2">
+          <div class="alert alert-info"><b>Period frozen.</b> Scores settle ~6h after the last whistle.</div>
+          <div class="alert alert-danger"><b>Live poller silent.</b> Stats may be stale — commissioner notified.</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="lbl">Realtime connection</div>
+        <div class="demo-row" style="margin-bottom:18px">
+          <span class="pill" style="background:var(--success-soft);color:var(--success)"><span class="dot"></span>Synced</span>
+          <span class="pill" style="background:var(--ytp-soft);color:var(--ytp)"><span class="spinner" style="width:9px;height:9px"></span>Reconnecting…</span>
+          <span class="pill" style="background:var(--surface-3);color:var(--text-tertiary)">Stale · 2m ago</span>
+        </div>
+        <div class="lbl">Loading (skeleton)</div>
+        <div class="stack gap-2" style="margin-bottom:18px">
+          <div class="row gap-2"><div class="skeleton" style="width:24px;height:24px;border-radius:50%"></div><div class="skeleton" style="height:12px;flex:1"></div><div class="skeleton" style="height:12px;width:40px"></div></div>
+          <div class="row gap-2"><div class="skeleton" style="width:24px;height:24px;border-radius:50%"></div><div class="skeleton" style="height:12px;flex:1"></div><div class="skeleton" style="height:12px;width:40px"></div></div>
+        </div>
+        <div class="lbl">Empty state</div>
+        <div class="card-2" style="padding:24px;text-align:center">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.6" style="width:28px;height:28px;margin:0 auto 8px"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>
+          <b class="t-sm">No free agents match “striker”</b>
+          <div class="t-caption text-tertiary" style="margin-top:2px">Clear filters or widen your search.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAILWIND -->
+  <section id="tailwind">
+    <div class="sec-head"><span class="n">12</span><h2 class="t-h2">Tailwind handoff</h2></div>
+    <p class="sec-sub">Every token maps 1:1 to a <code class="mono" style="font-size:12px">tailwind.config</code> theme extension. CSS variables stay the runtime source (theme + accent swap at the <code class="mono" style="font-size:12px">&lt;html&gt;</code> level); Tailwind classes reference them so Code writes <code class="mono" style="font-size:12px">bg-surface-1 text-live</code>, not raw hex.</p>
+    <div class="panel mono t-sm" style="white-space:pre;overflow:auto;color:var(--text-secondary)">theme: { extend: {
+  colors: {
+    surface: { 0:'var(--surface-0)', 1:'var(--surface-1)', 2:'var(--surface-2)', 3:'var(--surface-3)', 4:'var(--surface-4)' },
+    accent:  { DEFAULT:'var(--accent)', hover:'var(--accent-hover)', press:'var(--accent-press)' },
+    live:'var(--live)', locked:'var(--locked)', ytp:'var(--ytp)',
+    win:'var(--win)', loss:'var(--loss)', draw:'var(--draw)',
+    elim:'var(--elim)', refund:'var(--refund)', danger:'var(--danger)', success:'var(--success)',
+    pos: { gk:'var(--pos-gk)', def:'var(--pos-def)', mid:'var(--pos-mid)', fwd:'var(--pos-fwd)' },
+  },
+  fontFamily: { display:['Schibsted Grotesk'], sans:['Hanken Grotesk'], mono:['JetBrains Mono'] },
+  borderRadius: { sm:'6px', md:'8px', lg:'12px', xl:'16px' },
+  boxShadow: { e1:'var(--e1)', e2:'var(--e2)', e3:'var(--e3)' },
+  transitionTimingFunction: { standard:'cubic-bezier(.2,0,0,1)' },
+}}</div>
+  </section>
+
+  <footer style="margin-top:64px;padding-top:24px;border-top:1px solid var(--hairline);color:var(--text-tertiary)" class="t-sm">
+    Design System v1 — World Cup Fantasy. Next: the three live/lock surfaces (draft room, vs-the-field, set-lineup), then core &amp; specialized screens, then a navigable shell.
+  </footer>
+</div>
+
+<div id="tweaks">
+  <div class="tw-head" id="twHead"><b>Tweaks</b><button class="tw-x" id="twClose">✕</button></div>
+  <div class="tw-body">
+    <div class="tw-row">
+      <div class="tw-lbl">Accent</div>
+      <div class="tw-swatches" id="twAccent">
+        <button class="tw-sw" data-accent="cobalt" style="background:#4D8DFF" title="Cobalt"></button>
+        <button class="tw-sw" data-accent="green" style="background:#2FD39A" title="Emerald"></button>
+        <button class="tw-sw" data-accent="violet" style="background:#8B7CFF" title="Violet"></button>
+      </div>
+    </div>
+    <div class="tw-row">
+      <div class="tw-lbl">Theme</div>
+      <div class="tw-seg" id="twTheme">
+        <button data-theme="dark">Dark</button><button data-theme="light">Light</button>
+      </div>
+    </div>
+    <div class="tw-row">
+      <div class="tw-lbl">Density</div>
+      <div class="tw-seg" id="twDensity">
+        <button data-density="compact">Compact</button><button data-density="comfortable">Comfortable</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const root = document.documentElement;
+
+  // ---- Tweak state (host persists this EDITMODE block on disk) ----
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "accent": "cobalt",
+    "theme": "light",
+    "density": "compact"
+  }/*EDITMODE-END*/;
+
+  // merge any locally-saved overrides (survives reload in preview)
+  try { Object.assign(TWEAKS, JSON.parse(localStorage.getItem('wcf-ds-tweaks') || '{}')); } catch(e){}
+
+  function applyTweaks() {
+    root.setAttribute('data-accent', TWEAKS.accent);
+    root.setAttribute('data-theme', TWEAKS.theme);
+    root.setAttribute('data-density', TWEAKS.density);
+    // reflect in header segs
+    syncSeg(document.getElementById('accentSeg'), 'accent', TWEAKS.accent);
+    syncSeg(document.getElementById('themeSeg'), 'theme', TWEAKS.theme);
+    // reflect in tweak panel
+    syncSel('#twAccent .tw-sw', 'accent', TWEAKS.accent);
+    syncSeg(document.getElementById('twTheme'), 'theme', TWEAKS.theme);
+    syncSeg(document.getElementById('twDensity'), 'density', TWEAKS.density);
+  }
+  function syncSeg(container, key, val) {
+    if (!container) return;
+    [...container.children].forEach(c => c.classList.toggle('on', c.dataset[key] === val));
+  }
+  function syncSel(sel, key, val) {
+    document.querySelectorAll(sel).forEach(c => c.classList.toggle('on', c.dataset[key] === val));
+  }
+  function setTweak(key, val) {
+    TWEAKS[key] = val;
+    applyTweaks();
+    try { localStorage.setItem('wcf-ds-tweaks', JSON.stringify(TWEAKS)); } catch(e){}
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [key]: val } }, '*');
+  }
+
+  // ---- Host Tweaks protocol ----
+  const panel = document.getElementById('tweaks');
+  window.addEventListener('message', e => {
+    const t = e?.data?.type;
+    if (t === '__activate_edit_mode') panel.classList.add('show');
+    else if (t === '__deactivate_edit_mode') panel.classList.remove('show');
+  });
+  window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+  document.getElementById('twClose').addEventListener('click', () => {
+    panel.classList.remove('show');
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  });
+
+  // ---- Wire controls (header segs + tweak panel both feed setTweak) ----
+  document.getElementById('accentSeg').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setTweak('accent', b.dataset.accent); });
+  document.getElementById('themeSeg').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setTweak('theme', b.dataset.theme); });
+  document.getElementById('twAccent').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setTweak('accent', b.dataset.accent); });
+  document.getElementById('twTheme').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setTweak('theme', b.dataset.theme); });
+  document.getElementById('twDensity').addEventListener('click', e => { const b=e.target.closest('button'); if(b) setTweak('density', b.dataset.density); });
+
+  // draggable panel
+  (function(){
+    const head = document.getElementById('twHead'); let sx,sy,ox,oy,drag=false;
+    head.addEventListener('mousedown', e => { if(e.target.id==='twClose') return; drag=true; const r=panel.getBoundingClientRect(); sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top; panel.style.right='auto'; panel.style.bottom='auto'; panel.style.left=r.left+'px'; panel.style.top=r.top+'px'; e.preventDefault(); });
+    window.addEventListener('mousemove', e => { if(!drag) return; panel.style.left=(ox+e.clientX-sx)+'px'; panel.style.top=(oy+e.clientY-sy)+'px'; });
+    window.addEventListener('mouseup', () => drag=false);
+  })();
+
+  applyTweaks();
+
+  // Direction mini-boards
+  const dirData = [
+    {nm:'Margaux', sc:'112.4', me:true, rec:'8–3', ytp:2},
+    {nm:'Tomás', sc:'98.1', rec:'9–2', ytp:0},
+    {nm:'Wei', sc:'104.0', rec:'8–3', ytp:1},
+  ];
+  function miniBoard(el){
+    el.innerHTML = dirData.map(d => `
+      <div class="vmrow" ${d.me?'style="border-color:var(--accent);background:var(--accent-soft)"':''}>
+        <span class="avatar avatar-sm" style="background:${d.me?'var(--accent)':'var(--surface-4)'};color:${d.me?'var(--text-on-accent)':'var(--text-primary)'}">${d.nm.slice(0,2)}</span>
+        <div class="stack" style="flex:1"><span class="nm">${d.nm}${d.me?' <span class="t-micro text-tertiary">(you)</span>':''}</span>
+        <span class="t-micro text-tertiary">${d.rec} · ${d.ytp} yet to play</span></div>
+        <span class="sc">${d.sc}</span>
+      </div>`).join('');
+  }
+  ['dirA','dirB','dirC'].forEach(id => miniBoard(document.getElementById(id)));
+
+  // Motion demos
+  const mtTick = document.getElementById('mtTick');
+  let t = 8; setInterval(()=>{ t = t<=0?8:t-1; mtTick.textContent = '00:'+String(t).padStart(2,'0'); mtTick.classList.toggle('is-urgent', t<=5); const s=document.createElement('span'); }, 1000);
+  const mtScore = document.getElementById('mtScore');
+  let sc = 86.2; setInterval(()=>{ sc = +(sc + Math.random()*3).toFixed(1); mtScore.textContent = sc.toFixed(1); mtScore.classList.remove('score-pulse'); void mtScore.offsetWidth; mtScore.classList.add('score-pulse'); if(sc>140) sc=72.0; }, 2600);
+</script>
+</body>
+</html>

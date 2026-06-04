@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-accent="cobalt" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Component Map — World Cup Fantasy</title>
+<link rel="stylesheet" href="ds/ds.css">
+<style>
+  html,body{ height:100%; } body{ background:var(--surface-0); color:var(--text-primary); font-family:var(--font-sans); margin:0; }
+  ::-webkit-scrollbar{ width:11px; height:11px; } ::-webkit-scrollbar-thumb{ background:var(--surface-4); border-radius:10px; border:3px solid var(--surface-0);}
+
+  .cm{ display:grid; grid-template-columns:248px 1fr; min-height:100vh; max-width:1320px; margin:0 auto; }
+
+  /* ---- side nav ---- */
+  .cm-side{ position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; border-right:1px solid var(--hairline); padding:26px 18px; display:flex; flex-direction:column; gap:4px; background:var(--surface-1); }
+  .cm-brand{ display:flex; align-items:center; gap:11px; margin-bottom:18px; }
+  .cm-logo{ width:34px; height:34px; border-radius:9px; background:var(--accent); display:grid; place-items:center; color:var(--text-on-accent); font-family:var(--font-display); font-weight:900; font-size:18px; }
+  .cm-brand b{ font-family:var(--font-display); font-weight:800; font-size:15px; display:block; line-height:1.1; }
+  .cm-brand span{ font-size:11px; color:var(--text-tertiary); }
+  .cm-navlbl{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--text-tertiary); padding:14px 10px 4px; }
+  .cm-navitem{ display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:var(--r-md); color:var(--text-secondary); font-size:13.5px; font-weight:600; text-decoration:none; }
+  .cm-navitem:hover{ background:var(--surface-2); color:var(--text-primary); }
+  .cm-navitem .n{ width:18px; color:var(--text-tertiary); font-family:var(--font-mono); font-size:11px; }
+
+  /* ---- content ---- */
+  .cm-main{ padding:48px 56px 120px; min-width:0; }
+  .cm-hero{ border:1px solid var(--hairline); background:linear-gradient(180deg, var(--surface-1), var(--surface-0)); border-radius:var(--r-2xl); padding:34px 36px; margin-bottom:44px; box-shadow:var(--e2); }
+  .cm-kicker{ display:inline-flex; align-items:center; gap:7px; height:26px; padding:0 12px; border-radius:var(--r-pill); background:var(--accent-soft); color:var(--accent); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; margin-bottom:16px; }
+  .cm-kicker::before{ content:''; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+  .cm-hero h1{ font-family:var(--font-display); font-size:38px; font-weight:800; letter-spacing:-.025em; line-height:1.05; margin:0 0 12px; }
+  .cm-hero p{ color:var(--text-secondary); font-size:15.5px; line-height:1.6; max-width:720px; margin:0; }
+  .cm-hero .lead-strong{ color:var(--text-primary); font-weight:600; }
+  .cm-herostats{ display:flex; gap:34px; margin-top:24px; padding-top:22px; border-top:1px solid var(--hairline); }
+  .cm-hs b{ font-family:var(--font-display); font-size:30px; font-weight:800; line-height:1; display:block; }
+  .cm-hs span{ font-size:12px; color:var(--text-tertiary); }
+
+  section{ margin-bottom:52px; scroll-margin-top:24px; }
+  .cm-h2{ font-family:var(--font-display); font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.09em; color:var(--accent); margin:0 0 4px; }
+  .cm-h2-sub{ font-family:var(--font-display); font-size:25px; font-weight:800; letter-spacing:-.02em; margin:0 0 6px; }
+  .cm-lede{ color:var(--text-secondary); font-size:14.5px; line-height:1.55; margin:0 0 22px; max-width:760px; }
+
+  /* tables */
+  .cm-table{ width:100%; border-collapse:collapse; border:1px solid var(--hairline); border-radius:var(--r-lg); overflow:hidden; font-size:13.5px; }
+  .cm-table thead th{ background:var(--surface-2); text-align:left; padding:11px 14px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-tertiary); font-weight:700; border-bottom:1px solid var(--hairline); white-space:nowrap; }
+  .cm-table td{ padding:12px 14px; border-bottom:1px solid var(--hairline); vertical-align:top; line-height:1.5; }
+  .cm-table tbody tr:last-child td{ border-bottom:none; }
+  .cm-table tbody tr:hover{ background:var(--surface-1); }
+  .cm-table .cmp{ font-weight:700; color:var(--text-primary); white-space:nowrap; }
+  .cm-table .file{ font-family:var(--font-mono); font-size:12px; color:var(--accent); white-space:nowrap; }
+  .cm-table .muted{ color:var(--text-secondary); }
+  code{ font-family:var(--font-mono); font-size:.86em; background:var(--surface-2); border:1px solid var(--hairline); border-radius:5px; padding:1px 5px; color:var(--text-primary); }
+
+  .cm-grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+  /* swatch row — the living vocabulary preview */
+  .cm-swatches{ display:flex; flex-wrap:wrap; gap:10px; margin:0 0 22px; }
+  .cm-chip{ display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:var(--r-pill); border:1px solid var(--hairline); background:var(--surface-1); font-size:12.5px; font-weight:600; }
+  .pos{ display:inline-grid; place-items:center; min-width:30px; height:20px; padding:0 6px; border-radius:5px; font-size:11px; font-weight:800; color:#04101F; }
+  .pos-GK{ background:var(--pos-gk,#5E6E8C); color:#fff; } .pos-DEF{ background:#4DA8FF; } .pos-MID{ background:#19E08A; } .pos-FWD{ background:#FF6B8A; color:#fff; }
+  .dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .ava{ width:24px; height:24px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:10px; font-weight:800; }
+
+  /* callout */
+  .cm-note{ display:flex; gap:13px; border:1px solid var(--hairline); border-left:3px solid var(--ytp); background:var(--ytp-soft); border-radius:var(--r-lg); padding:15px 17px; margin:18px 0; }
+  .cm-note.ok{ border-left-color:var(--win); background:var(--win-soft); }
+  .cm-note.info{ border-left-color:var(--accent); background:var(--accent-soft); }
+  .cm-note h4{ margin:0 0 5px; font-size:13.5px; font-weight:800; }
+  .cm-note p{ margin:0; font-size:13px; color:var(--text-secondary); line-height:1.55; }
+  .cm-note .ic{ font-size:16px; line-height:1.3; }
+  .gap-list{ counter-reset:g; list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:12px; }
+  .gap-list li{ display:flex; gap:13px; border:1px solid var(--hairline); background:var(--surface-1); border-radius:var(--r-lg); padding:15px 17px; }
+  .gap-list li::before{ counter-increment:g; content:counter(g); width:26px; height:26px; flex:none; border-radius:50%; background:var(--ytp-soft); color:var(--ytp); display:grid; place-items:center; font-weight:800; font-size:13px; }
+  .gap-list b{ display:block; margin-bottom:3px; }
+  .gap-list span{ color:var(--text-secondary); font-size:13px; line-height:1.55; }
+
+  .pill-s{ display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:var(--r-pill); font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+  .pill-new{ background:var(--accent-soft); color:var(--accent); }
+  .pill-commish{ background:var(--locked-soft); color:var(--locked); }
+
+  @media (max-width:1080px){ .cm{ grid-template-columns:1fr; } .cm-side{ display:none; } .cm-main{ padding:32px 24px 80px; } .cm-grid2{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="cm">
+  <!-- ───────── side nav ───────── -->
+  <aside class="cm-side">
+    <div class="cm-brand">
+      <div class="cm-logo">W</div>
+      <div><b>Component Map</b><span>WC Fantasy League · Phase 5</span></div>
+    </div>
+    <div class="cm-navlbl">Handoff</div>
+    <a class="cm-navitem" href="#conventions"><span class="n">00</span>Conventions</a>
+    <a class="cm-navitem" href="#vocab"><span class="n">01</span>Vocabulary</a>
+    <a class="cm-navitem" href="#screens"><span class="n">02</span>Screen map</a>
+    <a class="cm-navitem" href="#ia"><span class="n">03</span>Shell &amp; IA</a>
+    <a class="cm-navitem" href="#data"><span class="n">04</span>Data modules</a>
+    <a class="cm-navitem" href="#gaps"><span class="n">05</span>Open gaps</a>
+    <div class="cm-navlbl">Surfaces</div>
+    <a class="cm-navitem" href="App Shell.html"><span class="n">→</span>App Shell</a>
+    <a class="cm-navitem" href="Design System.html"><span class="n">→</span>Design System</a>
+  </aside>
+
+  <!-- ───────── content ───────── -->
+  <main class="cm-main">
+    <div class="cm-hero">
+      <div class="cm-kicker">Phase 5 · Integration</div>
+      <h1>One product, one vocabulary.</h1>
+      <p><span class="lead-strong">The screen → component → state map for the Claude Code handoff.</span> Every surface
+      is built from <span class="lead-strong">one</span> canonical set of components — PlayerCard, StandingsRow, LockTag,
+      ScorePill, KitChip, the presenter stage, the iOS frame, Module / PrimaryBanner. This map says what each one is,
+      where the design reference defines it, where it's reused, and which live state each screen owns. Tokens live only
+      in <code>ds/ds.css</code>; values here are illustrative where <code>SCORING.md</code> is still open.</p>
+      <div class="cm-herostats">
+        <div class="cm-hs"><b>15</b><span>surfaces, incl. shell</span></div>
+        <div class="cm-hs"><b>1</b><span>component vocabulary</span></div>
+        <div class="cm-hs"><b>N</b><span>managers — never hardcoded</span></div>
+        <div class="cm-hs"><b>3</b><span>open gaps, flagged</span></div>
+      </div>
+    </div>
+
+    <!-- 00 conventions -->
+    <section id="conventions">
+      <p class="cm-h2">00 — Baked in</p>
+      <h2 class="cm-h2-sub">Conventions every screen already obeys</h2>
+      <p class="cm-lede">These are settled. Don't relitigate them in implementation — they are the product's identity.</p>
+      <div class="cm-swatches">
+        <span class="cm-chip"><span class="pos pos-GK">GK</span><span class="pos pos-DEF">DEF</span><span class="pos pos-MID">MID</span><span class="pos pos-FWD">FWD</span>&nbsp;Position badges (fixed)</span>
+        <span class="cm-chip"><span class="dot" style="background:var(--accent)"></span>Cobalt = you + actions only</span>
+        <span class="cm-chip"><span class="dot" style="background:var(--live)"></span>Live</span>
+        <span class="cm-chip"><span class="dot" style="background:var(--locked)"></span>Locked</span>
+        <span class="cm-chip"><span class="dot" style="background:var(--ytp)"></span>Yet-to-play</span>
+        <span class="cm-chip"><span class="dot" style="background:var(--win)"></span>Win</span>
+        <span class="cm-chip"><span class="dot" style="background:var(--elim)"></span>Eliminated</span>
+      </div>
+      <table class="cm-table">
+        <thead><tr><th>Rule</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td class="cmp">Theme</td><td class="muted">Dark-first, light first-class. <code>data-theme</code> on <code>&lt;html&gt;</code>.</td></tr>
+          <tr><td class="cmp">Accent</td><td class="muted"><b>Cobalt <code>#4D8DFF</code></b> marks <em>you</em> + primary actions only — never a functional state. Emerald / Violet kept as alternates. <b>Gold removed project-wide.</b></td></tr>
+          <tr><td class="cmp">Functional color</td><td class="muted">Always <b>color + icon + word</b>. Never color alone.</td></tr>
+          <tr><td class="cmp">Numbers</td><td class="muted">Tabular figures where they align. Display = Schibsted Grotesk · UI = Hanken Grotesk · timers/stats = JetBrains Mono.</td></tr>
+          <tr><td class="cmp">Variable N</td><td class="muted">Read <code>MANAGERS.length</code> — never hardcode 12.</td></tr>
+          <tr><td class="cmp">Time</td><td class="muted">UTC-stored; league-local is display-only. Be explicit when showing times.</td></tr>
+          <tr><td class="cmp">League name</td><td class="muted"><b>Placeholder <code>"WC Fantasy League"</code></b> — a 5-spot swap (<code>AUTH_LEAGUE.name</code>, <code>LEAGUE.name</code>, <code>LEAGUE_INFO.name</code>, the notifs literal, <code>SHELL_LEAGUE_NAME</code>). No locale flavoring; <code>@example.com</code> only.</td></tr>
+          <tr><td class="cmp">Scoring values</td><td class="muted">Illustrative — <code>SCORING.md</code> never provided. Layout is real; values are flagged in-UI.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 01 vocabulary -->
+    <section id="vocab">
+      <p class="cm-h2">01 — Build once, reuse</p>
+      <h2 class="cm-h2-sub">The canonical component vocabulary</h2>
+      <p class="cm-lede">"Defined in" is the design-reference file to port from. Build <b>one</b> of each and reuse it; never re-invent a PlayerCard or StandingsRow per screen.</p>
+
+      <h3 style="font-size:14px;margin:0 0 9px;color:var(--text-secondary)">Primitives &amp; atoms</h3>
+      <table class="cm-table">
+        <thead><tr><th>Component</th><th>Defined in</th><th>What it is · key state</th></tr></thead>
+        <tbody>
+          <tr><td class="cmp">PositionBadge <code>Pos</code></td><td class="file">vsfield/components.jsx</td><td class="muted">GK/DEF/MID/FWD chip; fixed position palette.</td></tr>
+          <tr><td class="cmp">Flag</td><td class="file">vsfield/components.jsx</td><td class="muted">National flag chip via <code>flagStyle(nat)</code>.</td></tr>
+          <tr><td class="cmp">Avatar</td><td class="file">vsfield/components.jsx</td><td class="muted">Manager initials disc; <code>size</code> sm/md/lg, presence dot.</td></tr>
+          <tr><td class="cmp">ConnPill</td><td class="file">vsfield/components.jsx</td><td class="muted">live / reconnecting / stale / loading.</td></tr>
+          <tr><td class="cmp">KitChip / JERSEY_BG</td><td class="file">setlineup/data.jsx</td><td class="muted">Flag-as-jersey, 54-nation lib. <b>Never <code>background-size:cover</code></b> — collapses the layered flag. Variants: <code>KitChip</code> · <code>FaKit</code> · <code>NotifKit</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-size:14px;margin:26px 0 9px;color:var(--text-secondary)">Status &amp; scoring — the unusual mechanics</h3>
+      <table class="cm-table">
+        <thead><tr><th>Component</th><th>Defined in</th><th>What it is · key state</th></tr></thead>
+        <tbody>
+          <tr><td class="cmp">LockTag + lock-on-play</td><td class="file">roster/ · setlineup/</td><td class="muted"><b>movable</b> (match not KO'd — swappable, incl. benched 0-min starter) · <b>locked·playing</b> · <b>locked·played</b>. No auto-subs. <code>statusOf</code>.</td></tr>
+          <tr><td class="cmp">ScorePill</td><td class="file">setlineup/components.jsx</td><td class="muted">Live/banked points; red pulse when live; click → PlayerScoreSheet.</td></tr>
+          <tr><td class="cmp">PlayerScoreSheet</td><td class="file">setlineup/components.jsx</td><td class="muted">Minute-by-minute; canonical events sum to hero total (honesty contract).</td></tr>
+          <tr><td class="cmp">RecordBadge</td><td class="file">vsfield/components.jsx</td><td class="muted">All-play-all W–L "power record"; provisional vs final.</td></tr>
+          <tr><td class="cmp">H2HResult</td><td class="file">vsfield/components.jsx</td><td class="muted">One-vs-one margin within the field + each side's ytp.</td></tr>
+          <tr><td class="cmp">Countdown</td><td class="file">ds.css <code>.countdown</code></td><td class="muted">Deadline / kickoff / "on the clock"; urgent threshold.</td></tr>
+          <tr><td class="cmp">useScorePulse</td><td class="file">vsfield/components.jsx</td><td class="muted">Hook — flash a number on change.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-size:14px;margin:26px 0 9px;color:var(--text-secondary)">Pitch · tables · modules</h3>
+      <div class="cm-grid2">
+        <table class="cm-table">
+          <thead><tr><th>Pitch / lineup</th><th>Defined in</th></tr></thead>
+          <tbody>
+            <tr><td class="cmp">Pitch / PitchToken</td><td class="file">setlineup/components.jsx</td></tr>
+            <tr><td class="cmp">PitchMini</td><td class="file">vsfield/components.jsx</td></tr>
+            <tr><td class="cmp">FormationPicker</td><td class="file">setlineup/components.jsx</td></tr>
+            <tr><td class="cmp">LockHero</td><td class="file">setlineup/components.jsx</td></tr>
+            <tr><td class="cmp">MyReducedPitch / PoNode</td><td class="file">playoffs/components.jsx</td></tr>
+          </tbody>
+        </table>
+        <table class="cm-table">
+          <thead><tr><th>Tables / modules</th><th>Defined in</th></tr></thead>
+          <tbody>
+            <tr><td class="cmp">Module</td><td class="file">dashboard/components.jsx</td></tr>
+            <tr><td class="cmp">PrimaryBanner</td><td class="file">dashboard/components.jsx</td></tr>
+            <tr><td class="cmp">StandingsTable / StandRow</td><td class="file">standings/components.jsx</td></tr>
+            <tr><td class="cmp">FormStrip · Seed · Move</td><td class="file">standings/components.jsx</td></tr>
+            <tr><td class="cmp">MatchStrip / MatchCard</td><td class="file">vsfield/components.jsx</td></tr>
+            <tr><td class="cmp">FeedItem</td><td class="file">vsfield/components.jsx</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="font-size:14px;margin:26px 0 9px;color:var(--text-secondary)">Surface-specific (still one each)</h3>
+      <table class="cm-table">
+        <thead><tr><th>Components</th><th>Defined in</th></tr></thead>
+        <tbody>
+          <tr><td class="cmp">FaKit · CutoffTag · Acquire · FaBidPreview</td><td class="file">fa/components.jsx</td></tr>
+          <tr><td class="cmp">FaabBar · WaiverOrderRail · BidComposer · ResultsBatch</td><td class="file">waivers/components.jsx</td></tr>
+          <tr><td class="cmp">GuillotineCutLine · SurvivorRow · RoundColumn · ReinforceModule</td><td class="file">playoffs/components.jsx</td></tr>
+          <tr><td class="cmp">AdmCard · ConfirmModal · AuditLog · ViewAsSwitcher · Stepper</td><td class="file">admin/components.jsx · panels.jsx</td></tr>
+          <tr><td class="cmp">AuthFlow · RosterAvatars · InviteBanner · PrivateTag</td><td class="file">auth/components.jsx</td></tr>
+          <tr><td class="cmp">NotifItem · CatIcon · NotifToast · Bell · PreferencesPanel</td><td class="file">notifs/components.jsx</td></tr>
+          <tr><td class="cmp">SubCard · SettingRow · SegControl · ProfileHeader · appearance picker</td><td class="file">settings/components.jsx</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-size:14px;margin:26px 0 9px;color:var(--text-secondary)">Shell / chrome <span class="pill-s pill-new">New · Phase 5</span></h3>
+      <table class="cm-table">
+        <thead><tr><th>Component</th><th>Defined in</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td class="cmp">GlobalSidebar / GlobalTopbar</td><td class="file">shell/components.jsx</td><td class="muted">Desktop nav — two patterns, a Tweak. One IA, active state.</td></tr>
+          <tr><td class="cmp">MobileTabBar + MobileSheet</td><td class="file">shell/components.jsx</td><td class="muted">5-slot tab-bar; Market / More open bottom sheets.</td></tr>
+          <tr><td class="cmp">NavIcon</td><td class="file">shell/components.jsx</td><td class="muted">One icon set for every destination.</td></tr>
+          <tr><td class="cmp">ShellBell</td><td class="file">shell/components.jsx</td><td class="muted">Unread badge from <code>shellUnread(t)</code> → <code>buildFeed</code> — same feed as Notifications.</td></tr>
+          <tr><td class="cmp">AvatarMenu</td><td class="file">shell/components.jsx</td><td class="muted">Profile · Settings · Commissioner (gated) · Sign out → Join.</td></tr>
+          <tr><td class="cmp">DesktopShell / MobileShell / ShellHome</td><td class="file">shell/desktop.jsx · mobile.jsx</td><td class="muted">Chrome wrapping a live Home that reuses dashboard <code>renderModule</code>/<code>modulesFor</code>/<code>PrimaryBanner</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="cm-note info"><span class="ic">◆</span><div><h4>Presentation scaffold ≠ product chrome</h4><p>The presenter stage (<code>vf-stage</code> / <code>vf-frames</code> / <code>vf-browser</code> / <code>vf-phone</code>), the <code>useFitScale</code> hook (with the <code>w&lt;=0</code> guard + height-aware <code>Math.min</code>), the <code>IOSDevice</code> bezel and the per-screen sim-bar are how the <em>design files</em> show desktop + mobile side-by-side. In production, Code drops each screen's content into the shell layout and discards the stage + sim bar.</p></div></div>
+    </section>
+
+    <!-- 02 screen map -->
+    <section id="screens">
+      <p class="cm-h2">02 — Ownership</p>
+      <h2 class="cm-h2-sub">Screen → file → state → components</h2>
+      <p class="cm-lede">Each screen is its own fit-scaled desktop+mobile stage today. The App Shell is the canonical chrome that ties them together; in production the shell layout wraps every route.</p>
+      <table class="cm-table">
+        <thead><tr><th>#</th><th>Screen</th><th>File · dir</th><th>State it owns</th><th>Reuses</th></tr></thead>
+        <tbody>
+          <tr><td>—</td><td class="cmp">App Shell <span class="pill-s pill-new">New</span></td><td class="file">App Shell.html · shell/</td><td class="muted">nav pattern, phase, sim clock, feed state, commish flag, bell unread</td><td class="muted">GlobalNav, AvatarMenu, ShellBell, dashboard Home, IOSDevice, stage</td></tr>
+          <tr><td>1</td><td class="cmp">Draft Room</td><td class="file">Draft Room.html · draft/</td><td class="muted">snake board, 60s clock, queue, autopick, presence</td><td class="muted">Pos, Flag, Avatar, Countdown, KitChip</td></tr>
+          <tr><td>2</td><td class="cmp">Vs the Field</td><td class="file">Vs the Field.html · vsfield/</td><td class="muted">sim minute, feed state, selected opponent</td><td class="muted">PitchMini, RecordBadge, H2HResult, MatchStrip, FeedItem, useScorePulse</td></tr>
+          <tr><td>3</td><td class="cmp">Set Lineup</td><td class="file">Set Lineup.html · setlineup/</td><td class="muted">formation, swap selection, period tab, playoff mode, autosave</td><td class="muted">Pitch, FormationPicker, LockHero, ScorePill, JERSEY_BG</td></tr>
+          <tr><td>4</td><td class="cmp">Dashboard / Home</td><td class="file">Dashboard.html · dashboard/</td><td class="muted">phase, hub↔router, layout</td><td class="muted">Module, PrimaryBanner, all phase modules</td></tr>
+          <tr><td>5</td><td class="cmp">My Team / Roster</td><td class="file">My Team.html · roster/</td><td class="muted">grouping↔table, drop/restore, legality 2/5/5/3</td><td class="muted">LockTag, ScorePill, KitChip, LegalityStrip</td></tr>
+          <tr><td>6</td><td class="cmp">Player Box Score</td><td class="file">Player Box Score.html · boxscore/</td><td class="muted">selected player (<code>?p=</code>), lead/breakdown layout</td><td class="muted">ScorePill total contract, period vs season columns</td></tr>
+          <tr><td>7</td><td class="cmp">Standings</td><td class="file">Standings.html · standings/</td><td class="muted">sim minute → live reorder, field size, expanded row</td><td class="muted">StandingsTable, FormStrip, Seed, Move, cutContext</td></tr>
+          <tr><td>8</td><td class="cmp">Free Agents</td><td class="file">Free Agents.html · fa/</td><td class="muted">search/filter/sort, include-rostered, cutoff clock</td><td class="muted">FaKit, CutoffTag, Acquire, FaBidPreview</td></tr>
+          <tr><td>9</td><td class="cmp">Waivers / FAAB</td><td class="file">Waivers.html · waivers/</td><td class="muted">pending claims, batch results, void+refund, playoff reset</td><td class="muted">FaabBar, WaiverOrderRail, BidComposer, ResultsBatch</td></tr>
+          <tr><td>10</td><td class="cmp">Guillotine Playoffs</td><td class="file">Guillotine Playoffs.html · playoffs/</td><td class="muted">round nav, live cut line, field size, schedule, board↔ladder</td><td class="muted">GuillotineCutLine, SurvivorRow, MyReducedPitch, ReinforceModule</td></tr>
+          <tr><td>11</td><td class="cmp">Commissioner <span class="pill-s pill-commish">Gated</span></td><td class="file">Commissioner.html · admin/</td><td class="muted">field lock (type-to-confirm), stat corrections, ops, audit, view-as</td><td class="muted">AdmCard, ConfirmModal, AuditLog, ViewAsSwitcher, Stepper</td></tr>
+          <tr><td>12</td><td class="cmp">Join / Auth</td><td class="file">Join.html · auth/</td><td class="muted">auth state machine, email validity, allowlist gate, invite mode</td><td class="muted">AuthFlow, RosterAvatars, InviteBanner, PrivateTag</td></tr>
+          <tr><td>13</td><td class="cmp">Notifications</td><td class="file">Notifications.html · notifs/</td><td class="muted">filter, group-by, mark-read, live toasts, preferences</td><td class="muted">NotifItem, FilterChips, NotifToast, Bell, PreferencesPanel</td></tr>
+          <tr><td>14</td><td class="cmp">Settings / Profile</td><td class="file">Settings.html · settings/</td><td class="muted">section, editable profile, <b>appearance (real settings)</b>, sessions, danger</td><td class="muted">SubCard, SegControl, appearance picker, PreferencesPanel</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 03 IA -->
+    <section id="ia">
+      <p class="cm-h2">03 — Connective tissue</p>
+      <h2 class="cm-h2-sub">The shell &amp; information architecture</h2>
+      <p class="cm-lede">Canonical IA lives in <code>shell/data.jsx</code>. Every destination is a real screen. Flat primary list + a "More" overflow; mobile collapses to a 5-slot tab-bar with Market / More sheets.</p>
+      <div class="cm-grid2">
+        <table class="cm-table">
+          <thead><tr><th>Desktop nav</th><th>Destinations</th></tr></thead>
+          <tbody>
+            <tr><td class="cmp">Primary</td><td class="muted">Home · My Team · Set Lineup · The Field · Standings · Free Agents</td></tr>
+            <tr><td class="cmp">More overflow</td><td class="muted">Waivers · Draft Room · Guillotine Playoffs · Player Box Score · Notifications · Settings</td></tr>
+            <tr><td class="cmp">Commissioner <span class="pill-s pill-commish">Gated</span></td><td class="muted">Slate "elevated privileges" entry — pinned bottom of sidebar / in More / avatar menu.</td></tr>
+            <tr><td class="cmp">Chrome</td><td class="muted">ConnPill · Bell (unread) · AvatarMenu</td></tr>
+          </tbody>
+        </table>
+        <table class="cm-table">
+          <thead><tr><th>Mobile tab-bar</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td class="cmp">Home</td><td class="muted">→ shell home</td></tr>
+            <tr><td class="cmp">My Team</td><td class="muted">→ roster</td></tr>
+            <tr><td class="cmp">The Field</td><td class="muted">→ vs-the-field</td></tr>
+            <tr><td class="cmp">Market</td><td class="muted">sheet → Free Agents · Waivers · Draft Room</td></tr>
+            <tr><td class="cmp">More</td><td class="muted">sheet → Standings · Playoffs · Box Score · Notifications · Settings · Commissioner</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cm-note info"><span class="ic">◆</span><div><h4>Integration depth</h4><p>The shell owns persistent identity/feed chrome (bell unread from <code>buildFeed</code>, avatar menu, active state) plus a phase/clock that drives the hosted Home. Other destinations are independent surfaces reached by navigation. Shell Tweaks: <b>nav pattern</b> (sidebar ↔ top-bar) · <b>Commissioner</b> on/off · <b>theme</b>. League phase + feed state are presenter sim-bar affordances, removed in production.</p></div></div>
+    </section>
+
+    <!-- 04 data -->
+    <section id="data">
+      <p class="cm-h2">04 — Don't re-derive</p>
+      <h2 class="cm-h2-sub">Data &amp; logic modules to port</h2>
+      <p class="cm-lede">The aggregation/eval logic is already written and consistent across screens. Reuse these exports rather than re-deriving records, locks, FAAB or seeding.</p>
+      <table class="cm-table">
+        <thead><tr><th>Module</th><th>Key exports</th></tr></thead>
+        <tbody>
+          <tr><td class="file">vsfield/data.jsx</td><td class="muted"><code>MANAGERS</code> · <code>ME_ID</code> · <code>mgr</code> · <code>NATIONS</code>/<code>flagStyle</code> · <code>MATCHES</code> · <code>evalField</code> · <code>recordForPeriod</code> · <code>seasonTable</code> · <code>feedUpTo</code></td></tr>
+          <tr><td class="file">setlineup/data.jsx</td><td class="muted"><code>JERSEY_BG</code> + helpers · <code>buildLineup</code> · <code>lineupSummary</code> · <code>SQUAD</code> · <code>FORMATIONS(_PO)</code> · <code>PERIODS</code> · <code>SL_DEFAULT_MIN</code>/<code>SL_DEADLINE</code></td></tr>
+          <tr><td class="file">roster/data.jsx</td><td class="muted"><code>ROSTER_REQ</code> (2/5/5/3) · <code>ROSTER_FAAB</code>/<code>faabLeft</code> · <code>ACQ</code> · <code>seasonPts</code> · <code>playerFixture</code> · <code>canDrop</code></td></tr>
+          <tr><td class="file">standings/data.jsx</td><td class="muted"><code>buildStandings</code> · <code>cutContext</code> · <code>winPct</code> · <code>stCmp</code> (wins → points tiebreak)</td></tr>
+          <tr><td class="file">fa/data.jsx</td><td class="muted"><code>FA_POOL</code> · <code>faCutoff</code> · <code>faAvailable</code> · <code>faList</code> · <code>faCounts</code></td></tr>
+          <tr><td class="file">waivers/data.jsx</td><td class="muted"><code>faabState</code> · <code>claimStatus</code> (open/void) · <code>claimableFAs</code> · <code>droppableSquad</code></td></tr>
+          <tr><td class="file">playoffs/data.jsx</td><td class="muted"><code>buildGuillotine</code> · <code>poSeeds</code> · <code>cutSchedule</code> · <code>poMyMargin</code></td></tr>
+          <tr><td class="file">admin/data.jsx</td><td class="muted"><code>STAT_CATS</code>/<code>STAT_GROUPS</code> · <code>catPts</code>/<code>linePts</code> · <code>fieldPlan</code> · <code>AUDIT_SEED</code> · <code>IS_COMMISSIONER</code></td></tr>
+          <tr><td class="file">auth/data.jsx</td><td class="muted"><code>AUTH_VIEWS</code> · <code>ALLOWLIST</code>/<code>onAllowlist</code> · <code>emailValid</code> · <code>INVITE</code> · <code>AUTH_LEAGUE</code></td></tr>
+          <tr><td class="file">notifs/data.jsx</td><td class="muted"><code>buildFeed</code> · <code>groupFeed</code> · <code>NOTIF_CATS</code> · <code>NOTIF_HISTORY</code>/<code>NOTIF_LIVE</code> · <code>NOTIF_PREF_ROWS</code></td></tr>
+          <tr><td class="file">dashboard/data.jsx</td><td class="muted"><code>PHASES</code> · <code>modulesFor</code> · <code>seasonTable</code> · <code>myLock</code> · <code>waiverState</code> · <code>fixtures</code> · <code>ACTIVITY</code></td></tr>
+          <tr><td class="file">shell/data.jsx <span class="pill-s pill-new">New</span></td><td class="muted"><code>SHELL_NAV_PRIMARY</code>/<code>_MORE</code>/<code>_COMMISH</code> · <code>SHELL_MOBILE_TABS</code> · <code>SHELL_MARKET_GROUP</code> · <code>shellMoreGroup</code> · <code>shellAvatarMenu</code> · <code>shellUnread</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 05 gaps -->
+    <section id="gaps">
+      <p class="cm-h2">05 — Flag, don't invent</p>
+      <h2 class="cm-h2-sub">Open gaps</h2>
+      <p class="cm-lede">The four "brain" docs (<code>PROJECT</code> / <code>ARCHITECTURE</code> / <code>DECISIONS</code> / <code>SCORING.md</code>) were never provided. These remain genuinely undecided and are surfaced in-UI as provisional / illustrative — resolve via a decision thread, not in code.</p>
+      <ol class="gap-list">
+        <li><div><b>SCORING.md — categories &amp; point values.</b><span>The box-score <em>layout</em> is final; the values are illustrative and flagged in-UI. Don't freeze values into shared scoring logic.</span></div></li>
+        <li><div><b>Final playoff field size (8 vs 10) + exact per-round cut counts.</b><span>Modeled as commissioner-set (<code>fieldPlan</code> / <code>cutSchedule</code>), provisional until the group→playoff transition. The Commissioner screen locks it; the spec value is TBD.</span></div></li>
+        <li><div><b>Group-stage period count feeding seeding, and weekly-record tie handling beyond total points.</b><span>The all-play-all record assumes ties break on total points; deeper tie rules undefined.</span></div></li>
+      </ol>
+      <div class="cm-note ok"><span class="ic">✓</span><div><h4>Resolved — don't reopen</h4><p>FAAB tie on equal bids → <b>breaks on the rolling waiver order</b> (stated in Waivers UI). <b>Gold removed project-wide</b> — <code>--pos-gk</code> slate, <code>--ytp</code> orange. League name stays the <code>"WC Fantasy League"</code> placeholder; no locale flavoring.</p></div></div>
+      <p style="margin-top:30px;color:var(--text-tertiary);font-size:12.5px">The developer-facing twin of this map is <code>COMPONENT_MAP.md</code> — drops straight into the Code repo.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>
