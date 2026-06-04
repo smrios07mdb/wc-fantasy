@@ -1,0 +1,134 @@
+import { describe, it, expect } from "vitest";
+import { MemoryIngestStore } from "./memoryStore";
+import { ingestLineups, ingestLive, ingestSettle } from "./ingest";
+import type { FeedClient } from "@app/feed";
+
+/** A FeedClient whose endpoints return empty pages unless overridden. */
+function fakeFeed(over: Partial<FeedClient>): FeedClient {
+  const empty = <T>() => Promise.resolve({ data: [] as T[], meta: {} });
+  return {
+    matches: empty,
+    matchLineups: empty,
+    matchEvents: empty,
+    playerMatchStats: empty,
+    teamMatchStats: empty,
+    matchShots: empty,
+    ...over,
+  } as FeedClient;
+}
+
+const kickoff = new Date("2026-06-10T18:00:00Z");
+
+describe("ingestLineups (pre-match)", () => {
+  it("locks every official-XI starter at kickoff; benched players stay unlocked", async () => {
+    const feed = fakeFeed({
+      matchLineups: () =>
+        Promise.resolve({
+          data: [
+            {
+              match_id: 50,
+              entries: [
+                { player_id: 1, is_starter: true },
+                { player_id: 2, is_starter: true },
+                { player_id: 3, is_starter: false },
+              ],
+            },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestLineups(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    expect(store.lockedAt(50, 1)).toEqual(kickoff);
+    expect(store.lockedAt(50, 2)).toEqual(kickoff);
+    expect(store.lockedAt(50, 3)).toBeUndefined(); // bench (not in real XI) stays swappable
+  });
+});
+
+describe("ingestLive", () => {
+  it("upserts events/stats, locks the substitute at his entry minute, marks players dirty", async () => {
+    const feed = fakeFeed({
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 900,
+              match_id: 50,
+              incident_type: "substitution",
+              player_in_id: 7,
+              player_out_id: 2,
+              time_minute: 61,
+              added_time: 1,
+            },
+          ],
+          meta: {},
+        }),
+      playerMatchStats: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, player_id: 7, minutes_played: 30, rating: 7.1 }],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    expect(store.lockedAt(50, 7)).toEqual(new Date("2026-06-10T19:02:00Z")); // +62 min
+    expect(store.isDirty(50, 7)).toBe(true);
+    expect(store.ratingFor(50, 7)).toBe(7.1);
+    expect(store.allEvents()).toHaveLength(1);
+  });
+
+  it("marks the out-going player dirty even with no stat row (event-only)", async () => {
+    const feed = fakeFeed({
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            { id: 901, match_id: 50, incident_type: "goal", player_id: 9, assist_player_id: 4 },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    expect(store.isDirty(50, 9)).toBe(true); // scorer
+    expect(store.isDirty(50, 4)).toBe(true); // assist
+  });
+
+  it("under kickoff-lock fallback, does NOT lock an entering substitute", async () => {
+    const feed = fakeFeed({
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 902,
+              match_id: 50,
+              incident_type: "substitution",
+              player_in_id: 7,
+              time_minute: 61,
+              added_time: 0,
+            },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: true });
+    expect(store.lockedAt(50, 7)).toBeUndefined();
+  });
+});
+
+describe("ingestSettle", () => {
+  it("re-pulls stats + rating and marks players dirty (no sub-locking)", async () => {
+    const feed = fakeFeed({
+      playerMatchStats: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, player_id: 9, minutes_played: 90, rating: 8.0 }],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestSettle(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    expect(store.ratingFor(50, 9)).toBe(8.0);
+    expect(store.isDirty(50, 9)).toBe(true);
+    expect(store.lockedAt(50, 9)).toBeUndefined();
+  });
+});

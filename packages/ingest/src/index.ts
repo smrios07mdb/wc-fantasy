@@ -9,4 +9,5 @@ export * from "./map";
 export * from "./lock";
 export * from "./mode";
 export * from "./store";
+export * from "./ingest";
 export { MemoryIngestStore } from "./memoryStore";
