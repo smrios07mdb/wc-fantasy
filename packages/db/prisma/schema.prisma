@@ -320,8 +320,9 @@ model FifaMatch {
   /// fixture's STRUCTURAL round/matchday — NEVER from kickoff-time inference (a postponement reorders
   /// kickoffs and would corrupt a time-derived matchday). Single source of truth: locking, the
   /// recompute dirty-walk, and period-close all read it. NULL until the matching period row is seeded.
-  /// TODO(confirm): assumes one league per fixture-period (the single-league product). Multi-league
-  /// would need a per-league match→period link rather than a single FK.
+  /// ASSUMPTION (permanent, ARCHITECTURE.md §4): ONE private league per tournament, so a single FK
+  /// holds (fifa_match is global; period is per-league). A multi-league deployment would instead need a
+  /// per-league match→period link — explicitly out of scope for this product.
   periodId      String?     @map("period_id")
   /// Per-match lock-on-play fallback (Theme B / §3). false = lock-on-play (default); true = revert to
   /// kickoff-locking when live appearance data is missing. The operator UI that flips it is a later prompt.

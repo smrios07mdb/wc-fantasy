@@ -7,7 +7,14 @@
  * the frozen gate are owned by @app/recompute; this guards the 05a integration claim end-to-end.
  */
 import { describe, it, expect } from "vitest";
-import { MemoryStore, sweep, type ScoreInputBundle, type StatRow } from "@app/recompute";
+import {
+  MemoryStore,
+  sweep,
+  buildScoreInput,
+  type ScoreInputBundle,
+  type StatRow,
+} from "@app/recompute";
+import { scorePlayerMatch } from "@app/scoring";
 
 function zeroStat(): StatRow {
   return {
@@ -79,6 +86,56 @@ describe("ingestion → recompute contract", () => {
     const standing = store.writtenStanding("L", "M");
     expect(standing).toMatchObject({ scope: "group_stage", seed: 1 });
     expect(standing?.totalPoints).toBeGreaterThan(0);
+  });
+
+  it("recomputes an EVENT-ONLY player-match that has no stat row (the markPlayersDirty channel)", async () => {
+    // Reproduces the silent-failure risk: an event-only ingest write (e.g. a card, no stat-row delta)
+    // re-dirties the player via the raw `dirty` channel `sweep` reads. Here the recompute MemoryStore
+    // holds a booked player with NO stat row; marked dirty, the sweep must still recompute his score
+    // from events alone. (The ingest Prisma store flips `stat_player_match.dirty` for exactly this.)
+    const store = new MemoryStore();
+    store.seedManagerLeague("M", "L");
+    store.seedPeriod("P", { leagueId: "L", kind: "group_md" });
+    const eventOnly: ScoreInputBundle = {
+      playerId: "booked",
+      role: "MID",
+      rating: null,
+      ratingSource: null,
+      stat: null, // ← no stat line at all
+      manual: null,
+      events: [
+        {
+          incidentType: "card",
+          incidentClass: "yellow",
+          timeMinute: 30,
+          addedTime: null,
+          playerId: "booked",
+          assistPlayerId: null,
+          playerInId: null,
+          playerOutId: null,
+          rescinded: false,
+        },
+      ],
+      shots: [],
+      team: {
+        playerTeamId: "A",
+        homeTeamId: "A",
+        awayTeamId: "B",
+        homeScore: 0,
+        awayScore: 0,
+        teamByPlayerId: {},
+      },
+    };
+    store.seedPlayerMatch("m1", "booked", eventOnly); // dirty by default
+    store.seedSlot("M", "P", "booked", true);
+    store.seedPlaysIn("booked", "P", "m1");
+
+    const result = await sweep(store);
+
+    expect(result.playerMatches).toBe(1); // the no-stat player-match WAS recomputed
+    expect(store.writtenPlayerScore("m1", "booked")).toEqual(
+      scorePlayerMatch(buildScoreInput(eventOnly)),
+    );
   });
 
   it("a late write into a FROZEN period is not restated (no commissioner override)", async () => {

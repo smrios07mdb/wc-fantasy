@@ -34,15 +34,18 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
     return row.id;
   };
 
-  // events/shots/team_stats have no row-level dirty col; the player_match marker drives the sweep.
-  const enqueuePlayerMatchDirty = async (matchId: string, playerId: string): Promise<void> => {
-    const exists = await prisma.recomputeDirty.findFirst({
-      where: { scope: "player_match", matchId, playerId, processedAt: null },
-      select: { id: true },
+  // events/shots/team_stats have NO row-level dirty column, so an event-only change (e.g. a card with
+  // no stat-row delta) must re-dirty the player through the channel the sweep actually reads:
+  // `sweep` Phase 1 (`listDirtyPlayerMatches`) scans the raw `dirty` BOOLEAN on stat/rating/manual —
+  // it does NOT read `recompute_dirty` scope=player_match (that scope has no consumer). So flip
+  // `stat_player_match.dirty`, upserting a stub row when the player has no stat line yet (the adapter
+  // tolerates an all-null stat; the stub self-corrects when real stats arrive).
+  const markStatDirty = async (matchId: string, playerId: string): Promise<void> => {
+    await prisma.statPlayerMatch.upsert({
+      where: { matchId_playerId: { matchId, playerId } },
+      create: { matchId, playerId, dirty: true },
+      update: { dirty: true },
     });
-    if (!exists) {
-      await prisma.recomputeDirty.create({ data: { scope: "player_match", matchId, playerId } });
-    }
   };
 
   return {
@@ -104,7 +107,7 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
 
     async resolvePeriodId(label): Promise<string | null> {
       if (!label) return null;
-      // Single-league assumption (one matching period). TODO(confirm): multi-league needs a per-league link.
+      // Single-league by design (ARCHITECTURE.md §4): exactly one matching period for the fixture.
       const p = await prisma.period.findFirst({
         where: { kind: label.kind as PeriodKind, label: label.label },
         select: { id: true },
@@ -224,7 +227,7 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       if (!matchId) return;
       for (const bdl of playerBdlIds) {
         const playerId = await playerIdFor(bdl);
-        if (playerId) await enqueuePlayerMatchDirty(matchId, playerId);
+        if (playerId) await markStatDirty(matchId, playerId);
       }
     },
 

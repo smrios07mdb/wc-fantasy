@@ -59,7 +59,12 @@ scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput 
 dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection
 (Theme C) ✅ (210 tests; recompute chain now end-to-end raw→`score_player_match`→`score_manager_period`→`standing`,
 idempotent; `selectGuillotineCuts` receives the cumulative-tournament total as a **pre-built map** —
-assembly of that map is deferred to the transition/FAAB prompt). **next: Prompt 05 — BALLDONTLIE polling
-+ Sofascore scraper + lock-on-play setting (`locked_at`); likely split 05a (BALLDONTLIE ingestion +
-`locked_at`) / 05b (isolated Sofascore scraper).** All themes remain LOCKED; build is downstream of
-decisions.
+assembly of that map is deferred to the transition/FAAB prompt). · Prompt 05a — BALLDONTLIE ingestion +
+polling scheduler + lock-on-play (`locked_at`) ✅ (253 tests; real `@app/feed` HTTP client + new
+`@app/ingest` package (pure map/lock/mode + `IngestStore`) + worker four-mode loop driving the existing
+`sweep`; **match→period pinned via a new structural `fifa_match.period_id` FK** — set from round/matchday,
+never kickoff time; window-inference retired; **single-league assumption stated** in ARCHITECTURE §4;
+`kickoff_lock_fallback` column + poller-silent alert wired. IO boundary is typecheck-only — a live
+DB/feed smoke-test + applying the migration are go-live work). **next: Prompt 05b — isolated Sofascore
+scraper (`source='scrape'`) + the one-time BALLDONTLIE-vs-Sofascore rating comparison.** All themes
+remain LOCKED; build is downstream of decisions.

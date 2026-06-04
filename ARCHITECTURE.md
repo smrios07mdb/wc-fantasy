@@ -230,6 +230,20 @@ not by hopeful application code:
 - `fifa_team`, `player` (id <-> balldontlie player_id, position, team, country),
   `fifa_match` (datetime **UTC**, status, scores incl. ET/pens, stage/group/round, formations,
   referee), `fifa_stage`, `fifa_group`.
+  - **`period_id` (Prompt 05a) — the structural match→period link.** Set at schedule-sync from the
+    fixture's **structural** round/matchday (knockout `round` -> the `knockout_round` period; group
+    matchday -> the `group_md` period), **never** from kickoff-time inference (a postponement would
+    reorder kickoffs and corrupt a time-derived matchday). It is the **single source of truth** —
+    locking, the recompute dirty-walk, and period-close all read it (this **retired** the earlier
+    `opens_at <= kickoff <= closes_at` window inference in the recompute store). **ASSUMPTION
+    (permanent):** ONE private league per tournament, so a single FK suffices (`fifa_match` is global;
+    `period` is per-league). Multi-league would need a per-league match→period link — out of scope.
+    `period_id` is NULL until the matching period row is seeded (group-stage matchday field is a
+    `TODO(confirm)` against first live data).
+  - **`kickoff_lock_fallback` (Prompt 05a) — per-match lock-on-play fallback flag.** `false` =
+    lock-on-play (default); `true` reverts the match to kickoff-locking when live appearance data is
+    missing (see §3 Lock-on-play fallback). The operator UI that flips it is a later prompt; the
+    poller-silent alert tells the operator when to flip it.
 
 **Roster / lineups (lock timestamps live here)**
 - `roster_player` — manager_id, player_id, acquired_at, dropped_at. **Ownership**; unique
