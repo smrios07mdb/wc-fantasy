@@ -268,6 +268,9 @@ model FifaTeam {
 model Player {
   id            String   @id @default(uuid())
   balldontlieId Int      @unique @map("balldontlie_player_id")
+  /// Sofascore player id (Prompt 05b). Nullable; populated by the verified one-time keyMatch pass
+  /// (unambiguous auto-written; ambiguous flagged for manual entry). Scrape resolves by stored id only.
+  sofascorePlayerId Int? @unique @map("sofascore_player_id")
   firstName     String?  @map("first_name")
   lastName      String?  @map("last_name")
   displayName   String   @map("display_name")
@@ -310,6 +313,9 @@ model Player {
 model FifaMatch {
   id            String      @id @default(uuid())
   balldontlieId Int         @unique @map("balldontlie_match_id")
+  /// Sofascore match id (Prompt 05b). Nullable; populated by the verified one-time keyMatch pass. The
+  /// scraper resolves targets by STORED id ONLY (no live name-matching). Mirrors `balldontlieId`.
+  sofascoreMatchId Int?     @unique @map("sofascore_match_id")
   /// Kickoff in UTC.
   kickoffAt     DateTime    @map("kickoff_at") @db.Timestamptz(6)
   status        MatchStatus @default(scheduled)

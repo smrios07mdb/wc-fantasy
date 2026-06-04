@@ -23,5 +23,8 @@ if (process.env.NODE_ENV !== "production") {
 export * from "@prisma/client";
 export { PrismaClient } from "@prisma/client";
 
+// Shared low-level DB helpers (the no-clobber dirty invariant, used by @app/ingest + @app/scrape).
+export * from "./dirty";
+
 // Importing `./parity` is unnecessary at runtime (it is type-only), but it lives under `src/`
 // so `tsc --noEmit` checks the schema↔@app/shared enum parity assertions on every typecheck.
