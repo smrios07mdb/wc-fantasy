@@ -5,7 +5,8 @@ import { defineConfig } from "vitest/config";
 // pnpm symlinked node_modules (every package depends on @app/shared), so no aliases are required.
 export default defineConfig({
   test: {
-    include: ["packages/**/src/**/*.test.ts"],
+    // Packages hold the pure logic; apps (e.g. the scraper edge) carry a few unit tests too.
+    include: ["packages/**/src/**/*.test.ts", "apps/**/src/**/*.test.ts"],
     // Keep build artefacts and deps out of the run (the scoring suite is the only suite for now).
     exclude: ["**/node_modules/**", "**/dist/**", "**/.next/**"],
   },

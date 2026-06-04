@@ -1,0 +1,24 @@
+{
+  "name": "@app/scraper",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "populate": "tsx src/populate.ts",
+    "compare": "tsx src/compare.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "@app/scrape": "workspace:*",
+    "@app/shared": "workspace:*",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2"
+  }
+}

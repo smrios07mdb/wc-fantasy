@@ -36,6 +36,28 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@types/node@22.19.19)(vite@8.0.16(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.4))
 
+  apps/scraper:
+    dependencies:
+      '@app/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@app/scrape':
+        specifier: workspace:*
+        version: link:../../packages/scrape
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.4
+
   apps/web:
     dependencies:
       '@app/db':

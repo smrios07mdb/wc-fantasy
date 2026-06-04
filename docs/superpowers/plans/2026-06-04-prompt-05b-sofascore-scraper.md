@@ -15,16 +15,19 @@
 ## File Structure
 
 **Modify (the hoist + schema):**
+
 - `packages/db/prisma/schema.prisma` — add `sofascoreMatchId Int? @unique` to `FifaMatch`, `sofascorePlayerId Int? @unique` to `Player`.
 - `packages/db/src/index.ts` — `export * from "./dirty"`.
 - `packages/ingest/src/prismaStore.ts` — drop the local `STAT_DIRTY_UPDATE`/`markStatDirty`; import + call `markStatPlayerDirty` from `@app/db`.
 - `packages/ingest/src/prismaStore.test.ts` — DELETE (the invariant + its guard move to `@app/db`).
 
 **Create (the hoist + migration):**
+
 - `packages/db/src/dirty.ts`, `packages/db/src/dirty.test.ts`
 - `packages/db/prisma/migrations/20260604140000_sofascore_ids/migration.sql`
 
 **Create (`packages/scrape`):**
+
 - `package.json`, `tsconfig.json`, `src/index.ts`
 - `src/extract.ts` (+ test) — pure `extractRating(html, sofascorePlayerId)`; the ONE selector constant.
 - `src/resolveTarget.ts` (+ test) — pure stored-id-only resolution.
@@ -39,6 +42,7 @@
 - `src/resolver.contract.test.ts` — scrape beats balldontlie end-to-end via `@app/recompute` sweep.
 
 **Create (`apps/scraper`):**
+
 - `package.json`, `tsconfig.json`
 - `src/config.ts`, `src/logger.ts` (mirror `apps/worker`)
 - `src/playwrightBrowser.ts` (+ test) — `createSofascoreBrowser(launch, opts)`; structural `ChromiumLauncher` (no `import "playwright"`); URL builder constant.
@@ -140,6 +144,7 @@ CREATE UNIQUE INDEX "player_sofascore_player_id_key" ON "player"("sofascore_play
 ```
 
 Import line becomes:
+
 ```ts
 import type { MatchStatus, PeriodKind, Position, PrismaClient } from "@app/db";
 import { markStatPlayerDirty } from "@app/db";
@@ -173,7 +178,11 @@ import { markStatPlayerDirty } from "@app/db";
   },
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": { "@app/db": "workspace:*", "@app/shared": "workspace:*" },
-  "devDependencies": { "@app/recompute": "workspace:*", "@app/scoring": "workspace:*", "@types/node": "^22.10.5" }
+  "devDependencies": {
+    "@app/recompute": "workspace:*",
+    "@app/scoring": "workspace:*",
+    "@types/node": "^22.10.5"
+  }
 }
 ```
 
@@ -190,7 +199,15 @@ const page = (players: Array<{ id: number; rating: number | null }>) =>
 
 describe("extractRating", () => {
   it("returns the 0–10 rating for the given sofascore player id", () => {
-    expect(extractRating(page([{ id: 1001, rating: 7.4 }, { id: 1002, rating: 6.1 }]), 1002)).toBe(6.1);
+    expect(
+      extractRating(
+        page([
+          { id: 1001, rating: 7.4 },
+          { id: 1002, rating: 6.1 },
+        ]),
+        1002,
+      ),
+    ).toBe(6.1);
   });
   it("returns null when the player is absent", () => {
     expect(extractRating(page([{ id: 1001, rating: 7.4 }]), 9999)).toBeNull();
@@ -202,7 +219,9 @@ describe("extractRating", () => {
     expect(extractRating("<html><body>Access denied</body></html>", 1001)).toBeNull();
   });
   it("returns null on malformed JSON, without throwing", () => {
-    expect(extractRating(`<script id="__SOFA_DATA__" type="application/json">{bad</script>`, 1001)).toBeNull();
+    expect(
+      extractRating(`<script id="__SOFA_DATA__" type="application/json">{bad</script>`, 1001),
+    ).toBeNull();
   });
 });
 ```
@@ -344,12 +363,18 @@ describe("proposePlayerMappings (team + normalized name)", () => {
     { sofascorePlayerId: 1002, teamCode: "BRA", name: "Vinícius Tobias" },
   ];
   it("auto-writes a unique exact normalized match", () => {
-    const out = proposePlayerMappings([{ playerId: "p1", teamCode: "BRA", name: "Vinicius Junior" }], sofa);
+    const out = proposePlayerMappings(
+      [{ playerId: "p1", teamCode: "BRA", name: "Vinicius Junior" }],
+      sofa,
+    );
     expect(out.proposals).toEqual([{ playerId: "p1", sofascorePlayerId: 1001 }]);
     expect(out.flagged).toEqual([]);
   });
   it("FLAGS (never auto-writes) when there's no exact hit", () => {
-    const out = proposePlayerMappings([{ playerId: "p9", teamCode: "BRA", name: "Vinicius" }], sofa);
+    const out = proposePlayerMappings(
+      [{ playerId: "p9", teamCode: "BRA", name: "Vinicius" }],
+      sofa,
+    );
     expect(out.proposals).toEqual([]);
     expect(out.flagged.map((f) => f.playerId)).toEqual(["p9"]);
   });
@@ -405,7 +430,8 @@ export function proposeMatchMappings(
   const flagged: FeedMatchKey[] = [];
   for (const f of feed) {
     const hits = sofa.filter((s) => sameMatch(f, s));
-    if (hits.length === 1) proposals.push({ fifaMatchId: f.fifaMatchId, sofascoreMatchId: hits[0]!.sofascoreMatchId });
+    if (hits.length === 1)
+      proposals.push({ fifaMatchId: f.fifaMatchId, sofascoreMatchId: hits[0]!.sofascoreMatchId });
     else flagged.push(f); // 0 (no candidate) or 2+ (ambiguous) → never auto-trust
   }
   return { proposals, flagged };
@@ -439,7 +465,8 @@ export function proposePlayerMappings(
   for (const f of feed) {
     const target = normalizeName(f.name);
     const hits = sofa.filter((s) => s.teamCode === f.teamCode && normalizeName(s.name) === target);
-    if (hits.length === 1) proposals.push({ playerId: f.playerId, sofascorePlayerId: hits[0]!.sofascorePlayerId });
+    if (hits.length === 1)
+      proposals.push({ playerId: f.playerId, sofascorePlayerId: hits[0]!.sofascorePlayerId });
     else flagged.push(f); // no exact hit, or same-surname/dup → manual entry
   }
   return { proposals, flagged };
@@ -461,7 +488,12 @@ import { describe, it, expect } from "vitest";
 import { selectScrapeTargets, type ScrapeCandidate } from "./target";
 
 const T = (iso: string) => new Date(iso).getTime();
-const base = { sofascoreMatchId: 50, sofascorePlayerId: 1001, status: "completed", hasScrapeRating: false };
+const base = {
+  sofascoreMatchId: 50,
+  sofascorePlayerId: 1001,
+  status: "completed",
+  hasScrapeRating: false,
+};
 
 describe("selectScrapeTargets", () => {
   const now = new Date("2026-06-10T22:00:00Z");
@@ -469,17 +501,41 @@ describe("selectScrapeTargets", () => {
   it("targets FT players lacking a scrape row, grouped by sofascore match", () => {
     const cands: ScrapeCandidate[] = [
       { ...base, matchId: "m1", playerId: "p1", kickoffMs: T("2026-06-10T18:00:00Z") },
-      { ...base, matchId: "m1", playerId: "p2", sofascorePlayerId: 1002, kickoffMs: T("2026-06-10T18:00:00Z") },
+      {
+        ...base,
+        matchId: "m1",
+        playerId: "p2",
+        sofascorePlayerId: 1002,
+        kickoffMs: T("2026-06-10T18:00:00Z"),
+      },
     ];
     const out = selectScrapeTargets(cands, now);
     expect(out).toEqual([
-      { sofascoreMatchId: 50, players: [{ matchId: "m1", playerId: "p1", sofascorePlayerId: 1001 }, { matchId: "m1", playerId: "p2", sofascorePlayerId: 1002 }] },
+      {
+        sofascoreMatchId: 50,
+        players: [
+          { matchId: "m1", playerId: "p1", sofascorePlayerId: 1001 },
+          { matchId: "m1", playerId: "p2", sofascorePlayerId: 1002 },
+        ],
+      },
     ]);
   });
   it("skips players already scraped and matches not yet FT", () => {
     const cands: ScrapeCandidate[] = [
-      { ...base, matchId: "m1", playerId: "p1", hasScrapeRating: true, kickoffMs: T("2026-06-10T18:00:00Z") },
-      { ...base, matchId: "m2", playerId: "p3", status: "in_progress", kickoffMs: T("2026-06-10T21:00:00Z") },
+      {
+        ...base,
+        matchId: "m1",
+        playerId: "p1",
+        hasScrapeRating: true,
+        kickoffMs: T("2026-06-10T18:00:00Z"),
+      },
+      {
+        ...base,
+        matchId: "m2",
+        playerId: "p3",
+        status: "in_progress",
+        kickoffMs: T("2026-06-10T21:00:00Z"),
+      },
     ];
     expect(selectScrapeTargets(cands, now)).toEqual([]);
   });
@@ -518,7 +574,10 @@ export interface ScrapeTarget {
 /** Stop retrying a match this long after kickoff (the rating has either landed or won't). */
 const STALE_AFTER_MS = 24 * 60 * 60_000;
 
-export function selectScrapeTargets(candidates: readonly ScrapeCandidate[], now: Date): ScrapeTarget[] {
+export function selectScrapeTargets(
+  candidates: readonly ScrapeCandidate[],
+  now: Date,
+): ScrapeTarget[] {
   const t = now.getTime();
   const byMatch = new Map<number, ScrapeTarget>();
   for (const c of candidates) {
@@ -530,7 +589,11 @@ export function selectScrapeTargets(candidates: readonly ScrapeCandidate[], now:
       target = { sofascoreMatchId: c.sofascoreMatchId, players: [] };
       byMatch.set(c.sofascoreMatchId, target);
     }
-    target.players.push({ matchId: c.matchId, playerId: c.playerId, sofascorePlayerId: c.sofascorePlayerId });
+    target.players.push({
+      matchId: c.matchId,
+      playerId: c.playerId,
+      sofascorePlayerId: c.sofascorePlayerId,
+    });
   }
   return [...byMatch.values()];
 }
@@ -564,7 +627,13 @@ describe("compareRatings", () => {
     expect(out.correlation).toBeGreaterThan(0.8); // scrape & balldontlie move together here
   });
   it("handles the empty set without dividing by zero", () => {
-    expect(compareRatings([])).toMatchObject({ n: 0, meanDiff: 0, meanAbsDiff: 0, maxAbsDiff: 0, correlation: null });
+    expect(compareRatings([])).toMatchObject({
+      n: 0,
+      meanDiff: 0,
+      meanAbsDiff: 0,
+      maxAbsDiff: 0,
+      correlation: null,
+    });
   });
 });
 ```
@@ -596,7 +665,15 @@ const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0
 export function compareRatings(pairs: readonly RatingPair[]): ComparisonSummary {
   const n = pairs.length;
   const dist = { lt05: 0, lt1: 0, lt2: 0, ge2: 0 };
-  if (n === 0) return { n: 0, meanDiff: 0, meanAbsDiff: 0, maxAbsDiff: 0, correlation: null, distribution: dist };
+  if (n === 0)
+    return {
+      n: 0,
+      meanDiff: 0,
+      meanAbsDiff: 0,
+      maxAbsDiff: 0,
+      correlation: null,
+      distribution: dist,
+    };
 
   const diffs = pairs.map((p) => p.scrape - p.balldontlie);
   const abs = diffs.map(Math.abs);
@@ -841,7 +918,8 @@ export function createPrismaScrapeStore(prisma: Db): ScrapeStore {
       }
       const pairs: RatingPair[] = [];
       for (const e of byKey.values()) {
-        if (e.scrape != null && e.balldontlie != null) pairs.push({ scrape: e.scrape, balldontlie: e.balldontlie });
+        if (e.scrape != null && e.balldontlie != null)
+          pairs.push({ scrape: e.scrape, balldontlie: e.balldontlie });
       }
       return pairs;
     },
@@ -861,10 +939,39 @@ export function createPrismaScrapeStore(prisma: Db): ScrapeStore {
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { MemoryStore, sweep, pickRating, type ScoreInputBundle, type StatRow } from "@app/recompute";
+import {
+  MemoryStore,
+  sweep,
+  pickRating,
+  type ScoreInputBundle,
+  type StatRow,
+} from "@app/recompute";
 
 function zeroStat(): StatRow {
-  return { minutesPlayed: 0, goals: 0, assists: 0, keyPasses: 0, dribblesAttempted: 0, dribblesCompleted: 0, duelsWon: 0, duelsLost: 0, passesTotal: 0, passesAccurate: 0, longBallsTotal: 0, longBallsAccurate: 0, wasFouled: 0, clearances: 0, blockedShots: 0, interceptions: 0, tacklesWon: 0, saves: 0, savesInsideBox: 0, punches: 0, highClaims: 0, possessionLost: 0 };
+  return {
+    minutesPlayed: 0,
+    goals: 0,
+    assists: 0,
+    keyPasses: 0,
+    dribblesAttempted: 0,
+    dribblesCompleted: 0,
+    duelsWon: 0,
+    duelsLost: 0,
+    passesTotal: 0,
+    passesAccurate: 0,
+    longBallsTotal: 0,
+    longBallsAccurate: 0,
+    wasFouled: 0,
+    clearances: 0,
+    blockedShots: 0,
+    interceptions: 0,
+    tacklesWon: 0,
+    saves: 0,
+    savesInsideBox: 0,
+    punches: 0,
+    highClaims: 0,
+    possessionLost: 0,
+  };
 }
 
 describe("resolver prefers the scrape over the balldontlie fallback (NO resolver change)", () => {
@@ -881,9 +988,22 @@ describe("resolver prefers the scrape over the balldontlie fallback (NO resolver
     // The bundle's rating is pre-resolved by the store wrapper; here we assert that resolving [scrape,
     // balldontlie] picks scrape and the swept score equals scoring with the scrape rating.
     const withScrape = (rating: number, source: "scrape" | "balldontlie"): ScoreInputBundle => ({
-      playerId: "p1", role: "FWD", rating, ratingSource: source,
-      stat: { ...zeroStat(), minutesPlayed: 90 }, manual: null, events: [], shots: [],
-      team: { playerTeamId: "A", homeTeamId: "A", awayTeamId: "B", homeScore: 0, awayScore: 0, teamByPlayerId: {} },
+      playerId: "p1",
+      role: "FWD",
+      rating,
+      ratingSource: source,
+      stat: { ...zeroStat(), minutesPlayed: 90 },
+      manual: null,
+      events: [],
+      shots: [],
+      team: {
+        playerTeamId: "A",
+        homeTeamId: "A",
+        awayTeamId: "B",
+        homeScore: 0,
+        awayScore: 0,
+        teamByPlayerId: {},
+      },
     });
     store.seedManagerLeague("M", "L");
     store.seedPeriod("P", { leagueId: "L", kind: "group_md" });
@@ -931,7 +1051,12 @@ describe("resolver prefers the scrape over the balldontlie fallback (NO resolver
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": { "@app/db": "workspace:*", "@app/scrape": "workspace:*", "@app/shared": "workspace:*", "dotenv": "^16.4.7" },
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "@app/scrape": "workspace:*",
+    "@app/shared": "workspace:*",
+    "dotenv": "^16.4.7"
+  },
   "devDependencies": { "@types/node": "^22.10.5", "tsx": "^4.19.2" }
 }
 ```
@@ -1021,7 +1146,10 @@ export function createSofascoreBrowser(
       const b = await ensure();
       const page = await b.newPage();
       try {
-        await page.goto(MATCH_URL(sofascoreMatchId), { waitUntil: "domcontentloaded", timeout: 30_000 });
+        await page.goto(MATCH_URL(sofascoreMatchId), {
+          waitUntil: "domcontentloaded",
+          timeout: 30_000,
+        });
         return await page.content();
       } finally {
         await page.close();
@@ -1051,7 +1179,16 @@ const page = (players: Array<{ id: number; rating: number | null }>) =>
 const T = (iso: string) => new Date(iso).getTime();
 
 function cand(over: Partial<ScrapeCandidate>): ScrapeCandidate {
-  return { matchId: "m1", playerId: "p1", sofascoreMatchId: 50, sofascorePlayerId: 1001, status: "completed", kickoffMs: T("2026-06-10T18:00:00Z"), hasScrapeRating: false, ...over };
+  return {
+    matchId: "m1",
+    playerId: "p1",
+    sofascoreMatchId: 50,
+    sofascorePlayerId: 1001,
+    status: "completed",
+    kickoffMs: T("2026-06-10T18:00:00Z"),
+    hasScrapeRating: false,
+    ...over,
+  };
 }
 
 describe("runScrapeTick", () => {
@@ -1072,9 +1209,14 @@ describe("runScrapeTick", () => {
   it("ISOLATION: a fetch that throws on one match does not block another match's write", async () => {
     const store = new MemoryScrapeStore();
     store.seedCandidate(cand({ sofascoreMatchId: 50, matchId: "bad", playerId: "pbad" }));
-    store.seedCandidate(cand({ sofascoreMatchId: 51, matchId: "good", playerId: "pgood", sofascorePlayerId: 2002 }));
+    store.seedCandidate(
+      cand({ sofascoreMatchId: 51, matchId: "good", playerId: "pgood", sofascorePlayerId: 2002 }),
+    );
     const transport: BrowserTransport = {
-      fetchMatchHtml: (id) => (id === 50 ? Promise.reject(new Error("blocked")) : Promise.resolve(page([{ id: 2002, rating: 6.6 }]))),
+      fetchMatchHtml: (id) =>
+        id === 50
+          ? Promise.reject(new Error("blocked"))
+          : Promise.resolve(page([{ id: 2002, rating: 6.6 }])),
       close: () => Promise.resolve(),
     };
     await expect(runScrapeTick(transport, store, now, 0)).resolves.toBeUndefined(); // never throws
@@ -1093,7 +1235,12 @@ describe("runScrapeTick", () => {
  * boundary: a block/parse failure is logged + contained — it never throws into the shared pipeline, and
  * a miss simply leaves no `scrape` row so the resolver falls back to `balldontlie`.
  */
-import { selectScrapeTargets, extractRating, type BrowserTransport, type ScrapeStore } from "@app/scrape";
+import {
+  selectScrapeTargets,
+  extractRating,
+  type BrowserTransport,
+  type ScrapeStore,
+} from "@app/scrape";
 import { log } from "./logger";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -1116,7 +1263,10 @@ export async function runScrapeTick(
       }
     } catch (err) {
       // Contained: never propagate into the shared pipeline. No row → resolver falls back to balldontlie.
-      log.warn("scrape.match.failed", { sofascoreMatchId: target.sofascoreMatchId, message: (err as Error).message });
+      log.warn("scrape.match.failed", {
+        sofascoreMatchId: target.sofascoreMatchId,
+        message: (err as Error).message,
+      });
     }
     if (politeGapMs > 0) await sleep(politeGapMs);
   }
@@ -1142,7 +1292,9 @@ import type { ScrapeStore } from "@app/scrape";
 import { createSofascoreBrowser, type ChromiumLauncher } from "./playwrightBrowser";
 
 const notWiredLauncher: ChromiumLauncher = () => {
-  throw new Error("playwright not wired — go-live: `pnpm add playwright && npx playwright install chromium`");
+  throw new Error(
+    "playwright not wired — go-live: `pnpm add playwright && npx playwright install chromium`",
+  );
 };
 
 export const store: ScrapeStore = createPrismaScrapeStore(prisma);
@@ -1217,7 +1369,12 @@ main();
  * matches + lineups). Until then it returns []; everything below is keyMatch-driven + unit-tested.
  */
 import { prisma } from "@app/db";
-import { proposeMatchMappings, proposePlayerMappings, type SofaMatchKey, type SofaPlayerKey } from "@app/scrape";
+import {
+  proposeMatchMappings,
+  proposePlayerMappings,
+  type SofaMatchKey,
+  type SofaPlayerKey,
+} from "@app/scrape";
 import { log } from "./logger";
 
 async function loadSofaIndex(): Promise<{ matches: SofaMatchKey[]; players: SofaPlayerKey[] }> {
@@ -1227,19 +1384,51 @@ async function loadSofaIndex(): Promise<{ matches: SofaMatchKey[]; players: Sofa
 async function main(): Promise<void> {
   const sofa = await loadSofaIndex();
   const feedMatches = (
-    await prisma.fifaMatch.findMany({ select: { id: true, kickoffAt: true, homeTeam: { select: { abbreviation: true } }, awayTeam: { select: { abbreviation: true } } } })
-  ).map((m) => ({ fifaMatchId: m.id, dateIso: m.kickoffAt.toISOString().slice(0, 10), homeCode: m.homeTeam?.abbreviation ?? "", awayCode: m.awayTeam?.abbreviation ?? "" }));
+    await prisma.fifaMatch.findMany({
+      select: {
+        id: true,
+        kickoffAt: true,
+        homeTeam: { select: { abbreviation: true } },
+        awayTeam: { select: { abbreviation: true } },
+      },
+    })
+  ).map((m) => ({
+    fifaMatchId: m.id,
+    dateIso: m.kickoffAt.toISOString().slice(0, 10),
+    homeCode: m.homeTeam?.abbreviation ?? "",
+    awayCode: m.awayTeam?.abbreviation ?? "",
+  }));
   const feedPlayers = (
-    await prisma.player.findMany({ select: { id: true, displayName: true, team: { select: { abbreviation: true } } } })
+    await prisma.player.findMany({
+      select: { id: true, displayName: true, team: { select: { abbreviation: true } } },
+    })
   ).map((p) => ({ playerId: p.id, teamCode: p.team?.abbreviation ?? "", name: p.displayName }));
 
   const m = proposeMatchMappings(feedMatches, sofa.matches);
   const p = proposePlayerMappings(feedPlayers, sofa.players);
-  for (const prop of m.proposals) await prisma.fifaMatch.update({ where: { id: prop.fifaMatchId }, data: { sofascoreMatchId: prop.sofascoreMatchId } });
-  for (const prop of p.proposals) await prisma.player.update({ where: { id: prop.playerId }, data: { sofascorePlayerId: prop.sofascorePlayerId } });
+  for (const prop of m.proposals)
+    await prisma.fifaMatch.update({
+      where: { id: prop.fifaMatchId },
+      data: { sofascoreMatchId: prop.sofascoreMatchId },
+    });
+  for (const prop of p.proposals)
+    await prisma.player.update({
+      where: { id: prop.playerId },
+      data: { sofascorePlayerId: prop.sofascorePlayerId },
+    });
 
-  log.info("populate.done", { matchProposals: m.proposals.length, matchFlagged: m.flagged.length, playerProposals: p.proposals.length, playerFlagged: p.flagged.length });
-  for (const f of p.flagged) log.warn("populate.player.manual", { playerId: f.playerId, name: f.name, teamCode: f.teamCode });
+  log.info("populate.done", {
+    matchProposals: m.proposals.length,
+    matchFlagged: m.flagged.length,
+    playerProposals: p.proposals.length,
+    playerFlagged: p.flagged.length,
+  });
+  for (const f of p.flagged)
+    log.warn("populate.player.manual", {
+      playerId: f.playerId,
+      name: f.name,
+      teamCode: f.teamCode,
+    });
   await prisma.$disconnect();
 }
 
@@ -1288,6 +1477,7 @@ grep -nE "Date\.now|new Date\(\s*\)|fetch\(|playwright|process\.env" \
 ---
 
 ## Self-Review (spec coverage)
+
 - Isolated `packages/scrape` + `apps/scraper`, no `@app/ingest` import — Tasks 1–9. ✓ (dirty invariant hoisted to `@app/db`, Task 0.)
 - Extraction pure, single selector — Task 1. ✓
 - Stored-id-only `resolveTarget` — Task 2. ✓ Population `keyMatch` (auto-write unambiguous, flag rest) — Task 3 + CLI Task 9. ✓
@@ -1299,6 +1489,7 @@ grep -nE "Date\.now|new Date\(\s*\)|fetch\(|playwright|process\.env" \
 - Purity grep + gates — Task 10. ✓
 
 ## `// TODO(confirm):` carried for first live data
+
 1. Sofascore rating selector / data shape (`extract.ts` `RATING_DATA`).
 2. Match URL pattern (`playwrightBrowser.ts` `MATCH_URL`).
 3. keyMatch real-data assumptions (team codes/dates align; manual-list size).
