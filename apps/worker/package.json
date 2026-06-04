@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "provision": "tsx src/provision/cli.ts",
+    "job:faab": "tsx src/jobs/faabBatch.ts",
+    "job:period-close": "tsx src/jobs/periodClose.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

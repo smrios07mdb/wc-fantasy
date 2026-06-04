@@ -28,4 +28,9 @@ export const config = {
   pollerSilentGraceMs: intEnv("POLLER_SILENT_GRACE_MS", 5 * 60_000),
   /** Run schedule-sync (the global fixture pull) every N ticks (≈hourly at a 60s tick). */
   scheduleSyncEveryTicks: intEnv("WORKER_SCHEDULE_SYNC_EVERY_TICKS", 60),
+  /** Draft-clock tick cadence (ms). SHORT on purpose — the per-pick countdown must autopick within
+   *  seconds of `pick_deadline_at`, not wait out the ~60s ingestion tick. Its own loop (src/draft.ts). */
+  draftTickMs: intEnv("WORKER_DRAFT_TICK_MS", 2_000),
+  /** When set, the draft ticker stops itself after this many ticks (smoke tests / CI exit path). */
+  draftMaxTicks: process.env.WORKER_DRAFT_MAX_TICKS ? intEnv("WORKER_DRAFT_MAX_TICKS", 0) : null,
 } as const;

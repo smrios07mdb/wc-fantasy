@@ -90,13 +90,18 @@ export function createPrismaDraftStore(prisma: Db): DraftStore {
       return rows.map((r) => ({ playerId: r.playerId, position: r.player.position }));
     },
 
-    getDefaultRanking(_leagueId): Promise<RankedPlayer[]> {
-      // SEAM — TODO(confirm): the real default-ranking SOURCE for "best available". The brain files
-      // name "best-available by default ranking" but define no source, and no `player.default_rank`
-      // column exists. A real ordering (a seeded rank column or a commissioner-provided list) is a
-      // follow-up; until then this returns [] (no fabricated ranking — alphabetical / balldontlie-id
-      // order would masquerade as a ranking), so autopick relies on each manager's queue.
-      return Promise.resolve([]);
+    async getDefaultRanking(_leagueId): Promise<RankedPlayer[]> {
+      // The "best-available" ordering for autopick. SEAM now RESOLVED (draft go-live / provisioning
+      // track): `player.default_rank` (1-based, lower = better) is the source, populated by the
+      // provisioning ranking step. Unranked players (default_rank NULL) are excluded — autopick falls to
+      // each manager's queue rather than a fabricated order. Players are global (one private league),
+      // so `_leagueId` is unused. If the column is unpopulated this is [] (the pre-provisioning state).
+      const rows = await prisma.player.findMany({
+        where: { defaultRank: { not: null } },
+        orderBy: { defaultRank: "asc" },
+        select: { id: true, position: true },
+      });
+      return rows.map((r) => ({ playerId: r.id, position: r.position }));
     },
 
     async commitPick(commit: PickCommit): Promise<boolean> {

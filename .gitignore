@@ -6,6 +6,10 @@ node_modules/
 .env.*
 !.env.example
 
+# provisioning input (real league name/emails + ranking — keep only the committed .example)
+provision.config.json
+provision.ranking.json
+
 # build output
 dist/
 build/
