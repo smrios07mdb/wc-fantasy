@@ -87,11 +87,23 @@ given sufficient stat granularity. See DECISIONS.md → Data source, and the per
 | Stat | Value |
 |---|---|
 | Yellow card | −1 |
-| Second yellow (min 0–29 / 30–59 / 60–90) | −3 / −2 / −1 |
-| Red card (min 0–29 / 30–59 / 60–90) | −4 / −3 / −2 |
+| Second yellow (min 0–29 / 30–59 / ≥60) | −3 / −2 / −1 |
+| Red card (min 0–29 / 30–59 / ≥60) | −4 / −3 / −2 |
 | Own goal | −2 |
 | ~~Offsides~~ → **dropped** (player-level n/a; only team-level exists) | ~~−1 / 2~~ |
 | ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 3 |
+
+**Card handling (clarification — additive; no suppression).** Each card row scores independently
+and is summed; a yellow is never removed because a later card followed. A player dismissed for a
+**second yellow** keeps the first yellow's **−1** *and* takes the second-yellow minute bucket — so a
+two-yellow dismissal equals a straight red at the same band, which is exactly why the second-yellow
+row sits one point above the red row. A **straight red** takes its bucket with no −1; a yellow
+followed by a *separate* straight red takes both. Minute bands are **lower-bound-inclusive**, and the
+**top band is ≥60 (a catch-all)** so a stoppage-time dismissal at 90+N lands in it rather than scoring
+0; bucket on the **effective minute** (`time_minute` + `added_time`). *Feed→input note:* the
+`match_events`→engine mapping must set the first-yellow signal alongside the second-yellow and
+classify a two-yellow dismissal as **second yellow, not red** (the `incident_class` confirm-in-code
+item, ARCHITECTURE §7). No point values changed.
 
 ## Balance reference
 Monster games ≈ **23–26** across all positions (forward hat-trick edges highest). Floors:

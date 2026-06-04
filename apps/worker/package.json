@@ -12,6 +12,7 @@
   "dependencies": {
     "@app/db": "workspace:*",
     "@app/feed": "workspace:*",
+    "@app/recompute": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
     "dotenv": "^16.4.7"

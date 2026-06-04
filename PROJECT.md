@@ -46,7 +46,7 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 ## Status
 | Theme | Status |
 |---|---|
-| A. Scoring | ✅ LOCKED (see SCORING.md) — **amended:** 6 verification-forced line changes from the BALLDONTLIE field map (3 drops, 2 keep-via-manual, 1 remap); balance untouched |
+| A. Scoring | ✅ LOCKED (see SCORING.md) — **amended:** 6 verification-forced line changes from the BALLDONTLIE field map (3 drops, 2 keep-via-manual, 1 remap); balance untouched; **§8 card-handling clarification** folded in (additive stacking; top minute band = ≥60 catch-all; no point values changed) |
 | Data source | ✅ LOCKED — BALLDONTLIE WC API (stats/events) + Sofascore rating scrape + manual failsafe (**amended twice:** (1) locking is play-driven → needs live substitution events; (2) verification — **Sofascore scrape is the PRIMARY rating source** (calibration target), BALLDONTLIE's own `rating` = automatic fallback (provenance unknown); ingestion is **polling** (no webhooks at our tier); tier confirmed **GOAT $39.99/mo**) |
 | B. Roster & lineups | ✅ LOCKED — 15-man squad (2/5/5/3), XI of 11, lock-on-play / no auto-subs, multiple-lineups defined, playoff cap ≈9 (7+2) |
 | C. League & format | ✅ LOCKED — all-play-all regular season (seed by record, ties by total points), period = matchday wave; **snake draft, per-pick timer = config, autopick queue→best-available**; **playoff field flexible (likely 8 or 10), per-round cut ≈2 tapering to 1 over the 5 WC knockout rounds, fixed at the transition**; **guillotine elimination tie = lowest cumulative tournament total points** (commissioner backstop); **late-correction freeze ≈6h after last FT, commissioner-only after**. Only the recruiting-dependent manager/field number is deferred (config) |
@@ -54,24 +54,9 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 | E. World Cup attrition | ✅ RESOLVED — folded into the playoff transition + FAAB (reinforcement now fully specified in Theme D) |
 | Architecture & stack | ✅ LOCKED (see ARCHITECTURE.md) — TypeScript/Next.js, Postgres via Supabase (+ Auth + Realtime), Render compute (web + workers + cron), polling ingestion, recompute scoring pipeline, lock-on-play live consumer; live "vs the field" screen + draft-room infra specified (draft *rules* now locked in Theme C) |
 
-## Implementation progress (build log)
-Decisions are all locked (table above). This tracks the **build** — each Claude Code prompt is a
-discrete, verified step. Detailed operational tracking lives in Cowork; this is the brain-level
-checkpoint so any thread knows where the code stands.
-
-| Prompt | Scope | Status |
-|---|---|---|
-| 01 — scaffold + schema | pnpm monorepo skeleton; complete Prisma schema (27 tables); invariants enforced in the **DB** (partial-unique active ownership, `faab_bid` RLS, `lineup_slot` lock latch, plain `@@unique` waiver uniqueness, CHECK constraints, `frozen_at` seam); typed `NotImplemented` stubs for scoring + feed | ✅ DONE & committed (migrations `init → invariants → manager_waiver_order_unique`; install / typecheck / migrate-deploy / invariant tests / build / lint all green) |
-| 02 — scoring engine | `packages/scoring` pure functions — `scorePlayerMatch` (all of SCORING.md incl. the amendments) + `scoreManagerPeriod` aggregation; exhaustive tests; no IO | **NEXT** |
-
-### Open `TODO(prompt-NN)` seams left by the scaffold (tracked so none is lost)
-- **Scoring math** → Prompt 02 (this one).
-- **Recompute sweeper** — dirty-flag → player → manager-period → standing; honor the `frozen_at` gate.
-- **All-play-all standings + seeding + guillotine** logic (Theme C) — pure, but its own prompt.
-- **Ingestion** — BALLDONTLIE poller (schedule / pre-match / live / settle) with idempotent upserts; the isolated **Sofascore scraper** (primary rating); the rating **resolver** `[manual, scrape, balldontlie]`.
-- **FAAB batch** transaction (add/drop pairing, highest-bid-first, void+refund on kicked-off, move-to-bottom tiebreak) — **incl. waiver contiguity via the two-phase reassignment** (uniqueness is now DB-enforced).
-- **Draft controller / autopick** — snake; `draft_pick_seconds` server timer; queue → best-available.
-- **Lock-on-play setter** — starter → kickoff, sub → entry minute; + the per-match kickoff-lock fallback.
-- **Commissioner override** for abandoned/postponed matches — a **scoped** `SET LOCAL app.lock_override` (or dedicated role) trigger exemption; **never** a blanket service-role bypass.
-- **Roster-cap** + **lineup → active-ownership / formation** validation in the relevant write transactions.
-- **Realtime** (draft room + vs-the-field), **auth UI**, the **vs-the-field** screen.
+**Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
+scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
+dirty-flag sweeper) ✅ · **next: Prompt 04 — standing / all-play-all (Theme C): weekly power-record +
+cumulative + seeding + guillotine cut-selection, draining the standing-dirty markers.** Then Prompt 05
+— BALLDONTLIE polling + Sofascore scraper + lock-on-play setting (`locked_at`). All themes remain
+LOCKED; build is downstream of decisions.

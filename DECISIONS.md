@@ -44,6 +44,21 @@ untouched, fully reversible):
 - **REMAP**: *dispossessed* (−1/3) → feed-native **possession lost** (broader stat; the −1/3 rate
   is kept, accepting that it now catches all careless giveaways, not only being tackled).
 
+### Card-handling clarification (build thread — folded into SCORING.md §8)
+§8 left one point open: does a **second-yellow dismissal** also incur the first yellow's −1?
+**Ruled: yes — additive, no suppression.** Each card row scores independently and is summed.
+*Decisive reason:* under the no-stacking reading a second yellow in the 60–90 band scores only its
+bucket (−1) — *identical to a lone yellow* — making a late sending-off cost the same as a harmless
+caution. Stacking gives −1 + bucket = −2 (correctly worse), and is also the **boring** implementation
+(sum rows; no "was this yellow upgraded?" state). It yields the identity *two-yellow dismissal =
+straight red at the same minute band*, which is exactly why §8's second-yellow row sits one point
+above the red row. Also locked: minute bands are **lower-bound-inclusive** with the **top band a ≥60
+catch-all** (so stoppage-time dismissals score rather than fall through); bucket on the **effective
+minute** (incl. `added_time`). **Feed→input requirement (recompute/ingestion prompts):** the
+`match_events`→`ScoreInput` mapping must set the first-yellow signal alongside the second-yellow and
+classify a two-yellow dismissal as **second yellow, not red** (the `incident_class` confirm-in-code
+item, ARCHITECTURE §7). **No point values changed** — purely disambiguating; reversible.
+
 ---
 
 ## Theme B — Roster & Lineups  ✅ LOCKED
