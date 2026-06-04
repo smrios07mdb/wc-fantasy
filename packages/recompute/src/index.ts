@@ -8,5 +8,7 @@
 export * from "./resolver";
 export * from "./adapter";
 export * from "./store";
+export * from "./standing";
+export * from "./guillotine";
 export * from "./recompute";
 export { MemoryStore } from "./memoryStore";

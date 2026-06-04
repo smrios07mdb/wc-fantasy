@@ -17,7 +17,15 @@ import type {
   ShotRow,
   StatRow,
 } from "./adapter";
-import type { ManagerPeriodRef, PlayerMatchRef, RecomputeStore, SlotScore } from "./store";
+import type { ManagerPeriodPoints } from "./standing";
+import type {
+  ManagerPeriodRef,
+  PeriodMeta,
+  PlayerMatchRef,
+  RecomputeStore,
+  SlotScore,
+  StandingUpsert,
+} from "./store";
 
 /** Minimal client surface this store needs (the singleton from `@app/db` satisfies it). */
 type Db = PrismaClient;
@@ -271,6 +279,69 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
       if (!existing) {
         await prisma.recomputeDirty.create({ data: { scope: "standing", leagueId, managerId } });
       }
+    },
+
+    async listDirtyStandingLeagues(): Promise<string[]> {
+      const rows = await prisma.recomputeDirty.findMany({
+        where: { scope: "standing", processedAt: null },
+        select: { leagueId: true },
+      });
+      const set = new Set<string>();
+      for (const r of rows) if (r.leagueId) set.add(r.leagueId);
+      return [...set];
+    },
+
+    async getLeaguePeriods(leagueId): Promise<PeriodMeta[]> {
+      const rows = await prisma.period.findMany({
+        where: { leagueId },
+        select: { id: true, kind: true, cutCount: true },
+        orderBy: { label: "asc" }, // deterministic; order is immaterial to the aggregate
+      });
+      return rows.map((r) => ({ id: r.id, kind: r.kind, cutCount: r.cutCount }));
+    },
+
+    async getManagerPeriodScores(periodId): Promise<ManagerPeriodPoints[]> {
+      const rows = await prisma.scoreManagerPeriod.findMany({
+        where: { periodId },
+        select: { managerId: true, points: true },
+        orderBy: { managerId: "asc" }, // deterministic
+      });
+      return rows.map((r) => ({ managerId: r.managerId, points: r.points }));
+    },
+
+    async upsertStanding(row: StandingUpsert): Promise<void> {
+      await prisma.standing.upsert({
+        where: {
+          leagueId_managerId_scope: {
+            leagueId: row.leagueId,
+            managerId: row.managerId,
+            scope: "group_stage",
+          },
+        },
+        create: {
+          leagueId: row.leagueId,
+          managerId: row.managerId,
+          scope: "group_stage",
+          allPlayAllW: row.allPlayAllW,
+          allPlayAllL: row.allPlayAllL,
+          totalPoints: row.totalPoints,
+          seed: row.seed,
+        },
+        update: {
+          allPlayAllW: row.allPlayAllW,
+          allPlayAllL: row.allPlayAllL,
+          totalPoints: row.totalPoints,
+          seed: row.seed,
+          computedAt: new Date(),
+        },
+      });
+    },
+
+    async clearStandingDirty(leagueId): Promise<void> {
+      await prisma.recomputeDirty.updateMany({
+        where: { scope: "standing", leagueId, processedAt: null },
+        data: { processedAt: new Date() },
+      });
     },
 
     async listDirtyPlayerMatches(): Promise<PlayerMatchRef[]> {

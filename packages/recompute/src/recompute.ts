@@ -9,6 +9,7 @@
  */
 import { scorePlayerMatch, scoreManagerPeriod } from "@app/scoring";
 import { buildScoreInput } from "./adapter";
+import { computeStandings, type PeriodScores } from "./standing";
 import type { ManagerPeriodRef, PlayerMatchRef, RecomputeStore } from "./store";
 
 export interface RecomputeOptions {
@@ -31,6 +32,8 @@ export interface SweepResult {
   managerPeriods: number;
   /** Manager-periods left unprocessed because their period is frozen (no override). */
   skippedFrozen: number;
+  /** Leagues whose `standing` was recomputed this sweep. */
+  standings: number;
 }
 
 /**
@@ -77,16 +80,48 @@ export async function recomputeManagerPeriod(
   await store.writeScoreManagerPeriod(managerId, periodId, total);
 
   const leagueId = await store.getManagerLeagueId(managerId);
-  if (leagueId) await store.enqueueStandingDirty(leagueId, managerId); // marked only — not computed here
+  if (leagueId) await store.enqueueStandingDirty(leagueId, managerId); // standing computed in its own phase
 
   return { managerId, periodId, points: total, skipped: false };
 }
 
 /**
+ * Recompute a league's all-play-all `standing` (scope `group_stage`) from its `group_md` periods'
+ * `score_manager_period` rows: filter to group_md → gather each period's points → run the pure
+ * {@link computeStandings} → upsert the rows → clear the `scope=standing` markers (LAST, so a crash
+ * mid-write simply re-runs and converges). The frozen gate is respected TRANSITIVELY: a frozen
+ * period's `score_manager_period` is stable (Prompt-03 gates its restatement), so reading those rows
+ * here can't shift a standing on a late correction — no new gate logic needed. Returns the row count.
+ */
+export async function recomputeStanding(store: RecomputeStore, leagueId: string): Promise<number> {
+  const periods = (await store.getLeaguePeriods(leagueId)).filter((p) => p.kind === "group_md");
+  const periodScores: PeriodScores[] = [];
+  for (const p of periods) {
+    periodScores.push({ periodId: p.id, scores: await store.getManagerPeriodScores(p.id) });
+  }
+
+  const rows = computeStandings(periodScores);
+  for (const row of rows) {
+    await store.upsertStanding({
+      leagueId,
+      managerId: row.managerId,
+      allPlayAllW: row.allPlayAllW,
+      allPlayAllL: row.allPlayAllL,
+      totalPoints: row.totalPoints,
+      seed: row.seed,
+    });
+  }
+  await store.clearStandingDirty(leagueId); // last → idempotent
+  return rows.length;
+}
+
+/**
  * Drain the dirty markers and walk the chain `(match,player) → (manager,period) → standing`,
- * clearing flags as it goes. Idempotent: a second sweep with no new writes does nothing. `standing`
- * is only MARKED dirty (its computation is the next prompt). Frozen periods are skipped unless
- * `allowFrozen`.
+ * clearing flags as it goes. Idempotent: a second sweep with no new writes does nothing. The chain
+ * is now END-TO-END — the standing phase recomputes every league with a pending `scope=standing`
+ * marker. Frozen periods are skipped unless `allowFrozen` (and standings inherit that gate
+ * transitively: a skipped manager-period leaves its `score_manager_period` — and thus the standing —
+ * unchanged).
  */
 export async function sweep(
   store: RecomputeStore,
@@ -112,5 +147,16 @@ export async function sweep(
     managerPeriods++;
   }
 
-  return { playerMatches: dirtyPlayerMatches.length, managerPeriods, skippedFrozen };
+  // Phase 3 — standing: recompute every league with a pending standing marker (chain end-to-end).
+  const standingLeagues = await store.listDirtyStandingLeagues();
+  for (const leagueId of standingLeagues) {
+    await recomputeStanding(store, leagueId);
+  }
+
+  return {
+    playerMatches: dirtyPlayerMatches.length,
+    managerPeriods,
+    skippedFrozen,
+    standings: standingLeagues.length,
+  };
 }
