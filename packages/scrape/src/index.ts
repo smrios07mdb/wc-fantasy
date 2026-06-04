@@ -7,3 +7,7 @@
  * so this entrypoint stays IO-free. This package does NOT import `@app/ingest` (physical isolation).
  */
 export * from "./extract";
+export * from "./resolveTarget";
+export * from "./keyMatch";
+export * from "./target";
+export * from "./compare";
