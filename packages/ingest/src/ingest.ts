@@ -5,13 +5,35 @@
  */
 import type { FeedClient } from "@app/feed";
 import type { IngestStore } from "./store";
-import { mapEvent, mapShot, mapStatLine, mapRating, mapTeamStat } from "./map";
+import {
+  mapEvent,
+  mapShot,
+  mapStatLine,
+  mapRating,
+  mapTeamStat,
+  mapMatchRow,
+  derivePeriodLabel,
+} from "./map";
 import { lockInstantsFromLineup, lockInstantFromSub, type LineupAppearance } from "./lock";
 
 export interface MatchCtx {
   bdlId: number;
   kickoffAt: Date;
   kickoffLockFallback: boolean;
+}
+
+/**
+ * Schedule-sync: pull the fixture list and upsert each `fifa_match`, resolving its STRUCTURAL period
+ * (round/matchday → period_id, never kickoff-time inference). This is the bootstrap that populates the
+ * DB the per-match modes then read. Idempotent: re-running overwrites and self-corrects.
+ */
+export async function ingestSchedule(feed: FeedClient, store: IngestStore): Promise<void> {
+  const res = await feed.matches();
+  for (const f of res.data) {
+    const row = mapMatchRow(f);
+    const periodId = await store.resolvePeriodId(derivePeriodLabel(f));
+    await store.upsertMatch(row, periodId, {});
+  }
 }
 
 function isSubstitution(incidentType: string): boolean {

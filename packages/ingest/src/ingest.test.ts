@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MemoryIngestStore } from "./memoryStore";
-import { ingestLineups, ingestLive, ingestSettle } from "./ingest";
+import { ingestLineups, ingestLive, ingestSettle, ingestSchedule } from "./ingest";
 import type { FeedClient } from "@app/feed";
 
 /** A FeedClient whose endpoints return empty pages unless overridden. */
@@ -113,6 +113,28 @@ describe("ingestLive", () => {
     const store = new MemoryIngestStore();
     await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: true });
     expect(store.lockedAt(50, 7)).toBeUndefined();
+  });
+});
+
+describe("ingestSchedule (schedule-sync)", () => {
+  it("upserts fixtures with the structurally-resolved period_id", async () => {
+    const feed = fakeFeed({
+      matches: () =>
+        Promise.resolve({
+          data: [
+            { id: 50, status: "scheduled", datetime: "2026-06-10T18:00:00Z", round: "Round of 16" },
+            { id: 51, status: "scheduled", datetime: "2026-06-11T18:00:00Z", group: "A" }, // no matchday
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    store.seedPeriod("knockout_round", "R16", "period-r16");
+
+    await ingestSchedule(feed, store);
+
+    expect(store.upsertedMatch(50)?.periodId).toBe("period-r16"); // structural round → R16 period
+    expect(store.upsertedMatch(51)?.periodId).toBeNull(); // group game, no matchday → left null
   });
 });
 

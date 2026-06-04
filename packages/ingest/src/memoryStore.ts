@@ -19,6 +19,11 @@ export class MemoryIngestStore implements IngestStore {
   private locks = new Map<string, Date>();
   private periods = new Map<string, string>(); // `${kind}:${label}` → periodId
   private matches: SchedulableMatch[] = [];
+  /** bdlId → what upsertMatch was called with (records the resolved period_id + fallback flag). */
+  private upsertedMatches = new Map<
+    number,
+    { periodId: string | null; kickoffLockFallback: boolean }
+  >();
 
   // ── seeding / assertions (test setup) ──
   seedPeriod(kind: string, label: string, id: string): void {
@@ -71,8 +76,22 @@ export class MemoryIngestStore implements IngestStore {
   upsertPlayerByBdlId(bdlId: number): Promise<string> {
     return Promise.resolve(`player-${bdlId}`);
   }
-  upsertMatch(row: MatchRowIn): Promise<{ matchId: string }> {
+  upsertMatch(
+    row: MatchRowIn,
+    periodId: string | null,
+    opts: { kickoffLockFallback?: boolean },
+  ): Promise<{ matchId: string }> {
+    this.upsertedMatches.set(row.bdlId, {
+      periodId,
+      kickoffLockFallback: opts.kickoffLockFallback ?? false,
+    });
     return Promise.resolve({ matchId: `match-${row.bdlId}` });
+  }
+  /** Assertion: what period_id the schedule-sync resolved for a fixture. */
+  upsertedMatch(
+    bdlId: number,
+  ): { periodId: string | null; kickoffLockFallback: boolean } | undefined {
+    return this.upsertedMatches.get(bdlId);
   }
   resolvePeriodId(label: { kind: string; label: string } | null): Promise<string | null> {
     return Promise.resolve(
