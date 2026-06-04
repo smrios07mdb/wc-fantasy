@@ -33,6 +33,13 @@ export default tseslint.config(
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
+  // The Next.js app runs in the browser too (client components use `window`, etc.).
+  {
+    files: ["apps/web/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
   // Prettier last: turn off rules that conflict with the formatter.
   prettier,
 );

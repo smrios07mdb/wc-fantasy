@@ -9,10 +9,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@app/auth": "workspace:*",
     "@app/db": "workspace:*",
+    "@app/draft": "workspace:*",
     "@app/feed": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.107.0",
     "next": "^15.1.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

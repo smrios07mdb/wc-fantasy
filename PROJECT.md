@@ -79,8 +79,25 @@ latch) and backstopped by the `draft_pick` and `roster_player` active-ownership 
 hook (`tickActiveDrafts`) drives timer-expiry autopicks; `pick_deadline_at` is the only timer source of
 truth. **SEAM:** the best-available **default-ranking source is injected** — `getDefaultRanking`
 returns `[]` with a `// TODO(confirm):` (no `player.default_rank` column exists), so autopick relies on
-each manager's queue until a real ranking is wired. Realtime broadcast + the draft-room UI + auth are
-explicitly out of scope (the deferred next deliverable). **Next: the user-facing critical path** (the
-WC opens June 11) — auth + the draft-room UI + Realtime (subscribe to the controller's state, call
-`submitPick`), a minimal lineup-setting flow, and deploy. The draft is the binding pre-kickoff
-deadline. All themes remain LOCKED; build is downstream of decisions.
+each manager's queue until a real ranking is wired. Realtime broadcast + the draft-room UI remain out
+of scope (the deferred Design+Code deliverable). · **Prompt 07 — auth (Supabase magic-link + allowlist
++ session→manager binding + the draft-op authz gate), COMPLETE ✅** (406 tests, +79). New pure
+`packages/auth` (`@app/auth`): the allowlist gate (`isEmailAllowed`, case-insensitive — a
+`// TODO(confirm):`), session→manager resolution (`resolveSessionManager` — dual-key match on the
+Supabase uid OR the linked `app_user` email, so it is robust to the unpinned link ceremony), and the
+scope-gated act-as assertion (`canActAsManager` — `self` = strict self-match, `admin` = commissioner
+override) + a typed `AuthError` family — all DB/Supabase/clock/env-free (`purity.test.ts` proves it,
+comment-stripped). The edges live in `apps/web`: `@supabase/ssr` server + browser clients (SEPARATE
+from Prisma; authz reads `getUser()`, never `getSession()`) + a session-refresh middleware;
+`getSessionManager` / `requireManager` (the reusable gate every later route reuses); the minimal
+magic-link sign-in / `/auth/callback` (code-exchange + edge allowlist enforcement: a non-allowlisted
+email is `signOut` + denied, never admitted) / sign-out; and `POST /api/draft/pick`, whose
+framework-agnostic `handleDraftPick` rejects **401 (no session) / 403 (not your manager) BEFORE**
+calling the **unchanged** `submitPick`. Google OAuth is config-gated / seamed-optional. **SEAMS
+(`// TODO(confirm):`):** the `user_id`↔`manager` provisioning ceremony (lookup is robust to either
+`app_user.id == uid` or email-only linking; no self-serve manager-creation wizard) + email
+case-sensitivity. Adversarial review (9 agents, 3 findings, **0 confirmed** — all the single-league
+`leagueId`-filter non-issue). **Next: the user-facing critical path** (the WC opens June 11) — the
+draft-room UI + Realtime (subscribe to the controller's state, call the now-gated `/api/draft/pick`),
+the manager-provisioning ceremony, a minimal lineup-setting flow, and deploy. The draft is the binding
+pre-kickoff deadline. All themes remain LOCKED; build is downstream of decisions.
