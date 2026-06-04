@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@app/db";
-import { isEmailAllowed } from "@app/auth";
+import { isEmailAllowed, safeNextPath } from "@app/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  // Validate `next` to a same-origin, path-absolute reference — `${origin}${next}` would otherwise be
+  // an open redirect (origin has no trailing slash, so e.g. `@evil.com` / `//evil.com` escape it).
+  const next = safeNextPath(searchParams.get("next"));
   if (!code) return NextResponse.redirect(`${origin}/auth/denied?reason=missing_code`);
 
   const supabase = await createClient();

@@ -11,6 +11,7 @@ const PURE_MODULES = [
   "allowlist.ts",
   "resolve.ts",
   "authz.ts",
+  "redirect.ts",
   "errors.ts",
   "types.ts",
   "index.ts",

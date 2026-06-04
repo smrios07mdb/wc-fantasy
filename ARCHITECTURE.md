@@ -381,8 +381,9 @@ Minimal, for a private league of friends.
   `getUser()`, **never** `getSession()`) + a session-refresh middleware; `getSessionManager` /
   `requireManager` (the **reusable** gate every later authenticated route will use — lineup-set, FAAB,
   admin); the minimal magic-link sign-in / `/auth/callback` (exchange code → enforce the allowlist:
-  a non-allowlisted email is signed out + denied, never admitted) / sign-out; and the first consumer
-  `POST /api/draft/pick` (401/403 BEFORE the controller; `submitPick` unchanged). Google OAuth is
+  a non-allowlisted email is signed out + denied, never admitted; the `next` redirect is validated to a
+  same-origin relative path via the pure `safeNextPath` — no open redirect) / sign-out; and the first
+  consumer `POST /api/draft/pick` (401/403 BEFORE the controller; `submitPick` unchanged). Google OAuth is
   config-gated/seamed. **SEAMS (`// TODO(confirm):`):** the `manager.user_id` provisioning ceremony
   (commissioner pre-provisions + links vs. seeded; whether `app_user.id` is the Supabase uid — managed
   via DB for now, **no** self-serve manager wizard) + email case-sensitivity. The polished auth UI +
