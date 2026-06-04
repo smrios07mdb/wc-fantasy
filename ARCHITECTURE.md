@@ -436,7 +436,10 @@ infrastructure to enforce them already lives in this doc:
   = snake**; **autopick on expiry** = highest-ranked available from the manager's pre-set queue,
   else best-available. Enforced by the §5 draft controller.
 - **Guillotine elimination tiebreak** = lowest **cumulative tournament total points** among the
-  tied managers is cut (commissioner backstop if still identical). Computed from `standing`.
+  tied managers is cut (commissioner backstop if still identical). This is **Σ `score_manager_period`
+  across all periods to date — regular season *and* knockout** — computed on the fly; **not**
+  `standing.total_points` (which sums `group_md` periods only). `selectGuillotineCuts` receives it as
+  a pre-built map; the transition/FAAB prompt assembles it.
 - **Playoff field size is flexible (likely 8 or 10)** and the **per-round cut count** (≈2 early,
   tapering to 1) is derived so the bracket collapses to one champion over the WC's 5 knockout
   rounds; fixed at the group→playoff transition once the final manager count is known. `period`

@@ -56,7 +56,10 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
-dirty-flag sweeper) ✅ · **next: Prompt 04 — standing / all-play-all (Theme C): weekly power-record +
-cumulative + seeding + guillotine cut-selection, draining the standing-dirty markers.** Then Prompt 05
-— BALLDONTLIE polling + Sofascore scraper + lock-on-play setting (`locked_at`). All themes remain
-LOCKED; build is downstream of decisions.
+dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection
+(Theme C) ✅ (210 tests; recompute chain now end-to-end raw→`score_player_match`→`score_manager_period`→`standing`,
+idempotent; `selectGuillotineCuts` receives the cumulative-tournament total as a **pre-built map** —
+assembly of that map is deferred to the transition/FAAB prompt). **next: Prompt 05 — BALLDONTLIE polling
++ Sofascore scraper + lock-on-play setting (`locked_at`); likely split 05a (BALLDONTLIE ingestion +
+`locked_at`) / 05b (isolated Sofascore scraper).** All themes remain LOCKED; build is downstream of
+decisions.
