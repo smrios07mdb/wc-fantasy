@@ -138,6 +138,60 @@ describe("ingestion → recompute contract", () => {
     );
   });
 
+  it("a late card on a player with REAL stats recomputes to reflect BOTH (stats not clobbered)", async () => {
+    // The consequence the upsert clobber-guard protects: re-dirtying for an event must NOT lose stats.
+    // A player with real minutes/goals gets an 80th-minute booking; the swept score must equal the
+    // engine on the full bundle, and strictly exceed a card-only score (so the stats are still present).
+    const store = new MemoryStore();
+    store.seedManagerLeague("M", "L");
+    store.seedPeriod("P", { leagueId: "L", kind: "group_md" });
+    const statsPlusCard: ScoreInputBundle = {
+      playerId: "p1",
+      role: "FWD",
+      rating: 7.5,
+      ratingSource: "balldontlie",
+      stat: { ...zeroStat(), minutesPlayed: 90, goals: 1 },
+      manual: null,
+      events: [
+        {
+          incidentType: "card",
+          incidentClass: "yellow",
+          timeMinute: 80,
+          addedTime: null,
+          playerId: "p1",
+          assistPlayerId: null,
+          playerInId: null,
+          playerOutId: null,
+          rescinded: false,
+        },
+      ],
+      shots: [],
+      team: {
+        playerTeamId: "A",
+        homeTeamId: "A",
+        awayTeamId: "B",
+        homeScore: 1,
+        awayScore: 0,
+        teamByPlayerId: {},
+      },
+    };
+    store.seedPlayerMatch("m1", "p1", statsPlusCard);
+    store.seedSlot("M", "P", "p1", true);
+    store.seedPlaysIn("p1", "P", "m1");
+
+    await sweep(store);
+
+    const score = store.writtenPlayerScore("m1", "p1");
+    expect(score).toEqual(scorePlayerMatch(buildScoreInput(statsPlusCard))); // (c) reflects BOTH stats + card
+    const cardOnly: ScoreInputBundle = {
+      ...statsPlusCard,
+      stat: null,
+      rating: null,
+      ratingSource: null,
+    };
+    expect(score!.total).toBeGreaterThan(scorePlayerMatch(buildScoreInput(cardOnly)).total); // stats present
+  });
+
   it("a late write into a FROZEN period is not restated (no commissioner override)", async () => {
     const store = new MemoryStore();
     seedIngestWrite(store);

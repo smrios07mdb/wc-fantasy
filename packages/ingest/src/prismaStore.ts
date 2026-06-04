@@ -11,6 +11,15 @@ import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
 
 type Db = PrismaClient;
 
+/**
+ * The CONFLICT (existing-row) branch of the stat dirty-mark upsert: flip ONLY the `dirty` flag, NEVER a
+ * stat column. A late event (e.g. an 80th-minute booking after live stats have already landed) must
+ * re-dirty the player WITHOUT nulling out real minutes/goals/etc. The all-null stub belongs solely to
+ * the create/insert branch (event-only players who have no stat row yet). Exported so the invariant is
+ * unit-testable without a live DB.
+ */
+export const STAT_DIRTY_UPDATE = { dirty: true } as const;
+
 export function createPrismaIngestStore(prisma: Db): IngestStore {
   const matchIdFor = async (bdlId: number): Promise<string | null> =>
     (await prisma.fifaMatch.findUnique({ where: { balldontlieId: bdlId }, select: { id: true } }))
@@ -35,16 +44,17 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
   };
 
   // events/shots/team_stats have NO row-level dirty column, so an event-only change (e.g. a card with
-  // no stat-row delta) must re-dirty the player through the channel the sweep actually reads:
-  // `sweep` Phase 1 (`listDirtyPlayerMatches`) scans the raw `dirty` BOOLEAN on stat/rating/manual —
-  // it does NOT read `recompute_dirty` scope=player_match (that scope has no consumer). So flip
-  // `stat_player_match.dirty`, upserting a stub row when the player has no stat line yet (the adapter
-  // tolerates an all-null stat; the stub self-corrects when real stats arrive).
+  // no stat-row delta) must re-dirty the player through the channel the sweep actually reads: `sweep`
+  // Phase 1 (`listDirtyPlayerMatches`) scans the raw `dirty` BOOLEAN on stat/rating/manual. (There is
+  // no player-match MARKER channel — the dead `recompute_dirty` scope was retired.) So flip
+  // `stat_player_match.dirty`: the all-null stub is written ONLY on INSERT (a player with no stat line
+  // yet — the adapter tolerates it and it self-corrects when real stats arrive); on CONFLICT we touch
+  // ONLY the flag (STAT_DIRTY_UPDATE), so a late card never nulls out stats that already landed.
   const markStatDirty = async (matchId: string, playerId: string): Promise<void> => {
     await prisma.statPlayerMatch.upsert({
       where: { matchId_playerId: { matchId, playerId } },
       create: { matchId, playerId, dirty: true },
-      update: { dirty: true },
+      update: STAT_DIRTY_UPDATE,
     });
   };
 

@@ -60,9 +60,10 @@ export const STANDING_SCOPES = ["group_stage", "playoff", "overall"] as const;
 export type StandingScope = (typeof STANDING_SCOPES)[number];
 
 /**
- * What a dirty marker points at, for the recompute sweeper.
- * Write to a raw/manual input -> mark `player_match` dirty -> recompute cascades up to
- * `manager_period` -> `standing` (ARCHITECTURE.md §3 idempotency & recompute).
+ * What a dirty MARKER points at, for the recompute sweeper. Player-match dirtiness is NOT a marker —
+ * it is the raw `dirty` BOOLEAN on stat/rating/manual rows (`sweep` Phase 1 reads those directly). The
+ * markers cover the upward cascade only: `manager_period` -> `standing` (ARCHITECTURE.md §3). The
+ * former `player_match` scope was retired (Prompt 05a follow-up) — it had no consumer.
  */
-export const RECOMPUTE_SCOPES = ["player_match", "manager_period", "standing"] as const;
+export const RECOMPUTE_SCOPES = ["manager_period", "standing"] as const;
 export type RecomputeScope = (typeof RECOMPUTE_SCOPES)[number];

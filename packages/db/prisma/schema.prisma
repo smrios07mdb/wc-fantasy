@@ -97,7 +97,8 @@ enum StandingScope {
 }
 
 enum RecomputeScope {
-  player_match
+  // NOTE: `player_match` was retired (Prompt 05a follow-up) — it had no consumer. Player-match
+  // dirtiness is the raw `dirty` BOOLEAN on stat/rating/manual; these markers cover manager_period + standing.
   manager_period
   standing
 }

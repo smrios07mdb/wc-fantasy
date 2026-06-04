@@ -27,6 +27,19 @@ describe("MemoryIngestStore raw upserts", () => {
     expect(store.isDirty(1, 2)).toBe(true);
   });
 
+  it("an event-only re-mark sets dirty WITHOUT clobbering an existing stat row", async () => {
+    // A late card arrives after live stats already landed: markPlayersDirty must re-dirty the player
+    // but leave his real minutes/goals intact (the inverse of the dead-channel bug).
+    const store = new MemoryIngestStore();
+    await store.upsertStatLine(
+      mapStatLine({ match_id: 1, player_id: 2, minutes_played: 90, goals: 1 }),
+    );
+    store.clearDirty(1, 2);
+    await store.markPlayersDirty(1, [2]); // event-only re-mark (no stat delta)
+    expect(store.statLines()[0]).toMatchObject({ minutesPlayed: 90, goals: 1 }); // (a) stats preserved
+    expect(store.isDirty(1, 2)).toBe(true); // (b) re-dirtied
+  });
+
   it("events/shots/team writes don't dirty by themselves — markPlayersDirty does", async () => {
     const store = new MemoryIngestStore();
     await store.upsertEvent({
