@@ -7,6 +7,7 @@ import {
   pollerSilentMatches,
   anyMatchInLiveWindow,
   ingestSchedule,
+  ingestRosters,
   ingestLineups,
   ingestLive,
   ingestSettle,
@@ -52,6 +53,17 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
     }
     running = true;
     try {
+      // Squad bootstrap (player + fifa_team): boot tick + a SLOW cadence (≈daily). Squads are static,
+      // so this never runs on the ordinary 60s tick. Its own try/catch keeps a rosters failure from
+      // starving the rest of the tick (ARCHITECTURE.md §3).
+      if (ticks === 0 || ticks % config.rostersSyncEveryTicks === 0) {
+        try {
+          await ingestRosters(feed, ingestStore);
+        } catch (err) {
+          log.error("ingest.rosters.error", { message: (err as Error).message });
+        }
+      }
+
       const toModeMatch = (r: SchedulableMatch): ModeMatch => ({
         bdlId: r.bdlId,
         status: r.status as ModeMatch["status"],

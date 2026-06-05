@@ -24,6 +24,13 @@ export class MemoryIngestStore implements IngestStore {
     number,
     { periodId: string | null; kickoffLockFallback: boolean }
   >();
+  /** bdlId → fields upsertPlayerByBdlId was called with (rosters-sync assertions). */
+  private upsertedPlayers = new Map<
+    number,
+    { displayName: string | null; position: string | null; teamBdlId: number | null }
+  >();
+  /** bdlId → name upsertTeamByBdlId was called with. */
+  private upsertedTeams = new Map<number, string | null>();
 
   // ── seeding / assertions (test setup) ──
   seedPeriod(kind: string, label: string, id: string): void {
@@ -70,11 +77,31 @@ export class MemoryIngestStore implements IngestStore {
   }
 
   // ── IngestStore: reference rows ──
-  upsertTeamByBdlId(bdlId: number, _name: string | null): Promise<string> {
+  upsertTeamByBdlId(bdlId: number, name: string | null): Promise<string> {
+    this.upsertedTeams.set(bdlId, name);
     return Promise.resolve(`team-${bdlId}`);
   }
-  upsertPlayerByBdlId(bdlId: number): Promise<string> {
+  upsertPlayerByBdlId(
+    bdlId: number,
+    fields: { displayName: string | null; position: string | null; teamBdlId: number | null },
+  ): Promise<string> {
+    this.upsertedPlayers.set(bdlId, fields);
     return Promise.resolve(`player-${bdlId}`);
+  }
+  /** Assertions for the rosters sync. */
+  upsertedPlayer(
+    bdlId: number,
+  ): { displayName: string | null; position: string | null; teamBdlId: number | null } | undefined {
+    return this.upsertedPlayers.get(bdlId);
+  }
+  upsertedPlayerCount(): number {
+    return this.upsertedPlayers.size;
+  }
+  upsertedTeam(bdlId: number): string | null | undefined {
+    return this.upsertedTeams.get(bdlId);
+  }
+  upsertedTeamCount(): number {
+    return this.upsertedTeams.size;
   }
   upsertMatch(
     row: MatchRowIn,

@@ -3,7 +3,7 @@
  * BALLDONTLIE ids; the store resolves them to internal UUIDs. EVERY column the §7 map consumes is
  * mapped — an unmapped column silently undercounts a score (the adapter coalesces null→0 downstream).
  */
-import type { PeriodKind } from "@app/shared";
+import type { PeriodKind, Position } from "@app/shared";
 import type {
   FIFAMatch,
   FIFAMatchEvent,
@@ -14,6 +14,16 @@ import type {
 
 const n = (v: number | null | undefined): number | null => v ?? null;
 const s = (v: string | null | undefined): string | null => v ?? null;
+
+/**
+ * Map the BALLDONTLIE FIFA roster position (single-letter `G/D/M/F`, verified exhaustive across all
+ * 1,253 2026 roster rows) to our {@link Position} enum. Unknown/null → `MID` defensively, so an
+ * unexpected code from a future edition can never crash the rosters sync.
+ */
+const POSITION_BY_CODE: Record<string, Position> = { G: "GK", D: "DEF", M: "MID", F: "FWD" };
+export function mapPosition(code: string | null | undefined): Position {
+  return POSITION_BY_CODE[(code ?? "").trim().toUpperCase()] ?? "MID";
+}
 
 export interface StatLineRow {
   matchBdlId: number;

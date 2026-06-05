@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MemoryIngestStore } from "./memoryStore";
-import { ingestLineups, ingestLive, ingestSettle, ingestSchedule } from "./ingest";
+import { ingestLineups, ingestLive, ingestSettle, ingestSchedule, ingestRosters } from "./ingest";
 import type { FeedClient } from "@app/feed";
 
 /** A FeedClient whose endpoints return empty pages unless overridden. */
@@ -13,11 +13,56 @@ function fakeFeed(over: Partial<FeedClient>): FeedClient {
     playerMatchStats: empty,
     teamMatchStats: empty,
     matchShots: empty,
+    rosters: empty,
     ...over,
   } as FeedClient;
 }
 
 const kickoff = new Date("2026-06-10T18:00:00Z");
+
+describe("ingestRosters (squad bootstrap)", () => {
+  it("upserts each player (mapped position + team link) and the team (name = country)", async () => {
+    const feed = fakeFeed({
+      rosters: () =>
+        Promise.resolve({
+          data: [
+            {
+              team_id: 36,
+              position: "F",
+              player: {
+                id: 30233,
+                name: "Alexander Sørloth",
+                position: "F",
+                country_name: "Norway",
+              },
+            },
+            {
+              team_id: 10,
+              position: "G",
+              player: { id: 5, name: "A Keeper", position: "G", country_name: "Brazil" },
+            },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+
+    await ingestRosters(feed, store);
+
+    expect(store.upsertedPlayerCount()).toBe(2);
+    expect(store.upsertedTeam(36)).toBe("Norway");
+    expect(store.upsertedPlayer(30233)).toEqual({
+      displayName: "Alexander Sørloth",
+      position: "FWD", // F → FWD
+      teamBdlId: 36,
+    });
+    expect(store.upsertedPlayer(5)).toEqual({
+      displayName: "A Keeper",
+      position: "GK", // G → GK
+      teamBdlId: 10,
+    });
+  });
+});
 
 describe("ingestLineups (pre-match)", () => {
   it("locks every official-XI starter at kickoff; benched players stay unlocked", async () => {

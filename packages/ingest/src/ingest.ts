@@ -12,6 +12,7 @@ import {
   mapRating,
   mapTeamStat,
   mapMatchRow,
+  mapPosition,
   derivePeriodLabel,
 } from "./map";
 import { lockInstantsFromLineup, lockInstantFromSub, type LineupAppearance } from "./lock";
@@ -33,6 +34,26 @@ export async function ingestSchedule(feed: FeedClient, store: IngestStore): Prom
     const row = mapMatchRow(f);
     const periodId = await store.resolvePeriodId(derivePeriodLabel(f));
     await store.upsertMatch(row, periodId, {});
+  }
+}
+
+/**
+ * Squad bootstrap: pull the per-edition rosters and upsert each player (with their national team +
+ * mapped position) — the ONLY path that creates `player` + `fifa_team` rows, which every later mode
+ * then references. Idempotent (upserts on BDL ids). Team name = the player's country; the position
+ * letter (G/D/M/F) is normalized to our enum via `mapPosition`. Runs on a SLOW cadence (boot + ~daily),
+ * NOT the 60s tick — squads are static (ARCHITECTURE.md §3). Default season: 2026.
+ */
+export async function ingestRosters(feed: FeedClient, store: IngestStore): Promise<void> {
+  const res = await feed.rosters({ seasons: [2026] });
+  for (const r of res.data) {
+    // Team first: upsertPlayerByBdlId resolves teamBdlId → the fifa_team row, so it must exist.
+    await store.upsertTeamByBdlId(r.team_id, r.player.country_name ?? null);
+    await store.upsertPlayerByBdlId(r.player.id, {
+      displayName: r.player.name ?? null,
+      position: mapPosition(r.player.position),
+      teamBdlId: r.team_id,
+    });
   }
 }
 

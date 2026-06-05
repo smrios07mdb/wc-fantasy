@@ -14,8 +14,10 @@ import type {
   FIFAPlayerMatchStats,
   FIFATeamMatchStats,
   FIFAShot,
+  FIFARoster,
   MatchListParams,
   MatchScopedParams,
+  RostersParams,
   ListParams,
 } from "./types";
 import type { FeedClient, FeedClientConfig } from "./index";
@@ -118,5 +120,15 @@ export function buildClient(config: FeedClientConfig): FeedClient {
     teamMatchStats: (p: MatchScopedParams) =>
       getAll<FIFATeamMatchStats>(b, "team_match_stats", scoped(p)),
     matchShots: (p: MatchScopedParams) => getAll<FIFAShot>(b, "match_shots", scoped(p)),
+    // Squads. `seasons[]`/`team_ids[]`/`player_ids[]` are snake_case array params (toQuery emits `[]`);
+    // built explicitly here since snakeParams doesn't rename multi-word keys. Defaults to season 2026.
+    rosters: (p?: RostersParams) =>
+      getAll<FIFARoster>(b, "rosters", {
+        cursor: p?.cursor,
+        per_page: p?.perPage,
+        seasons: p?.seasons ?? [2026],
+        team_ids: p?.teamIds,
+        player_ids: p?.playerIds,
+      }),
   };
 }

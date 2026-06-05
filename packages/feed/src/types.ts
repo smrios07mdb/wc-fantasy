@@ -120,6 +120,36 @@ export interface FIFAShot {
   [key: string]: unknown;
 }
 
+/** Biographical player (the `/players` + nested `/rosters` shape). `position` is a single letter G/D/M/F. */
+export interface FIFAPlayer {
+  id: number;
+  name: string;
+  short_name?: string | null;
+  position?: string | null;
+  date_of_birth?: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
+  height_cm?: number | null;
+  jersey_number?: string | null;
+  [key: string]: unknown;
+}
+
+/** A `/rosters` row: one player's per-edition squad entry. Carries `team_id` (→ fifa_team) + nested bio. */
+export interface FIFARoster {
+  team_id: number;
+  player: FIFAPlayer;
+  position?: string | null;
+  appearances?: number | null;
+  starts?: number | null;
+  minutes_played?: number | null;
+  goals?: number | null;
+  assists?: number | null;
+  yellow_cards?: number | null;
+  red_cards?: number | null;
+  avg_rating?: number | null;
+  [key: string]: unknown;
+}
+
 // ── Request params ────────────────────────────────────────────────────────────
 
 export interface ListParams {
@@ -133,4 +163,10 @@ export interface MatchListParams extends ListParams {
 }
 export interface MatchScopedParams extends ListParams {
   matchId: number;
+}
+export interface RostersParams extends ListParams {
+  /** World Cup edition years; defaults to [2026] in the client when omitted. */
+  seasons?: number[];
+  teamIds?: number[];
+  playerIds?: number[];
 }

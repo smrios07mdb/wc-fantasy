@@ -479,3 +479,24 @@ Closed in migration `20260605170000_enable_rls_public_tables` (extends the `faab
 - **Invariant for future work:** any NEW table the browser reads (direct `.from()` or a Realtime
   subscription) needs its own `authenticated` SELECT policy, or the client sees nothing. Today the
   browser reads only `draft`/`draft_pick` (Realtime) — there are zero `.from()`/`.rpc()` calls.
+
+## Theme G — Ingestion: squad / player source (rosters bootstrap)  ✅ LOCKED
+The feed client had NO player source: schedule-sync pulls only `/matches`, and `upsertPlayerByBdlId`
+was an unwired seam — so `player` / `fifa_team` stayed empty and stat ingestion silently no-opped (every
+raw upsert early-returns when the player row is absent). Confirmed against the live BALLDONTLIE FIFA
+OpenAPI spec + season-2026 data (48 teams, 1,253 players, positions exactly `G/D/M/F`).
+
+### Decisions & rationale
+- **Source = `/fifa/worldcup/v1/rosters?seasons[]=2026`** (NOT `/players`): a roster row carries
+  `team_id` (→ `fifa_team`) AND the nested player bio (id, name, position, country) in one call, so it
+  fills our `player.teamId` FK; `/players` lacks `team_id`. New `feed.rosters()` paginates via the
+  existing cursor `getAll` (same as `feed.matches()`).
+- **`ingestRosters` upserts the team then the player** (team name = the player's `country_name`); the
+  position letter maps to the `Position` enum via the exhaustive pure `mapPosition`
+  (`G→GK, D→DEF, M→MID, F→FWD`; unknown/null → `MID` defensively). Idempotent on BALLDONTLIE ids.
+- **Cadence = boot + a slow ~daily re-pull** (`WORKER_ROSTERS_SYNC_EVERY_TICKS`, default 1440 ticks),
+  NEVER the 60s tick — squads are static; the slow re-pull only catches pre-tournament squad
+  corrections. Plus a one-shot `job:rosters` for on-demand populate/refresh. Additive only — no change
+  to the existing schedule/pre-match/live/settle modes.
+- **Deferred (not now):** a `/teams` pull to enrich `fifa_team.abbreviation` / `country` — rosters only
+  gives the country name, which is sufficient for `fifa_team.name`.

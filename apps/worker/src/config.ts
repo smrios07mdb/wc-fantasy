@@ -28,6 +28,9 @@ export const config = {
   pollerSilentGraceMs: intEnv("POLLER_SILENT_GRACE_MS", 5 * 60_000),
   /** Run schedule-sync (the global fixture pull) every N ticks (≈hourly at a 60s tick). */
   scheduleSyncEveryTicks: intEnv("WORKER_SCHEDULE_SYNC_EVERY_TICKS", 60),
+  /** Run the rosters squad-sync (the player + fifa_team bootstrap) every N ticks. Squads are static, so
+   *  this is SLOW: default 1440 (≈daily at a 60s tick), PLUS always on the boot tick. Never the 60s tick. */
+  rostersSyncEveryTicks: intEnv("WORKER_ROSTERS_SYNC_EVERY_TICKS", 1440),
   /** Draft-clock tick cadence (ms). SHORT on purpose — the per-pick countdown must autopick within
    *  seconds of `pick_deadline_at`, not wait out the ~60s ingestion tick. Its own loop (src/draft.ts). */
   draftTickMs: intEnv("WORKER_DRAFT_TICK_MS", 2_000),

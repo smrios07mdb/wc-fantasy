@@ -128,6 +128,7 @@ table each tick):
 
 | Mode | When | Pulls | Purpose |
 |---|---|---|---|
+| **Squad sync** | boot + slow (~daily) | `rosters` (season 2026) | bootstrap the **`player` + `fifa_team`** pool the draft and scoring reference — `player.id`/`name`/`position` (`G/D/M/F` → `GK/DEF/MID/FWD`) + national team (`team_id`). The ONLY path that creates `player` rows; every later mode just references them. Squads are static, so it stays off the 60s tick (own slow cadence). |
 | **Schedule sync** | hourly + daily | `matches` | keep kickoff times / statuses / scores current; kickoff times drive FAAB gating, period closes, and entry into "live" mode. |
 | **Pre-match** | at each kickoff | `match_lineups` | confirmed starting XIs -> **lock all starters** (set `locked_at`). |
 | **Live** | while any match `in_progress` | `match_events` (~60s), plus `player_match_stats` / `match_shots` / `team_match_stats` | **lock each substitute at his entry minute**; cards (w/ minute); goals; own goals; live-updating event points. |

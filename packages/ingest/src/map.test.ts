@@ -7,7 +7,27 @@ import {
   mapMatchRow,
   derivePeriodLabel,
   normalizeStatus,
+  mapPosition,
 } from "./map";
+
+describe("mapPosition", () => {
+  it("maps the feed's single-letter codes (G/D/M/F) to the Position enum", () => {
+    expect(mapPosition("G")).toBe("GK");
+    expect(mapPosition("D")).toBe("DEF");
+    expect(mapPosition("M")).toBe("MID");
+    expect(mapPosition("F")).toBe("FWD");
+  });
+  it("is case-insensitive and trims", () => {
+    expect(mapPosition("g")).toBe("GK");
+    expect(mapPosition(" f ")).toBe("FWD");
+  });
+  it("falls back to MID for null/empty/unknown codes (defensive; all 2026 rows are G/D/M/F)", () => {
+    expect(mapPosition(null)).toBe("MID");
+    expect(mapPosition(undefined)).toBe("MID");
+    expect(mapPosition("")).toBe("MID");
+    expect(mapPosition("X")).toBe("MID");
+  });
+});
 
 describe("mapStatLine", () => {
   it("maps every consumed column and leaves absent fields null", () => {

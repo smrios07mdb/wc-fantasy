@@ -11,8 +11,10 @@ import type {
   FIFAPlayerMatchStats,
   FIFATeamMatchStats,
   FIFAShot,
+  FIFARoster,
   MatchListParams,
   MatchScopedParams,
+  RostersParams,
 } from "./types";
 import type { FetchLike } from "./http";
 import { buildClient } from "./client";
@@ -29,6 +31,8 @@ export interface FeedClient {
   playerMatchStats(params: MatchScopedParams): Promise<Paginated<FIFAPlayerMatchStats>>;
   teamMatchStats(params: MatchScopedParams): Promise<Paginated<FIFATeamMatchStats>>;
   matchShots(params: MatchScopedParams): Promise<Paginated<FIFAShot>>;
+  /** Per-edition squads (the source of `player` + `fifa_team`). Defaults to season 2026. */
+  rosters(params?: RostersParams): Promise<Paginated<FIFARoster>>;
 }
 
 export interface FeedClientConfig {
