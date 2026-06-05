@@ -50,6 +50,19 @@ describe("createBalldontlieClient", () => {
     expect(seenAuth).toBe("secret");
   });
 
+  it("targets the FIFA World Cup GOAT base path (api.balldontlie.io/fifa/worldcup/v1)", async () => {
+    // Confirmed against the official OpenAPI spec + docs: the WC endpoints live under /fifa/worldcup/v1,
+    // NOT /fifa/v1. A wrong prefix 404s every request and silently breaks schedule-sync.
+    let seenUrl = "";
+    const transport: FetchLike = (url) => {
+      seenUrl = url;
+      return Promise.resolve(json({ data: [], meta: {} }));
+    };
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    await client.matches();
+    expect(seenUrl).toContain("https://api.balldontlie.io/fifa/worldcup/v1/matches");
+  });
+
   it("does not send a match_id query for the unscoped matches endpoint", async () => {
     let seenUrl = "";
     const transport: FetchLike = (url) => {

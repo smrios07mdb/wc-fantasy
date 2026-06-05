@@ -20,8 +20,11 @@ import type {
 } from "./types";
 import type { FeedClient, FeedClientConfig } from "./index";
 
-// TODO(confirm): verify the API base path + auth scheme against live GOAT docs.
-const API_PREFIX = "/fifa/v1";
+// CONFIRMED against the official BALLDONTLIE OpenAPI spec (www.balldontlie.io/openapi/fifa.yml) + docs
+// (fifa.balldontlie.io): the FIFA World Cup (GOAT) endpoints live under `/fifa/worldcup/v1`, the base is
+// https://api.balldontlie.io, and auth is the RAW API key in the `Authorization` header (no "Bearer").
+// e.g. GET https://api.balldontlie.io/fifa/worldcup/v1/matches  -H "Authorization: <key>".
+const API_PREFIX = "/fifa/worldcup/v1";
 
 interface Built {
   transport: FetchLike;
