@@ -18,6 +18,10 @@
 
 generator client {
   provider = "prisma-client-js"
+  // `native` covers local + CI (macOS/Linux). The explicit Linux target guarantees `prisma generate`
+  // always emits the engine the Render runtime loads (Debian/Ubuntu, OpenSSL 3) — so a client built
+  // anywhere is deployable, and we never hit "could not locate the Query Engine" at runtime.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

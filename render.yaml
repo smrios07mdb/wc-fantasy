@@ -18,7 +18,9 @@ services:
     plan: starter
     region: virginia
     branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @app/web build
+    # Explicit, ordered `prisma generate` before `next build` (not relying on the implicit postinstall
+    # hook), and it splits the chain so a generate failure reports distinctly from a build failure.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm --filter @app/web build
     # Apply pending Prisma migrations ONCE per deploy, before the new version goes live. Prisma Migrate
     # needs the DIRECT (non-pooled) Supabase connection — DIRECT_URL, not the pooled DATABASE_URL.
     preDeployCommand: pnpm db:migrate:deploy

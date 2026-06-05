@@ -1,8 +1,11 @@
 name: CI
 
-# Runs the same gate set as the local DoD on every PR + push to main, so changes get a green check
-# before merge. No DB/secrets needed: `prisma generate` reads the schema offline and the suite is pure
-# (no DATABASE_URL connection).
+# Runs the local DoD gate set (typecheck · lint · format · test) AND a production `next build` that
+# mirrors Render's web buildCommand on Linux — so a build break that would fail the Render deploy is
+# caught here first. (Previously CI never built, so a green CI did not imply a deployable build — which
+# is exactly how a broken production build slipped past a green CI.)
+# No DB/secrets needed: `prisma generate` reads the schema offline, the suite is pure, and every
+# DB-touching route is force-dynamic (no DATABASE_URL connection at build time).
 on:
   pull_request:
     branches: [main]
@@ -46,3 +49,32 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Mirrors render.yaml's web buildCommand on Linux. Secrets are intentionally absent (Render marks
+  # them sync:false), proving the production build needs none — and converting an opaque Render
+  # "exit status 1" into a readable stack trace here.
+  build:
+    name: next build (mirror Render web build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm db:generate
+
+      - name: Build web (production)
+        run: pnpm --filter @app/web build
+        env:
+          NODE_ENV: production
