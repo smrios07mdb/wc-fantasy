@@ -448,3 +448,34 @@ playoff field/cut cadence (flexible field, ≈2-cut tapering to 1 over the 5 kno
 the transition), and the **late-correction freeze policy** (final ~6h after last FT,
 commissioner-only after) are all decided — see **Theme C** above; infra in **ARCHITECTURE.md §4/§9**.
 Trades remain out of brief. **All themes are now LOCKED.**
+
+## Theme F — Security: Data API / Row-Level Security  ✅ LOCKED
+Supabase Security Advisor flagged RLS disabled on every public table: the anon/publishable key could
+read **and write** all 27 tables directly through the Data API, bypassing the gated server routes.
+Closed in migration `20260605170000_enable_rls_public_tables` (extends the `faab_bid` RLS from
+`20260603223500_invariants`).
+
+### Decisions & rationale
+- **RLS ENABLED on every public table.** A table with RLS on and no policy default-denies the
+  `anon`/`authenticated` roles entirely — so the Data API exposes nothing unless a policy opts it in.
+- **Server bypasses RLS; it is the only writer.** Prisma connects as the table-owning `postgres`
+  role and RLS is **`ENABLE`, never `FORCE`**, so the owner bypasses it. Every server path — the app,
+  the gated `POST /api/draft/pick`, the worker, provisioning, and `prisma migrate deploy` — is
+  unaffected. Supabase `service_role` bypasses too. **No `INSERT/UPDATE/DELETE` policies exist**, so
+  all client writes are default-denied: mutations go through the server, never the anon key.
+- **Browser gets least-privilege reads only**, `TO authenticated`, identity `auth.uid() =
+  manager.user_id` (same idiom as the `faab_bid` policies):
+  - `draft` and `draft_pick` — the two tables the draft room subscribes to via Realtime — scoped to
+    **league membership** (a `manager` row linking the caller to the draft's league), not `USING(true)`
+    (authorization, not just authentication).
+  - `manager` — **own row only**. Load-bearing: it's the minimum that lets the league-membership
+    subqueries (and the existing `faab_bid` policies, which also subquery `manager`) resolve the
+    caller's identity now that `manager` itself has RLS. Other managers' details reach the draft room
+    only via the server-rendered snapshot (Prisma), never the anon key.
+- **Realtime keeps working** because supabase-js authorizes the socket as the signed-in user (its
+  `accessToken` callback), so an authenticated league member passes the SELECT policy. The migration
+  does **not** touch the `supabase_realtime` publication (a dashboard/operator concern) and stays
+  portable to the DoD's plain-Postgres (a stub `authenticated` role + `auth.uid()` shim cover it).
+- **Invariant for future work:** any NEW table the browser reads (direct `.from()` or a Realtime
+  subscription) needs its own `authenticated` SELECT policy, or the client sees nothing. Today the
+  browser reads only `draft`/`draft_pick` (Realtime) — there are zero `.from()`/`.rpc()` calls.
