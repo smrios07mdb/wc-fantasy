@@ -1,3 +1,5 @@
+import { PrismaPlugin } from "@prisma/nextjs-monorepo-workaround-plugin";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -16,6 +18,17 @@ const nextConfig = {
   serverExternalPackages: ["@prisma/client"],
   // Lint is a separate repo-root step (`pnpm lint`), not part of the build.
   eslint: { ignoreDuringBuilds: true },
+  // In a pnpm monorepo the Prisma query engine binary lives deep in the .pnpm store, and Next's
+  // output tracing does NOT copy it next to the server bundle — so at runtime the client throws
+  // "could not locate the Query Engine ... bundler has not copied libquery_engine-…". `binaryTargets`
+  // (schema.prisma) ensures the engine is GENERATED; this plugin ensures it's COPIED into the build
+  // output on the server compilation. Canonical fix: https://pris.ly/d/engine-not-found-nextjs
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.plugins = [...config.plugins, new PrismaPlugin()];
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
