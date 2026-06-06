@@ -1,0 +1,154 @@
+import { describe, it, expect } from "vitest";
+import type { Position } from "@app/shared";
+import {
+  buildPitch,
+  evaluateProposal,
+  isMovable,
+  canSwap,
+  swapStarters,
+  defaultStarterIds,
+} from "./view";
+import type { LineupPlayer, PeriodLineup } from "./types";
+
+const NOW = new Date("2026-06-12T10:00:00.000Z");
+
+function player(id: string, position: Position): LineupPlayer {
+  return {
+    id,
+    displayName: id.toUpperCase(),
+    firstName: null,
+    lastName: id,
+    position,
+    country: null,
+  };
+}
+
+const SQUAD: LineupPlayer[] = [
+  player("gk1", "GK"),
+  player("gk2", "GK"),
+  player("d1", "DEF"),
+  player("d2", "DEF"),
+  player("d3", "DEF"),
+  player("d4", "DEF"),
+  player("d5", "DEF"),
+  player("m1", "MID"),
+  player("m2", "MID"),
+  player("m3", "MID"),
+  player("m4", "MID"),
+  player("m5", "MID"),
+  player("f1", "FWD"),
+  player("f2", "FWD"),
+  player("f3", "FWD"),
+];
+
+const XI = ["gk1", "d1", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"];
+
+function period(over: Partial<PeriodLineup> = {}): PeriodLineup {
+  return {
+    periodId: "md1",
+    label: "MD1",
+    status: "open",
+    closesAt: "2026-06-12T18:00:00.000Z",
+    starterIds: XI,
+    locks: [],
+    kickoffByPlayer: {},
+    ...over,
+  };
+}
+
+describe("buildPitch — renders XI + bench from authoritative state", () => {
+  it("groups the 11 starters by position and lists the 4 bench", () => {
+    const view = buildPitch(SQUAD, period());
+    expect(view.lanes.GK.map((s) => s.player.id)).toEqual(["gk1"]);
+    expect(view.lanes.DEF).toHaveLength(4);
+    expect(view.lanes.MID).toHaveLength(4);
+    expect(view.lanes.FWD).toHaveLength(2);
+    expect(view.bench.map((s) => s.player.id).sort()).toEqual(["d5", "f3", "gk2", "m5"]);
+    expect(view.formationLabel).toBe("4-4-2");
+  });
+
+  it("marks locked players non-movable (non-draggable) and movable ones movable", () => {
+    const view = buildPitch(SQUAD, period({ locks: [{ playerId: "d1", isStarter: true }] }));
+    const d1 = view.lanes.DEF.find((s) => s.player.id === "d1");
+    const d2 = view.lanes.DEF.find((s) => s.player.id === "d2");
+    expect(d1?.movable).toBe(false);
+    expect(d2?.movable).toBe(true);
+  });
+});
+
+describe("isMovable — the lock projection the UI uses to forbid dragging", () => {
+  it("a locked player is not movable; an unlocked one is", () => {
+    const p = period({ locks: [{ playerId: "gk1", isStarter: true }] });
+    expect(isMovable(p, "gk1")).toBe(false);
+    expect(isMovable(p, "d1")).toBe(true);
+  });
+});
+
+describe("evaluateProposal — live legality feedback (drives save-disabled + reason)", () => {
+  it("a legal XI can be saved", () => {
+    const res = evaluateProposal(SQUAD, period(), XI, NOW);
+    expect(res.ok).toBe(true);
+  });
+
+  it("an illegal formation disables save and explains why", () => {
+    const bad = ["gk1", "d1", "d2", "m1", "m2", "m3", "m4", "m5", "f1", "f2", "f3"]; // 2 DEF
+    const res = evaluateProposal(SQUAD, period(), bad, NOW);
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected failure");
+    expect(res.error.code).toBe("illegal-formation");
+    expect(res.error.message).toMatch(/DEF/);
+  });
+
+  it("a move of a locked player disables save (lock-respecting on the client too)", () => {
+    const p = period({ locks: [{ playerId: "d1", isStarter: true }] });
+    const benchD1 = ["gk1", "d5", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"];
+    const res = evaluateProposal(SQUAD, p, benchD1, NOW);
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected failure");
+    expect(res.error.code).toBe("locked-player-moved");
+  });
+});
+
+describe("swap helpers — start↔bench swaps drive formation changes + live legality", () => {
+  it("allows a same-position start↔bench swap (m4 starter ↔ m5 bench)", () => {
+    expect(canSwap(period(), SQUAD, XI, "m4", "m5")).toBe(true);
+  });
+
+  it("allows a CROSS-position outfield swap so the formation can change (4-4-2 → 3-4-3)", () => {
+    expect(canSwap(period(), SQUAD, XI, "m4", "f3")).toBe(true); // MID starter ↔ FWD bench
+  });
+
+  it("keeps GK on its own side: a keeper may not swap with an outfielder", () => {
+    expect(canSwap(period(), SQUAD, XI, "d1", "gk2")).toBe(false); // DEF starter ↔ GK bench
+  });
+
+  it("allows the two keepers to swap (GK↔GK)", () => {
+    expect(canSwap(period(), SQUAD, XI, "gk1", "gk2")).toBe(true);
+  });
+
+  it("rejects a no-op swap of two starters, or of two bench players", () => {
+    expect(canSwap(period(), SQUAD, XI, "m4", "m1")).toBe(false); // both starters
+    expect(canSwap(period(), SQUAD, XI, "m5", "f3")).toBe(false); // both bench
+  });
+
+  it("rejects a swap touching a locked player", () => {
+    const p = period({ locks: [{ playerId: "m4", isStarter: true }] });
+    expect(canSwap(p, SQUAD, XI, "m4", "m5")).toBe(false);
+  });
+
+  it("swapStarters replaces the outgoing starter with the incoming bench player", () => {
+    const next = swapStarters(XI, "m4", "m5");
+    expect(next).toContain("m5");
+    expect(next).not.toContain("m4");
+    expect(next).toHaveLength(11);
+  });
+});
+
+describe("defaultStarterIds — a legal 4-4-2 when no lineup is saved yet", () => {
+  it("picks 1 GK + 4 DEF + 4 MID + 2 FWD and is a legal XI", () => {
+    const xi = defaultStarterIds(SQUAD);
+    expect(xi).toHaveLength(11);
+    const res = evaluateProposal(SQUAD, period({ starterIds: xi }), xi, NOW);
+    expect(res.ok).toBe(true);
+  });
+});

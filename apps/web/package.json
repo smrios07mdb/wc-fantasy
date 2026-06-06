@@ -13,6 +13,7 @@
     "@app/db": "workspace:*",
     "@app/draft": "workspace:*",
     "@app/feed": "workspace:*",
+    "@app/lineup": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
     "@supabase/ssr": "^0.10.3",
