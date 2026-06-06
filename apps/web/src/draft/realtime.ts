@@ -42,6 +42,10 @@ export interface RealtimeChannelLike {
 }
 
 export interface RealtimeClientLike {
+  /** Authorize the Realtime socket with the signed-in user's JWT. postgres_changes is RLS-gated, so the
+   *  anon apikey alone is silently filtered to zero rows (presence/broadcast bypass RLS and still work,
+   *  which masks the problem). Must be set BEFORE subscribing so the bindings authorize against the user. */
+  realtime: { setAuth(token: string | null): unknown };
   channel(name: string, opts?: unknown): RealtimeChannelLike;
   removeChannel(channel: RealtimeChannelLike): unknown;
 }
@@ -93,13 +97,22 @@ export function presenceOnlineManagerIds(
 /**
  * Subscribe to a draft's authoritative changes + presence. Returns an unsubscribe fn. The handlers fire
  * on every broadcast; the caller re-renders from the row payload (state stays authoritative in Postgres).
+ *
+ * `accessToken` is the signed-in user's JWT: we `realtime.setAuth(accessToken)` BEFORE subscribing so the
+ * RLS-gated postgres_changes (draft / draft_pick) are authorized and actually delivered. Subscribing with
+ * only the anon apikey joins the channel and streams presence/broadcast, but every row-change frame is
+ * silently filtered out — re-subscribe (a fresh call) whenever the token refreshes.
  */
 export function subscribeDraft(
   client: RealtimeClientLike,
   draftId: string,
   ctx: DraftPresenceContext,
   handlers: DraftRealtimeHandlers,
+  accessToken: string | null,
 ): () => void {
+  // Authorize the socket with the USER JWT first — this is what lets postgres_changes pass RLS.
+  client.realtime.setAuth(accessToken);
+
   const channel = client.channel(draftChannelName(draftId), {
     config: { presence: { key: ctx.sessionManagerId } },
   });

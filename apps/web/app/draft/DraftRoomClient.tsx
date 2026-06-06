@@ -85,42 +85,66 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), 4500);
   }, []);
 
-  // Realtime: subscribe to the authoritative draft + draft_pick changes and presence. State stays in
-  // Postgres; we re-render from the broadcast row via the pure reducers.
+  // Realtime: subscribe to the authoritative draft + draft_pick changes and presence. The socket MUST
+  // carry the user's JWT or RLS silently filters out every postgres_changes frame (draft/draft_pick) —
+  // so we (re)subscribe from onAuthStateChange, which fires once the cookie session is hydrated and again
+  // on every token refresh, gating on a real token. State stays in Postgres; we re-render from the
+  // broadcast row via the pure reducers.
   useEffect(() => {
     const supabase = createClient();
-    // The Prompt-07 browser client satisfies the structural RealtimeClientLike (its .on is broader);
-    // narrow it at this single IO boundary.
-    const unsubscribe = subscribeDraft(
-      supabase as unknown as RealtimeClientLike,
-      draftId,
-      { sessionManagerId },
-      {
-        onStatus: (status) => setConnected(status === "SUBSCRIBED"),
-        onPresence: (ids) => setOnlineIds(new Set([sessionManagerId, ...ids])),
-        onDraftChange: (payload) => {
-          const plan = planDraftBroadcast(newRow(payload));
-          if (plan.kind === "apply") {
-            setState((s) => applyDraftRowChange(s, plan.change));
-          } else {
-            // Partial payload (pointer re-synced but `status` dropped) — re-derive from the
-            // authoritative draft row so a lobby client still flips to the live board on start.
-            // Only the latest re-fetch may apply: a slow earlier response must not clobber newer state.
-            const seq = (refetchSeq.current += 1);
-            void fetchDraftState({ fetch: (input, init) => fetch(input, init) }).then((patch) => {
-              if (patch && seq === refetchSeq.current) {
-                setState((s) => applyDraftRowChange(s, patch));
-              }
-            });
-          }
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    const resubscribe = (accessToken: string | null) => {
+      unsubscribe?.();
+      unsubscribe = undefined;
+      // Gate on an available session: an anon subscription joins but receives no row-change frames.
+      if (cancelled || !accessToken) return;
+      unsubscribe = subscribeDraft(
+        supabase as unknown as RealtimeClientLike,
+        draftId,
+        { sessionManagerId },
+        {
+          onStatus: (status) => setConnected(status === "SUBSCRIBED"),
+          onPresence: (ids) => setOnlineIds(new Set([sessionManagerId, ...ids])),
+          onDraftChange: (payload) => {
+            const plan = planDraftBroadcast(newRow(payload));
+            if (plan.kind === "apply") {
+              setState((s) => applyDraftRowChange(s, plan.change));
+            } else {
+              // Partial payload (pointer re-synced but `status` dropped) — re-derive from the
+              // authoritative draft row so a lobby client still flips to the live board on start.
+              // Only the latest re-fetch may apply: a slow earlier response must not clobber newer state.
+              const seq = (refetchSeq.current += 1);
+              void fetchDraftState({ fetch: (input, init) => fetch(input, init) }).then((patch) => {
+                if (patch && seq === refetchSeq.current) {
+                  setState((s) => applyDraftRowChange(s, patch));
+                }
+              });
+            }
+          },
+          onPickChange: (payload) => {
+            const row = newRow(payload);
+            if (row) setState((s) => applyPickRowChange(s, row as unknown as PickRowChange));
+          },
         },
-        onPickChange: (payload) => {
-          const row = newRow(payload);
-          if (row) setState((s) => applyPickRowChange(s, row as unknown as PickRowChange));
-        },
-      },
-    );
-    return unsubscribe;
+        accessToken,
+      );
+    };
+
+    // onAuthStateChange fires INITIAL_SESSION (cookie session hydrated) then TOKEN_REFRESHED/SIGNED_*,
+    // so the first subscribe waits for the session and each refresh re-subscribes with the fresh JWT.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      resubscribe(session?.access_token ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      subscription.unsubscribe();
+    };
   }, [draftId, sessionManagerId]);
 
   const makePick = useCallback(

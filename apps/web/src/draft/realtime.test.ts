@@ -17,10 +17,10 @@ function mockChannel() {
       bindings.push({ type, filter, cb });
       return channel;
     },
-    subscribe(cb?: (status: string) => void) {
+    subscribe: vi.fn((cb?: (status: string) => void) => {
       subscribeCb = cb;
       return channel;
-    },
+    }),
     track: vi.fn(async () => {}),
     untrack: vi.fn(async () => {}),
     presenceState: vi.fn(() => ({}) as Record<string, Array<Record<string, unknown>>>),
@@ -37,10 +37,14 @@ function mockChannel() {
 
 function mockClient(channel: ReturnType<typeof mockChannel>) {
   return {
+    realtime: { setAuth: vi.fn() },
     channel: vi.fn(() => channel),
     removeChannel: vi.fn(),
   };
 }
+
+/** A signed-in user's access token (any non-empty JWT-ish string is fine for the wiring tests). */
+const TOKEN = "user-jwt-token";
 
 describe("pure realtime descriptors", () => {
   it("names the channel per draft", () => {
@@ -75,7 +79,7 @@ describe("subscribeDraft — wiring", () => {
   it("subscribes to draft + draft_pick changes and presence on the draft channel", () => {
     const channel = mockChannel();
     const client = mockClient(channel);
-    subscribeDraft(client, "d1", { sessionManagerId: "m1" }, {});
+    subscribeDraft(client, "d1", { sessionManagerId: "m1" }, {}, TOKEN);
 
     expect(client.channel).toHaveBeenCalledWith("draft-room:d1", expect.anything());
     const tables = channel.bindings
@@ -85,12 +89,32 @@ describe("subscribeDraft — wiring", () => {
     expect(channel.bindings.some((b) => b.type === "presence")).toBe(true);
   });
 
+  it("authorizes the socket with the user JWT BEFORE subscribing (RLS-gated postgres_changes)", () => {
+    const channel = mockChannel();
+    const client = mockClient(channel);
+
+    subscribeDraft(client, "d1", { sessionManagerId: "m1" }, {}, TOKEN);
+
+    expect(client.realtime.setAuth).toHaveBeenCalledWith(TOKEN);
+    // Ordering is load-bearing: postgres_changes RLS is evaluated at subscribe time, so setAuth must run
+    // first — otherwise the channel joins as anon and every draft/draft_pick frame is silently filtered.
+    expect(client.realtime.setAuth.mock.invocationCallOrder[0]!).toBeLessThan(
+      channel.subscribe.mock.invocationCallOrder[0]!,
+    );
+  });
+
   it("re-renders on a simulated change: a draft row update fires onDraftChange; a new pick fires onPickChange", () => {
     const channel = mockChannel();
     const client = mockClient(channel);
     const onDraftChange = vi.fn();
     const onPickChange = vi.fn();
-    subscribeDraft(client, "d1", { sessionManagerId: "m1" }, { onDraftChange, onPickChange });
+    subscribeDraft(
+      client,
+      "d1",
+      { sessionManagerId: "m1" },
+      { onDraftChange, onPickChange },
+      TOKEN,
+    );
 
     channel.fire("postgres_changes", "draft", { new: { current_pick_no: 3 } });
     channel.fire("postgres_changes", "draft_pick", { new: { pick_no: 2, player_id: "p9" } });
@@ -105,7 +129,7 @@ describe("subscribeDraft — wiring", () => {
     const client = mockClient(channel);
     const onPresence = vi.fn();
     const onStatus = vi.fn();
-    subscribeDraft(client, "d1", { sessionManagerId: "m1" }, { onPresence, onStatus });
+    subscribeDraft(client, "d1", { sessionManagerId: "m1" }, { onPresence, onStatus }, TOKEN);
 
     channel.fire("presence", undefined, { event: "sync" });
     expect(onPresence).toHaveBeenCalledWith(expect.arrayContaining(["m1", "m7"]));
@@ -118,7 +142,7 @@ describe("subscribeDraft — wiring", () => {
   it("unsubscribe removes the channel", () => {
     const channel = mockChannel();
     const client = mockClient(channel);
-    const unsubscribe = subscribeDraft(client, "d1", { sessionManagerId: "m1" }, {});
+    const unsubscribe = subscribeDraft(client, "d1", { sessionManagerId: "m1" }, {}, TOKEN);
     unsubscribe();
     expect(client.removeChannel).toHaveBeenCalledWith(channel);
   });
