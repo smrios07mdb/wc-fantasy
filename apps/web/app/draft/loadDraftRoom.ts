@@ -7,6 +7,7 @@
  * plus the pure-logic suites cover the shapes it produces.
  */
 import { prisma } from "@app/db";
+import { orderDraftPool } from "@app/draft";
 import type { Position } from "@app/shared";
 import type { DraftPlayer, DraftRoomState } from "../../src/draft/types";
 
@@ -83,18 +84,23 @@ export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoom
   ]);
 
   const ownedIds = ownedRows.map((r) => r.playerId);
-  // The undrafted pool, BEST-AVAILABLE first: ranked players by `default_rank` (1 = best, unique), then
-  // the unranked (Postgres sorts NULLs last). The PRIMARY key (default_rank) matches autopick exactly,
-  // so the top of this list IS what an expired-timer autopick takes. The unranked TAIL is shown
-  // alphabetically for human browsing, whereas autopick (@app/draft `orderDraftPool`) breaks unranked
-  // ties by `id` for determinism — so the two diverge only AMONG equal-rank players (≈ none once
-  // provisioning has ranked the pool). TODO(confirm): unify the unranked tiebreak (id vs displayName)
-  // if that edge-case ordering ever needs to match — it's a display-vs-determinism product call.
+  // The undrafted pool in EXACTLY the autopick order: `orderDraftPool` (@app/draft) is the SINGLE
+  // source — default_rank ASC, NULLS LAST, then `id` ASC, identical (ranked AND unranked) to what an
+  // expired-timer autopick takes. So the displayed "next best" is precisely what autopick would pick.
+  // We fetch the rows (incl. default_rank), order their ids via orderDraftPool, then map back to the
+  // display players (the DB read order is irrelevant — orderDraftPool imposes the total order).
   const availableRows = await prisma.player.findMany({
     where: ownedIds.length > 0 ? { id: { notIn: ownedIds } } : {},
-    orderBy: [{ defaultRank: { sort: "asc", nulls: "last" } }, { displayName: "asc" }],
-    select: PLAYER_SELECT,
+    select: { ...PLAYER_SELECT, defaultRank: true },
   });
+  const availableById = new Map(availableRows.map((p) => [p.id, p]));
+  const availablePlayers = orderDraftPool(
+    availableRows.map((p) => ({
+      playerId: p.id,
+      position: p.position,
+      defaultRank: p.defaultRank,
+    })),
+  ).map((r) => toPlayer(availableById.get(r.playerId)!));
 
   return {
     draftId: draft.id,
@@ -117,7 +123,7 @@ export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoom
       player: p.player ? toPlayer(p.player) : null,
       isAuto: p.isAuto,
     })),
-    availablePlayers: availableRows.map(toPlayer),
+    availablePlayers,
     sessionManagerId,
     myQueue: queueRows.map((q) => q.playerId),
   };
