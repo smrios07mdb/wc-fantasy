@@ -10,7 +10,7 @@
  */
 import type { DraftStatus, Position } from "@app/shared";
 import { type PositionCounts } from "./roster";
-import type { QueueEntry, RankedPlayer } from "./autopick";
+import { orderDraftPool, type PoolPlayer, type QueueEntry, type RankedPlayer } from "./autopick";
 import type { DraftInit, DraftSnapshot, DraftStore, PickCommit } from "./store";
 
 interface DraftRow {
@@ -54,8 +54,9 @@ export class MemoryDraftStore implements DraftStore {
   /** managerId → per-position counts of actively-owned players. */
   private counts = new Map<string, Record<Position, number>>();
   private playerPosition = new Map<string, Position>();
+  /** playerId → default_rank (1-based, lower = better). Absent ⇒ unranked (NULLS LAST in the pool). */
+  private playerRank = new Map<string, number>();
   private queues = new Map<string, QueueEntry[]>();
-  private rankings = new Map<string, RankedPlayer[]>();
 
   // ── seeding (test setup) ──
   seedDraft(row: SeedDraft): void {
@@ -70,16 +71,17 @@ export class MemoryDraftStore implements DraftStore {
       pickDeadlineAt: row.pickDeadlineAt ?? null,
     });
   }
-  seedPlayer(playerId: string, position: Position): void {
+  seedPlayer(playerId: string, position: Position, defaultRank?: number | null): void {
     this.playerPosition.set(playerId, position);
+    if (defaultRank != null) this.playerRank.set(playerId, defaultRank);
   }
   seedQueue(managerId: string, entries: readonly QueueEntry[]): void {
     this.queues.set(managerId, [...entries]);
     for (const e of entries) this.playerPosition.set(e.playerId, e.position);
   }
-  seedRanking(leagueId: string, ranked: readonly RankedPlayer[]): void {
-    this.rankings.set(leagueId, [...ranked]);
-    for (const r of ranked) this.playerPosition.set(r.playerId, r.position);
+  /** Seed players as the default ranking, best-first; each gets a 1-based `default_rank` by position. */
+  seedRanking(_leagueId: string, ranked: readonly RankedPlayer[]): void {
+    ranked.forEach((r, i) => this.seedPlayer(r.playerId, r.position, i + 1));
   }
   /** Seed a pre-existing active ownership (player owned by a manager); also bumps the manager's counts. */
   seedOwnership(leagueId: string, managerId: string, playerId: string, position: Position): void {
@@ -134,8 +136,16 @@ export class MemoryDraftStore implements DraftStore {
   getQueue(managerId: string): Promise<QueueEntry[]> {
     return Promise.resolve([...(this.queues.get(managerId) ?? [])]);
   }
-  getDefaultRanking(leagueId: string): Promise<RankedPlayer[]> {
-    return Promise.resolve([...(this.rankings.get(leagueId) ?? [])]);
+  getDefaultRanking(_leagueId: string): Promise<RankedPlayer[]> {
+    // The WHOLE pool ordered for autopick: default_rank ASC, NULLS LAST, then id ASC (orderDraftPool).
+    // Including unranked players is what keeps autopick total (no unranked-pool stall). Players are
+    // global (one private league), mirroring the Prisma adapter, so `_leagueId` is unused.
+    const pool: PoolPlayer[] = [...this.playerPosition.entries()].map(([playerId, position]) => ({
+      playerId,
+      position,
+      defaultRank: this.playerRank.get(playerId) ?? null,
+    }));
+    return Promise.resolve(orderDraftPool(pool));
   }
   commitPick(commit: PickCommit): Promise<boolean> {
     const d = this.drafts.get(commit.draftId);

@@ -62,8 +62,9 @@ export interface DraftStore {
   listOwnedPlayerIds(leagueId: string): Promise<ReadonlySet<string>>;
   /** A manager's pre-set autopick queue, in stored `draft_queue.position` order, with positions. */
   getQueue(managerId: string): Promise<QueueEntry[]>;
-  /** SEAM — the best-available default ranking, best-first. The real source is pinned with a
-   *  `// TODO(confirm):` in the Prisma adapter (no `player.default_rank` column exists yet). */
+  /** The WHOLE candidate pool as the autopick ranking: `player.default_rank` ASC, NULLS LAST, then
+   *  id ASC (built with `orderDraftPool`). Unranked players are included (ordered by id), so autopick
+   *  is total — it can never stall on an unranked pool. */
   getDefaultRanking(leagueId: string): Promise<RankedPlayer[]>;
   /** Atomically write the pick + ownership + advance in ONE transaction. Returns `true` if committed,
    *  `false` (no write) if the guard (draft still on `pickNo`, slot unfilled, player free) lost — which

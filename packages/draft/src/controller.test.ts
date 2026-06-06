@@ -260,3 +260,76 @@ describe("tickDraft (timer expiry → autopick)", () => {
     expect(store.pickRows("d").map((p) => p.playerId)).toEqual(["pl-a"]); // no autopick added
   });
 });
+
+describe("tickDraft — autopick totality (queue → default_rank NULLS LAST → stable id tiebreak)", () => {
+  it("autopicks the lowest-id undrafted, legal player when the queue is empty and NO player is ranked", async () => {
+    // The original mock-draft pick-1 stick: ranks not yet populated. Autopick must NOT stall — it
+    // falls through to the whole pool ordered by id and picks deterministically.
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    store.seedPlayer("p-c", "MID");
+    store.seedPlayer("p-a", "MID");
+    store.seedPlayer("p-b", "MID");
+
+    const res = await tickDraft(store, "d", later(1000));
+
+    expect(res.acted).toBe(true);
+    expect(res.reason).toBe("autopicked");
+    expect(res.reason).not.toBe("no-eligible-player");
+    expect(res.pick).toMatchObject({ managerId: "m1", playerId: "p-a", isAuto: true });
+    expect(store.isOwned(L, "p-a")).toBe(true);
+  });
+
+  it("prefers the lowest default_rank, and any ranked player beats an unranked one (NULLS LAST)", async () => {
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    store.seedPlayer("p-unranked", "MID"); // default_rank null
+    store.seedPlayer("p-rank2", "MID", 2);
+    store.seedPlayer("p-rank1", "MID", 1);
+
+    const res = await tickDraft(store, "d", later(1000));
+
+    expect(res.pick?.playerId).toBe("p-rank1");
+  });
+
+  it("excludes already-drafted players from the autopick pool", async () => {
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    store.seedPlayer("p-rank1", "MID", 1);
+    store.seedPlayer("p-rank2", "MID", 2);
+    store.seedOwnership(L, "m2", "p-rank1", "MID"); // the best player is already owned
+
+    const res = await tickDraft(store, "d", later(1000));
+
+    expect(res.pick?.playerId).toBe("p-rank2");
+  });
+
+  it("respects the 2/5/5/3 roster legality — skips a position whose bucket is full", async () => {
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    for (const f of ["f1", "f2", "f3"]) store.seedOwnership(L, "m1", f, "FWD"); // m1's FWD bucket full
+    store.seedPlayer("p-fwd", "FWD", 1); // best rank, but illegal for m1
+    store.seedPlayer("p-mid", "MID", 2);
+
+    const res = await tickDraft(store, "d", later(1000));
+
+    expect(res.pick?.playerId).toBe("p-mid");
+  });
+
+  it("never stalls while ANY legal, undrafted player remains (totality guarantee)", async () => {
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    // The two best-ranked are taken; one unranked legal player remains → autopick must still fire.
+    store.seedPlayer("p-best", "MID", 1);
+    store.seedPlayer("p-second", "MID", 2);
+    store.seedPlayer("p-leftover", "MID"); // unranked, undrafted, legal
+    store.seedOwnership(L, "m2", "p-best", "MID");
+    store.seedOwnership(L, "m2", "p-second", "MID");
+
+    const res = await tickDraft(store, "d", later(1000));
+
+    expect(res.acted).toBe(true);
+    expect(res.reason).toBe("autopicked");
+    expect(res.pick?.playerId).toBe("p-leftover");
+  });
+});

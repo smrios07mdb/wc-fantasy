@@ -12,10 +12,10 @@
  * ranking best-first), so selection is deterministic by construction: first eligible wins, no
  * re-sorting and no tie-break.
  *
- * SEAM — the `ranking` (the "default ranking" for best-available) is an INJECTED input. The brain
- * files name "best-available by default ranking" but define no source, and no `player.default_rank`
- * column exists. The controller obtains it from the store; the real source is pinned with a
- * `// TODO(confirm):` in the Prisma store (`getDefaultRanking`). Do NOT invent a ranking here.
+ * The `ranking` is an INJECTED input the controller obtains from the store. Its source is
+ * `player.default_rank` (1-based, lower = better), populated at provision time; the store builds the
+ * list with {@link orderDraftPool} so it spans the WHOLE pool (ranked first, then unranked by id) and
+ * autopick is total — it can never stall on an unranked pool. Do NOT invent a ranking here.
  */
 import { isPositionLegal, type PositionCounts } from "./roster";
 import type { Position } from "@app/shared";
@@ -31,6 +31,14 @@ export interface QueueEntry {
 export interface RankedPlayer {
   playerId: string;
   position: Position;
+}
+
+/** A candidate in the raw draft pool, carrying its objective `default_rank` (1-based, lower = better)
+ *  or null when unranked. This is the shape {@link orderDraftPool} turns into the ordered ranking. */
+export interface PoolPlayer {
+  playerId: string;
+  position: Position;
+  defaultRank: number | null;
 }
 
 export interface AutopickInput {
@@ -60,8 +68,31 @@ export function selectAutopick(input: AutopickInput): string | null {
   const fromQueue = input.queue.find(eligible);
   if (fromQueue) return fromQueue.playerId;
 
-  // 2. Best-available by the injected default ranking.
-  // TODO(confirm): the real default-ranking SOURCE (injected for now; no player.default_rank exists).
+  // 2. Best-available by the injected default ranking. The store builds this list with
+  // {@link orderDraftPool}, so it spans the WHOLE pool (ranked players first, then unranked by id) —
+  // which makes this fall-through total: whenever any undrafted, position-legal player exists it is in
+  // the ranking and is returned here. `null` therefore means a genuinely empty legal pool, never an
+  // unranked-pool stall (the original mock-draft pick-1 bug).
   const fromRanking = input.ranking.find(eligible);
   return fromRanking ? fromRanking.playerId : null;
+}
+
+/**
+ * Order the whole draft candidate pool into the "best-available" ranking the autopick consumes:
+ * `default_rank` ascending, NULLS LAST (every unranked player after every ranked one), then `playerId`
+ * ascending as the stable final tiebreak. PURE + TOTAL: each input player appears exactly once in the
+ * output, so a non-empty pool can never order down to empty. That totality is what makes
+ * {@link selectAutopick} unable to stall on an unranked pool — the order encodes the locked preference
+ * "queue → default_rank (NULLS LAST) → stable id tiebreak" (DECISIONS.md → Mock-draft open items).
+ * Does not mutate its input.
+ */
+export function orderDraftPool(pool: readonly PoolPlayer[]): RankedPlayer[] {
+  return [...pool]
+    .sort((a, b) => {
+      const ra = a.defaultRank ?? Number.POSITIVE_INFINITY;
+      const rb = b.defaultRank ?? Number.POSITIVE_INFINITY;
+      if (ra !== rb) return ra - rb;
+      return a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0;
+    })
+    .map((p) => ({ playerId: p.playerId, position: p.position }));
 }

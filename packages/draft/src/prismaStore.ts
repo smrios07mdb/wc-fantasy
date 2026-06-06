@@ -14,7 +14,7 @@
  */
 import { Prisma, type PrismaClient } from "@app/db";
 import type { Position } from "@app/shared";
-import type { QueueEntry, RankedPlayer } from "./autopick";
+import { orderDraftPool, type QueueEntry, type RankedPlayer } from "./autopick";
 import type { PositionCounts } from "./roster";
 import type { DraftInit, DraftSnapshot, DraftStore, PickCommit } from "./store";
 
@@ -91,17 +91,18 @@ export function createPrismaDraftStore(prisma: Db): DraftStore {
     },
 
     async getDefaultRanking(_leagueId): Promise<RankedPlayer[]> {
-      // The "best-available" ordering for autopick. SEAM now RESOLVED (draft go-live / provisioning
-      // track): `player.default_rank` (1-based, lower = better) is the source, populated by the
-      // provisioning ranking step. Unranked players (default_rank NULL) are excluded — autopick falls to
-      // each manager's queue rather than a fabricated order. Players are global (one private league),
-      // so `_leagueId` is unused. If the column is unpopulated this is [] (the pre-provisioning state).
+      // The WHOLE candidate pool ordered for autopick: `default_rank` (1-based, lower = better,
+      // populated by provisioning) ASC, NULLS LAST, then `id` ASC — via the pure `orderDraftPool` so
+      // the order is identical to the Memory double. Unranked players are INCLUDED (ordered by id):
+      // that is what keeps autopick total — an unranked pool orders by id instead of collapsing to
+      // empty (the original mock-draft pick-1 stick). Players are global (one private league), so
+      // `_leagueId` is unused.
       const rows = await prisma.player.findMany({
-        where: { defaultRank: { not: null } },
-        orderBy: { defaultRank: "asc" },
-        select: { id: true, position: true },
+        select: { id: true, position: true, defaultRank: true },
       });
-      return rows.map((r) => ({ playerId: r.id, position: r.position }));
+      return orderDraftPool(
+        rows.map((r) => ({ playerId: r.id, position: r.position, defaultRank: r.defaultRank })),
+      );
     },
 
     async commitPick(commit: PickCommit): Promise<boolean> {
