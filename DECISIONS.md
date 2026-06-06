@@ -500,3 +500,27 @@ OpenAPI spec + season-2026 data (48 teams, 1,253 players, positions exactly `G/D
   to the existing schedule/pre-match/live/settle modes.
 - **Deferred (not now):** a `/teams` pull to enrich `fifa_team.abbreviation` / `country` — rosters only
   gives the country name, which is sufficient for `fifa_team.name`.
+
+## Mock-draft session — open items & known issues (build / ops)
+A live end-to-end smoke test of the draft (controller + draft-room UI + Supabase Realtime + worker
+autopick) against the deployed app + a real Supabase. Verified capabilities are recorded in PROJECT.md →
+Build progress; the engineering follow-ups:
+
+- **Lobby→active client flip on draft start (OPEN — future thread).** Connected clients did NOT
+  auto-flip from the pre-draft lobby to the active board when the draft started; the operator had to
+  refresh to pick up `status='active'`. In-room Realtime delivery DOES work (picks streamed live across
+  two browsers), so this is narrowed to the **lobby→active status-change subscription** — not a broad
+  Realtime gap. Flagged for a future thread.
+- **Autopick empty-ranking fallback (pre-launch HARDENING — required before the real draft).** Autopick
+  must fall back to **any available player** when the default ranking is empty, so it can never freeze on
+  an unpopulated ranking. Today: empty ranking → `selectAutopick` returns null → the draft stalls; the
+  mock only ran because `provision rank` populated every `default_rank` first (hence the go-live order
+  `provision rank` → `provision draft`).
+- **Born-expired `pick_deadline_at` (RESOLVED — do not reopen).** The earlier ≈-expired deadline was a
+  **non-simultaneous-read artifact** (measured ~30s after the start). A clean chained measurement showed a
+  real **~30s window** (deadline − server `now()` ≈ +26.5s), and the first autopick fired ~1s after the
+  full 30s elapsed. No fix needed.
+- **Manual / human pick recording (VERIFIED working).** A completed mock draft recorded human picks
+  alongside autopicks — manual pick submission persists correctly. This positively clears the earlier
+  "manual pick didn't record" concern (its born-expired cause was already ruled out, and a human pick is
+  now positively observed).

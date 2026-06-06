@@ -24,6 +24,10 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 - **Start of each new thread:** attach these files (keep them in the Project's knowledge so
   every thread sees them).
 - **End of each thread:** update the files with whatever was locked.
+- **Verification discipline (applies to Code AND Chat):** state only what's directly verified — read the
+  code, queried the DB, or ran a command. Anything not directly observable — Render env/process,
+  dashboard config, request origin, deploy status — is labeled an **inference to confirm**, never
+  asserted as fact.
 
 ## Locked requirements (from brief)
 1. Snake draft; unique player ownership per league.
@@ -100,4 +104,17 @@ case-sensitivity. Adversarial review (9 agents, 3 findings, **0 confirmed** — 
 `leagueId`-filter non-issue). **Next: the user-facing critical path** (the WC opens June 11) — the
 draft-room UI + Realtime (subscribe to the controller's state, call the now-gated `/api/draft/pick`),
 the manager-provisioning ceremony, a minimal lineup-setting flow, and deploy. The draft is the binding
-pre-kickoff deadline. All themes remain LOCKED; build is downstream of decisions.
+pre-kickoff deadline. All themes remain LOCKED; build is downstream of decisions. · **Mock-draft smoke
+test — the draft exercised end-to-end LIVE ✅** Against the deployed app + a real Supabase, the draft
+controller + the draft-room UI + Supabase Realtime + the worker tick/autopick now run together: a draft
+started, ran on the per-pick timer, and **completed**, recording **both** manual human picks **and**
+timer autopicks. Verified facts: (1) **`default_rank` must be populated for autopick** — an empty ranking
+makes `selectAutopick` return null and the draft **stalls**, so the go-live order is **`provision rank` →
+`provision draft`**; (2) a clean **~30s pick window** was confirmed and the earlier "born-expired
+`pick_deadline_at`" was **ruled out** (a non-simultaneous-read artifact, not a real defect); (3) the
+worker **autopicks ~1s after each expiry** (autopicks landing = **verified**; *that they originate from
+the Render worker = inference* — no process access, but no local worker was running); (4) picks **stream
+across two browser sessions via Realtime** (operator-confirmed); (5) **manual pick recording = verified
+working** (human picks recorded alongside autopicks). Engineering follow-ups in DECISIONS.md →
+"Mock-draft session — open items": the lobby→active client flip on start, and an autopick empty-ranking
+fallback (pre-launch hardening).
