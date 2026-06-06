@@ -7,11 +7,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@app/db";
 import { isEmailAllowed, safeNextPath } from "@app/auth";
 import { createClient } from "@/lib/supabase/server";
+import { siteOrigin } from "@/lib/site-origin";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  // Build redirects from the PUBLIC origin, not new URL(request.url).origin — on Render the latter is
+  // the internal bind (localhost:10000). See @/lib/site-origin.
+  const origin = siteOrigin(request);
   const code = searchParams.get("code");
   // Validate `next` to a same-origin, path-absolute reference — `${origin}${next}` would otherwise be
   // an open redirect (origin has no trailing slash, so e.g. `@evil.com` / `//evil.com` escape it).

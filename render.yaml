@@ -41,6 +41,9 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED
         value: "false"
+      - key: SITE_URL # public origin for server-side auth redirects (callback/sign-out) — NOT the
+        # internal request host (Render binds 0.0.0.0:10000). Non-secret; pinned here.
+        value: https://wc-fantasy-web.onrender.com
 
   # ── Background worker: boots index.ts = the ingestion scheduler AND the draft ticker together ─────
   - type: worker

@@ -6,7 +6,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     // Packages hold the pure logic; apps (e.g. the scraper edge) carry a few unit tests too.
-    include: ["packages/**/src/**/*.test.ts", "apps/**/src/**/*.test.ts"],
+    // `apps/**/lib/**` covers app-level pure helpers (e.g. apps/web/lib/site-origin).
+    include: [
+      "packages/**/src/**/*.test.ts",
+      "apps/**/src/**/*.test.ts",
+      "apps/**/lib/**/*.test.ts",
+    ],
     // Keep build artefacts and deps out of the run (the scoring suite is the only suite for now).
     exclude: ["**/node_modules/**", "**/dist/**", "**/.next/**"],
   },
