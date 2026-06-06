@@ -104,7 +104,11 @@ case-sensitivity. Adversarial review (9 agents, 3 findings, **0 confirmed** — 
 `leagueId`-filter non-issue). **Next: the user-facing critical path** (the WC opens June 11) — the
 draft-room UI + Realtime (subscribe to the controller's state, call the now-gated `/api/draft/pick`),
 the manager-provisioning ceremony, a minimal lineup-setting flow, and deploy. The draft is the binding
-pre-kickoff deadline. All themes remain LOCKED; build is downstream of decisions. · **Mock-draft smoke
+pre-kickoff deadline. All themes remain LOCKED; build is downstream of decisions. · **Prompt 08 —
+draft-room screen + Supabase Realtime + worker draft-tick loop, COMPLETE ✅** the deferred Prompt-06 UI:
+a gated draft-room screen (pure board / countdown / reducer / pickClient / realtime modules) subscribes
+to the controller's state over Supabase Realtime and calls the gated `/api/draft/pick`; a dedicated
+worker tick loop drives timer-expiry autopicks. · **Mock-draft smoke
 test — the draft exercised end-to-end LIVE ✅** Against the deployed app + a real Supabase, the draft
 controller + the draft-room UI + Supabase Realtime + the worker tick/autopick now run together: a draft
 started, ran on the per-pick timer, and **completed**, recording **both** manual human picks **and**
@@ -117,9 +121,45 @@ the Render worker = inference* — no process access, but no local worker was ru
 across two browser sessions via Realtime** (operator-confirmed); (5) **manual pick recording = verified
 working** (human picks recorded alongside autopicks). Engineering follow-ups in DECISIONS.md →
 "Mock-draft session — open items": the lobby→active client flip on start, and an autopick empty-ranking
-fallback (pre-launch hardening). · **Draft surface — verified end-to-end on the live Render deploy ✅**
+fallback (pre-launch hardening). · **Prompt 09 — draft closeout (lobby→active flip + autopick
+totality), COMPLETE ✅** the two mock-draft follow-ups closed: the client lobby→active flip on the
+`draft.status` change (partial-safe reducer + authoritative state fetch), and a total autopick
+best-available fallback via `orderDraftPool` when the queue/ranking is empty (the empty-ranking stall is
+gone). · **Draft surface — verified end-to-end on the live Render deploy ✅**
 Both follow-ups above are now **CLOSED** (DECISIONS.md → "Mock-draft session — open items"): the
 **lobby→active flip** and **live pick + autopick streaming** were confirmed across **two authed clients
 with no reload**. Root fix = the browser Realtime client now authorizes with the **user JWT** (`setAuth`)
 before subscribing — the anon socket received zero RLS-gated `postgres_changes`; autopick totality came
-via the pure `orderDraftPool` (queue → `default_rank` NULLS LAST → `playerId`).
+via the pure `orderDraftPool` (queue → `default_rank` NULLS LAST → `playerId`). · **Prompt 10 —
+set-lineup flow (XI picker + lock-on-play binding), COMPLETE ✅** (605 tests, +~110). New pure
+`packages/lineup` (`@app/lineup`): `validateLineup(squad, proposedXI, lockState, period, now)` →
+`ok | a typed LineupError family` (`illegal-formation` / `incomplete-xi` / `not-your-player` /
+`locked-player-moved` / `wrong-period`), with the Theme-B bounds sourced from `@app/shared`
+(`FORMATION_BOUNDS` / `STARTING_XI_SIZE`, never re-derived) and **lock-respecting** on each locked slot's
+frozen `is_starter` (a played player can't be moved into or out of the XI); behind a thin `LineupStore`
+port (Memory + Prisma impls) + a store-backed `setLineup` controller — the decision core is
+**purity-proven** (`purity.test.ts`, comment-stripped). The **player lock is consumed, not
+reimplemented**: it is ingestion's `lineup_slot.locked_at` (Prompt 05a), read through the SSR loader. The
+ONLY write path is the gated **`POST /api/lineup`**, mirroring `POST /api/draft/pick` (resolve session →
+assert it owns the lineup, **401/403 before** the controller, scope `self`), with a **triple-defended
+server-authoritative lock re-check**: `validateLineup` on the authoritative lock state → `saveLineup`
+writes only `WHERE locked_at IS NULL` and **aborts the whole commit if a locked row would change** → the
+`enforce_lineup_lock` trigger is the DB backstop (the Prompt-01 latch is **not regressed**).
+`wrong-period` gates on `period.closes_at`, and **future windows are legal by construction** (the
+validator's `PeriodWindow` carries no `opens_at`) — so pre-setting upcoming windows is allowed, and an
+unplayed, never-locked starter is still backstopped by period close. The **set-lineup screen**
+(`app/lineup/`, mapped to `design_reference/setlineup/*` + `shell/*`) renders the formation pitch +
+bench, swaps start↔bench with live legality feedback (the SAME `validateLineup`), freezes locked players,
+and pre-sets per-period windows; lineup data reaches the browser only via the SSR Prisma loader (**no
+browser-direct `lineup_slot` read / no Realtime on the table — Theme F needs no new authenticated SELECT
+policy**). Opus adversarial review (6 lenses → verify): **0 blockers, 2 majors fixed pre-merge**
+(cross-position swaps so the formation can actually change + the live illegal-formation feedback is
+reachable; the FAAB-drop orphan-slot reconcile seam TODO'd). **Launch gates (pre-June-11):** (a) wire the
+per-player **kickoff indicator** (`kickoffByPlayer` `TODO(confirm)` — `fifa_match.kickoff_at` via
+`player.teamId`); (b) the **runtime lock-freeze + late-edit rejection** is deferred (no drafted roster /
+live `locked_at` yet) → fold into the GOAT-trial ingestion smoke test. **Carried TODOs:** FAAB add/drop
+reconcile (`saveLineup` orphan-slot DELETE + forbid dropping a locked-slot player), a dedicated
+`FormationPicker` / `reshape()`, and a commissioner `admin` lineup scope. **Next: the live "vs the field"
+screen** (ARCHITECTURE → Real-time layer) — points-so-far alongside how much is still to come,
+all-play-all — then the commissioner/admin surface + the group→playoff transition. All themes remain
+LOCKED; build is downstream of decisions.
