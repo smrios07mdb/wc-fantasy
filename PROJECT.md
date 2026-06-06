@@ -117,4 +117,9 @@ the Render worker = inference* — no process access, but no local worker was ru
 across two browser sessions via Realtime** (operator-confirmed); (5) **manual pick recording = verified
 working** (human picks recorded alongside autopicks). Engineering follow-ups in DECISIONS.md →
 "Mock-draft session — open items": the lobby→active client flip on start, and an autopick empty-ranking
-fallback (pre-launch hardening).
+fallback (pre-launch hardening). · **Draft surface — verified end-to-end on the live Render deploy ✅**
+Both follow-ups above are now **CLOSED** (DECISIONS.md → "Mock-draft session — open items"): the
+**lobby→active flip** and **live pick + autopick streaming** were confirmed across **two authed clients
+with no reload**. Root fix = the browser Realtime client now authorizes with the **user JWT** (`setAuth`)
+before subscribing — the anon socket received zero RLS-gated `postgres_changes`; autopick totality came
+via the pure `orderDraftPool` (queue → `default_rank` NULLS LAST → `playerId`).

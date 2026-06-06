@@ -506,16 +506,22 @@ A live end-to-end smoke test of the draft (controller + draft-room UI + Supabase
 autopick) against the deployed app + a real Supabase. Verified capabilities are recorded in PROJECT.md →
 Build progress; the engineering follow-ups:
 
-- **Lobby→active client flip on draft start (OPEN — future thread).** Connected clients did NOT
-  auto-flip from the pre-draft lobby to the active board when the draft started; the operator had to
-  refresh to pick up `status='active'`. In-room Realtime delivery DOES work (picks streamed live across
-  two browsers), so this is narrowed to the **lobby→active status-change subscription** — not a broad
-  Realtime gap. Flagged for a future thread.
-- **Autopick empty-ranking fallback (pre-launch HARDENING — required before the real draft).** Autopick
-  must fall back to **any available player** when the default ranking is empty, so it can never freeze on
-  an unpopulated ranking. Today: empty ranking → `selectAutopick` returns null → the draft stalls; the
-  mock only ran because `provision rank` populated every `default_rank` first (hence the go-live order
-  `provision rank` → `provision draft`).
+- **Lobby→active client flip on draft start (RESOLVED — commits `9781030` Part A/B, `c884928` Realtime
+  auth).** Root cause was **NOT the reducer** (the Part A status-fold handler was correct) — it was the
+  browser **Realtime client subscribing with the anon apikey only**. The RLS policies on `draft` /
+  `draft_pick` are `TO authenticated USING (manager.user_id = auth.uid())`, so an anon socket
+  (`auth.uid()` null, role not `authenticated`) gets **zero `postgres_changes`**, while presence and
+  broadcast (RLS-bypassing) still stream — which masked the gap (so it only updated on reload).
+  **Fix (client-side only; no schema/policy change):** `client.realtime.setAuth(<user access_token>)`
+  **before** subscribe, gate the first subscribe on `INITIAL_SESSION`, and re-subscribe on
+  `TOKEN_REFRESHED` (tearing down the prior channel first). A bound league member's JWT then satisfies
+  the policy and frames flow.
+- **Autopick empty-ranking fallback (RESOLVED).** `selectAutopick` can no longer stall on an
+  unpopulated ranking. A pure **`orderDraftPool`** (queue → `default_rank` NULLS LAST → `playerId`) is the
+  single ordering source, and `getDefaultRanking` now **drops the `default_rank IS NOT NULL` filter** so
+  the best-available fallback spans the whole undrafted, position-legal pool — a non-empty legal pool
+  always yields a pick. (`provision rank` is still the right go-live step for a *good* order, but no
+  longer a stall-avoidance prerequisite.)
 - **Born-expired `pick_deadline_at` (RESOLVED — do not reopen).** The earlier ≈-expired deadline was a
   **non-simultaneous-read artifact** (measured ~30s after the start). A clean chained measurement showed a
   real **~30s window** (deadline − server `now()` ≈ +26.5s), and the first autopick fired ~1s after the
@@ -524,3 +530,24 @@ Build progress; the engineering follow-ups:
   alongside autopicks — manual pick submission persists correctly. This positively clears the earlier
   "manual pick didn't record" concern (its born-expired cause was already ruled out, and a human pick is
   now positively observed).
+- **Learning — verify Realtime AUTH, not just the policy + publication.** RLS-gated Realtime
+  `postgres_changes` are delivered only when the Realtime client carries the **user JWT**
+  (`realtime.setAuth(token)`); **presence and broadcast do NOT** require it (they bypass table RLS). So a
+  channel can JOIN and stream presence/broadcast while every row-change frame is silently filtered to
+  zero. When `postgres_changes` are missing, check the **socket's auth (the JWT)** — not only the RLS
+  policy and the `supabase_realtime` publication.
+
+## Security follow-ups (non-blocking, pre-prod)
+From the Supabase Security Advisor — to fix before production (none block the draft):
+
+- **`mirror_auth_user_to_app_user()` is `SECURITY DEFINER` and `EXECUTE`-able by `public` / signed-in
+  users** — revoke `EXECUTE` (or switch it to `SECURITY INVOKER`) so it can't be invoked directly.
+- **`enforce_lineup_lock` has a mutable `search_path`** — pin it (`SET search_path = ...` on the
+  function) to close the search-path-injection vector.
+- **Enable Auth leaked-password protection** (HaveIBeenPwned check) in the Supabase Auth settings.
+
+## Env / deploy facts (recorded)
+- `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` live on the **web service** (build-time —
+  `NEXT_PUBLIC_` values are inlined at build, not read at runtime).
+- `draft` and `draft_pick` are in the **`supabase_realtime` publication** (Realtime row-change broadcasts
+  are enabled for those tables; delivery to a client still requires the user JWT — see the Learning above).
