@@ -81,6 +81,9 @@ importers:
       '@app/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@app/vsfield':
+        specifier: workspace:*
+        version: link:../../packages/vsfield
       '@supabase/ssr':
         specifier: ^0.10.3
         version: 0.10.3(@supabase/supabase-js@2.107.0)
@@ -275,6 +278,19 @@ importers:
         version: 22.19.19
 
   packages/shared: {}
+
+  packages/vsfield:
+    dependencies:
+      '@app/recompute':
+        specifier: workspace:*
+        version: link:../recompute
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
 
 packages:
 

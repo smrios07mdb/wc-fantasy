@@ -16,6 +16,7 @@
     "@app/lineup": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
+    "@app/vsfield": "workspace:*",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "next": "^15.1.4",

@@ -1,0 +1,762 @@
+/*
+ * vs-the-field screen layout — the `.vf-*` classes on top of ds.css tokens.
+ * Ported from design/design_reference/Vs the Field.html (the desktop surface). The presenter STAGE,
+ * the browser/phone chrome, the mobile `.mvf-*` variant, and the scoring `.vf-feed*` panel are
+ * deliberately dropped (presenter scaffold per COMPONENT_MAP §1.7; the feed needs event-level data
+ * that is out of this prompt's scope). No gold — node/record/H2H states use --live/--locked/--ytp +
+ * --pos-* + win/loss/draw, per design/CLAUDE.md.
+ */
+
+/* Gold-free local token refinement (mirrors the reference; --pos-gk is a shared DS token). */
+.vf-app {
+  --pos-gk: #5e6e8c;
+  --node-played: #6e86b4;
+}
+.vf-app .pos-GK {
+  color: var(--text-primary);
+}
+
+.vf-app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* top bar */
+.vf-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-1);
+  flex: none;
+}
+.vf-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vf-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  color: var(--text-on-accent);
+  font-family: var(--font-display);
+  font-weight: 800;
+  flex: none;
+}
+.vf-brand-title {
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1;
+}
+.vf-top-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* connection banners */
+.vf-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  font-size: var(--fs-sm);
+  flex: none;
+}
+.vf-banner-recon {
+  background: var(--info-soft);
+  color: var(--text-primary);
+}
+.vf-banner-stale,
+.vf-banner-empty {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/* body split */
+.vf-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.vf-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+.vf-rail {
+  width: 372px;
+  flex: none;
+  border-left: 1px solid var(--hairline);
+  background: var(--surface-1);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vf-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+/* match strip */
+.vf-matchstrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-1);
+  flex: none;
+}
+.vf-matchstrip-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  flex: 1;
+  padding-bottom: 2px;
+}
+.vf-match {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 148px;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  text-align: left;
+  flex: none;
+  color: var(--text-primary);
+}
+.vf-match-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: 700 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.vf-match-clock.is-live {
+  color: var(--live);
+}
+.vf-match-clock.is-final {
+  color: var(--locked);
+}
+.vf-match-clock.is-ytp {
+  color: var(--text-tertiary);
+}
+.vf-match-teams {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vf-mt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-sm);
+}
+.vf-match-score {
+  font-weight: 700;
+  margin-left: auto;
+}
+
+/* field table */
+.vf-thead,
+.vf-row {
+  display: grid;
+  grid-template-columns: 34px 228px 56px minmax(150px, 1fr) 86px 80px;
+  align-items: center;
+  gap: 10px;
+}
+.vf-thead {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.vf-thead > div {
+  font: 700 var(--fs-micro) / 1 var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.vf-thead .vf-c-rank,
+.vf-thead .vf-c-xi,
+.vf-thead .vf-c-ytp {
+  text-align: center;
+}
+.vf-row {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+  border-radius: var(--r-sm);
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+.vf-row:hover {
+  background: var(--surface-2);
+}
+.vf-row.is-me {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.vf-row.is-selected {
+  background: var(--surface-3);
+  box-shadow: inset 3px 0 0 var(--text-tertiary);
+}
+.vf-row.is-me.is-selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.vf-c-rank {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.vf-c-mgr {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.vf-mgr-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+.vf-mgr-name b {
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vf-mgr-name span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vf-c-score {
+  text-align: left;
+  font-weight: 800;
+  font-size: 20px;
+}
+.vf-c-xi {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.vf-c-ytp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.vf-ytp-num {
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+.vf-ytp-lab {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  line-height: 1.1;
+}
+.vf-c-h2h {
+  display: flex;
+  justify-content: flex-start;
+}
+
+/* XI formation pitch — the lineup's shape; nodes lit by live state. */
+.vf-pitch {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--pitch-2) 26%, var(--surface-1)),
+    color-mix(in srgb, var(--pitch-2) 13%, var(--surface-1))
+  );
+}
+.vf-pitch-v {
+  flex-direction: column;
+}
+.vf-pitch-h {
+  flex-direction: row;
+}
+.vf-lane {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-evenly;
+  min-width: 0;
+}
+.vf-pitch-v .vf-lane {
+  flex-direction: row;
+}
+.vf-pitch-h .vf-lane {
+  flex-direction: column;
+}
+.vf-node {
+  border-radius: 50%;
+  flex: none;
+}
+.vf-node.s-played {
+  background: var(--node-played);
+}
+.vf-node.s-live {
+  background: var(--live);
+  box-shadow: 0 0 0 3px var(--live-soft);
+}
+.vf-node.s-ytp {
+  background: transparent;
+  border: 1.5px solid var(--text-tertiary);
+}
+.vf-pitch-table {
+  width: 100%;
+  max-width: 200px;
+  height: 66px;
+  padding: 7px 13px;
+}
+.vf-pitch-table .vf-node {
+  width: 8.5px;
+  height: 8.5px;
+}
+.vf-pitch-table .vf-node.s-live {
+  box-shadow: 0 0 0 2.5px var(--live-soft);
+}
+.vf-pitch-hero {
+  width: 100%;
+  height: 168px;
+  padding: 16px 20px;
+}
+.vf-pitch-hero .vf-node {
+  width: 14px;
+  height: 14px;
+}
+.vf-pitch-hero .vf-node.s-live {
+  animation: vfnodepulse 2.6s var(--ease-standard) infinite;
+}
+@keyframes vfnodepulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--live-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+.vf-pitch-mini {
+  width: 100%;
+  height: 96px;
+  padding: 10px 14px;
+}
+.vf-pitch-mini .vf-node {
+  width: 11px;
+  height: 11px;
+}
+
+/* legend */
+.vf-legend2 {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.vf-l2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.vf-l2 .vf-node {
+  width: 9px;
+  height: 9px;
+}
+
+/* live dot */
+.vf-livedot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: livepulse 1.4s var(--ease-standard) infinite;
+  flex: none;
+}
+
+/* record badge */
+.vf-recbadge {
+  flex: none;
+}
+.vf-rec-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.vf-recbadge-lg .vf-rec-nums {
+  font-size: 44px;
+}
+.vf-rec-w {
+  color: var(--win);
+}
+.vf-rec-l {
+  color: var(--loss);
+}
+.vf-rec-dash {
+  color: var(--text-tertiary);
+}
+.vf-rec-d {
+  color: var(--draw);
+  font-size: 0.6em;
+}
+.vf-rec-cap {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  margin-top: 3px;
+}
+.vf-rec-win {
+  color: var(--win);
+}
+.vf-rec-loss {
+  color: var(--loss);
+}
+.vf-rec-draw {
+  color: var(--draw);
+}
+
+/* H2H result chip */
+.vf-h2h {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.vf-h2h-margin {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+.vf-h2h-margin.is-up {
+  color: var(--win);
+}
+.vf-h2h-margin.is-down {
+  color: var(--loss);
+}
+
+/* hero */
+.vf-hero {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+.vf-hero > .t-label {
+  margin-bottom: 14px;
+}
+.vf-hero-sec {
+  padding: 15px 0;
+  border-top: 1px solid var(--hairline);
+}
+.vf-hero-sec.first {
+  border-top: none;
+  padding-top: 0;
+}
+.vf-hero-sec.last {
+  padding-bottom: 0;
+}
+.vf-hero-headline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.vf-hero-score-num {
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 0.85;
+}
+.vf-hero-score-lab {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  margin-top: 8px;
+}
+.vf-hero-rankchip {
+  text-align: right;
+  white-space: nowrap;
+}
+.vf-hero-rank-num {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.vf-hero-rank-sub {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+.vf-hero-recsec {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.vf-hero-recnote {
+  margin: 0;
+}
+.vf-hero-pitchsec {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.vf-pitch-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 15px;
+  flex: none;
+  width: 92px;
+}
+.vf-ps-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.vf-ps-num {
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.vf-ps-num.is-live {
+  color: var(--live);
+}
+.vf-ps-lab {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.vf-hero-sec .vf-legend2 {
+  margin-top: 14px;
+}
+.vf-swing {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.vf-swing-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.vf-swing-dir {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--win);
+  width: 92px;
+  flex: none;
+}
+.vf-swing-down {
+  color: var(--loss);
+}
+.vf-swing-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vf-swing-gap {
+  margin-left: auto;
+  font-weight: 800;
+  color: var(--win);
+  font-size: var(--fs-body-lg);
+}
+.vf-swing-gap.is-down {
+  color: var(--text-secondary);
+}
+.vf-swing-top {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* H2H detail panel */
+.vf-h2hwrap {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vf-h2h-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.vf-h2h-scoreline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+}
+.vf-h2h-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 54px;
+}
+.vf-h2h-side b {
+  font-size: var(--fs-sm);
+}
+.vf-h2h-side .mono {
+  font-size: 22px;
+  font-weight: 800;
+}
+.vf-h2h-verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font: 700 var(--fs-micro) / 1.3 var(--font-sans);
+  letter-spacing: 0.06em;
+}
+.vf-h2h-verdict .mono {
+  font-size: 20px;
+}
+.vf-h2h-verdict.is-win {
+  color: var(--win);
+}
+.vf-h2h-verdict.is-loss {
+  color: var(--loss);
+}
+.vf-h2h-verdict.is-draw {
+  color: var(--draw);
+}
+.vf-h2h-upside {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  padding: 0 4px;
+}
+.vf-h2h-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.vf-h2h-col {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  padding: 9px;
+}
+.vf-h2h-colhead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 8px;
+}
+.vf-h2h-colhead b {
+  font-size: var(--fs-caption);
+}
+.vf-h2h-coltot {
+  margin-left: auto;
+  font-weight: 800;
+}
+
+/* season */
+.vf-season-note {
+  margin-bottom: 14px;
+}
+.vf-seasontable .vf-st-mgr {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.vf-st-periods {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.vf-st-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+}
+.vf-st-chip.is-live {
+  border-color: var(--live);
+  box-shadow: 0 0 0 1px var(--live-soft);
+}
+
+/* connection pill variants */
+.vf-conn-recon {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.vf-conn-stale {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+}
+
+/* simple initials avatar (no per-manager colors in the snapshot) */
+.vf-ava {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font: 700 11px/1 var(--font-sans);
+}
+.vf-ava.is-me {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* empty state */
+.vf-empty {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+  padding: 24px;
+}
