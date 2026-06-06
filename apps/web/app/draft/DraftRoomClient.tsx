@@ -16,11 +16,12 @@ import { roundForPick } from "../../src/draft/board";
 import {
   applyDraftRowChange,
   applyPickRowChange,
-  type DraftRowChange,
+  planDraftBroadcast,
   type PickRowChange,
 } from "../../src/draft/reducer";
 import { subscribeDraft, type RealtimeClientLike } from "../../src/draft/realtime";
 import { submitDraftPick } from "../../src/draft/pickClient";
+import { fetchDraftState } from "../../src/draft/stateClient";
 import {
   AvailableList,
   Board,
@@ -72,6 +73,8 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
   const [railTab, setRailTab] = useState<"available" | "queue" | "roster">("available");
   const [showBoardMobile, setShowBoardMobile] = useState(false);
   const toastSeq = useRef(0);
+  // Monotonic id for authoritative re-fetches, so a slow earlier response can't overwrite newer state.
+  const refetchSeq = useRef(0);
 
   const draftId = initialState.draftId;
   const sessionManagerId = initialState.sessionManagerId;
@@ -96,8 +99,20 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
         onStatus: (status) => setConnected(status === "SUBSCRIBED"),
         onPresence: (ids) => setOnlineIds(new Set([sessionManagerId, ...ids])),
         onDraftChange: (payload) => {
-          const row = newRow(payload);
-          if (row) setState((s) => applyDraftRowChange(s, row as unknown as DraftRowChange));
+          const plan = planDraftBroadcast(newRow(payload));
+          if (plan.kind === "apply") {
+            setState((s) => applyDraftRowChange(s, plan.change));
+          } else {
+            // Partial payload (pointer re-synced but `status` dropped) — re-derive from the
+            // authoritative draft row so a lobby client still flips to the live board on start.
+            // Only the latest re-fetch may apply: a slow earlier response must not clobber newer state.
+            const seq = (refetchSeq.current += 1);
+            void fetchDraftState({ fetch: (input, init) => fetch(input, init) }).then((patch) => {
+              if (patch && seq === refetchSeq.current) {
+                setState((s) => applyDraftRowChange(s, patch));
+              }
+            });
+          }
         },
         onPickChange: (payload) => {
           const row = newRow(payload);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DraftRoomState, DraftPlayer } from "./types";
-import { applyDraftRowChange, applyPickRowChange } from "./reducer";
+import { applyDraftRowChange, applyPickRowChange, planDraftBroadcast } from "./reducer";
 
 const player = (id: string, p: DraftPlayer["position"]): DraftPlayer => ({
   id,
@@ -56,6 +56,45 @@ describe("applyDraftRowChange — patch the pointer/deadline from a `draft` broa
       pick_deadline_at: null,
     });
     expect(next).toMatchObject({ status: "complete", currentPickNo: null, pickDeadlineAt: null });
+  });
+
+  it("flips status pending→active from the authoritative row (the lobby↔active gate source)", () => {
+    const next = applyDraftRowChange(mkState({ status: "pending", currentPickNo: null }), {
+      status: "active",
+      current_pick_no: 1,
+      current_manager_id: "m1",
+      pick_deadline_at: "2026-06-04T00:00:30Z",
+    });
+    expect(next.status).toBe("active");
+    expect(next.currentPickNo).toBe(1);
+  });
+
+  it("preserves the pointer/deadline when a draft broadcast omits them (partial-safe, no clobber)", () => {
+    // A partial `draft` payload (only the changed columns) must NOT null out the live pointer — the
+    // reducer keeps what it isn't told about, so a thin broadcast can't strand the board.
+    const next = applyDraftRowChange(
+      mkState({ status: "active", currentPickNo: 2, currentManagerId: "m2" }),
+      { status: "active" },
+    );
+    expect(next.currentPickNo).toBe(2);
+    expect(next.currentManagerId).toBe("m2");
+    expect(next.pickDeadlineAt).toBe("2026-06-04T00:02:00Z");
+  });
+});
+
+describe("planDraftBroadcast — apply the authoritative status, or re-fetch when partial", () => {
+  it("applies a broadcast that carries an authoritative status", () => {
+    const plan = planDraftBroadcast({ status: "active", current_pick_no: 1 });
+    expect(plan).toEqual({ kind: "apply", change: { status: "active", current_pick_no: 1 } });
+  });
+
+  it("signals a re-fetch when the broadcast omits status (the partial-payload case)", () => {
+    // The lobby→active stall: a `draft` row update that re-syncs the pointer but drops `status`.
+    expect(planDraftBroadcast({ current_pick_no: 1 })).toEqual({ kind: "refetch" });
+  });
+
+  it("signals a re-fetch on a null/empty payload", () => {
+    expect(planDraftBroadcast(null)).toEqual({ kind: "refetch" });
   });
 });
 

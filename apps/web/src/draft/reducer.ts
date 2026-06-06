@@ -17,15 +17,34 @@ export interface DraftRowChange {
   pick_deadline_at?: string | null;
 }
 
-/** Patch the pointer / deadline / status from a `draft` row broadcast. */
+/** Patch the pointer / deadline / status from a `draft` row broadcast. Partial-safe: only fields the
+ *  payload actually carries are applied (an absent column keeps its current value; an explicit null —
+ *  e.g. on completion — clears it). This is what lets the lobby↔active gate re-derive from the
+ *  authoritative `draft.status` without a thin/partial broadcast nulling out the live pointer. */
 export function applyDraftRowChange(state: DraftRoomState, row: DraftRowChange): DraftRoomState {
   return {
     ...state,
     status: row.status ?? state.status,
-    currentPickNo: row.current_pick_no ?? null,
-    currentManagerId: row.current_manager_id ?? null,
-    pickDeadlineAt: row.pick_deadline_at ?? null,
+    currentPickNo: "current_pick_no" in row ? (row.current_pick_no ?? null) : state.currentPickNo,
+    currentManagerId:
+      "current_manager_id" in row ? (row.current_manager_id ?? null) : state.currentManagerId,
+    pickDeadlineAt:
+      "pick_deadline_at" in row ? (row.pick_deadline_at ?? null) : state.pickDeadlineAt,
   };
+}
+
+/** How to fold a `draft` broadcast. The lobby↔active view reads `draft.status`, so a broadcast that
+ *  carries an authoritative status is applied directly; a partial one (pointer re-synced but `status`
+ *  dropped) signals a re-fetch of the authoritative row, so a lobby client is never stranded on a stale
+ *  status (the verified pending→active stall). */
+export type DraftBroadcastPlan = { kind: "apply"; change: DraftRowChange } | { kind: "refetch" };
+
+/** Decide how to handle a `draft` broadcast's `new` record (snake_case, possibly partial). */
+export function planDraftBroadcast(row: Record<string, unknown> | null): DraftBroadcastPlan {
+  if (row && typeof row.status === "string") {
+    return { kind: "apply", change: row as unknown as DraftRowChange };
+  }
+  return { kind: "refetch" };
 }
 
 /** The `draft_pick` row columns we fold in. */

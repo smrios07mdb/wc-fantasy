@@ -83,9 +83,13 @@ export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoom
   ]);
 
   const ownedIds = ownedRows.map((r) => r.playerId);
-  // The undrafted pool, BEST-AVAILABLE first: ranked players by `default_rank` (1 = best), then the
-  // unranked alphabetically (Postgres sorts NULLs last). This mirrors the autopick fallback order
-  // (@app/draft `getDefaultRanking`), so the "Best available" list and an expired-timer autopick agree.
+  // The undrafted pool, BEST-AVAILABLE first: ranked players by `default_rank` (1 = best, unique), then
+  // the unranked (Postgres sorts NULLs last). The PRIMARY key (default_rank) matches autopick exactly,
+  // so the top of this list IS what an expired-timer autopick takes. The unranked TAIL is shown
+  // alphabetically for human browsing, whereas autopick (@app/draft `orderDraftPool`) breaks unranked
+  // ties by `id` for determinism — so the two diverge only AMONG equal-rank players (≈ none once
+  // provisioning has ranked the pool). TODO(confirm): unify the unranked tiebreak (id vs displayName)
+  // if that edge-case ordering ever needs to match — it's a display-vs-determinism product call.
   const availableRows = await prisma.player.findMany({
     where: ownedIds.length > 0 ? { id: { notIn: ownedIds } } : {},
     orderBy: [{ defaultRank: { sort: "asc", nulls: "last" } }, { displayName: "asc" }],
