@@ -171,6 +171,21 @@ pnpm --filter @app/worker provision rank <file>  # populate player.default_rank 
 pnpm --filter @app/worker provision status       # sanity-check the provisioning state
 ```
 
+> **Allowlist the league's real members (committed seed).** `provision provision` seeds the allowlist
+> from the gitignored `provision.config.json`; for the **real league** the canonical, reviewable member
+> list lives committed in `packages/db/scripts/seed-allowlist.ts`. Once the league row exists, seed it so
+> members can pass the magic-link gate — run it **before** they sign in (sign-in is denied for any
+> non-allowlisted email):
+>
+> ```
+> pnpm --filter @app/db seed:allowlist   # idempotent → "N emails — M newly added, K already present"
+> ```
+>
+> It writes **only** `allowlist_email` (plain `@app/db` Prisma — no Supabase service-role client, no RLS
+> surface) and `update: {}` never clobbers a claimed row, so re-running is a clean no-op. To add or remove
+> a member, edit the committed list and re-run. Run it from a **Render Shell on `wc-fantasy-web` or
+> `wc-fantasy-worker`** (inherits `DATABASE_URL`) to avoid copying prod secrets onto a laptop.
+
 > **Ranking is no longer a stall-avoidance prerequisite (§544–549):** `getDefaultRanking` drops the
 > `default_rank IS NOT NULL` filter and the best-available fallback spans the whole legal pool, so a non-empty
 > pool always yields a pick. `provision rank` is still the right go-live step for a **good** order — just no
@@ -206,11 +221,18 @@ Realtime, and worker autopick** — on the deployed stack. **Put the Realtime-AU
 
 **Reference only — these are fixed in their own threads, NOT here.** All must pass before go-live:
 
-- [ ] **Security follow-up 1 (§568):** revoke `EXECUTE` on `mirror_auth_user_to_app_user()` (or make it
-      `SECURITY INVOKER`) so it can't be invoked directly.
-- [ ] **Security follow-up 2 (§570):** pin `enforce_lineup_lock`'s `search_path` (`SET search_path = ...`).
-- [ ] **Security follow-up 3 (§572):** enable Auth **leaked-password protection** (HaveIBeenPwned) in Supabase
-      Auth settings.
+- [ ] **Security follow-up 1 (§568) — code fix landed in migration `20260606180000_security_followups_function_hardening`:**
+      `EXECUTE` on `mirror_auth_user_to_app_user()` is revoked from `PUBLIC` (+ `anon`/`authenticated`, guarded);
+      it KEEPS `SECURITY DEFINER` (the `auth.users` trigger still fires — Postgres doesn't check `EXECUTE` at
+      trigger-fire time). **Post-deploy gate (Sergio):** after `migrate deploy`, a real magic-link signup still
+      creates the `app_user` row (the mirror trigger survives the revoke).
+- [ ] **Security follow-up 2 (§570) — code fix landed in the same migration:** `enforce_lineup_lock`'s
+      `search_path` is pinned (`SET search_path = ''`; body/logic unchanged). **Post-deploy gate (Sergio):** a
+      played/locked player still can't be swapped (the lock-on-play latch holds).
+- [ ] **Security follow-up 3 (§572) — operator dashboard action; Code does NOT toggle it:** enable Auth
+      **leaked-password protection** (HaveIBeenPwned) in Supabase → **Authentication → Sign In / Providers →
+      Password security** (TODO(confirm): exact dashboard nav — the Security Advisor's
+      `auth_leaked_password_protection` lint deep-links to the toggle).
 - [ ] **GOAT-trial ingestion smoke:** with a drafted roster, run a live ingestion window and confirm the
       recompute pipeline (player → manager-period → standing) lands scores. **This is where the vs-the-field
       `JWT-postgres_changes` check folds in:** on `/vsfield`, confirm `score_manager_period` + `standing`
