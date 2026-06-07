@@ -171,6 +171,21 @@ pnpm --filter @app/worker provision rank <file>  # populate player.default_rank 
 pnpm --filter @app/worker provision status       # sanity-check the provisioning state
 ```
 
+> **Allowlist the league's real members (committed seed).** `provision provision` seeds the allowlist
+> from the gitignored `provision.config.json`; for the **real league** the canonical, reviewable member
+> list lives committed in `packages/db/scripts/seed-allowlist.ts`. Once the league row exists, seed it so
+> members can pass the magic-link gate — run it **before** they sign in (sign-in is denied for any
+> non-allowlisted email):
+>
+> ```
+> pnpm --filter @app/db seed:allowlist   # idempotent → "N emails — M newly added, K already present"
+> ```
+>
+> It writes **only** `allowlist_email` (plain `@app/db` Prisma — no Supabase service-role client, no RLS
+> surface) and `update: {}` never clobbers a claimed row, so re-running is a clean no-op. To add or remove
+> a member, edit the committed list and re-run. Run it from a **Render Shell on `wc-fantasy-web` or
+> `wc-fantasy-worker`** (inherits `DATABASE_URL`) to avoid copying prod secrets onto a laptop.
+
 > **Ranking is no longer a stall-avoidance prerequisite (§544–549):** `getDefaultRanking` drops the
 > `default_rank IS NOT NULL` filter and the best-available fallback spans the whole legal pool, so a non-empty
 > pool always yields a pick. `provision rank` is still the right go-live step for a **good** order — just no
