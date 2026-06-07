@@ -9,10 +9,12 @@
 import type { ReactNode } from "react";
 import "./ds.css";
 import "./vsfield.css";
+import { CrossNav } from "../shell/CrossNav";
 
 export default function VsFieldLayout({ children }: { children: ReactNode }) {
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
+      <CrossNav />
       {children}
     </div>
   );
