@@ -31,6 +31,10 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
   const leagueId = viewer.leagueId;
 
   const [managerRows, periodRows, standingRows] = await Promise.all([
+    // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
+    // no current-period score_manager_period row (and no XI) MUST still appear, so buildVsField pads
+    // him to 0 points + empty XI and he is a free win for everyone strictly above (Prompt 04 line 42 /
+    // Theme C). Closing this loader-side, NOT via the recompute sweeper writing 0 rows.
     prisma.manager.findMany({
       where: { leagueId },
       select: { id: true, displayName: true },

@@ -225,6 +225,32 @@ describe("buildVsField — per-opponent H2H (viewer vs the field) via the helper
   });
 });
 
+describe("buildVsField — full-roster completeness (Prompt-04 inactive-0 assumption)", () => {
+  it("a roster member absent from the period score map AND with no XI is still rendered inactive-0 and is a free win for everyone above", () => {
+    // m4 is in `managers` (the FULL league roster the loader enumerates) but is OMITTED from
+    // currentPeriodScores (no score_manager_period row) AND from lineupsForPeriod (no XI) — the
+    // all-benched / no-row manager. Prompt 04 line 42 assumes he is PRESENT as a 0; if he vanished,
+    // every strictly-above manager's provisional W would be undercounted.
+    const view = buildVsField(baseInput());
+    const m4 = field(view, "m4");
+    expect(m4).toBeDefined(); // still rendered (did not vanish)
+    expect(m4.points).toBe(0); // inactive-0
+    expect(m4.starters).toEqual([]); // empty XI
+    expect(m4.counts).toEqual({ yetToPlay: 0, playing: 0, played: 0, noMatch: 0 });
+    // free win for everyone above: he loses to all 3 scoring managers, beats nobody…
+    expect(m4.record).toEqual({ w: 0, l: 3, d: 0 });
+    // …even the LOWEST-scoring active manager (m3, 10 pts) banks the free win against him…
+    expect(field(view, "m3").record.w).toBe(1);
+    // …and the viewer (m1, 20) banks the free win in the per-opponent H2H column.
+    expect(m4.h2hVsViewer).toEqual({
+      result: "win",
+      points: 20,
+      opponentPoints: 0,
+      margin: 20,
+    });
+  });
+});
+
 describe("buildVsField — starters yet to play (count grounded in §4 match status)", () => {
   it("buckets a mixed lineup by its starters' match status", () => {
     const view = buildVsField(baseInput());
