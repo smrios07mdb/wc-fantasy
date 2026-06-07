@@ -480,6 +480,31 @@ Closed in migration `20260605170000_enable_rls_public_tables` (extends the `faab
   subscription) needs its own `authenticated` SELECT policy, or the client sees nothing. Today the
   browser reads only `draft`/`draft_pick` (Realtime) — there are zero `.from()`/`.rpc()` calls.
 
+### Learning (Prompt 11 — vs-the-field): the RLS-subquery visibility trap
+A browser-readable table that resolves league membership via the **caller's own** `manager` row is
+fine with the plain draft idiom — `standing`, `draft`, `draft_pick` all carry `league_id`, so the
+`manager_select_own`-visible own row satisfies the EXISTS. A table that must resolve the league via
+**another** manager's row silently breaks: `score_manager_period` keys by `manager_id`/`period_id`
+(no `league_id`), so a naive `manager` subquery has to read the *scored* manager's row — which
+`manager_select_own` hides — and the policy returns **zero other-manager rows** (the whole field
+collapses to just you). Same silent-failure class as the draft-room Realtime bug, on the read side.
+- **Fix:** a `SECURITY DEFINER` membership helper (`vsfield_caller_shares_league_with_manager`) that
+  bypasses `manager` RLS to resolve `manager_id → league_id`, then checks the caller's membership.
+  Hardened: pinned `search_path`, `EXECUTE` revoked from `PUBLIC` + granted to `authenticated`.
+  `auth.uid()` still resolves to the **caller** inside the helper — it reads the
+  `request.jwt.claim.sub` session GUC (never `current_user`), which survives the DEFINER role swap
+  (verified: a member sees the whole field; a different-league member and anon see nothing).
+- **Rule of thumb:** prefer the direct `league_id` idiom; reach for the SECDEF helper only when a
+  table lacks `league_id` and the no-churn boundary forbids denormalizing one onto it.
+
+### Update: `supabase_realtime` publication is now migration-managed
+Refines the earlier operational note ("the migration does not touch the publication — a
+dashboard/operator concern"); the security decisions above are unchanged. New Realtime-read tables
+are added to the publication **inside their RLS migration**, existence-guarded
+(`IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime')`) so it's idempotent
+and no-ops cleanly on the plain-Postgres DoD shim. (Origin: Prompt 11 added `score_manager_period`
++ `standing`.)
+
 ## Theme G — Ingestion: squad / player source (rosters bootstrap)  ✅ LOCKED
 The feed client had NO player source: schedule-sync pulls only `/matches`, and `upsertPlayerByBdlId`
 was an unwired seam — so `player` / `fifa_team` stayed empty and stat ingestion silently no-opped (every
