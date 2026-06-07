@@ -666,3 +666,44 @@ landing hub.
   sub-page). Lives in the pure `selectActiveNav` helper.
 - **Presentational only:** no auth / routes / env / middleware; `getSessionManager()` gating unchanged;
   the hub `/` (Prompt 16) untouched; sign-out reuses the hub POST form verbatim; zero new CSS.
+
+## Landing visual design (Prompt 19) — plain CSS over Tailwind, scoped per-route
+
+- **Amends ARCHITECTURE §1 "Tailwind."** Design delivered the system as **plain CSS** — `ds.css` (the
+  global design system: tokens / reset / component classes) + a per-screen CSS file. Per "boring and
+  reliable" + the launch deadline, the app **consumes the CSS as delivered** rather than re-translating
+  it to Tailwind. Tailwind stays installed (root `globals.css`, `@tailwind` directives) but is **not** the
+  styling system; the feature screens (`/draft`, `/lineup`, `/vsfield`) already import their own
+  per-route `ds.css` copies. `ds.css` is duplicated per-route by the existing convention (4 byte-identical
+  copies now — a shared-import refactor was rejected as out-of-scope; the landing's copy is guarded
+  byte-identical to the feature copy by a test).
+- **Per-route, NOT global (operator decision).** The prompt asked to import `ds.css` **globally** in the
+  root layout, but that **collides** with the existing global `globals.css` (Tailwind Preflight = a second
+  reset) and would **double-load** `ds.css` on the feature routes. Resolved by importing `ds.css` +
+  `landing.css` **in `page.tsx`** (route-scoped to `/`, the repo's per-route convention) under a `.lp`
+  wrapper. Root `layout.tsx` is **untouched** (no conflict with Prompt 18's metadata edit there).
+- **Two CSS adaptations to the vendored `landing.css` (the only edits to delivered CSS, both sanctioned
+  by "scope under a wrapper"):** (1) the design ships `body.lp { … }`, but `/` shares the root-layout
+  `<body>` with every route, so it was re-scoped to a **`.lp` wrapper** — using **`overflow-x: clip`**
+  (NOT the original `hidden`: on a non-`<body>` element `overflow-x:hidden` computes `overflow-y:auto`,
+  making `.lp` a scroll container that would **break the sticky `.lp-nav`**; the hero/CTA glows are
+  self-clipped by their sections' `overflow:hidden`). (2) `.lp` sets **`color: var(--text-primary)`** —
+  load-bearing: `ds.css` sets `body{color}` (element, 0,0,1) but the root `<body>` carries Tailwind's
+  `text-slate-900` **class** (0,1,0), which wins on `/`, so the landing's color-less headings would
+  inherit dark-on-dark without re-establishing the baseline on `.lp`.
+- **The delivered design is a full marketing+login page, NOT a four-state re-skin (the prompt's premise
+  was off).** Resolved with the operator: the logged-out **`signin`** state renders the **full 10-section
+  XI marketing landing** (ported from `XI Landing.html` to `_landing/MarketingLanding.tsx`); `hub` /
+  `unlinked` / `denied` get branded `ds.css` panels (no design pixel-truth exists for them). The
+  prototype's **two inline self-serve email forms → a "Sign in" CTA → `/sign-in`** (honoring "no
+  self-serve join flow"); the prototype Tweaks panel + `<script>` are dropped.
+- **`selectLandingView()` + the four-outcome branch + the route set are byte-for-byte unchanged** (proven
+  by diff + a source-contract smoke). `<Brand/>` (`BrandMark`) sits in every state's header. Link targets:
+  the three built screens deep-link to `/draft` `/lineup` `/vsfield`; design destinations without a route
+  yet (Dashboard / Standings / Guillotine / Free Agents / Waivers / Settings) point at `/sign-in` to avoid
+  404s — a `TODO(confirm)` to repoint when those screens ship.
+- **Deferred (flagged follow-up):** `/sign-in` (and `/auth/denied`) stay unstyled — the login flow's
+  design (`Join.html`) was **not in this handoff bundle**, so skinning it is a separate task, not improvised.
+- **Branch:** `feat/landing-design` (`aa295bd`) stacks on **Prompt 18** (`feat/brand-pwa`), because it
+  imports `Brand.tsx` (landed in Prompt 18, not yet on `main`). **Merge order: Prompt 18 → main, then
+  Prompt 19.** Held for clearance; not pushed; no force-push.
