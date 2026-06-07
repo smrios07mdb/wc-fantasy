@@ -19,14 +19,18 @@
     "studio": "prisma studio",
     "format": "prisma format",
     "validate": "prisma validate",
-    "typecheck": "tsc --noEmit"
+    "seed:allowlist": "tsx scripts/seed-allowlist.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p scripts/tsconfig.json"
   },
   "dependencies": {
     "@app/shared": "workspace:*",
     "@prisma/client": "^6.2.1"
   },
   "devDependencies": {
+    "@app/auth": "workspace:*",
     "@types/node": "^22.10.5",
-    "prisma": "^6.2.1"
+    "dotenv": "^16.4.7",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2"
   }
 }

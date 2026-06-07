@@ -174,12 +174,21 @@ importers:
         specifier: ^6.2.1
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
     devDependencies:
+      '@app/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.19
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
       prisma:
         specifier: ^6.2.1
         version: 6.19.3(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.4
 
   packages/draft:
     dependencies:
