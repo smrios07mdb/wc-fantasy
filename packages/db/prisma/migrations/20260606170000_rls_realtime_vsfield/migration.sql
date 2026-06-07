@@ -131,8 +131,14 @@ DECLARE
   v_mgr_out   text := 'rls_selftest_mgr_out';    -- a manager in a DIFFERENT league
   v_period    text := 'rls_selftest_period';
   v_standing  text := 'rls_selftest_standing';
-  v_user_in   text := 'rls_selftest_user_in';
-  v_user_out  text := 'rls_selftest_user_out';
+  -- These two ids are driven into `request.jwt.claim.sub` below and read back via
+  -- `auth.uid()`. On Supabase the REAL auth.uid() casts that claim to `uuid` (the
+  -- text-returning shim above only exists on a bare Postgres), so they MUST be
+  -- valid uuids or the helper 22P02s ("string_to_uuid") on `prisma migrate deploy`.
+  -- Canonical lowercase form so the `manager.user_id` (text) == auth.uid()::text
+  -- comparison round-trips exactly.
+  v_user_in   text := '00000000-0000-0000-0000-000000000001';  -- in-league caller's auth uid
+  v_user_out  text := '00000000-0000-0000-0000-000000000002';  -- different-league caller's auth uid
   v_member_sees_own   boolean := false;
   v_member_sees_other boolean := false;  -- the all-play-all property the naive policy broke
   v_nonmember_sees    boolean := true;
