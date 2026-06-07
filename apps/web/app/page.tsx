@@ -6,32 +6,79 @@
  *
  * It reuses `getSessionManager()` UNCHANGED (the Prompt-07 `getUser()`-backed primitive, the thin IO
  * edge) and defers the branch to the pure `selectLandingView()` helper. Four states:
- *   - signin   → logged-out visitor: a single "Sign in" CTA → /sign-in.
+ *   - signin   → logged-out visitor: the XI marketing landing with a "Sign in" CTA → /sign-in.
  *   - hub      → resolved league manager: nav to /draft, /lineup, /vsfield + POST sign-out.
  *   - unlinked → allowlisted + signed in but manager.user_id not yet linked (the Prompt-07
  *                provisioning seam): "contact the commissioner". This is NOT a denial — never /auth/denied.
  *   - denied   → not allowlisted (defensive; the callback already signs these out) → link to /auth/denied.
  *
- * Deliberately minimal/unstyled (matches the placeholder auth-page convention); polish is the deferred
- * Design deliverable. No redirect change, no new routes/env, no admin surface, no shared cross-nav strip.
+ * Prompt 19 — VISUAL re-skin only. `selectLandingView()`, the four-outcome branch, the session read, and
+ * the route set are byte-for-byte as Prompt 16 left them; only the presentational bodies changed. The
+ * design system + landing CSS are imported here (per-route, NOT global — they layer over the root-layout
+ * Tailwind without a double reset, and the feature screens keep their own per-route ds.css). The XI
+ * `<Brand/>` mark sits in every state's header via `BrandLink`. The marketing-page body (the `signin`
+ * state) lives in `_landing/MarketingLanding`. `/sign-in` itself stays unstyled — its design (`Join.html`)
+ * was NOT in this handoff bundle, so skinning it is a flagged follow-up.
  */
 import { getSessionManager } from "@/lib/auth/manager";
 import { selectLandingView } from "@/src/landing/selectLandingView";
+import { BrandLink, LpRoot, SignOutButton } from "./_landing/chrome";
+import { MarketingLanding } from "./_landing/MarketingLanding";
+import "./_landing/ds.css";
+import "./_landing/landing.css";
 
 // Reads the session on every request — never statically cache the front door (matches the feature pages).
 export const dynamic = "force-dynamic";
 
 const FEATURES = [
-  { href: "/draft", label: "Draft room", blurb: "Make your picks when the draft is live." },
+  {
+    href: "/draft",
+    label: "Draft room",
+    blurb: "Make your picks when the draft is live.",
+    icon: (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      >
+        <path d="M3 7h18v12H3zM3 7l3-4h12l3 4M8 12h8" />
+      </svg>
+    ),
+  },
   {
     href: "/lineup",
     label: "Set lineup",
     blurb: "Choose your formation and starters each matchday.",
+    icon: (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      >
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M3 9h18M9 21V9" />
+      </svg>
+    ),
   },
   {
     href: "/vsfield",
     label: "Vs the field",
     blurb: "Live scores and standings across the league.",
+    icon: (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+      >
+        <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+      </svg>
+    ),
   },
 ];
 
@@ -48,80 +95,105 @@ export default async function Home() {
   return <SignIn />;
 }
 
+/** Logged-out front door → the full XI marketing landing (its "Sign in" CTA routes to /sign-in). */
 function SignIn() {
-  return (
-    <main className="mx-auto flex max-w-sm flex-col gap-4 px-6 py-16">
-      <h1 className="text-2xl font-semibold">WC Fantasy</h1>
-      <p className="text-sm text-slate-600">
-        Private World Cup fantasy league. Sign in with your allowlisted email to set your lineup and
-        follow the league live.
-      </p>
-      <a href="/sign-in" className="rounded bg-blue-600 px-3 py-2 text-center text-white">
-        Sign in
-      </a>
-    </main>
-  );
+  return <MarketingLanding />;
 }
 
+/** Signed-in, resolved manager → the post-login signpost into the three live screens. */
 function Hub({ displayName }: { displayName: string }) {
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-16">
-      <div className="flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold">WC Fantasy</h1>
-        <SignOutButton />
-      </div>
-      <p className="text-sm text-slate-600">Signed in as {displayName}.</p>
-      <ul className="flex flex-col gap-3">
-        {FEATURES.map((feature) => (
-          <li key={feature.href}>
-            <a
-              href={feature.href}
-              className="block rounded border border-slate-200 bg-white px-4 py-3 hover:border-slate-300"
-            >
-              <span className="font-medium text-slate-900">{feature.label}</span>
-              <span className="block text-sm text-slate-600">{feature.blurb}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </main>
+    <LpRoot>
+      <nav className="lp-nav">
+        <div className="lp-container lp-nav-inner">
+          <BrandLink />
+          <div className="lp-nav-cta">
+            <span className="lp-proof-txt">
+              Signed in as <b>{displayName}</b>
+            </span>
+            <SignOutButton />
+          </div>
+        </div>
+      </nav>
+      <section className="lp-section" style={{ borderTop: "none" }}>
+        <div className="lp-container">
+          <div className="lp-section-head">
+            <p className="lp-eyebrow">Your league</p>
+            <h2>Welcome back.</h2>
+            <p>Jump straight in — draft your squad, name your XI, and follow the league live.</p>
+          </div>
+          <div className="lp-peek-grid">
+            {FEATURES.map((feature) => (
+              <a className="lp-peek" href={feature.href} key={feature.href}>
+                <span className="lp-peek-ic">{feature.icon}</span>
+                <span className="lp-peek-txt">
+                  <h4>
+                    {feature.label} <span className="arr">↗</span>
+                  </h4>
+                  <p>{feature.blurb}</p>
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+    </LpRoot>
   );
 }
 
+/** Allowlisted + signed in but not yet linked to a manager — points at the commissioner, NOT a denial. */
 function Unlinked() {
   return (
-    <main className="mx-auto flex max-w-sm flex-col gap-4 px-6 py-16">
-      <h1 className="text-2xl font-semibold">Almost there</h1>
-      <p className="text-sm text-slate-600">
-        You&rsquo;re signed in, but your account isn&rsquo;t linked to a manager yet. Contact the
-        commissioner to get set up, then refresh this page.
-      </p>
-      <SignOutButton />
-    </main>
+    <LpRoot>
+      <nav className="lp-nav">
+        <div className="lp-container lp-nav-inner">
+          <BrandLink />
+          <div className="lp-nav-cta">
+            <SignOutButton />
+          </div>
+        </div>
+      </nav>
+      <section className="lp-cta">
+        <div className="lp-container lp-cta-card">
+          <p className="lp-eyebrow">Almost there</p>
+          <h2>You&rsquo;re in — almost.</h2>
+          <p>
+            You&rsquo;re signed in, but your account isn&rsquo;t linked to a manager yet. Contact
+            the commissioner to get set up, then refresh this page.
+          </p>
+        </div>
+      </section>
+    </LpRoot>
   );
 }
 
+/** Not on the allowlist (defensive; the callback already signs these out) → the short denied state. */
 function Denied() {
   return (
-    <main className="mx-auto flex max-w-sm flex-col gap-4 px-6 py-16">
-      <h1 className="text-2xl font-semibold">Can&rsquo;t sign you in</h1>
-      <p className="text-sm text-slate-600">
-        This is a private league and your email isn&rsquo;t on the allowlist.
-      </p>
-      <a className="text-blue-600 underline" href="/auth/denied">
-        More info
-      </a>
-    </main>
-  );
-}
-
-/** Sign-out is a STATE-CHANGING action → a POST form to the existing route handler, not a link. */
-function SignOutButton() {
-  return (
-    <form action="/auth/sign-out" method="post">
-      <button type="submit" className="text-sm text-slate-500 underline">
-        Sign out
-      </button>
-    </form>
+    <LpRoot>
+      <nav className="lp-nav">
+        <div className="lp-container lp-nav-inner">
+          <BrandLink />
+          <div className="lp-nav-cta">
+            <a className="btn btn-ghost btn-sm" href="/sign-in">
+              Log in
+            </a>
+          </div>
+        </div>
+      </nav>
+      <section className="lp-cta">
+        <div className="lp-container lp-cta-card">
+          <p className="lp-eyebrow">Private league</p>
+          <h2>We can&rsquo;t sign you in.</h2>
+          <p>
+            This is a private, invite-only league and your email isn&rsquo;t on the allowlist. If
+            you think that&rsquo;s a mistake, ask the commissioner for an invite.
+          </p>
+          <a className="btn btn-ghost" href="/auth/denied" style={{ marginTop: 8 }}>
+            More info
+          </a>
+        </div>
+      </section>
+    </LpRoot>
   );
 }

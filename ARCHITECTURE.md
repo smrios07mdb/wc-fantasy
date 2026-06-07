@@ -39,8 +39,11 @@ Python data stack — so a single language removes context-switching and, more i
 the **scoring rules, the lock logic, the feed-ingestion shapes, and the API contract share one
 set of types.** For a small team that is the single biggest reliability win available.
 
-- **Frontend:** Next.js (App Router) + React + TypeScript. Tailwind for styling (Design will
-  specify the system). Two reactive surfaces matter: the **live draft room** and the **live "vs
+- **Frontend:** Next.js (App Router) + React + TypeScript. ~~Tailwind for styling~~ — **AMENDED
+  (Prompt 19, see DECISIONS):** Design delivered the system as **plain CSS** (`ds.css` design system
+  + per-screen CSS), so the app consumes that as-delivered (imported **per-route**, scoped under a
+  wrapper) rather than re-translating to Tailwind. Tailwind remains installed (root `globals.css`) but
+  is not the styling system. Two reactive surfaces matter: the **live draft room** and the **live "vs
   the field" screen**; everything else is ordinary CRUD.
 - **Backend:** a **modular monolith** — the Next.js app's route handlers serve the web API
   (auth'd reads/writes: set lineup, submit FAAB bid, make pick, admin overrides). Scheduled and
