@@ -652,3 +652,17 @@ landing hub.
   PROJECT.md / DECISIONS.md Prompt-16 doc paste sits on top of that rebase. Gate re-run green post-rebase.
   **Remaining:** the merge of `feat/landing-hub` → `main` and the push to `origin/main` are **held for
   explicit operator go** (not yet merged, not yet pushed); the branch was never pushed, so no force-push.
+
+## Cross-nav strip (Prompt 17) — direct movement between authenticated screens
+
+- **No shared layout existed.** Each authenticated screen has its own route-scoped `app/<route>/layout.tsx`.
+  Per the DRY rule's **path B**, one `CrossNav` component was created and mounted once in each layout
+  (three mount lines, one source of markup) rather than refactoring into a route group (rejected as
+  out-of-scope churn). The `shell/*` reference on the lineup screen is component-level, not a shared layout.
+- **Active-state semantics (judgment call, encoded + tested):** home (`/`) matches **exactly** (a
+  `startsWith` greedily matches everything); feature routes match exact / trailing-slash / nested sub-path,
+  but **not** a prefix-sibling (`/draftroom` ≠ `/draft`). Standard section-nav default — a future
+  `/draft/<sub>` keeps the Draft tab active; exact-only was considered and rejected (de-highlights on any
+  sub-page). Lives in the pure `selectActiveNav` helper.
+- **Presentational only:** no auth / routes / env / middleware; `getSessionManager()` gating unchanged;
+  the hub `/` (Prompt 16) untouched; sign-out reuses the hub POST form verbatim; zero new CSS.
