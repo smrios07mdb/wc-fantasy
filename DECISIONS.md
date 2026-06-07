@@ -568,13 +568,32 @@ Build progress; the engineering follow-ups:
   policy and the `supabase_realtime` publication.
 
 ## Security follow-ups (non-blocking, pre-prod)
-From the Supabase Security Advisor — to fix before production (none block the draft):
+From the Supabase Security Advisor (none blocked the draft). All three closed by **Prompt 15** —
+function-privilege + `search_path` hardening, **catalog-verified on live**: the Render deploy of `main`
+(`c8f404d`) is green, so `prisma migrate deploy` applied `20260606180000` and its embedded **catalog-only**
+self-test **PASSED on the live DB** — the `EXECUTE` revoke + both `search_path` pins are catalog-verified
+there. This is a catalog-verified-on-live close-out, **not** a behavioral one; the no-regression
+behavioral checks ride on go-live (below).
 
-- **`mirror_auth_user_to_app_user()` is `SECURITY DEFINER` and `EXECUTE`-able by `public` / signed-in
-  users** — revoke `EXECUTE` (or switch it to `SECURITY INVOKER`) so it can't be invoked directly.
-- **`enforce_lineup_lock` has a mutable `search_path`** — pin it (`SET search_path = ...` on the
-  function) to close the search-path-injection vector.
-- **Enable Auth leaked-password protection** (HaveIBeenPwned check) in the Supabase Auth settings.
+- **Item 1 — `mirror_auth_user_to_app_user()` `EXECUTE` (RESOLVED — do not reopen).** Shipped in
+  `20260606180000` (idempotent re-assertion — `20260606010000` had already revoked from `PUBLIC` + pinned
+  `search_path=''`): `REVOKE EXECUTE` from `PUBLIC` + role-guarded `anon`/`authenticated`. **KEPT
+  `SECURITY DEFINER`** (not `INVOKER` — the boring fix); the `auth.users` trigger still fires (Postgres
+  does not check `EXECUTE` at trigger-fire time). Catalog-verified on live (deploy self-test). Behavioral
+  confirm (trigger fires) folds into the first allowlisted signup → `app_user` row.
+- **Item 2 — `enforce_lineup_lock` `search_path` (RESOLVED — do not reopen).** Pinned to `''` in
+  `20260606180000` (`ALTER … SET search_path=''`; `INVOKER`, body unchanged — all six lock branches
+  verified under `''` pre-merge). Catalog-verified on live (deploy self-test). Behavioral lock-enforcement
+  confirm deferred to first kickoff / GOAT-trial smoke (no live locks pre-tournament) — same deferral as
+  the Prompt-10 lock-freeze check.
+- **Item 3 — Auth leaked-password protection (HaveIBeenPwned).** **STILL PENDING** — operator dashboard
+  toggle (Authentication → Sign In / Providers → Password security; the `auth_leaked_password_protection`
+  advisor lint deep-links to it). Code does not toggle it.
+- **Learning.** Ship `SECURITY DEFINER` functions with a pinned `search_path` + `EXECUTE` revoked from
+  `PUBLIC` at creation; the consolidated migration guards both with a fail-safe **catalog-only** self-test
+  (`has_function_privilege(...) = false` + `proconfig` `c IN ('search_path=""', 'search_path=')`, tolerant
+  of PG empty-string serializations; a `RAISE` rolls back the txn; `LIKE 'search_path=%'` is the documented
+  deeper fallback). Catalog-only ⇒ no `auth.uid()`/JWT ⇒ none of the Prompt-13 `22P02` class.
 
 ## Env / deploy facts (recorded)
 - `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` live on the **web service** (build-time —
