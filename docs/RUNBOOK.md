@@ -53,7 +53,9 @@
 3. **The scraper is non-gating.** Playwright is not yet wired (`apps/scraper/src/wiring.ts` → `notWiredLauncher`),
    so `wc-fantasy-scraper` boots and idles (each tick logs a contained "not wired" error; ratings fall back to
    BALLDONTLIE through the group stage). You **may suspend** it until the go-live scrape wiring lands. See the
-   `TODO(confirm: go-live scrape)` in `render.yaml`.
+   `TODO(confirm: go-live scrape)` in `render.yaml`. Simplest at launch: **leave `wc-fantasy-scraper`
+   un-provisioned entirely** (skip/decline it in the Blueprint apply, or delete the service) — nothing depends
+   on it until Playwright + `loadSofaIndex` land.
 
 ## (b) Bind secrets — what goes where (build-time vs runtime)
 
