@@ -67,24 +67,27 @@ BEGIN
   ELSIF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated')
         AND has_function_privilege('authenticated', 'public.mirror_auth_user_to_app_user()', 'EXECUTE') THEN
     v_fail := 'authenticated can EXECUTE mirror_auth_user_to_app_user';
-  -- (b) both functions have search_path pinned to the EMPTY value '' (proconfig holds exactly the
-  -- entry `search_path=""` — verified on PG16 that '' serialises to that, while `public` /
-  -- `pg_catalog` serialise to `search_path=public` / `search_path=pg_catalog`). Value-exact, not
-  -- mere presence: for the SECURITY DEFINER mirror fn the empty path IS the security property — a
-  -- future drift to `search_path = public` would re-open the hijack vector, and this check goes RED
-  -- on it (presence-only `LIKE 'search_path=%'` would not).
+  -- (b) both functions have search_path pinned to the EMPTY value '' — value-exact, not mere
+  -- presence: for the SECURITY DEFINER mirror fn the empty path IS the security property, so a future
+  -- drift to `search_path = public` must go RED (presence-only `LIKE 'search_path=%'` would not).
+  -- The empty path serialises to `search_path=""` on PG16 (verified); we ALSO accept a bare
+  -- `search_path=` to absorb any PG version that emits the unquoted empty form — both mean "empty",
+  -- and the reject-set is unchanged (`public` -> `search_path=public`, `pg_catalog` ->
+  -- `search_path=pg_catalog` still fail). Deeper fallback: if some PG ever emits a THIRD empty form
+  -- this both-forms check misses, the assertion RAISEs and the single-txn migration fail-safe rolls
+  -- back (nothing persists) — that is the point at which you would widen to `LIKE 'search_path=%'`.
   ELSIF NOT EXISTS (
     SELECT 1 FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'mirror_auth_user_to_app_user'
-      AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c = 'search_path=""')
+      AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c IN ('search_path=""', 'search_path='))
   ) THEN
     v_fail := 'mirror_auth_user_to_app_user search_path is not pinned to the empty value';
   ELSIF NOT EXISTS (
     SELECT 1 FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'enforce_lineup_lock'
-      AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c = 'search_path=""')
+      AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c IN ('search_path=""', 'search_path='))
   ) THEN
     v_fail := 'enforce_lineup_lock search_path is not pinned to the empty value';
   END IF;
