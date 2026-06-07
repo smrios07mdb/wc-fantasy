@@ -115,6 +115,37 @@ worker — **per service**, since Render won't take a `sync: false` secret on th
   > **Gate:** services boot **and** `migrate deploy` succeeds on `DIRECT_URL`. (Provision-time — see the
   > Runtime-verification note at the end.)
 
+### (d.1) Recovery — if a prior deploy left `20260606170000_rls_realtime_vsfield` **failed**
+
+A deploy attempt **before** this fix landed died inside that migration's self-test with Postgres
+`22P02` (`invalid input syntax for type uuid: "rls_selftest_user_in"` — the self-test fed a non-uuid
+label into `request.jwt.claim.sub`, which Supabase's real `auth.uid()` casts `::uuid`). Prisma marks
+the migration **failed** in `_prisma_migrations` and **refuses to apply anything further** until it is
+resolved. The whole migration is a **single transaction** (no `CREATE INDEX CONCURRENTLY` or other
+non-transactional statement), so the failed apply **rolled back cleanly — nothing persisted.**
+
+Run the recovery in a **Render Shell** on `wc-fantasy-web` (env group provides `DIRECT_URL`; same
+session pooler `:5432` as `migrate deploy`):
+
+```
+# 1. mark the rolled-back migration as rolled-back so Prisma will re-apply it
+pnpm exec prisma migrate resolve --rolled-back 20260606170000_rls_realtime_vsfield \
+  --schema=packages/db/prisma/schema.prisma
+# 2. re-run deploy — the CORRECTED migration (valid-uuid self-test) now applies
+pnpm db:migrate:deploy
+```
+
+`migrate deploy` should now apply `20260606170000_rls_realtime_vsfield` and report all migrations
+applied.
+
+- **Pre-launch alternative (no real league data yet):** `pnpm db:reset` (= `prisma migrate reset`)
+  drops and re-applies every migration from scratch — acceptable **only before any real managers/leagues
+  exist**, never after.
+- `TODO(confirm):` exact wrapper for the resolve step — there is no `db:migrate:resolve` script yet, so
+  the `pnpm exec prisma migrate resolve …` form above is used; add a script alias if preferred.
+- `TODO(confirm):` recovery-doc home — kept **inline in this runbook's step (d)** (most discoverable
+  during execution) rather than a separate `docs/MIGRATION_RECOVERY.md`.
+
 ## (e) Seed the rosters — the Theme G bootstrap
 
 The draft pool (`player` + `fifa_team`) comes **only** from the BALLDONTLIE rosters pull (Theme G §508–527).
