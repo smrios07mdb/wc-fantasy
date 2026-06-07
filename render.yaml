@@ -1,14 +1,43 @@
-# Render Blueprint — WC Fantasy (runbook A6 / B1 / B3).
+# Render Blueprint — WC Fantasy (Infrastructure-as-Code for the launch topology).
 #
-# Two vendors only: Render (compute) + Supabase (Postgres / Auth / Realtime). This file describes the
-# SERVICES + their NON-secret env. Every secret (DATABASE_URL, DIRECT_URL, the Supabase keys, the
-# BALLDONTLIE key) is `sync: false` — set in the Render dashboard, NEVER committed (ARCHITECTURE §8).
+# Two vendors only: Render (compute) + Supabase (Postgres / Auth / Realtime) — DECISIONS.md "Architecture
+# & Stack" (the prompt's "Theme E") §372. One repo, ONE build, four service shapes:
+#   • web     — the Next.js app (UI + API routes, incl. the gated POST /api/draft/pick)
+#   • worker  — the RESIDENT draft controller + ingestion scheduler (one process; ARCHITECTURE.md §2/§5)
+#   • cron    — daily FAAB batch + hourly period-close (the two modes the worker EXTERNALIZES; roster
+#               re-pull is self-scheduled in the worker via WORKER_ROSTERS_SYNC_EVERY_TICKS, so it is
+#               NOT a cron — Theme G §522)
+#   • scraper — the isolated Playwright rating scraper (apps/scraper). NON-GATING at launch (see below)
 #
-# Set `region` on each service to match your Supabase region (runbook A1: "one region near the league").
-# `virginia` (US-East) suits an America/New_York league + a US-East Supabase project — change as needed.
+# ── Env contract (the load-bearing pooler split — DECISIONS.md §574–578) ──────────────────────────
+#   DATABASE_URL = Supabase TRANSACTION pooler (PgBouncer, :6543) → app + worker + scraper RUNTIME.
+#   DIRECT_URL   = Supabase SESSION pooler (:5432) → `prisma migrate deploy` ONLY (the txn pooler
+#                  cannot carry migrations). Used by the web service `preDeployCommand`, once per release.
+#   NEXT_PUBLIC_* are BUILD-TIME on web (inlined into the client bundle at `next build`, not read at
+#                  runtime). They live INLINE on the web service for that reason.
 #
-# The Sofascore scraper worker (Section B) is intentionally OMITTED — the league launches on the
-# BALLDONTLIE fallback and flips the scrape on once stats land (Prompt 05b isolation).
+# ── Secrets & the env group ───────────────────────────────────────────────────────────────────────
+#   Every secret (the two pooler URLs, the Supabase keys, the BALLDONTLIE key) is `sync: false` — set
+#   in the Render dashboard, NEVER committed. Render does NOT allow `sync: false` inside an env group
+#   (group vars may only carry a literal `value`/`generateValue`), so the secret pooler URLs are
+#   declared PER-SERVICE. The `wc-fantasy-shared` env group carries only the non-secret shared config
+#   (NODE_ENV, LOG_LEVEL), entered once and inherited by every linked service.
+#
+# ── Region / plans ────────────────────────────────────────────────────────────────────────────────
+#   Set `region` to match the Supabase project (runbook A1: "one region near the league"). `virginia`
+#   (US-East) suits an America/New_York league on a US-East Supabase project — change as needed.
+#   `plan: starter` sizes the documented ~$14 baseline (web + worker); the scraper + crons add cost —
+#   exact tiers are a dashboard/billing choice (Sergio's). The scraper MAY be suspended until go-live.
+
+envVarGroups:
+  # Non-secret shared config only — Render forbids `sync: false` in a group, so the secret pooler URLs
+  # live per-service below (NOT here). Entered once on the group, inherited by all linked services.
+  - name: wc-fantasy-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
 
 services:
   # ── Next.js app (UI + API routes, incl. the gated POST /api/draft/pick) ──────────────────────────
@@ -19,33 +48,32 @@ services:
     region: virginia
     branch: main
     # Explicit, ordered `prisma generate` before `next build` (not relying on the implicit postinstall
-    # hook), and it splits the chain so a generate failure reports distinctly from a build failure.
+    # hook), split so a generate failure reports distinctly from a build failure.
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm --filter @app/web build
-    # Apply pending Prisma migrations ONCE per deploy, before the new version goes live. Prisma Migrate
-    # needs the DIRECT (non-pooled) Supabase connection — DIRECT_URL, not the pooled DATABASE_URL.
+    # Apply pending migrations ONCE per release, before the new version serves. `prisma migrate deploy`
+    # reads the datasource `directUrl` (DIRECT_URL, :5432) — the txn pooler cannot carry migrations.
     preDeployCommand: pnpm db:migrate:deploy
     startCommand: pnpm --filter @app/web start
     healthCheckPath: /api/health
     envVars:
-      - key: NODE_ENV
-        value: production
+      - fromGroup: wc-fantasy-shared
       - key: DATABASE_URL # pooled (PgBouncer, Supabase :6543) — app runtime
         sync: false
-      - key: DIRECT_URL # direct (:5432) — Prisma Migrate (preDeployCommand)
+      - key: DIRECT_URL # direct/session pooler (:5432) — Prisma Migrate (preDeployCommand)
         sync: false
-      - key: NEXT_PUBLIC_SUPABASE_URL
+      - key: NEXT_PUBLIC_SUPABASE_URL # build-time — inlined into the client bundle at `next build`
         sync: false
-      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY # build-time — inlined
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY # server-only; bypasses RLS — never NEXT_PUBLIC_
+      - key: SUPABASE_SERVICE_ROLE_KEY # server-only RUNTIME; bypasses RLS — NEVER NEXT_PUBLIC_ (guarded
+        # by `import "server-only"` in lib/supabase/server.ts)
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED
         value: "false"
-      - key: SITE_URL # public origin for server-side auth redirects (callback/sign-out) — NOT the
-        # internal request host (Render binds 0.0.0.0:10000). Non-secret; pinned here.
+      - key: SITE_URL # public origin for server-side auth redirects (callback/sign-out). Non-secret.
         value: https://wc-fantasy-web.onrender.com
 
-  # ── Background worker: boots index.ts = the ingestion scheduler AND the draft ticker together ─────
+  # ── Background worker (RESIDENT): boots index.ts = ingestion scheduler AND the draft ticker ──────
   - type: worker
     name: wc-fantasy-worker
     runtime: node
@@ -55,12 +83,13 @@ services:
     buildCommand: corepack enable && pnpm install --frozen-lockfile
     startCommand: pnpm --filter @app/worker start
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
+      - fromGroup: wc-fantasy-shared
+      - key: DATABASE_URL # pooled (:6543) — worker runtime + the provision/rosters one-shots
         sync: false
-      - key: DIRECT_URL
+      - key: DIRECT_URL # also here so a `migrate deploy` / `provision` from the worker shell works
         sync: false
+      # No Supabase keys here: the worker connects via Prisma as the table-owning role and BYPASSES RLS
+      # (Theme F) — it never uses the anon/service-role key.
       - key: BALLDONTLIE_API_KEY
         sync: false
       - key: BALLDONTLIE_BASE_URL
@@ -71,31 +100,54 @@ services:
         value: "60000"
       - key: WORKER_DRAFT_TICK_MS # draft clock — its own short cadence (server-authoritative timer)
         value: "2000"
-      - key: LOG_LEVEL
-        value: info
+      - key: WORKER_ROSTERS_SYNC_EVERY_TICKS # boot + ~daily roster re-pull, self-scheduled (no cron)
+        value: "1440"
 
-  # ── Cron: daily FAAB batch (plumbing live now; the clearing logic is a later prompt) ──────────────
+  # ── Isolated Sofascore rating scraper (apps/scraper, Playwright). NON-GATING at launch ───────────
+  # The league launches on the BALLDONTLIE rating fallback; the scrape flips on once stats land
+  # (Prompt 05b isolation). Playwright is NOT yet wired — `apps/scraper/src/wiring.ts` uses a
+  # `notWiredLauncher`, so this service BOOTS and idles (each tick logs a contained "not wired" error;
+  # it NEVER throws into the app / ingestion / scoring). Ratings fall back to BALLDONTLIE through the
+  # group stage. Sergio MAY suspend this service until go-live.
+  #   TODO(confirm: go-live scrape): wire Playwright — `pnpm add playwright` (apps/scraper) +
+  #   `npx playwright install chromium`, swap `notWiredLauncher` in wiring.ts, and APPEND to the
+  #   buildCommand below: ` && pnpm --filter @app/scraper exec playwright install --with-deps chromium`.
+  - type: worker
+    name: wc-fantasy-scraper
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @app/scraper start
+    envVars:
+      - fromGroup: wc-fantasy-shared
+      - key: DATABASE_URL # pooled (:6543) — scraper writes rating_player_match via @app/db
+        sync: false
+      - key: SCRAPER_TICK_MS # slow + polite settle loop; the rating lands near/after FT
+        value: "300000"
+      - key: SCRAPER_POLITE_GAP_MS # polite gap between match-page fetches
+        value: "4000"
+
+  # ── Cron: daily FAAB batch (plumbing live now; the clearing logic is a later prompt) ─────────────
   - type: cron
     name: wc-fantasy-faab-batch
     runtime: node
     plan: starter
     region: virginia
     branch: main
-    # 06:00 America/New_York. The World Cup window (Jun–Jul) is EDT (UTC-4), so 06:00 EDT = 10:00 UTC.
-    # (Render cron is fixed UTC; outside DST, 06:00 EST = 11:00 UTC. The batch job reads
+    # 06:00 America/New_York. The WC window (Jun–Jul) is EDT (UTC-4), so 06:00 EDT = 10:00 UTC.
+    # (Render cron is fixed UTC; outside DST, 06:00 EST = 11:00 UTC. The batch reads
     # league.faab_batch_local_time for the precise local cutoff — this cron is only the trigger cadence.)
     schedule: "0 10 * * *"
     buildCommand: corepack enable && pnpm install --frozen-lockfile
     startCommand: pnpm --filter @app/worker job:faab
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
+      - fromGroup: wc-fantasy-shared
+      - key: DATABASE_URL # pooled (:6543) — runtime
         sync: false
-      - key: LOG_LEVEL
-        value: info
 
-  # ── Cron: period-close check (plumbing live now; the freeze/close logic is a later prompt) ────────
+  # ── Cron: period-close check (plumbing live now; the freeze/close logic is a later prompt) ───────
   - type: cron
     name: wc-fantasy-period-close
     runtime: node
@@ -107,9 +159,6 @@ services:
     buildCommand: corepack enable && pnpm install --frozen-lockfile
     startCommand: pnpm --filter @app/worker job:period-close
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
+      - fromGroup: wc-fantasy-shared
+      - key: DATABASE_URL # pooled (:6543) — runtime
         sync: false
-      - key: LOG_LEVEL
-        value: info
