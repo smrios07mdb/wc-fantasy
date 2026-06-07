@@ -505,6 +505,11 @@ are added to the publication **inside their RLS migration**, existence-guarded
 and no-ops cleanly on the plain-Postgres DoD shim. (Origin: Prompt 11 added `score_manager_period`
 + `standing`.)
 
+### Learning (Prompt 13 — vsfield RLS migration self-test): valid uuids, and the text-shim false-green
+The Prompt 11 migration shipped with the embedded member-can / non-member-cannot self-test (the Theme F pattern). Its in/out test users were **non-uuid labels** (`'rls_selftest_user_in'` / `'…_out'`); on Supabase the real `auth.uid()` casts `request.jwt.claim.sub` to `uuid`, so `vsfield_caller_shares_league_with_manager` `22P02`'d on every clean apply — `migrate deploy` failed at this migration and blocked the Render deploy (the WC-eve launch gate). **Fix = valid-uuid literals** (`00000000-…-0001/0002`, canonical-lowercase so `manager.user_id (text) = auth.uid()::text` round-trips), mirroring `20260605170000_enable_rls_public_tables`. Helper / SELECT policies / publication adds **unchanged** — a test-value bug, not RLS behavior.
+- **⚠️ Known testing gap (parked — own thread, queued with the Security follow-ups below):** the plain-Postgres DoD shim stubs `auth.uid()` as **text-returning**, which **masks the uuid cast** — so `migrate reset` on bare Postgres passes even the *broken* migration (false green). The real proof came from a Docker repro with a **uuid-returning** `auth.uid()`. Consequence: the standing suite does **not** guard against reintroducing a non-uuid literal in an RLS-helper test. Hardening = make the test-path `auth.uid()` uuid-returning so a regression goes red locally. No new suites added now (out of scope).
+- **Recovery (documented — RUNBOOK d.1):** a failed-and-rolled-back migration is cleared with `prisma migrate resolve --rolled-back <name>` on `DIRECT_URL`, then redeploy; pre-launch `migrate reset` is the acceptable one-shot (empty DB). `--rolled-back` (not `--applied`) is correct because the failed apply rolled back — single transaction, no non-transactional statements.
+
 ## Theme G — Ingestion: squad / player source (rosters bootstrap)  ✅ LOCKED
 The feed client had NO player source: schedule-sync pulls only `/matches`, and `upsertPlayerByBdlId`
 was an unwired seam — so `player` / `fifa_team` stayed empty and stat ingestion silently no-opped (every
@@ -576,3 +581,4 @@ From the Supabase Security Advisor — to fix before production (none block the 
   `NEXT_PUBLIC_` values are inlined at build, not read at runtime).
 - `draft` and `draft_pick` are in the **`supabase_realtime` publication** (Realtime row-change broadcasts
   are enabled for those tables; delivery to a client still requires the user JWT — see the Learning above).
+- Web pre-deploy runs `prisma migrate deploy` on `DIRECT_URL` (session pooler :5432); first green end-to-end deploy Jun 6 after the Prompt 13 fix. Failed-migration recovery: RUNBOOK d.1.
