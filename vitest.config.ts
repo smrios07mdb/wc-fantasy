@@ -11,6 +11,8 @@ export default defineConfig({
       "packages/**/src/**/*.test.ts",
       "apps/**/src/**/*.test.ts",
       "apps/**/lib/**/*.test.ts",
+      // Shared presentational components (e.g. apps/web/components/Brand) carry node-safe smoke tests.
+      "apps/**/components/**/*.test.ts",
     ],
     // Keep build artefacts and deps out of the run (the scoring suite is the only suite for now).
     exclude: ["**/node_modules/**", "**/dist/**", "**/.next/**"],
