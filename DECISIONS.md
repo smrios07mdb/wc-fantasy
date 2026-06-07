@@ -601,3 +601,54 @@ behavioral checks ride on go-live (below).
 - `draft` and `draft_pick` are in the **`supabase_realtime` publication** (Realtime row-change broadcasts
   are enabled for those tables; delivery to a client still requires the user JWT — see the Learning above).
 - Web pre-deploy runs `prisma migrate deploy` on `DIRECT_URL` (session pooler :5432); first green end-to-end deploy Jun 6 after the Prompt 13 fix. Failed-migration recovery: RUNBOOK d.1.
+
+## Landing hub & route-map ground truth (Prompt 16) — navigation gap closed
+
+### Route-map ground truth (verified pre-go-live, report-only — baseline commit `c8f404d`)
+Established before touching anything. The deployed `apps/web` surface:
+- **Page routes (6), all in the production build** — none env-gated or build-excluded; the feature pages
+  are protected by **runtime** `getSessionManager()` redirects, not build exclusion: `/` (scaffold —
+  since replaced by Prompt 16), `/sign-in`, `/auth/denied` (public); `/draft`, `/lineup`, `/vsfield`
+  (auth — no session → `/sign-in`, not-ok → `/auth/denied`).
+- **Route handlers:** `GET /api/health`, `GET /api/db-check` (public diagnostics); `GET
+  /api/draft/state`, `POST /api/draft/pick`, `POST /api/lineup`, `GET /api/vsfield` (gated); `GET
+  /auth/callback` (code-exchange + allowlist enforcement → `next || /`); `POST /auth/sign-out` (→ 303
+  `/sign-in`).
+- **Middleware does zero authz** — it only refreshes the Supabase token cookie; all authz is per-page via
+  `getSessionManager()` (so `/` is reachable by anyone). `app/draft/flags.ts` = **nation flags** (CSS
+  country chips), NOT feature flags — nothing in the app is feature-flag-gated. The only conditional UI is
+  the optional Google button on `/sign-in` (`NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED`).
+
+### The navigation gap (two parts) — RESOLVED by Prompt 16
+1. **Dead-end `/`** — the scaffold root linked only to `/api/health` + `/api/db-check`; no link to
+   `/sign-in` on it or in the root layout. The only in-app link to `/sign-in` lived on `/auth/denied`.
+2. **Post-login stranding** — the magic link's `emailRedirectTo` carries no `next`, so `safeNextPath(null)`
+   defaults to `/`; an authenticated member landed back on the scaffold with no path onward.
+Both closed by a **single** auth-aware root (Prompt 16) — fixing `/` is sufficient precisely because `/`
+is also the post-login redirect target. The bare "add a sign-in link" alternative was rejected (leaves
+authed users stranded). `safeNextPath` / the callback were left unchanged.
+
+### Prompt-15 / 16 numbering deconfliction (do not re-collide)
+Two different deliverables briefly shared the number 15: the **security follow-ups closeout** (mirror-fn /
+`search_path` hardening, migration `20260606180000`) and the **landing hub**. The security closeout merged
+to main first and owns **Prompt 15** (do not reopen — items 1 & 2 RESOLVED). The landing hub was
+renumbered to **Prompt 16**. PROJECT.md's "Prompt 15 COMPLETE ✅" = security; "Prompt 16 COMPLETE ✅" =
+landing hub.
+
+### Merge / working-tree hygiene (action before merge)
+- `feat/landing-hub` (`dd0aed3`) was branched off **stale local main `c8f404d`**, not current
+  `origin/main 9accb1f` (the security merge). **Reconcile first:** `git fetch`, then **rebase
+  `feat/landing-hub` onto `origin/main`** (disjoint file sets → clean) for a fast-forward merge, or
+  `--no-ff`. Re-run the gate post-rebase before merging.
+- ⚠️ **The shared working tree has the Prompt-15 security migration SQL deleted (unstaged):
+  `D …20260606180000_…/migration.sql`.** It is committed in history; the deletion is phantom local state
+  (NOT in `dd0aed3`). **`git restore`** it before any branch / merge / DB work — letting the deletion ride
+  into a commit drops the migration from the repo and causes `migrate deploy` drift on a fresh
+  environment. This recurring dirty-checkout state (phantom diff, modified RUNBOOK, untracked prompts) has
+  carried across sessions — clean it once before go-live.
+- **Status (reconciled 2026-06-07, this session):** both actions above are **DONE** — `feat/landing-hub`
+  rebased clean onto `origin/main` `9accb1f` (code commit `430419e`; disjoint file sets, zero conflicts),
+  and the phantom working-tree state (deleted migration SQL + reverted RUNBOOK) `git restore`d. The
+  PROJECT.md / DECISIONS.md Prompt-16 doc paste sits on top of that rebase. Gate re-run green post-rebase.
+  **Remaining:** the merge of `feat/landing-hub` → `main` and the push to `origin/main` are **held for
+  explicit operator go** (not yet merged, not yet pushed); the branch was never pushed, so no force-push.
