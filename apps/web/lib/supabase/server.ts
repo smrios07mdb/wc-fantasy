@@ -4,6 +4,10 @@
  * is swappable/mockable. Env: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (browser-safe);
  * SUPABASE_SERVICE_ROLE_KEY is server-only (never NEXT_PUBLIC_, never shipped to the browser).
  */
+// Deploy-safety guard (DECISIONS.md Theme F): the service-role client below BYPASSES RLS. This
+// side-effect import makes the bundler throw if this module is ever pulled into a client bundle, so
+// the RLS-bypassing key can never leak to the browser. Asserted by serverOnlyGuard.test.ts.
+import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
