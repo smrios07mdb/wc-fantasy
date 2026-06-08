@@ -939,3 +939,28 @@ landing hub.
   live indicator should be green (a "`--live`/positive" token) was INCORRECT** — `--live` is red by spec;
   corrected against the design source and locked here so it isn't re-opened. Discipline held: the build's
   `ConnPill` / `.vf-livedot` use **tokenized `var(--live)`**, no raw hex.
+
+---
+
+## Post-provision fixes — mapper reconciliation & session-manager hardening
+Three fixes landed on `main` after the design sprint (most-recent-first).
+
+### Scoring mappers reconciled with the GOAT docs (`fix/scoring-mapper-shape`, `f3db93a`)
+All four scoring mappers (`mapEvent`/`mapStatLine`/`mapTeamStat`/`mapShot`) reconciled against the
+official GOAT FIFA API docs. `mapEvent` had the **same nested-object bug as the match mapper**
+(`player`/`assist_player`/`player_in`/`player_out` are nested objects, not flat IDs).
+**`FeedShapeMismatchError`** added as a **per-item fail-loud guard** — thrown on an unexpected shape,
+caught per-item in the ingest pipeline so one bad row never halts the batch. GOAT covers the
+**2018/2022/2026** tournaments (not 2026-only); **2022 completed-match data** used for pre-opener
+shape verification.
+
+### GOAT matches endpoint returns nested objects (`fix/feed-mapper-shape`, `6ca5829`)
+The GOAT API returns **nested objects** for teams/stage/group on the `matches` endpoint, not flat
+primitives. `mapMatchRow` and `derivePeriodLabel` updated to extract from the nested shape. Period
+bucketing verified: **3 group MDs + 5 KO rounds = 103 mapped fixtures; 3rd-place match intentionally
+excluded** (no 9th period).
+
+### `resolveSessionManager` — split uid/email link fails loud (`1b28e3b`)
+`resolveSessionManager`: a uid↔email **cross-link mismatch throws `AmbiguousManagerLinkError`** rather
+than silently preferring the uid match. **Rationale:** a split link is a **data-integrity issue that
+must surface, not hide.**
