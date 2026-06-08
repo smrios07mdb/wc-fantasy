@@ -1,0 +1,350 @@
+/* auth.css — the logged-out auth / Join surface (Prompt 21), vendored from the canonical design source
+   `design/design_reference/Join.html` (the `au-*` rules in its <style> block) + `auth/components.jsx`.
+   Re-skins `/sign-in` + `/auth/denied` OFF bare Tailwind onto the ds split-shell. Shared by both routes
+   (a private `_auth/` folder, mirroring `_landing/`); the App Shell does NOT wrap these routes (Prompt 20
+   boundary — auth screens are full-bleed splash, their brand comes from this panel, not the topbar).
+
+   Tokens (--surface-*, --hairline*, --accent*, --danger*, --locked*, --success*, --r-*, --fs-*, --font-*)
+   come from the GLOBAL ds.css (Prompt 20). Component helper classes used in the markup (`.btn`,
+   `.btn-primary`, `.btn-block`, `.btn-ghost`, `.spinner`) are ds.css too. This sheet adds ONLY the
+   auth-surface `au-*` layout classes — it does NOT fork or duplicate ds.css.
+
+   ADAPTATIONS vs the prototype (the design ran inside a fit-scaled browser/iOS presenter frame; this runs
+   as a real full-page route), each load-bearing:
+     • `.au-bw`  replaces the prototype's `.au-bw-body` frame body: `min-height:100dvh` (it IS the page, not
+                 a fixed-height frame) + the same `display:grid; place-items:center` centering. `color` is
+                 set defensively (the Prompt-20 <body> is Tailwind-color-free, so ds `body{color}` already
+                 applies — but unmigrated Tailwind coexists, so we re-establish the ds baseline locally).
+     • Only the SPLIT layout is shipped (the prototype's centered/compact + iOS `.au-phone` variants are
+                 demo affordances). The split's own responsive collapse (≤1100px → single column, brand
+                 panel on top) is ported verbatim, so narrow viewports stack rather than break.
+     • The data-bound `.au-roster*` / `.au-invite*` / `.au-cardbrand` rules are omitted — these routes have
+                 no manager/invite fetch (wiring one is out of scope), so the brand panel composes from the
+                 data-free parts only (lockup + league·season + private tag + value props).
+   Gold rule (BRAND.md §1): gold lives ONLY inside the trophy PNG of the lockup. Every accent here is the
+   ds cobalt token (`--accent`); the CTA, links, value dots, and focus rings are cobalt, never gold. */
+
+/* full-page surface — centers the shell, fills the viewport, paints the ds app background */
+.au-bw {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 28px 16px;
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* shell — split brand-panel + form column (collapses to a single stacked column on narrow viewports) */
+.au-shell {
+  width: 100%;
+  max-width: 430px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.au-shell.is-split {
+  max-width: 940px;
+  display: grid;
+  grid-template-columns: 1fr 430px;
+  gap: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2xl);
+  overflow: hidden;
+  box-shadow: var(--e2);
+  align-items: stretch;
+}
+
+/* brand bits */
+.au-brandrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.au-brand-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1.1;
+}
+.au-brand-season {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.au-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--locked);
+  background: var(--locked-soft);
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+}
+.au-private svg {
+  flex: none;
+}
+
+/* split brand panel (left in split, top in the collapsed/stacked layout) */
+.au-brandpanel {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, var(--surface-2)), var(--surface-2) 60%);
+  border-right: 1px solid var(--hairline);
+  padding: 34px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.au-brandpanel-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+.au-values {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.au-values li {
+  display: flex;
+  gap: 11px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.au-valdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--accent);
+  flex: none;
+  margin-top: 5px;
+}
+
+/* form column */
+.au-formcol {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.au-card {
+  background: none;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 38px 34px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.au-foot {
+  text-align: left;
+  padding: 0 34px 26px;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.au-foot a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* view */
+.au-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.au-view.au-center {
+  align-items: center;
+  text-align: center;
+}
+.au-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.au-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.au-sub {
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+.au-email {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* field */
+.au-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.au-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.au-input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  color: var(--text-primary);
+  padding: 13px 14px;
+  font: 500 15px var(--font-sans);
+  outline: none;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.au-input::placeholder {
+  color: var(--text-tertiary);
+}
+.au-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.au-input.is-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+.au-err {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-caption);
+  color: var(--danger);
+}
+.au-err svg {
+  flex: none;
+}
+
+.au-magic {
+  font-size: 15px;
+  min-height: 48px;
+}
+.au-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
+}
+.au-or::before,
+.au-or::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--hairline);
+}
+.au-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: 600 15px var(--font-sans);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+  white-space: nowrap;
+}
+.au-google:hover {
+  background: var(--surface-3);
+}
+.au-fineprint {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* status icon (the check-email / denied glyph) */
+.au-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.au-icon.tone-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.au-icon.tone-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.au-pop {
+  animation: aupop 420ms var(--ease-out);
+}
+@keyframes aupop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.au-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 13px;
+  background: var(--surface-2);
+  border-radius: var(--r-md);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  text-align: left;
+}
+.au-note svg {
+  flex: none;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+
+.au-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+/* responsive collapse — split → single stacked column, brand panel on top (verbatim from Join.html) */
+@media (max-width: 1100px) {
+  .au-shell.is-split {
+    grid-template-columns: 1fr;
+    max-width: 430px;
+  }
+  .au-shell.is-split .au-brandpanel {
+    border-right: none;
+    border-bottom: 1px solid var(--hairline);
+  }
+}

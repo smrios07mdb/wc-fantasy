@@ -40,7 +40,7 @@ the **scoring rules, the lock logic, the feed-ingestion shapes, and the API cont
 set of types.** For a small team that is the single biggest reliability win available.
 
 - **Frontend:** Next.js (App Router) + React + TypeScript. ~~Tailwind for styling~~ — **AMENDED
-  (Prompt 19 → 20, see DECISIONS):** Design delivered the system as **plain CSS** (`ds.css` design
+  (Prompt 19 → 21, see DECISIONS):** Design delivered the system as **plain CSS** (`ds.css` design
   system + per-screen CSS), so the app consumes that as-delivered rather than re-translating to
   Tailwind. **Prompt 20 promoted `ds.css` to the single GLOBAL stylesheet** (root `layout.tsx`,
   imported **after** `globals.css` so it wins cascade ties; canonical copy at `app/styles/ds.css`,
@@ -49,7 +49,9 @@ set of types.** For a small team that is the single biggest reliability win avai
   routes still carry byte-identical per-route `ds.css` copies that double-load harmlessly. The
   authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield`) are wrapped by the **App Shell**
   top-bar nav (`app/shell/AppShell.tsx`, which absorbed the interim CrossNav); auth/landing routes are
-  not. Two reactive surfaces matter: the **live draft room** and the **live "vs the field" screen**;
+  not — they carry their own brand chrome (`/sign-in` + `/auth/denied` ds-skinned off Tailwind onto the
+  split-shell `_auth/auth.css` in **Prompt 21**; the marketing landing in Prompt 19). Two reactive
+  surfaces matter: the **live draft room** and the **live "vs the field" screen**;
   everything else is ordinary CRUD.
 - **Backend:** a **modular monolith** — the Next.js app's route handlers serve the web API
   (auth'd reads/writes: set lineup, submit FAAB bid, make pick, admin overrides). Scheduled and

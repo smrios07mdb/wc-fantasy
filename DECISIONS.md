@@ -781,3 +781,77 @@ landing hub.
   the shell is a **stateless server component** (no open/close state to lose). Revisit a shared `(app)/`
   route-group layout if/when **stateful chrome** ships (avatar menu / bell open-state), so the shell
   persists across feature navigation instead of remounting.
+
+## Sign-in / Join skin (Prompt 21) — `/sign-in` + `/auth/denied` off Tailwind onto ds
+
+- **Architecture decision this prompt advances — `/sign-in` + `/auth/denied` join the ds-only set**
+  (alongside the Prompt-19 landing + the Prompt-20 shell). Tailwind / `globals.css` / Preflight stay
+  global (other unmigrated screens still consume Tailwind) — **no teardown here**; the Preflight drop
+  stays post-sprint. The Prompt-20 `text-slate-*` legibility repair on these two routes is **gone**
+  (superseded by the full ds skin — it was always a stop-gap).
+- **Canonical design = the repo's `design/design_reference/Join.html` + `auth/*`** (NOT the Downloads
+  bundle, which was landing-only). Built to the design's **split layout** (`.au-shell.is-split` =
+  brand-panel splash + form column) using the design's `au-*` vocabulary.
+- **Route-scoped stylesheet, NOT a per-route ds.css copy.** `apps/web/app/_auth/auth.css` holds only the
+  `au-*` layout rules, ported from `Join.html`'s `<style>`; tokens + `.btn`/`.spinner` come from the
+  **global** ds.css. This follows the **`shell.css` model** (shell relies on global ds, ships only
+  `.sh-*`) — cleaner than the Prompt-19 landing, which keeps its own per-route `ds.css` copy because it
+  predates the global promotion. ds.css is **not forked**; both routes import `auth.css`.
+- **Shared chrome `apps/web/app/_auth/AuthChrome.tsx`** (parallels `_landing/chrome.tsx`): `AuthScreen`
+  (split shell + brand panel + form-column slot + foot) + the design's icons + `PrivateTag`. **No
+  `"use client"`** — pure presentational markup (next/image is server+client safe), so the **client**
+  `/sign-in` and the **server** `/auth/denied` both render it. Each route is thin: drop its view in the slot.
+- **Brand per BRAND.md §5 — reused `LockupStacked`, NOT redrawn.** Brand panel = the Prompt-18
+  `LockupStacked` (trophy · "XI" · tagline) + the `{league} · {season}` row (`WC Fantasy League` — the
+  SAME placeholder the shell uses, **no new source / no `SHELL_LEAGUE_NAME` wiring** — + `World Cup
+  2026`) + `PrivateTag` + the static value-props list. The data-bound design pieces (`RosterAvatars` /
+  `InviteBanner`) are **dropped, not faked** — they need a manager/invite fetch these routes don't have
+  (out of scope). The design's old `AuthLogo` "W" chip (pre-XI-rebrand) is replaced by the XI lockup.
+- **Gold rule (BRAND.md §1) holds:** gold lives ONLY in the trophy PNG; "XI" = `--text-primary` (via
+  `Wordmark`); CTA / links / value-dots / focus rings are cobalt `--accent`; `PrivateTag` is slate
+  `--locked`. **No gold leak** (grep-clean of `au-*` CSS + TSX — the only "gold" strings are prose).
+- **`/sign-in` is PRESENTATION-ONLY.** The Supabase `signInWithOtp` (same `emailRedirectTo` →
+  `/auth/callback`), the env-gated `signInWithOAuth(google)` + `GOOGLE_ENABLED`, and the `createClient`
+  edge are **byte-for-byte preserved**. The one-string `message` became two presentation flags (`error` +
+  `sent`) so the request form and the "check your email" confirmation render as the two designed views —
+  the network/redirect behavior is identical. **No next/safeNextPath handling was introduced** (there
+  never was — that passthrough lives in `auth/callback/route.ts`, untouched). The "Use a different email"
+  reset is pure client UI state. `/auth/denied` keeps its **dual-cause** copy (allowlist OR expired link —
+  the design's `DeniedView` is allowlist-only) + the back-to-sign-in affordance.
+- **Early-warning seam — clean, no `page.tsx` edit.** The root `selectLandingView` `denied`/`unlinked`
+  states render as **independent** `page.tsx` components (already ds-skinned in Prompt 19 via `.lp-*`),
+  NOT shared with the `/auth/denied` **route** — so skinning the route touches nothing of `page.tsx`.
+  `page.tsx` / `selectLandingView` / `getSessionManager` / the callback / the allowlist are **untouched**.
+- **Shell-free boundary holds (Prompt 20).** Neither auth route is wrapped in `AppShell`; there is no
+  `layout.tsx` under `sign-in/` or `auth/` (root layout only). The brand IS the auth chrome (the
+  `AuthScreen` panel), replacing the shell topbar. Both stay `○` static (no `cookies()`/`headers()`/
+  `force-dynamic`); `/` stays `ƒ`.
+- **Responsive:** the design's split collapse (`@media (max-width:1100px)` → single column, brand panel
+  on top with `border-bottom`) is ported verbatim; **browser-verified** (desktop split + mobile stack).
+- **Adversarial review (Opus, 4 lenses [logic-scope / brand-gold / ds-responsive-a11y / convention] →
+  per-finding verify): 1 of 1 confirmed, folded.** The reused `LockupStacked` double-announced "XI"
+  (trophy image `alt="XI"` + visible "XI" wordmark). Fix = wrap the lockup in `aria-hidden="true"` (the
+  splash is decorative) — the **in-repo precedent** is `_landing/chrome.tsx`, which aria-hides the same
+  `BrandMark`; the accessible brand name now comes from the visible league name + each view's `<h1>`.
+  **Browser-DOM-verified:** lockup `aria-hidden`, still centered (no layout shift), brand-panel accessible
+  text = "WC Fantasy League · World Cup 2026 · Private league · invite only", single `<h1>`. (`Brand.tsx`
+  — a shared primitive — was NOT edited; the ideal `alt=""` fix there is out of this prompt's scope.)
+- **Tests:** a pure-Node source-contract smoke (`apps/web/src/auth/authPages.test.ts`, +12, mirroring
+  `landingPage.test.ts` — no DOM/JSX mount): both routes go through `AuthScreen` + import `auth.css`; the
+  brand mark is present; the Supabase wiring + Google gate + denied affordance are preserved; off-Tailwind
+  (no `text-slate-*`/`bg-blue-600`); `auth.css` doesn't restyle `<body>` (no leak) and stays gold-free.
+- **Confirmed at clearance (both `TODO(confirm)`s resolved — Chat):** (1) **The auth foot stays prose,
+  never a link** — no commissioner-contact route exists app-wide, so we do NOT invent a `mailto`/`href="#"`;
+  wiring a real contact destination is a later prompt. (2) **`/auth/denied`'s broadened `<h1>` "We can't
+  sign you in" stays** — this route is **dual-cause** (allowlist OR expired link), so the design's
+  allowlist-only `DeniedView` copy would mislead; this is a recorded **design-deviation**, and cause-
+  specific copy is a future **logic** prompt (not a skin). (3) The `message → error + sent` split is
+  **endorsed as presentation** (required to render the "check your email" confirmation as its own view).
+  No `TODO(confirm)` remains in the auth skin.
+- **Gates:** `pnpm -w typecheck && lint && format:check && test` (735, +12) + `pnpm --filter @app/web
+  build` all exit 0; route shapes preserved (`○ /sign-in`, `○ /auth/denied`, `ƒ /`); no out-of-scope
+  churn (no auth-logic / `selectLandingView` / route / redirect / env edits, no shell wrapping, no
+  Tailwind teardown, no feature-body re-skin, no `page.tsx` edit). **Next: Prompt 22 — first feature-body
+  re-skin (Draft, from the `design_reference/` Draft screen).** ✅ **CLEARED (Chat); branch `feat/auth-skin`
+  (off post-20 `main`) pushed to origin (no force-push).** *Sergio runs the fast-forward merge to `main`
+  and owns the Render deploy + live-verify — Code does NOT merge or deploy.*

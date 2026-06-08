@@ -1,18 +1,34 @@
-/** Minimal denied page (functional placeholder; the polished UI is the deferred deliverable). Reached
- *  when the sign-in link was invalid/expired or the authenticated email is not on the allowlist. */
+/**
+ * Denied page, re-skinned onto the ds split-shell (Prompt 21) per the `auth/*` DeniedView. Reached when
+ * the sign-in link was invalid/expired or the authenticated email is not on the allowlist — so it keeps
+ * its DUAL-CAUSE copy (the design's DeniedView is allowlist-only; this route covers both). Stays a server
+ * component with no dynamic data (route shape unchanged: `○` static). Shell-free (Prompt 20 boundary) —
+ * the brand comes from the AuthScreen panel, not the topbar. The back-to-sign-in affordance is preserved.
+ */
+import { AuthScreen, IconShield } from "../../_auth/AuthChrome";
+import "../../_auth/auth.css";
+
 export default function DeniedPage() {
   return (
-    <main className="mx-auto flex max-w-sm flex-col gap-4 px-6 py-16">
-      <h1 className="text-2xl font-semibold">Can&rsquo;t sign you in</h1>
-      {/* text-slate-400 (not -600): legible on the global dark body (Prompt 20). Bare page stays
-          Tailwind; the full ds skin is the deferred /auth/denied follow-up. */}
-      <p className="text-sm text-slate-400">
-        This is a private league. Your email may not be on the allowlist, or the sign-in link
-        expired.
-      </p>
-      <a className="text-blue-600 underline" href="/sign-in">
-        Back to sign in
-      </a>
-    </main>
+    <AuthScreen>
+      <div className="au-view au-center">
+        <div className="au-icon tone-danger">
+          <IconShield s={26} />
+        </div>
+        {/* Broadened from the design's allowlist-only DeniedView (confirmed Prompt 21): this route is
+            dual-cause (allowlist OR expired link), so allowlist-only copy would mislead. Cause-specific
+            copy is a future LOGIC prompt, not a skin. */}
+        <h1 className="au-title">We can’t sign you in</h1>
+        <p className="au-sub">
+          This is a private, invite-only league. Your email may not be on the allowlist, or the
+          sign-in link expired. If you think that’s a mistake, ask the commissioner for an invite.
+        </p>
+        <div className="au-actions">
+          <a className="btn btn-primary btn-block" href="/sign-in">
+            Back to sign in
+          </a>
+        </div>
+      </div>
+    </AuthScreen>
   );
 }
