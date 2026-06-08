@@ -144,12 +144,16 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       <div className="sl-body">
         <section className="sl-pitchcol">
           <Pitch view={view} selected={selected} eligibleIds={eligibleIds} onSelect={onSelect} />
+          {/* Two-state legend: the authoritative lock is the binary `lineup_slot.locked_at` projection
+              (movable vs locked) — the design's third "Locked · playing" row needs the live feed (the
+              vs-the-field surface), so it's deferred. The locked label matches the LockTag chip ("Locked")
+              rather than over-claiming "played": a locked-on-play man may still be on the pitch. */}
           <div className="sl-legend t-caption text-tertiary">
             <span>
-              <span className="sl-dot sl-dot-movable" /> Movable
+              <span className="sl-dot sl-dot-movable" /> Movable — still swappable
             </span>
             <span>
-              <span className="sl-dot sl-dot-locked" /> Locked · played
+              <span className="sl-dot sl-dot-locked" /> Locked — has played, frozen
             </span>
           </div>
         </section>

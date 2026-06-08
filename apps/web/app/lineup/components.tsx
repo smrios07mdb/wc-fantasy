@@ -111,7 +111,14 @@ export interface PitchProps {
 export function Pitch({ view, selected, eligibleIds, onSelect }: PitchProps) {
   return (
     <div className="sl-pitch">
-      <div className="sl-pitch-lines" aria-hidden="true" />
+      <div className="sl-pitch-lines" aria-hidden="true">
+        <span className="sl-pl-box sl-pl-box-top" />
+        <span className="sl-pl-goal sl-pl-goal-top" />
+        <span className="sl-pl-mid" />
+        <span className="sl-pl-circle" />
+        <span className="sl-pl-box sl-pl-box-bot" />
+        <span className="sl-pl-goal sl-pl-goal-bot" />
+      </div>
       <div className="sl-pitch-lanes">
         {LANE_ORDER.map((pos) => (
           <div key={pos} className={`sl-lane sl-lane-${pos}`}>
