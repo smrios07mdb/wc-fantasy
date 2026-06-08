@@ -12,6 +12,7 @@
     "@app/auth": "workspace:*",
     "@app/db": "workspace:*",
     "@app/draft": "workspace:*",
+    "@app/faab": "workspace:*",
     "@app/feed": "workspace:*",
     "@app/lineup": "workspace:*",
     "@app/scoring": "workspace:*",

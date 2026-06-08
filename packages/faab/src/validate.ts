@@ -1,0 +1,98 @@
+/**
+ * PURE submission-time validation for a single FAAB bid (DECISIONS.md §D — "rejected at submission,
+ * not deferred to the batch"). Returns a typed {@link FaabBidError} (as data) or `null` when the bid is
+ * legal. No Prisma / Supabase / clock: `now`, the add target's kickoff, and the manager snapshot are
+ * all injected, so the rule set is unit-testable with literals and reusable by the form and the route.
+ *
+ * The rules, in order (DECISIONS §D "$0 bids / out-of-budget" + "Mesh with the acquisition deadline"):
+ *  1. amount ≥ 0 ($0 is legal; negative is not).
+ *  2. amount ≤ faabBudget − (sum of the manager's OTHER pending bids) — no over-commit across claims.
+ *  3. the add target is unowned league-wide AND its match has not kicked off at `now`.
+ *  4. the drop ≠ the add; the drop is owned by this manager; a drop is REQUIRED once the squad is full.
+ *  5. the add/drop keeps the roster within the 2/5/5/3 caps (and the 15-man cap).
+ */
+import { POSITIONS, SQUAD_COMPOSITION, SQUAD_SIZE, type Position } from "@app/shared";
+import type { PositionCounts } from "./resolve";
+import {
+  addKickedOff,
+  addOwned,
+  amountNegative,
+  dropEqualsAdd,
+  dropLocked,
+  dropNotOwned,
+  dropRequired,
+  overBudget,
+  rosterIllegal,
+  type FaabBidError,
+} from "./errors";
+
+/** The bid a manager is placing (or editing). Positions are resolved by the IO layer from the player. */
+export interface BidSubmission {
+  managerId: string;
+  playerAddId: string;
+  addPosition: Position;
+  playerDropId: string | null;
+  dropPosition: Position | null;
+  amount: number;
+}
+
+/** Everything the validator needs about the manager + the add target, read by the IO layer. */
+export interface BidValidationContext {
+  now: Date;
+  faabBudget: number;
+  /** Sum of the amounts of the manager's OTHER pending bids (exclude the one being edited). */
+  pendingTotal: number;
+  /** The manager's active per-position roster counts. */
+  counts: PositionCounts;
+  /** The manager's active squad size (≥ SQUAD_SIZE ⇒ full ⇒ a drop is required). */
+  squadSize: number;
+  /** Players actively owned by THIS manager (validates the drop). */
+  ownedByManager: ReadonlySet<string>;
+  /** Players actively owned by ANY manager in the league (validates the add availability). */
+  ownedByLeague: ReadonlySet<string>;
+  /** Kickoff of the add target's relevant fixture, or null if none upcoming. */
+  addTargetKickoffAt: Date | null;
+  /** Is the named drop LOCKED by play (lineup_slot.locked_at in a still-active matchday)? A locked drop
+   *  has played this matchday and can't be dropped yet. False when there is no drop. */
+  dropLocked: boolean;
+}
+
+export function validateBidSubmission(
+  sub: BidSubmission,
+  ctx: BidValidationContext,
+): FaabBidError | null {
+  // (1) amount ≥ 0 — $0 is the legal minimum.
+  if (sub.amount < 0) return amountNegative(sub.amount);
+
+  // (2) no over-commit: amount ≤ budget − other pending bids.
+  const available = ctx.faabBudget - ctx.pendingTotal;
+  if (sub.amount > available) return overBudget(sub.amount, available);
+
+  // (3) add availability + the acquisition deadline.
+  if (ctx.ownedByLeague.has(sub.playerAddId)) return addOwned(sub.playerAddId);
+  if (ctx.addTargetKickoffAt !== null && ctx.addTargetKickoffAt.getTime() <= ctx.now.getTime()) {
+    return addKickedOff(sub.playerAddId);
+  }
+
+  // (4) drop rules.
+  if (sub.playerDropId !== null) {
+    if (sub.playerDropId === sub.playerAddId) return dropEqualsAdd(sub.playerAddId);
+    if (!ctx.ownedByManager.has(sub.playerDropId)) return dropNotOwned(sub.playerDropId);
+    // A drop that has played this matchday (locked-on-play) can't be dropped until the matchday ends.
+    if (ctx.dropLocked) return dropLocked(sub.playerDropId);
+  } else if (ctx.squadSize >= SQUAD_SIZE) {
+    return dropRequired();
+  }
+
+  // (5) roster legality: the drop frees a slot of its position, the add fills one of its position.
+  const after: Record<Position, number> = { ...ctx.counts };
+  if (sub.playerDropId !== null && sub.dropPosition !== null) after[sub.dropPosition] -= 1;
+  after[sub.addPosition] += 1;
+  if (after[sub.addPosition] > SQUAD_COMPOSITION[sub.addPosition]) {
+    return rosterIllegal(sub.addPosition);
+  }
+  const total = POSITIONS.reduce((sum, p) => sum + after[p], 0);
+  if (total > SQUAD_SIZE) return rosterIllegal(sub.addPosition);
+
+  return null;
+}

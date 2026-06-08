@@ -69,6 +69,9 @@ importers:
       '@app/draft':
         specifier: workspace:*
         version: link:../../packages/draft
+      '@app/faab':
+        specifier: workspace:*
+        version: link:../../packages/faab
       '@app/feed':
         specifier: workspace:*
         version: link:../../packages/feed
@@ -133,6 +136,9 @@ importers:
       '@app/draft':
         specifier: workspace:*
         version: link:../../packages/draft
+      '@app/faab':
+        specifier: workspace:*
+        version: link:../../packages/faab
       '@app/feed':
         specifier: workspace:*
         version: link:../../packages/feed
@@ -195,6 +201,22 @@ importers:
       '@app/db':
         specifier: workspace:*
         version: link:../db
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+
+  packages/faab:
+    dependencies:
+      '@app/db':
+        specifier: workspace:*
+        version: link:../db
+      '@app/lineup':
+        specifier: workspace:*
+        version: link:../lineup
       '@app/shared':
         specifier: workspace:*
         version: link:../shared

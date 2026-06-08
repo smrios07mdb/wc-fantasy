@@ -17,6 +17,11 @@
 import type { PrismaClient } from "@app/db";
 import type { LineupCommit, LineupContext, LineupStore, SaveOutcome } from "./store";
 
+// FAAB-drop ↔ lineup reconciliation lives in @app/lineup (the owner of lineup_slot), re-exported on the
+// `@app/lineup/prisma` surface so the FAAB batch consumes it without touching the table itself.
+export { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "./slotRelease";
+export type { LineupSlotClient } from "./slotRelease";
+
 /** Minimal client surface this store needs (the singleton from `@app/db` satisfies it). */
 type Db = PrismaClient;
 
