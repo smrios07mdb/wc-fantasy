@@ -1,0 +1,131 @@
+/* shell.css — the App Shell chrome (Prompt 20), vendored from the canonical design source
+   `design/design_reference/App Shell.html` (the `sh-*` rules, lines ~189-228) + `shell/components.jsx`
+   `GlobalTopbar`. This is the PRODUCTION top-bar variant of the design's GlobalNav: it sits in the
+   same place the interim Prompt-17 CrossNav did (a top strip), so it supersedes CrossNav without
+   reflowing the un-reskinned feature bodies (a 240px sidebar would squeeze them — deferred).
+
+   Tokens (--surface-*, --hairline, --accent*, --r-*, --fs-*) come from the GLOBAL ds.css. Component
+   helper classes used in the markup (`.btn`, `.display`, `.t-micro`, `.text-tertiary`) are ds.css too.
+
+   ADAPTATIONS vs the prototype (the design assumed a fit-scaled presenter frame; this runs in normal
+   document flow), each load-bearing:
+     • `.sh-app`     keeps the design's `height:100%` (so a fixed-height parent propagates a DEFINITE
+                     height down the flex chain) PLUS a `min-height:100dvh` floor so the shell fills the
+                     viewport on the natural-scroll screens. This dual model is what lets ONE shell host
+                     BOTH height contracts: `/draft` (`.dr-app{height:100dvh; overflow:hidden}` →
+                     `height:100%` is definite → the board/rail internal-scroll chain resolves, nothing
+                     is clipped) and `/lineup`,`/vsfield`,hub (auto-height parents → `height:100%`
+                     computes to `auto` → the page scrolls naturally). The earlier `min-height:100dvh`-
+                     only port clipped /draft, so the design's `height:100%` is restored.
+     • `.sh-content` keeps the design's `flex:1; min-height:0; overflow-y:auto` (the min-height:0 lets the
+                     flex child shrink so a fixed-height descendant resolves; overflow-y:auto is a no-op
+                     on the natural-scroll screens — their parents have no definite height).
+     • brand secondary line is SHOWN (the prototype's `.sh-topbar .sh-brand-txt span{display:none}` rule
+                     is intentionally omitted) — BRAND.md §5 wants the league name as the topbar's
+                     secondary line; a brain file outranks the prototype.
+     • `.sh-topbar`  gains `flex-wrap` + `row-gap` so the bar reflows on narrow viewports (the prototype
+                     swaps to a separate mobile tab-bar + sheets — a flagged seam, not built here).
+   The bar is intentionally STATIC (not sticky), matching CrossNav's prior behaviour — avoids overlap
+   with any feature-screen sticky header. */
+
+.sh-app {
+  background: var(--surface-0);
+  color: var(--text-primary);
+  height: 100%;
+  min-height: 100dvh;
+}
+.sh-app-top {
+  display: flex;
+  flex-direction: column;
+}
+
+/* brand lockup (BrandBadge · "XI" · league line) */
+.sh-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+.sh-brand-txt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+.sh-brand-txt b {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* the top bar */
+.sh-topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  row-gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-1);
+  flex: none;
+}
+.sh-topnav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sh-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sh-nav-item svg {
+  opacity: 0.78;
+  flex: none;
+}
+.sh-nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.sh-nav-item.is-active {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+.sh-nav-item.is-active svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* right cluster: identity hint + sign-out */
+.sh-top-r {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sh-top-who {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.sh-top-who b {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* the screen's content area — design's original flex-scroll model (see ADAPTATIONS note above) */
+.sh-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}

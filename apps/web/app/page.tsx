@@ -24,6 +24,7 @@ import { getSessionManager } from "@/lib/auth/manager";
 import { selectLandingView } from "@/src/landing/selectLandingView";
 import { BrandLink, LpRoot, SignOutButton } from "./_landing/chrome";
 import { MarketingLanding } from "./_landing/MarketingLanding";
+import { AppShell } from "./shell/AppShell";
 import "./_landing/ds.css";
 import "./_landing/landing.css";
 
@@ -100,21 +101,17 @@ function SignIn() {
   return <MarketingLanding />;
 }
 
-/** Signed-in, resolved manager → the post-login signpost into the three live screens. */
+/**
+ * Signed-in, resolved manager → the post-login signpost into the three live screens. Prompt 20 nests
+ * this into the global `AppShell` (the `home` nav id): the shell's top bar supersedes the hub's own
+ * `.lp-nav` (Brand + sign-out now live there; "Signed in as …" rides the shell's right cluster). The
+ * welcome body below is the Prompt-19 `.lp-section` content unchanged — the shell wraps it, it isn't
+ * re-skinned. This is the only landing state the shell wraps: the others (`signin`/`unlinked`/`denied`)
+ * are not authenticated feature surfaces, so they keep their landing chrome.
+ */
 function Hub({ displayName }: { displayName: string }) {
   return (
-    <LpRoot>
-      <nav className="lp-nav">
-        <div className="lp-container lp-nav-inner">
-          <BrandLink />
-          <div className="lp-nav-cta">
-            <span className="lp-proof-txt">
-              Signed in as <b>{displayName}</b>
-            </span>
-            <SignOutButton />
-          </div>
-        </div>
-      </nav>
+    <AppShell active="home" signedInAs={displayName}>
       <section className="lp-section" style={{ borderTop: "none" }}>
         <div className="lp-container">
           <div className="lp-section-head">
@@ -137,7 +134,7 @@ function Hub({ displayName }: { displayName: string }) {
           </div>
         </div>
       </section>
-    </LpRoot>
+    </AppShell>
   );
 }
 

@@ -40,7 +40,9 @@ export default function SignInPage() {
   return (
     <main className="mx-auto flex max-w-sm flex-col gap-4 px-6 py-16">
       <h1 className="text-2xl font-semibold">Sign in</h1>
-      <p className="text-sm text-slate-600">
+      {/* text-slate-400/300 (not -600/-700): legible on the global dark body (Prompt 20). This bare
+          page stays Tailwind; the full ds skin is the deferred /sign-in follow-up. */}
+      <p className="text-sm text-slate-400">
         Private league — enter your allowlisted email and we&rsquo;ll send a magic link.
       </p>
       <form onSubmit={sendMagicLink} className="flex flex-col gap-2">
@@ -69,7 +71,7 @@ export default function SignInPage() {
           Continue with Google
         </button>
       )}
-      {message && <p className="text-sm text-slate-700">{message}</p>}
+      {message && <p className="text-sm text-slate-300">{message}</p>}
     </main>
   );
 }
