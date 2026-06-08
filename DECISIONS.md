@@ -904,3 +904,38 @@ landing hub.
 - **Merged to `main` at `d9800e7`** (`b135cac` P20 → `7e5d801` P21 → `d9800e7` P22). This thread-close
   record did **not** ride that commit (it was the cherry-picked draft change only); this docs commit adds
   it. **Next: Prompt 23 — Lineup re-skin (from the `design_reference/` Set Lineup screen).**
+
+## Lineup + Vs-the-Field skins (Prompts 23–24) — design sprint complete; the live indicator is RED, never green
+- **Design sprint COMPLETE.** All five screens are re-skinned to `design_reference/` on the Prompt-20 App
+  Shell foundation: **landing (19) → App Shell (20) → auth (21) → Draft (22) → Lineup (23) →
+  Vs-the-Field (24)**, all merged to `main` (68 files / 770 tests). Like Draft (Prompt 22), both bodies
+  were **already faithful** route-scoped ports on the **global** ds.css (ds.css not forked); each re-skin
+  reduced to small presentation-only reconciliations (per-prompt detail in PROJECT.md). The only sprint work
+  left is the **operator gate** — live authenticated visual fidelity on the Render deploy (the feature
+  bodies need auth+DB+Realtime, not in-session renderable).
+  - **Prompt 23 (`/lineup`, `43490aa`):** already a faithful `.sl-*` port; **no body brand chip existed**
+    (`sl-topbar` is a de-branded screen-title strip) → **no de-dup needed** (unlike Draft/Vs-the-Field).
+    Reduced to **pitch markings** (ported the full field markings) + a **legend over-claim fix** (the binary
+    `lineup_slot.locked_at` is "Locked", not "Locked · played"). No `packages/lineup` / `POST /api/lineup` /
+    lock-recheck edits.
+  - **Prompt 24 (`/vsfield`, `fee577f` via merge `37fd7c6`):** **brand de-dup** (dropped the body `.vf-logo`
+    "W" — **vsfield-LOCAL** despite BRAND §5 naming it "the shared chip"; in code it was defined+used only in
+    `apps/web/app/vsfield/*`, exactly like `.dr-logo` was route-scoped to draft, so removing it is **not** a
+    shared-file edit) + **pitch markings** (centre circle + halfway line, the same gap as Lineup). The
+    **natural-scroll height model is preserved** (`.vf-app` keeps `min-height:100%`; `shell.css` classes
+    `/vsfield` as a natural-scroll screen where `.sh-content` owns the single scrollbar — **NOT** forced to
+    the design's `height:100%`, which would fight the shell). Avatars stay initials (BRAND §6 — no parrot).
+    No `packages/vsfield` (`buildVsField`) / Prompt-04-helper / `loadVsField` / authed-read (**401, no 403**)
+    / Realtime / RLS edits.
+
+- **LIVE INDICATOR = RED `#FF4D4D`, NEVER GREEN — ✅ LOCKED (design-canonical; do not re-litigate).** The
+  `--live` token is **byte-identical** in the app's `apps/web/app/styles/ds.css` and the design's
+  `design/design_reference/ds/ds.css` (`--live: #FF4D4D`), and **design `CLAUDE.md §3`** lists the functional
+  color "live `#FF4D4D`". Red is the **broadcast / match-LIVE pulse** — a starter currently playing, a match
+  in progress, the "● Live" connection pill — always **color + icon + word**, never color alone. It is
+  **not** a "connection-healthy" green light: the connection-health ladder is **Live = red** · Reconnecting =
+  info-blue · Stale = gray (`--surface-3`) · Loading = neutral; **green (`--win #2FBF71`) is reserved for WIN
+  states only** (the all-play-all record W, an H2H `+margin`). **The Prompt-24 prompt's assumption that the
+  live indicator should be green (a "`--live`/positive" token) was INCORRECT** — `--live` is red by spec;
+  corrected against the design source and locked here so it isn't re-opened. Discipline held: the build's
+  `ConnPill` / `.vf-livedot` use **tokenized `var(--live)`**, no raw hex.
