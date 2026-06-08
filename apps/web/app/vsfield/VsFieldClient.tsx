@@ -99,14 +99,15 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
   return (
     <div className="vf-app">
       <div className="vf-top">
-        <div className="vf-brand">
-          <div className="vf-logo">W</div>
-          <div>
-            <div className="display vf-brand-title">The Field</div>
-            <div className="t-micro text-tertiary" style={{ letterSpacing: ".06em" }}>
-              {periodLabel.toUpperCase()}
-            </div>
-          </div>
+        {/* De-branded screen-context strip. The brand lockup (trophy · "XI" · league name) now lives
+            ONCE in the AppShell topbar (Prompt 20 / BRAND.md §1/§5), so the body's former `.vf-logo` "W"
+            badge + wordmark were removed here to stop doubling it — mirrors the Prompt-22 `.dr-logo`
+            de-dup. This keeps only the vsfield-LOCAL context: the screen label + the live period line. */}
+        <div className="vf-status">
+          <b className="display vf-brand-title">The Field</b>
+          <span className="t-micro text-tertiary" style={{ letterSpacing: ".06em" }}>
+            {periodLabel.toUpperCase()}
+          </span>
         </div>
         <div className="tabs vf-viewtabs">
           {VIEW_TABS.map(([k, l]) => (

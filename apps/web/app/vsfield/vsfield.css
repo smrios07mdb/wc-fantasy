@@ -35,22 +35,15 @@
   background: var(--surface-1);
   flex: none;
 }
-.vf-brand {
+/* De-branded screen-context block. The body brand lockup (the `.vf-logo` "W" badge) was removed in the
+   Prompt-24 re-skin — the AppShell topbar (Prompt 20) now owns the trophy · "XI" · league lockup
+   (BRAND.md §1/§5), so the body must not double it. `.vf-top` keeps only this de-branded text stack
+   (screen label + the live period line) + the view tabs + the updated/ConnPill cluster. Mirrors the
+   Prompt-22 `.dr-status` de-dup; `.vf-logo` was vsfield-local (defined+used only here), so it's gone. */
+.vf-status {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.vf-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  color: var(--text-on-accent);
-  font-family: var(--font-display);
-  font-weight: 800;
-  flex: none;
+  flex-direction: column;
+  gap: 2px;
 }
 .vf-brand-title {
   font-weight: 800;
@@ -303,11 +296,45 @@
     color-mix(in srgb, var(--pitch-2) 13%, var(--surface-1))
   );
 }
+/* Pitch markings — ported from the design (Vs the Field.html): a faint centre circle + a halfway line
+   so the surface reads as a pitch, not a bare gradient (mirrors the Prompt-23 /lineup pitch-markings
+   fix). The original port dropped these; lines are barely-there white (no gold). The halfway line runs
+   perpendicular to the lanes, so it differs by orientation. */
+.vf-pitch::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  pointer-events: none;
+}
 .vf-pitch-v {
   flex-direction: column;
 }
 .vf-pitch-h {
   flex-direction: row;
+}
+.vf-pitch-v::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 50%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.vf-pitch-h::before {
+  content: "";
+  position: absolute;
+  top: 12%;
+  bottom: 12%;
+  left: 50%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.05);
 }
 .vf-lane {
   display: flex;
