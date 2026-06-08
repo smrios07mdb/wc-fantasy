@@ -17,22 +17,47 @@ export interface Paginated<T> {
   meta: CursorMeta;
 }
 
+export interface FIFATeamRef {
+  id: number;
+  name?: string | null;
+  abbreviation?: string | null;
+  country_code?: string | null;
+  confederation?: string | null;
+  [key: string]: unknown;
+}
+export interface FIFAStageRef {
+  id: number;
+  /** "Group Stage" | "Round of 32" | "Round of 16" | "Quarter-finals" | "Semi-finals" | "Final" */
+  name?: string | null;
+  order?: number | null;
+  [key: string]: unknown;
+}
+export interface FIFAGroupRef {
+  id: number;
+  name?: string | null; // "Group A"
+  [key: string]: unknown;
+}
+
 export interface FIFAMatch {
   id: number;
   status: string;
   /** ISO 8601 UTC. */
   datetime: string;
-  stage?: string | null;
-  group?: string | null;
-  round?: string | null;
-  home_team_id?: number | null;
-  away_team_id?: number | null;
+  match_number?: number | null;
+  season?: { id: number; year: number } | null;
+  stage?: FIFAStageRef | null;
+  group?: FIFAGroupRef | null;
+  /** Group stage: this is the matchday (1/2/3). */
+  round_number?: number | null;
+  round_name?: string | null;
+  home_team?: FIFATeamRef | null;
+  away_team?: FIFATeamRef | null;
   home_score?: number | null;
   away_score?: number | null;
-  home_score_et?: number | null;
-  away_score_et?: number | null;
-  home_score_pens?: number | null;
-  away_score_pens?: number | null;
+  extra_time_home_score?: number | null;
+  extra_time_away_score?: number | null;
+  home_score_penalties?: number | null;
+  away_score_penalties?: number | null;
   home_formation?: string | null;
   away_formation?: string | null;
   referee?: string | null;

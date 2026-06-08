@@ -200,17 +200,18 @@ export function mapMatchRow(f: FIFAMatch): MatchRowIn {
     bdlId: f.id,
     kickoffAtIso: f.datetime,
     status: normalizeStatus(f.status),
-    round: s(f.round),
-    group: s(f.group),
-    stage: s(f.stage),
-    homeTeamBdlId: n(f.home_team_id),
-    awayTeamBdlId: n(f.away_team_id),
+    // round_name when present (knockouts); else the group matchday number as a label.
+    round: f.round_name ?? (f.round_number != null ? String(f.round_number) : null),
+    group: f.group?.name ?? null,
+    stage: f.stage?.name ?? null,
+    homeTeamBdlId: n(f.home_team?.id),
+    awayTeamBdlId: n(f.away_team?.id),
     homeScore: n(f.home_score),
     awayScore: n(f.away_score),
-    homeScoreEt: n(f.home_score_et),
-    awayScoreEt: n(f.away_score_et),
-    homeScorePens: n(f.home_score_pens),
-    awayScorePens: n(f.away_score_pens),
+    homeScoreEt: n(f.extra_time_home_score),
+    awayScoreEt: n(f.extra_time_away_score),
+    homeScorePens: n(f.home_score_penalties),
+    awayScorePens: n(f.away_score_penalties),
     homeFormation: s(f.home_formation),
     awayFormation: s(f.away_formation),
     referee: s(f.referee),
@@ -231,16 +232,24 @@ const KNOCKOUT: Array<[RegExp, string]> = [
  * integer → MD{n}; otherwise null (the caller leaves period_id null + TODO(confirm)).
  */
 export function derivePeriodLabel(f: FIFAMatch): { kind: PeriodKind; label: string } | null {
-  const round = (f.round ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (round) {
+  const stageNorm = (f.stage?.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  // Knockout: match the stage name (e.g. "Round of 32", "Quarter-finals", "Final").
+  if (stageNorm && !stageNorm.includes("group")) {
     for (const [re, label] of KNOCKOUT)
-      if (re.test(round)) return { kind: "knockout_round", label };
+      if (re.test(stageNorm)) return { kind: "knockout_round", label };
+    const roundNorm = (f.round_name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (const [re, label] of KNOCKOUT)
+      if (re.test(roundNorm)) return { kind: "knockout_round", label };
   }
-  // Group: look for an explicit matchday integer (loose field — confirm exact key on live data).
-  const md = (f as Record<string, unknown>)["matchday"];
-  const num = typeof md === "number" ? md : typeof md === "string" ? Number(md) : NaN;
-  if (Number.isInteger(num) && num >= 1) return { kind: "group_md", label: `MD${num}` };
-  // TODO(confirm): the feed gives stage/group/round but no confirmed matchday integer; derive MD1/2/3
-  // structurally once the live shape is known — never by sorting kickoff times.
+
+  // Group stage: round_number IS the matchday (1/2/3 → MD1/MD2/MD3).
+  if (
+    stageNorm.includes("group") &&
+    Number.isInteger(f.round_number) &&
+    (f.round_number as number) >= 1
+  ) {
+    return { kind: "group_md", label: `MD${f.round_number}` };
+  }
   return null;
 }

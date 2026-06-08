@@ -122,51 +122,112 @@ describe("normalizeStatus", () => {
 });
 
 describe("mapMatchRow", () => {
-  it("maps kickoff/scores/round and normalizes status", () => {
+  it("maps nested teams/stage/group + renamed ET/penalty fields and normalizes status", () => {
     const row = mapMatchRow({
       id: 100,
       status: "completed",
       datetime: "2026-06-10T18:00:00Z",
-      round: "Final",
-      home_team_id: 1,
-      away_team_id: 2,
+      stage: { id: 7, name: "Final" },
+      round_name: "Final",
+      home_team: { id: 1, name: "Mexico" },
+      away_team: { id: 2, name: "Brazil" },
       home_score: 2,
       away_score: 1,
+      extra_time_home_score: 2,
+      extra_time_away_score: 2,
+      home_score_penalties: 4,
+      away_score_penalties: 3,
     });
     expect(row).toMatchObject({
       bdlId: 100,
       kickoffAtIso: "2026-06-10T18:00:00Z",
       status: "completed",
       round: "Final",
+      stage: "Final",
       homeTeamBdlId: 1,
       awayTeamBdlId: 2,
       homeScore: 2,
       awayScore: 1,
+      homeScoreEt: 2,
+      awayScoreEt: 2,
+      homeScorePens: 4,
+      awayScorePens: 3,
+    });
+  });
+
+  it("uses round_number for the label and tolerates absent teams (knockout TBD)", () => {
+    const row = mapMatchRow({
+      id: 101,
+      status: "scheduled",
+      datetime: "2026-06-12T18:00:00Z",
+      stage: { id: 1, name: "Group Stage" },
+      group: { id: 1, name: "Group A" },
+      round_number: 2,
+    });
+    expect(row).toMatchObject({
+      bdlId: 101,
+      round: "2",
+      stage: "Group Stage",
+      group: "Group A",
+      homeTeamBdlId: null,
+      awayTeamBdlId: null,
     });
   });
 });
 
 describe("derivePeriodLabel", () => {
-  it("maps a knockout round to its canonical label", () => {
-    expect(
-      derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", round: "Round of 32" }),
-    ).toEqual({
-      kind: "knockout_round",
-      label: "R32",
-    });
-    expect(
-      derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", round: "Final" }),
-    ).toEqual({
-      kind: "knockout_round",
-      label: "Final",
-    });
+  it("maps each knockout stage name to its canonical label", () => {
+    const ko = (name: string) =>
+      derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", stage: { id: 1, name } });
+    expect(ko("Round of 32")).toEqual({ kind: "knockout_round", label: "R32" });
+    expect(ko("Round of 16")).toEqual({ kind: "knockout_round", label: "R16" });
+    expect(ko("Quarter-finals")).toEqual({ kind: "knockout_round", label: "QF" });
+    expect(ko("Semi-finals")).toEqual({ kind: "knockout_round", label: "SF" });
+    expect(ko("Final")).toEqual({ kind: "knockout_round", label: "Final" });
   });
-  it("returns null for a group game with no usable matchday (TODO(confirm))", () => {
-    expect(derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", group: "A" })).toBeNull();
-  });
-  it("maps a group matchday when the feed provides one", () => {
+
+  it("maps a group fixture to MD{round_number}", () => {
     expect(
-      derivePeriodLabel({ id: 1, status: "scheduled", datetime: "x", group: "A", matchday: 2 }),
-    ).toEqual({ kind: "group_md", label: "MD2" });
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 1, name: "Group Stage" },
+        group: { id: 1, name: "Group A" },
+        round_number: 1,
+      }),
+    ).toEqual({ kind: "group_md", label: "MD1" });
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 1, name: "Group Stage" },
+        round_number: 3,
+      }),
+    ).toEqual({ kind: "group_md", label: "MD3" });
+  });
+
+  it("returns null for a group fixture with no round_number", () => {
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 1, name: "Group Stage" },
+      }),
+    ).toBeNull();
+  });
+
+  it("falls back to round_name when the stage name isn't a clean knockout label", () => {
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 9, name: "Knockout Stage" },
+        round_name: "Round of 16",
+      }),
+    ).toEqual({ kind: "knockout_round", label: "R16" });
   });
 });

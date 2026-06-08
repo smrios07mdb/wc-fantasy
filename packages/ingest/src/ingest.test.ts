@@ -167,8 +167,19 @@ describe("ingestSchedule (schedule-sync)", () => {
       matches: () =>
         Promise.resolve({
           data: [
-            { id: 50, status: "scheduled", datetime: "2026-06-10T18:00:00Z", round: "Round of 16" },
-            { id: 51, status: "scheduled", datetime: "2026-06-11T18:00:00Z", group: "A" }, // no matchday
+            {
+              id: 50,
+              status: "scheduled",
+              datetime: "2026-06-10T18:00:00Z",
+              stage: { id: 2, name: "Round of 16" },
+            },
+            {
+              id: 51,
+              status: "scheduled",
+              datetime: "2026-06-11T18:00:00Z",
+              stage: { id: 1, name: "Group Stage" },
+              group: { id: 1, name: "Group A" },
+            }, // group game, no round_number
           ],
           meta: {},
         }),
@@ -178,8 +189,8 @@ describe("ingestSchedule (schedule-sync)", () => {
 
     await ingestSchedule(feed, store);
 
-    expect(store.upsertedMatch(50)?.periodId).toBe("period-r16"); // structural round → R16 period
-    expect(store.upsertedMatch(51)?.periodId).toBeNull(); // group game, no matchday → left null
+    expect(store.upsertedMatch(50)?.periodId).toBe("period-r16"); // structural stage → R16 period
+    expect(store.upsertedMatch(51)?.periodId).toBeNull(); // group game, no round_number → left null
   });
 });
 
