@@ -25,6 +25,31 @@ export interface FIFATeamRef {
   confederation?: string | null;
   [key: string]: unknown;
 }
+/**
+ * Nested player object (the GOAT `/events` player/assist_player/player_in/player_out fields, and the
+ * `/rosters` nested bio). Analogous to {@link FIFATeamRef}: `id` is the only field the mappers read;
+ * the rest are tolerated via the index signature.
+ */
+export interface FIFAPlayerRef {
+  id: number;
+  name?: string | null;
+  short_name?: string | null;
+  position?: string | null;
+  date_of_birth?: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
+  height_cm?: number | null;
+  jersey_number?: string | null;
+  [key: string]: unknown;
+}
+/** Nested referee object on a match (GOAT `/matches` shape — an object, NOT a bare string). */
+export interface FIFARefereeRef {
+  id: number;
+  name?: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
+  [key: string]: unknown;
+}
 export interface FIFAStageRef {
   id: number;
   /** "Group Stage" | "Round of 32" | "Round of 16" | "Quarter-finals" | "Semi-finals" | "Final" */
@@ -60,7 +85,8 @@ export interface FIFAMatch {
   away_score_penalties?: number | null;
   home_formation?: string | null;
   away_formation?: string | null;
-  referee?: string | null;
+  /** GOAT `/matches`: a nested object `{ id, name, country_code, country_name }`, NOT a bare string. */
+  referee?: FIFARefereeRef | null;
   [key: string]: unknown;
 }
 
@@ -83,54 +109,110 @@ export interface FIFAMatchEvent {
   match_id: number;
   /** e.g. "goal" | "card" | "substitution". */
   incident_type: string;
-  /** e.g. "yellow" | "red" | "second_yellow" | "own_goal". */
+  /** e.g. "penalty" | "yellow" | "red" | "second_yellow" | "own_goal". */
   incident_class?: string | null;
   time_minute?: number | null;
   added_time?: number | null;
   period?: string | null;
-  player_id?: number | null;
-  assist_player_id?: number | null;
-  player_in_id?: number | null;
-  player_out_id?: number | null;
+  is_home?: boolean | null;
+  /** NESTED objects on the documented GOAT shape — the player id lives at `player.id`, not `player_id`. */
+  player?: FIFAPlayerRef | null;
+  assist_player?: FIFAPlayerRef | null;
+  player_in?: FIFAPlayerRef | null;
+  player_out?: FIFAPlayerRef | null;
+  home_score?: number | null;
+  away_score?: number | null;
+  shootout_sequence?: number | null;
+  shootout_description?: string | null;
   rescinded?: boolean | null;
+  reason?: string | null;
   [key: string]: unknown;
 }
 
 export interface FIFAPlayerMatchStats {
   match_id: number;
   player_id: number;
+  team_id?: number | null;
+  is_home?: boolean | null;
   minutes_played?: number | null;
   rating?: number | null;
+  expected_goals?: number | null;
+  expected_assists?: number | null;
   goals?: number | null;
   assists?: number | null;
+  shots_on_target?: number | null;
   key_passes?: number | null;
-  dribbles_attempted?: number | null;
-  dribbles_completed?: number | null;
-  duels_won?: number | null;
-  duels_lost?: number | null;
   passes_total?: number | null;
   passes_accurate?: number | null;
   long_balls_total?: number | null;
   long_balls_accurate?: number | null;
-  was_fouled?: number | null;
-  clearances?: number | null;
-  interceptions?: number | null;
+  crosses_total?: number | null;
+  crosses_accurate?: number | null;
+  dribbles_attempted?: number | null;
+  dribbles_completed?: number | null;
+  tackles?: number | null;
   tackles_won?: number | null;
+  interceptions?: number | null;
+  clearances?: number | null;
   blocked_shots?: number | null;
+  duels_won?: number | null;
+  duels_lost?: number | null;
+  aerial_duels_won?: number | null;
+  aerial_duels_lost?: number | null;
+  fouls_committed?: number | null;
+  was_fouled?: number | null;
+  touches?: number | null;
+  possession_lost?: number | null;
+  ball_recoveries?: number | null;
+  big_chances_created?: number | null;
+  big_chances_missed?: number | null;
   saves?: number | null;
   saves_inside_box?: number | null;
   punches?: number | null;
   high_claims?: number | null;
-  possession_lost?: number | null;
   [key: string]: unknown;
 }
 
 export interface FIFATeamMatchStats {
   match_id: number;
   team_id: number;
-  offsides?: number | null;
+  is_home?: boolean | null;
+  /** Possession share, percent. The documented field is `possession_pct` (NOT `possession`). */
+  possession_pct?: number | null;
+  expected_goals?: number | null;
+  big_chances?: number | null;
+  big_chances_missed?: number | null;
+  shots_total?: number | null;
+  shots_on_target?: number | null;
+  shots_off_target?: number | null;
   shots_blocked?: number | null;
-  possession?: number | null;
+  shots_inside_box?: number | null;
+  shots_outside_box?: number | null;
+  hit_woodwork?: number | null;
+  corners?: number | null;
+  offsides?: number | null;
+  fouls?: number | null;
+  yellow_cards?: number | null;
+  passes_total?: number | null;
+  passes_accurate?: number | null;
+  passes_final_third?: number | null;
+  long_balls_total?: number | null;
+  long_balls_accurate?: number | null;
+  crosses_total?: number | null;
+  crosses_accurate?: number | null;
+  tackles?: number | null;
+  interceptions?: number | null;
+  clearances?: number | null;
+  saves?: number | null;
+  ground_duels_won?: number | null;
+  ground_duels_total?: number | null;
+  aerial_duels_won?: number | null;
+  aerial_duels_total?: number | null;
+  dribbles_completed?: number | null;
+  dribbles_total?: number | null;
+  throw_ins?: number | null;
+  goal_kicks?: number | null;
+  free_kicks?: number | null;
   [key: string]: unknown;
 }
 
@@ -138,10 +220,25 @@ export interface FIFAShot {
   id: number;
   match_id: number;
   player_id?: number | null;
+  team_id?: number | null;
+  is_home?: boolean | null;
   shot_type?: string | null;
-  /** Penalty detection lives here (situation === "penalty"). */
+  /** Penalty detection lives here (situation === "penalty", confirmed in the GOAT docs). */
   situation?: string | null;
-  minute?: number | null;
+  body_part?: string | null;
+  goal_type?: string | null;
+  xg?: number | null;
+  xgot?: number | null;
+  player_x?: number | null;
+  player_y?: number | null;
+  goal_mouth_x?: number | null;
+  goal_mouth_y?: number | null;
+  block_x?: number | null;
+  block_y?: number | null;
+  /** The documented minute field is `time_minute` (NOT `minute`). */
+  time_minute?: number | null;
+  added_time?: number | null;
+  time_seconds?: number | null;
   [key: string]: unknown;
 }
 

@@ -5,6 +5,7 @@
  * live here; the Prisma-backed store is imported separately via `@app/ingest/prisma` so this entrypoint
  * stays IO-free and unit-testable with fixtures.
  */
+export * from "./errors";
 export * from "./map";
 export * from "./lock";
 export * from "./mode";

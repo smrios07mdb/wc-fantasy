@@ -21,7 +21,7 @@ describe("createBalldontlieClient", () => {
               id: 10,
               match_id: 7,
               incident_type: "substitution",
-              player_in_id: 99,
+              player_in: { id: 99 },
               time_minute: 61,
             },
           ],

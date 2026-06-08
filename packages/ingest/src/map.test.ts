@@ -4,11 +4,13 @@ import {
   mapEvent,
   mapShot,
   mapRating,
+  mapTeamStat,
   mapMatchRow,
   derivePeriodLabel,
   normalizeStatus,
   mapPosition,
 } from "./map";
+import { FeedShapeMismatchError } from "./errors";
 
 describe("mapPosition", () => {
   it("maps the feed's single-letter codes (G/D/M/F) to the Position enum", () => {
@@ -50,6 +52,11 @@ describe("mapStatLine", () => {
     expect(row.assists).toBeNull();
     expect(row.possessionLost).toBeNull();
   });
+
+  it("throws FeedShapeMismatchError when a structurally-required id is missing", () => {
+    expect(() => mapStatLine({ match_id: 1 } as never)).toThrow(FeedShapeMismatchError);
+    expect(() => mapStatLine({ player_id: 2 } as never)).toThrow(/match_id/);
+  });
 });
 
 describe("mapRating", () => {
@@ -64,21 +71,32 @@ describe("mapRating", () => {
 });
 
 describe("mapShot", () => {
-  it("derives is_penalty from situation==='penalty' and preserves shot_type/situation", () => {
+  it("sources the minute from time_minute (NOT a flat `minute`) and derives is_penalty from situation", () => {
+    // Documented GOAT /shots shape: time_minute, time_seconds, xg/xgot, body_part, goal_type, coords.
     const pen = mapShot({
-      id: 5,
-      match_id: 1,
-      player_id: 2,
+      id: 5073,
+      match_id: 1030,
+      player_id: 8760,
+      team_id: 20,
+      is_home: false,
       shot_type: "goal",
       situation: "penalty",
-      minute: 30,
+      body_part: "right-foot",
+      goal_type: "penalty",
+      xg: 0.7884,
+      xgot: 0.9937,
+      time_minute: 16,
+      added_time: null,
+      time_seconds: 949,
     });
     expect(pen).toMatchObject({
-      bdlId: 5,
+      bdlId: 5073,
+      matchBdlId: 1030,
+      playerBdlId: 8760,
       isPenalty: true,
       shotType: "goal",
       situation: "penalty",
-      minute: 30,
+      minute: 16,
     });
     const open = mapShot({
       id: 6,
@@ -88,27 +106,97 @@ describe("mapShot", () => {
       situation: "open_play",
     });
     expect(open.isPenalty).toBe(false);
+    expect(open.minute).toBeNull();
+  });
+
+  it("throws FeedShapeMismatchError when a structurally-required id is missing", () => {
+    expect(() => mapShot({ match_id: 1 } as never)).toThrow(FeedShapeMismatchError);
+    expect(() => mapShot({ id: 5 } as never)).toThrow(/match_id/);
   });
 });
 
 describe("mapEvent", () => {
-  it("carries incident_class through verbatim (no pre-collapsing)", () => {
+  it("extracts ?.id from the NESTED player/assist/in/out objects and carries incident_class verbatim", () => {
+    // Documented GOAT /events shape: player et al. are nested objects, NOT flat *_id fields.
     const e = mapEvent({
-      id: 9,
-      match_id: 1,
-      incident_type: "card",
-      incident_class: "yellowRed",
-      time_minute: 75,
-      added_time: 2,
-      player_id: 4,
+      id: 3713,
+      match_id: 1030,
+      incident_type: "goal",
+      incident_class: "penalty",
+      time_minute: 16,
+      added_time: null,
+      period: null,
+      is_home: false,
+      player: { id: 8760, name: "Enner Valencia", position: "F", country_code: "ECU" },
+      assist_player: null,
+      player_in: null,
+      player_out: null,
+      home_score: 0,
+      away_score: 1,
+      rescinded: null,
     });
     expect(e).toMatchObject({
-      bdlId: 9,
-      incidentType: "card",
-      incidentClass: "yellowRed",
-      timeMinute: 75,
-      addedTime: 2,
+      bdlId: 3713,
+      matchBdlId: 1030,
+      incidentType: "goal",
+      incidentClass: "penalty",
+      timeMinute: 16,
+      playerBdlId: 8760,
+      assistPlayerBdlId: null,
+      playerInBdlId: null,
+      playerOutBdlId: null,
+      rescinded: false,
     });
+  });
+
+  it("extracts the substitution in/out player ids from their nested objects", () => {
+    const e = mapEvent({
+      id: 900,
+      match_id: 50,
+      incident_type: "substitution",
+      player: null,
+      player_in: { id: 7, name: "Sub In" },
+      player_out: { id: 2, name: "Sub Out" },
+      time_minute: 61,
+      added_time: 1,
+    });
+    expect(e).toMatchObject({ playerInBdlId: 7, playerOutBdlId: 2, playerBdlId: null });
+  });
+
+  it("throws FeedShapeMismatchError on the OLD flat shape (a raw number where a nested object is documented)", () => {
+    // Guards against silently reverting to the pre-fix flat-id reads.
+    expect(() =>
+      mapEvent({ id: 9, match_id: 1, incident_type: "goal", player: 4 } as never),
+    ).toThrow(FeedShapeMismatchError);
+  });
+
+  it("throws FeedShapeMismatchError when incident_type is missing", () => {
+    expect(() => mapEvent({ id: 9, match_id: 1 } as never)).toThrow(/incident_type/);
+  });
+});
+
+describe("mapTeamStat", () => {
+  it("sources possession from possession_pct (NOT a flat `possession`) and maps offsides/shots_blocked", () => {
+    // Documented GOAT /team-stats shape: possession_pct (not `possession`).
+    const row = mapTeamStat({
+      match_id: 1,
+      team_id: 8,
+      is_home: true,
+      possession_pct: 60,
+      shots_blocked: 3,
+      offsides: 2,
+    });
+    expect(row).toMatchObject({
+      matchBdlId: 1,
+      teamBdlId: 8,
+      possession: 60,
+      shotsBlocked: 3,
+      offsides: 2,
+    });
+  });
+
+  it("throws FeedShapeMismatchError when team_id is missing", () => {
+    expect(() => mapTeamStat({ match_id: 1 } as never)).toThrow(/team_id/);
   });
 });
 
@@ -153,6 +241,23 @@ describe("mapMatchRow", () => {
       homeScorePens: 4,
       awayScorePens: 3,
     });
+  });
+
+  it("extracts the referee NAME from the nested referee object (documented as an object, not a string)", () => {
+    const row = mapMatchRow({
+      id: 102,
+      status: "completed",
+      datetime: "2026-06-10T18:00:00Z",
+      referee: {
+        id: 55,
+        name: "Ismail Elfath",
+        country_code: "USA",
+        country_name: "United States",
+      },
+    });
+    expect(row.referee).toBe("Ismail Elfath");
+    const noRef = mapMatchRow({ id: 103, status: "scheduled", datetime: "x" });
+    expect(noRef.referee).toBeNull();
   });
 
   it("uses round_number for the label and tolerates absent teams (knockout TBD)", () => {

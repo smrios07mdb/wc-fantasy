@@ -8,12 +8,60 @@ import type {
   FIFAMatch,
   FIFAMatchEvent,
   FIFAPlayerMatchStats,
+  FIFAPlayerRef,
   FIFAShot,
   FIFATeamMatchStats,
 } from "@app/feed";
+import { FeedShapeMismatchError } from "./errors";
 
 const n = (v: number | null | undefined): number | null => v ?? null;
 const s = (v: string | null | undefined): string | null => v ?? null;
+
+type Ctx = Record<string, unknown>;
+
+/** A structurally-required numeric id — present and finite, or fail loud. */
+function requireNumber(entity: string, field: string, v: unknown, ctx: Ctx): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  throw new FeedShapeMismatchError(
+    entity,
+    field,
+    `expected a finite number, got ${v === null ? "null" : typeof v}`,
+    ctx,
+  );
+}
+
+/** A structurally-required non-empty string, or fail loud. */
+function requireString(entity: string, field: string, v: unknown, ctx: Ctx): string {
+  if (typeof v === "string" && v.length > 0) return v;
+  throw new FeedShapeMismatchError(
+    entity,
+    field,
+    `expected a non-empty string, got ${v === null ? "null" : typeof v}`,
+    ctx,
+  );
+}
+
+/**
+ * Extract `.id` from a documented NESTED player ref. Null/absent → null (a legitimately empty slot,
+ * e.g. no assist). A non-null value that is NOT a `{ id: number }` object (e.g. the OLD flat `*_id`
+ * number) fails loud — this is the exact mistake that silently nulled every player link before.
+ */
+function refId(
+  entity: string,
+  field: string,
+  ref: FIFAPlayerRef | null | undefined,
+  ctx: Ctx,
+): number | null {
+  if (ref == null) return null;
+  if (typeof ref === "object" && typeof ref.id === "number" && Number.isFinite(ref.id))
+    return ref.id;
+  throw new FeedShapeMismatchError(
+    entity,
+    field,
+    `expected a nested { id } object or null, got ${typeof ref}`,
+    ctx,
+  );
+}
 
 /**
  * Map the BALLDONTLIE FIFA roster position (single-letter `G/D/M/F`, verified exhaustive across all
@@ -53,9 +101,10 @@ export interface StatLineRow {
 }
 
 export function mapStatLine(f: FIFAPlayerMatchStats): StatLineRow {
+  const ctx: Ctx = { match_id: f.match_id, player_id: f.player_id };
   return {
-    matchBdlId: f.match_id,
-    playerBdlId: f.player_id,
+    matchBdlId: requireNumber("player_match_stats", "match_id", f.match_id, ctx),
+    playerBdlId: requireNumber("player_match_stats", "player_id", f.player_id, ctx),
     minutesPlayed: n(f.minutes_played),
     goals: n(f.goals),
     assists: n(f.assists),
@@ -106,18 +155,20 @@ export interface EventRowIn {
 }
 
 export function mapEvent(f: FIFAMatchEvent): EventRowIn {
+  const ctx: Ctx = { id: f.id, match_id: f.match_id };
   return {
-    bdlId: f.id,
-    matchBdlId: f.match_id,
-    incidentType: f.incident_type,
+    bdlId: requireNumber("match_event", "id", f.id, ctx),
+    matchBdlId: requireNumber("match_event", "match_id", f.match_id, ctx),
+    incidentType: requireString("match_event", "incident_type", f.incident_type, ctx),
     incidentClass: s(f.incident_class), // carried VERBATIM (adapter keys 2nd-yellow vs red off it)
     timeMinute: n(f.time_minute),
     addedTime: n(f.added_time),
     period: s(f.period),
-    playerBdlId: n(f.player_id),
-    assistPlayerBdlId: n(f.assist_player_id),
-    playerInBdlId: n(f.player_in_id),
-    playerOutBdlId: n(f.player_out_id),
+    // NESTED player objects on the documented shape — extract `.id` (fail loud on the old flat `*_id`).
+    playerBdlId: refId("match_event", "player", f.player, ctx),
+    assistPlayerBdlId: refId("match_event", "assist_player", f.assist_player, ctx),
+    playerInBdlId: refId("match_event", "player_in", f.player_in, ctx),
+    playerOutBdlId: refId("match_event", "player_out", f.player_out, ctx),
     rescinded: f.rescinded ?? false,
   };
 }
@@ -132,18 +183,19 @@ export interface ShotRowIn {
   minute: number | null;
 }
 
-// TODO(confirm): the exact match_shots.situation token for a penalty (first live GOAT data).
+// The match_shots.situation token for a penalty, confirmed against the documented GOAT shape.
 const PENALTY_SITUATION = "penalty";
 export function mapShot(f: FIFAShot): ShotRowIn {
+  const ctx: Ctx = { id: f.id, match_id: f.match_id };
   const situation = s(f.situation);
   return {
-    bdlId: f.id,
-    matchBdlId: f.match_id,
+    bdlId: requireNumber("shot", "id", f.id, ctx),
+    matchBdlId: requireNumber("shot", "match_id", f.match_id, ctx),
     playerBdlId: n(f.player_id),
     shotType: s(f.shot_type),
     situation,
     isPenalty: (situation ?? "").toLowerCase() === PENALTY_SITUATION,
-    minute: n(f.minute),
+    minute: n(f.time_minute), // documented field is `time_minute`, NOT `minute`
   };
 }
 
@@ -155,12 +207,13 @@ export interface TeamStatRowIn {
   possession: number | null;
 }
 export function mapTeamStat(f: FIFATeamMatchStats): TeamStatRowIn {
+  const ctx: Ctx = { match_id: f.match_id, team_id: f.team_id };
   return {
-    matchBdlId: f.match_id,
-    teamBdlId: f.team_id,
+    matchBdlId: requireNumber("team_match_stats", "match_id", f.match_id, ctx),
+    teamBdlId: requireNumber("team_match_stats", "team_id", f.team_id, ctx),
     offsides: n(f.offsides),
     shotsBlocked: n(f.shots_blocked),
-    possession: n(f.possession),
+    possession: n(f.possession_pct), // documented field is `possession_pct`, NOT `possession`
   };
 }
 
@@ -214,7 +267,7 @@ export function mapMatchRow(f: FIFAMatch): MatchRowIn {
     awayScorePens: n(f.away_score_penalties),
     homeFormation: s(f.home_formation),
     awayFormation: s(f.away_formation),
-    referee: s(f.referee),
+    referee: s(f.referee?.name), // documented as a nested object { id, name, ... }, not a bare string
   };
 }
 

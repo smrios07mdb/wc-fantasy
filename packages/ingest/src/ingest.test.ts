@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { MemoryIngestStore } from "./memoryStore";
 import { ingestLineups, ingestLive, ingestSettle, ingestSchedule, ingestRosters } from "./ingest";
 import type { FeedClient } from "@app/feed";
@@ -100,8 +100,8 @@ describe("ingestLive", () => {
               id: 900,
               match_id: 50,
               incident_type: "substitution",
-              player_in_id: 7,
-              player_out_id: 2,
+              player_in: { id: 7 },
+              player_out: { id: 2 },
               time_minute: 61,
               added_time: 1,
             },
@@ -127,7 +127,13 @@ describe("ingestLive", () => {
       matchEvents: () =>
         Promise.resolve({
           data: [
-            { id: 901, match_id: 50, incident_type: "goal", player_id: 9, assist_player_id: 4 },
+            {
+              id: 901,
+              match_id: 50,
+              incident_type: "goal",
+              player: { id: 9 },
+              assist_player: { id: 4 },
+            },
           ],
           meta: {},
         }),
@@ -136,6 +142,37 @@ describe("ingestLive", () => {
     await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
     expect(store.isDirty(50, 9)).toBe(true); // scorer
     expect(store.isDirty(50, 4)).toBe(true); // assist
+  });
+
+  it("logs and skips a structurally-broken item without halting the rest of the batch", async () => {
+    const errors: unknown[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      errors.push(args);
+    });
+    const feed = fakeFeed({
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            // Malformed: a raw number where a nested player object is documented → must be skipped.
+            { id: 950, match_id: 50, incident_type: "goal", player: 9 } as never,
+            // Valid event in the SAME batch → must still be processed.
+            { id: 951, match_id: 50, incident_type: "goal", player: { id: 11 } },
+          ],
+          meta: {},
+        }),
+      playerMatchStats: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, player_id: 11, minutes_played: 90 }],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+
+    expect(store.allEvents()).toHaveLength(1); // only the valid event landed
+    expect(store.isDirty(50, 11)).toBe(true); // good rows still processed
+    expect(errors).toHaveLength(1); // the bad item was logged loudly
+    spy.mockRestore();
   });
 
   it("under kickoff-lock fallback, does NOT lock an entering substitute", async () => {
@@ -147,7 +184,7 @@ describe("ingestLive", () => {
               id: 902,
               match_id: 50,
               incident_type: "substitution",
-              player_in_id: 7,
+              player_in: { id: 7 },
               time_minute: 61,
               added_time: 0,
             },

@@ -16,11 +16,31 @@ import {
   derivePeriodLabel,
 } from "./map";
 import { lockInstantsFromLineup, lockInstantFromSub, type LineupAppearance } from "./lock";
+import { FeedShapeMismatchError } from "./errors";
 
 export interface MatchCtx {
   bdlId: number;
   kickoffAt: Date;
   kickoffLockFallback: boolean;
+}
+
+/**
+ * Run `handle` once per feed item, catching {@link FeedShapeMismatchError} PER ITEM: a malformed row is
+ * logged loudly and skipped so one bad item never halts the whole batch. Any OTHER error propagates —
+ * that's a real bug (store/DB failure), not tolerable bad input.
+ */
+async function eachItem<T>(items: T[], handle: (item: T) => Promise<void>): Promise<void> {
+  for (const item of items) {
+    try {
+      await handle(item);
+    } catch (err) {
+      if (err instanceof FeedShapeMismatchError) {
+        console.error(`[ingest] skipping malformed feed item: ${err.message}`, err.context);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 /**
@@ -94,15 +114,15 @@ export async function ingestLive(
 
   const touched = new Set<number>();
 
-  for (const f of stats.data) {
+  await eachItem(stats.data, async (f) => {
     const row = mapStatLine(f);
     await store.upsertStatLine(row);
     const r = mapRating(f);
     await store.upsertRatingBalldontlie(r.matchBdlId, r.playerBdlId, r.rating);
     touched.add(row.playerBdlId);
-  }
+  });
 
-  for (const f of events.data) {
+  await eachItem(events.data, async (f) => {
     const e = mapEvent(f);
     await store.upsertEvent(e);
     for (const id of [e.playerBdlId, e.assistPlayerBdlId, e.playerInBdlId, e.playerOutBdlId]) {
@@ -116,15 +136,17 @@ export async function ingestLive(
       );
       if (lock) await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
     }
-  }
+  });
 
-  for (const f of shots.data) {
+  await eachItem(shots.data, async (f) => {
     const sh = mapShot(f);
     await store.upsertShot(sh);
     if (sh.playerBdlId != null) touched.add(sh.playerBdlId);
-  }
+  });
 
-  for (const f of teamStats.data) await store.upsertTeamStat(mapTeamStat(f));
+  await eachItem(teamStats.data, async (f) => {
+    await store.upsertTeamStat(mapTeamStat(f));
+  });
 
   // events/shots/team_stats have no `dirty` column → enqueue player-match markers explicitly.
   await store.markPlayersDirty(ctx.bdlId, [...touched]);
@@ -141,17 +163,17 @@ export async function ingestSettle(
     feed.matchShots({ matchId: ctx.bdlId }),
   ]);
   const touched = new Set<number>();
-  for (const f of stats.data) {
+  await eachItem(stats.data, async (f) => {
     const row = mapStatLine(f);
     await store.upsertStatLine(row);
     const r = mapRating(f);
     await store.upsertRatingBalldontlie(r.matchBdlId, r.playerBdlId, r.rating);
     touched.add(row.playerBdlId);
-  }
-  for (const f of shots.data) {
+  });
+  await eachItem(shots.data, async (f) => {
     const sh = mapShot(f);
     await store.upsertShot(sh);
     if (sh.playerBdlId != null) touched.add(sh.playerBdlId);
-  }
+  });
   await store.markPlayersDirty(ctx.bdlId, [...touched]);
 }
