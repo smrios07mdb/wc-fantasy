@@ -855,3 +855,52 @@ landing hub.
   re-skin (Draft, from the `design_reference/` Draft screen).** ✅ **CLEARED (Chat); branch `feat/auth-skin`
   (off post-20 `main`) pushed to origin (no force-push).** *Sergio runs the fast-forward merge to `main`
   and owns the Render deploy + live-verify — Code does NOT merge or deploy.*
+
+## Draft body skin (Prompt 22) — `/draft` re-skinned to the `design_reference` Draft screen on global ds.css
+
+- **Architecture decision this prompt advances — `/draft` joins the ds-aligned skinned set** (Prompt-19
+  landing, Prompt-20 shell, Prompt-21 auth, now Draft — the **first feature body**). Tailwind /
+  `globals.css` / Preflight stay **global** (Lineup + Vs-the-Field still consume them) — **no teardown
+  here**; the per-route `ds.css` de-dup + the Preflight drop stay post-sprint. **The skin introduced no
+  architecture change** — this DECISIONS entry is the record (ARCHITECTURE.md untouched).
+- **The re-skin reduced to ONE change: brand de-dup.** A 6-agent adversarial fidelity audit confirmed the
+  Draft body was **already byte-faithful** to `design_reference/Draft Room.html` on the global ds.css (the
+  Prompt 08/09 port), so the only drift after Prompt 20 wrapped `/draft` in `AppShell` was a **doubled
+  brand lockup**: the body's `.dr-top` rendered its own `.dr-logo` "W" + "Snake Draft" wordmark on top of
+  the shell topbar's trophy · "XI" · league. Fix = drop the body lockup; `.dr-top` → a **de-branded
+  `.dr-status` strip** (phase line + connection pill + presence). **No brand mark added to the body** — the
+  shell owns it (BRAND.md §1/§5).
+- **Route-scoped stylesheet, no fork.** The `.dr-*` layout lives in `apps/web/app/draft/draft.css` (the
+  `shell.css` / `_auth/auth.css` convention), layered on the **global** ds.css; the `.dr-brand`/`.dr-logo`
+  rules → `.dr-status`. **ds.css is NOT forked**; the per-route `draft/ds.css` copy + its import are **left
+  in place** for the post-sprint de-dup. draft.css stays fully tokenized (zero hex) → cobalt `--accent` /
+  red `--live` / slate `--pos-gk` only — **no gold leak**.
+- **Presentation only — every mechanism preserved.** No edits to `packages/draft`, the gated `POST
+  /api/draft/pick`, `handlePick`, the worker tick, the Realtime subscription wiring, the **server-synced
+  countdown** (`pick_deadline_at` → `useServerCountdown`/`countdownView`, never the client clock), or the
+  deadline logic. The Prompt-20 fixed-height/internal-scroll model
+  (`.dr-app{height:100dvh;overflow:hidden}` → `.sh-content{flex:1;min-height:0;overflow-y:auto}` →
+  `.dr{height:100%}`) is **untouched** (`.dr-top` stays `flex:none`). `/draft` stays `ƒ`.
+- **Deferred-not-built (flagged, NOT skin gaps).** Two classes: **(a) data-shape seams** — the lobby
+  start/sim controls + the "Draft starts in" countdown, and the Summary PROJECTED / draft-grade /
+  value-pick + the available/roster `proj` sublines, are all **absent from `DraftRoomState`** (no `proj`,
+  no scheduled-start field), so building them needs a loader/payload change (an early-warning STOP), not a
+  re-skin — the build correctly omits them. **(b) deferred features** — the autopick queue **editor** (add
+  ＋ / drag-reorder / ✕ remove + the clock-bar "Idle → autopick {top}" hint; the queue stays a read-only
+  display) and the board **auto-scroll-to-current-pick** (`boardEndRef` + `scrollIntoView` — needs a
+  ref+effect on live state, not CSS) are out-of-scope follow-ups.
+- **Tests:** a pure-Node source-contract smoke (`apps/web/src/draft/draftRoom.test.ts`, +10, mirroring
+  `landingPage.test.ts` / `appShell.test.ts` — no RTL/jsdom in the repo) guards the brand de-dup, the
+  view-state→region branch, the make-pick on-the-clock gate, the server-countdown source, the typed-error
+  surface, the no-hex/no-gold palette, and the `ƒ` shape. The 49 existing pure draft tests
+  (`board`/`countdown`/`reducer`/`handlePick`/`pickClient`) already pin the behaviors at the right
+  altitude, so a `selectDraftView` extraction was **rejected as disproportionate logic churn**. Draft
+  suite **59 green**.
+- **Gates:** `pnpm -w typecheck && lint && format:check && test` (745, +10) + `pnpm --filter @app/web
+  build` all exit 0; route shapes preserved (`ƒ /draft`, others unchanged). Independent adversarial diff
+  review = **clean PASS**. **Live visual fidelity** + the one `// TODO(confirm)` (the de-branded strip
+  label) are the **operator gate** on the Render deploy — `/draft` needs auth+DB+Realtime, not in-session
+  renderable — confirmed per the sprint cadence (merge → verify-live).
+- **Merged to `main` at `d9800e7`** (`b135cac` P20 → `7e5d801` P21 → `d9800e7` P22). This thread-close
+  record did **not** ride that commit (it was the cherry-picked draft change only); this docs commit adds
+  it. **Next: Prompt 23 — Lineup re-skin (from the `design_reference/` Set Lineup screen).**
