@@ -707,3 +707,72 @@ landing hub.
 - **Branch:** `feat/landing-design` (`aa295bd`) stacks on **Prompt 18** (`feat/brand-pwa`), because it
   imports `Brand.tsx` (landed in Prompt 18, not yet on `main`). **Merge order: Prompt 18 → main, then
   Prompt 19.** Held for clearance; not pushed; no force-push.
+
+## App Shell & global design system (Prompt 20) — ds.css promoted to global; the nav chrome
+
+- **ARCHITECTURE decision this prompt executes — `ds.css` is now the GLOBAL design system; Tailwind /
+  `globals.css` / Preflight COEXIST (not retired).** `ds.css` is imported once in the root
+  `layout.tsx`, **after** `globals.css`, so it wins cascade ties. This **supersedes Prompt 19's
+  "per-route, NOT global"** call (above): that was a stop-gap to dodge the body-surface collision; the
+  collision is now fixed head-on, so the global promotion is safe. Teardown of Tailwind/Preflight is
+  **post-sprint** (only once nothing consumes Tailwind), explicitly out of scope here.
+- **Canonical copy = `apps/web/app/styles/ds.css`** (byte-identical, md5 `66d4bbbc…`, the prompt's
+  suggested tidy location). The four per-route copies (`draft`/`lineup`/`vsfield`/`_landing`) **stay** —
+  they double-load harmlessly (identical bytes → idempotent); de-duping the per-route imports is a
+  deliberate post-sprint follow-up, NOT this prompt. A test guards the canonical copy byte-identical.
+- **Collision A (body surface) FIXED.** The root `<body>` carried Tailwind `bg-slate-50 text-slate-900`
+  (**class** selectors, 0,1,0) which out-specified `ds.css`'s `body { background; color }` (**element**,
+  0,0,1), pinning the app **light**. Fix = **drop the two classes** (keep `min-h-screen antialiased`);
+  the ds dark surface then applies, and dark is the ds `:root` **default**, so **no `data-theme`** is
+  needed. (This retires Prompt 19's `.lp`-wrapper `color` workaround for `/`, though that wrapper is left
+  in place — harmless.) Collision B (the `.gap-*` class-name overlap) is **left as-is** (ds + Tailwind
+  emit identical values; ds wins by import order).
+- **Shell shape = TOP BAR, server component, real routes only.** Built the design's `GlobalTopbar`
+  variant (`apps/web/app/shell/AppShell.tsx` + `shell.css`, ported from `App Shell.html` + `shell/*`),
+  NOT the 240px sidebar: the topbar sits where the interim CrossNav did (a top strip), so it supersedes
+  CrossNav **without reflowing the un-reskinned feature bodies**. It is a **pure server component** (no
+  `"use client"`, no JS): active state is passed **explicitly** (`active` prop) by each consumer instead
+  of CrossNav's client `usePathname()`; nav items are plain `<a>`; sign-out is the existing POST
+  `<form>`. Nav lists **only the four built screens** (Home/Draft/Lineup/Vs-field). The prototype's
+  richer chrome (the full 14-screen IA + "More" overflow, the bell → Notifications, the avatar menu, the
+  slate commissioner entry, the dedicated mobile tab-bar + sheets) targets **unbuilt** screens → left as
+  flagged `TODO(confirm)` seams (mirrors the landing's deferred unbuilt-screen links). The bar reflows
+  responsively (flex-wrap) for now; it is intentionally **static** (not sticky), matching CrossNav.
+- **Brand per BRAND.md §5 (a brain file outranks the prototype).** `<BrandBadge>` trophy chip + the
+  **"XI"** wordmark + the **league-name** (`WC Fantasy League`) secondary line. The prototype's
+  `ShellBrand` used the league name as the PRIMARY bold text and hid the secondary line in topbar mode
+  (`.sh-brand-txt span{display:none}`); BRAND.md §5 wants "XI" primary + league name secondary, so that
+  hide rule is **intentionally omitted** and the league line is shown.
+- **Mounting = per-feature-layout + a conditional hub wrap (NOT a route group).** The dual-state `/`
+  can't be wrapped by an unconditional `(app)` route-group layout (logged-out `/` = marketing, must stay
+  bare), so the shell is applied **per layout** (matching the existing CrossNav pattern, zero directory
+  moves): `draft`/`lineup`/`vsfield` layouts swap `<CrossNav/>` → `<AppShell active="…">`, and the **hub
+  state only** of `page.tsx` is wrapped (`<AppShell active="home" signedInAs=…>`, dropping its own
+  `.lp-nav`). `selectLandingView()`, `Home()`'s branch, and the `signin`/`unlinked`/`denied` states are
+  **byte-for-byte unchanged** (those three keep their landing chrome — they aren't feature surfaces). The
+  hub's welcome body (`.lp-section`/`.lp-peek-grid`) is unchanged and styles correctly outside `.lp`
+  (every `.lp-*` is a global selector, not `.lp`-descendant-scoped — verified).
+- **CrossNav absorbed:** `apps/web/app/shell/CrossNav.tsx` **deleted**; the pure helper
+  `apps/web/src/shell/crossNav.ts` (`NAV_ITEMS` + `selectActiveNav`) + its test **stay and are reused**
+  (the shell consumes `NAV_ITEMS`). The vsfield layout's old `TODO(prompt-NN): nest into the shell` is
+  closed.
+- **Height model — restored the design's original, after a browser-verified regression.** A naive port
+  (`.sh-app{min-height:100dvh}` + a content-less `.sh-content`) **clipped the fixed-height `/draft`
+  surface** (`.dr-app{height:100dvh; overflow:hidden}` → ~3300px of the board lost, internal scroll
+  dead). Fix = the design's `.sh-app{height:100%}` (propagates a definite height when the parent has one)
+  + `min-height:100dvh` floor + `.sh-content{flex:1; min-height:0; overflow-y:auto}`. This **one** model
+  hosts both contracts: `/draft` (definite-height parent → internal scroll resolves, nothing clipped) and
+  `/lineup`/`/vsfield`/hub (auto-height parents → `height:100%` computes to `auto` → natural page scroll).
+  Both verified in a headless browser (the same method that proved the bug).
+- **Auth-page legibility repair (minimal, NOT the deferred skin).** Promoting the dark body to global
+  made `/sign-in` + `/auth/denied` gray helper/status copy (`text-slate-600/700`) ~2:1 on dark — the
+  sign-in error/status line (its only feedback channel) was illegible. Bumped to `text-slate-400/300`
+  (stays Tailwind, legible). The **full** auth skin off Tailwind remains the **deferred next prompt**.
+- **Adversarial review:** 5 lenses (cascade / design-faithfulness / scope / a11y+RSC / hub-integrity) →
+  per-finding verify. **3 of 10 confirmed, all folded** (the two above + an `aria-label="Global"` on the
+  shell `<header>` so it doesn't duplicate `/lineup`'s own `sl-topbar` banner landmark). Brand-link badge
+  also `aria-hidden` so the link reads "XI WC Fantasy League" (matches the Prompt-19 a11y fix).
+- **Deferred / flagged:** **Prompt 21** = skin `/sign-in` + `/auth/denied` off Tailwind (from `Join.html`
+  + `auth/*`); the richer shell IA + mobile tab-bar/sheets/bell/avatar/commissioner (add as those screens
+  ship); per-route `ds.css` de-dup + Preflight drop (post-sprint). **Branch `feat/app-shell`, off
+  post-19 `main`; held for clearance; not pushed; no force-push.**

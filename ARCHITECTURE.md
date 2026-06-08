@@ -40,11 +40,17 @@ the **scoring rules, the lock logic, the feed-ingestion shapes, and the API cont
 set of types.** For a small team that is the single biggest reliability win available.
 
 - **Frontend:** Next.js (App Router) + React + TypeScript. ~~Tailwind for styling~~ — **AMENDED
-  (Prompt 19, see DECISIONS):** Design delivered the system as **plain CSS** (`ds.css` design system
-  + per-screen CSS), so the app consumes that as-delivered (imported **per-route**, scoped under a
-  wrapper) rather than re-translating to Tailwind. Tailwind remains installed (root `globals.css`) but
-  is not the styling system. Two reactive surfaces matter: the **live draft room** and the **live "vs
-  the field" screen**; everything else is ordinary CRUD.
+  (Prompt 19 → 20, see DECISIONS):** Design delivered the system as **plain CSS** (`ds.css` design
+  system + per-screen CSS), so the app consumes that as-delivered rather than re-translating to
+  Tailwind. **Prompt 20 promoted `ds.css` to the single GLOBAL stylesheet** (root `layout.tsx`,
+  imported **after** `globals.css` so it wins cascade ties; canonical copy at `app/styles/ds.css`,
+  with the global dark `body` surface now in effect). Tailwind / `globals.css` / Preflight remain
+  installed and **coexist** (not the styling system; teardown is post-sprint). The feature/landing
+  routes still carry byte-identical per-route `ds.css` copies that double-load harmlessly. The
+  authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield`) are wrapped by the **App Shell**
+  top-bar nav (`app/shell/AppShell.tsx`, which absorbed the interim CrossNav); auth/landing routes are
+  not. Two reactive surfaces matter: the **live draft room** and the **live "vs the field" screen**;
+  everything else is ordinary CRUD.
 - **Backend:** a **modular monolith** — the Next.js app's route handlers serve the web API
   (auth'd reads/writes: set lineup, submit FAAB bid, make pick, admin overrides). Scheduled and
   long-running work (pollers, FAAB batch, period close, scraper) runs in a **separate worker
