@@ -1,7 +1,12 @@
 /* Draft-room screen CSS — ported verbatim from design/design_reference/Draft Room.html's <style>
    block (the `.dr-*` classes that ds.css does NOT define), adapted for the Next app: the prototype's
    `#root{height:100vh}` is replaced by the `.dr-app` wrapper (the route layout). ds.css supplies the
-   tokens + the generic component classes; this file is only the draft-specific layout. */
+   tokens + the generic component classes; this file is only the draft-specific layout.
+
+   Prompt 22 (re-skin) adaptation: the body brand lockup (the old `.dr-brand`/`.dr-logo` "W" + the
+   "Snake Draft" wordmark) was dropped — the AppShell topbar (Prompt 20) now provides the trophy · "XI" ·
+   league brand, so the body must not double it (BRAND.md §1). `.dr-top` remains as a de-branded status
+   strip (`.dr-status` text stack + ConnPill + presence). Everything else is the verbatim port. */
 
 /* Route wrapper: fixed-height, internal-scroll surface (the design's #root + .dr contract). */
 .dr-app {
@@ -28,21 +33,13 @@
   background: var(--surface-1);
   flex: none;
 }
-.dr-brand {
+/* De-branded draft status block. The brand lockup (`.dr-brand`/`.dr-logo` "W") was removed in Prompt 22
+   — the AppShell topbar now owns the trophy · "XI" · league lockup (BRAND.md §1/§5), so the body must
+   not double it. This is just the phase-line text stack that remains in `.dr-top`. */
+.dr-status {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.dr-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  color: var(--text-on-accent);
-  font-family: var(--font-display);
-  font-weight: 800;
+  flex-direction: column;
+  line-height: 1.15;
 }
 .dr-presence {
   display: flex;

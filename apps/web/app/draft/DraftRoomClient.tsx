@@ -195,17 +195,18 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
 
   return (
     <div className={"dr" + (showBoardMobile ? " show-board" : "")}>
+      {/* De-branded draft STATUS strip. The brand lockup (trophy · "XI" · league name) now lives ONCE in
+          the AppShell topbar (Prompt 20 / BRAND.md §5), so the body's former "W" logo square + "Snake
+          Draft" wordmark were removed here to stop doubling it. This strip keeps only the draft-LOCAL
+          context: the phase line, the connection pill, and presence ("who's online"). */}
       <div className="dr-top">
-        <div className="dr-brand">
-          <div className="dr-logo">W</div>
-          <div>
-            <div className="display" style={{ fontWeight: 800, fontSize: 15, lineHeight: 1 }}>
-              Snake Draft
-            </div>
-            <div className="t-micro text-tertiary" style={{ letterSpacing: ".08em" }}>
-              {phaseLine}
-            </div>
-          </div>
+        <div className="dr-status">
+          {/* TODO(confirm): the de-branded strip label. The design's `.dr-top` carried the brand the
+              shell now owns; "Snake draft" is a restrained screen-context label, not a second brand mark. */}
+          <b className="t-sm">Snake draft</b>
+          <span className="t-micro text-tertiary" style={{ letterSpacing: ".08em" }}>
+            {phaseLine}
+          </span>
         </div>
         <ConnPill connected={connected} />
         <div style={{ flex: 1 }} />
