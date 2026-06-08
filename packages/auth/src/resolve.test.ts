@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { resolveSessionManager, assertSessionManager } from "./resolve";
-import { NoManagerLinkedError, NoSessionError, NotAllowlistedError } from "./errors";
+import {
+  AmbiguousManagerLinkError,
+  NoManagerLinkedError,
+  NoSessionError,
+  NotAllowlistedError,
+} from "./errors";
 import type { AllowlistEntry, ManagerRecord, SessionIdentity } from "./types";
 
 const allowlist: AllowlistEntry[] = [{ email: "alice@example.com" }, { email: "bob@example.com" }];
@@ -77,6 +82,21 @@ describe("resolveSessionManager — the pure session→manager core", () => {
       managers: [linkedByEmailOnly],
     });
     expect(result).toEqual({ kind: "ok", manager: linkedByEmailOnly, isCommissioner: true });
+  });
+
+  // The dual-key safety check: if the uid links manager A and the email links a DIFFERENT manager B,
+  // the identity is ambiguous/corrupt. The resolver must FAIL LOUD (throw), never silently take the
+  // first `.find()` match — silently binding the wrong manager is a correctness + privacy bug (one
+  // member acting on another's row). Both keys are allowlisted here, so it reaches the link logic.
+  it("fails loud when uid→A and email→B resolve DIFFERENT managers (no silent wrong-bind)", () => {
+    expect(() =>
+      resolveSessionManager({
+        // uid links alice; email links bob — two different managers via the two keys.
+        session: session({ userId: "uid-alice", email: "bob@example.com" }),
+        allowlist,
+        managers,
+      }),
+    ).toThrow(AmbiguousManagerLinkError);
   });
 
   it("checks the allowlist BEFORE the manager link (not-allowlisted wins even if a manager matches)", () => {

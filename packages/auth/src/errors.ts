@@ -32,6 +32,26 @@ export class NoManagerLinkedError extends AuthError {
   }
 }
 
+/**
+ * Allowlisted + authenticated, but the user resolves to TWO DIFFERENT managers — one by the Supabase
+ * uid, a different one by the email key. A should-never-happen data-integrity breach (a corrupt/stale
+ * link). The resolver THROWS this rather than silently binding the first match, because binding the
+ * wrong manager is a correctness + privacy bug (one member acting on another's row). Loud by design — it
+ * surfaces as a 500 for the commissioner to repair the link, NOT a graceful 401/403 user flow.
+ */
+export class AmbiguousManagerLinkError extends AuthError {
+  constructor(
+    readonly userId: string,
+    readonly uidManagerId: string,
+    readonly emailManagerId: string,
+  ) {
+    super(
+      `user ${userId} resolves to two managers: ${uidManagerId} by uid, ${emailManagerId} by email`,
+    );
+    this.name = "AmbiguousManagerLinkError";
+  }
+}
+
 /** The session manager may not act as the target manager (→ 403). The identity gate Prompt 06
  *  deferred: the controller still owns turn/ownership/legality; this only asserts "is it you?". */
 export class NotYourManagerError extends AuthError {
