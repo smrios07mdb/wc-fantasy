@@ -7,13 +7,12 @@
 import type { ReactNode } from "react";
 import "./ds.css";
 import "./lineup.css";
-import { CrossNav } from "../shell/CrossNav";
+import { AppShell } from "../shell/AppShell";
 
 export default function LineupLayout({ children }: { children: ReactNode }) {
   return (
     <div className="sl-app" data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <CrossNav />
-      {children}
+      <AppShell active="lineup">{children}</AppShell>
     </div>
   );
 }

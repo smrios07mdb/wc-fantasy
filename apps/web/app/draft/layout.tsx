@@ -7,13 +7,12 @@
 import type { ReactNode } from "react";
 import "./ds.css";
 import "./draft.css";
-import { CrossNav } from "../shell/CrossNav";
+import { AppShell } from "../shell/AppShell";
 
 export default function DraftLayout({ children }: { children: ReactNode }) {
   return (
     <div className="dr-app" data-theme="dark" data-accent="cobalt" data-density="compact">
-      <CrossNav />
-      {children}
+      <AppShell active="draft">{children}</AppShell>
     </div>
   );
 }
