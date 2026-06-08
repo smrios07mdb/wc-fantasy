@@ -776,3 +776,8 @@ landing hub.
   + `auth/*`); the richer shell IA + mobile tab-bar/sheets/bell/avatar/commissioner (add as those screens
   ship); per-route `ds.css` de-dup + Preflight drop (post-sprint). **Branch `feat/app-shell`, off
   post-19 `main`; held for clearance; not pushed; no force-push.**
+- **Known tradeoff of per-layout mounting:** because the shell is mounted in each feature layout (not a
+  shared `(app)/` route-group layout), it **remounts on every feature-route change**. Harmless today —
+  the shell is a **stateless server component** (no open/close state to lose). Revisit a shared `(app)/`
+  route-group layout if/when **stateful chrome** ships (avatar menu / bell open-state), so the shell
+  persists across feature navigation instead of remounting.
