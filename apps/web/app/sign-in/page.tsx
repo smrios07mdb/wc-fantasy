@@ -1,32 +1,43 @@
 "use client";
 
 /**
- * Minimal, DELIBERATELY UNSTYLED magic-link sign-in (the polished auth UI is the deferred Design+Code
- * deliverable). Enter email → Supabase sends a passwordless link that returns to /auth/callback.
- * Google OAuth is config-gated (seamed-optional): the button shows only when the env flag is set;
- * magic-link is the required path and never blocks on Google.
+ * Magic-link sign-in, re-skinned onto the ds split-shell (Prompt 21) per `Join.html` + `auth/*` +
+ * BRAND.md §5. Enter email → Supabase sends a passwordless link that returns to /auth/callback. Google
+ * OAuth is config-gated (seamed-optional): the button shows only when the env flag is set; magic-link is
+ * the required path and never blocks on Google.
+ *
+ * PRESENTATION ONLY — the auth logic is unchanged from the bare-Tailwind original: the same
+ * `signInWithOtp` request (same `emailRedirectTo` → /auth/callback), the same env-gated `signInWithOAuth`,
+ * the same `createClient` edge. The one-string `message` became two presentation flags (`error` + `sent`)
+ * so the request form and the "check your email" confirmation render as the two distinct designed views —
+ * the network/redirect behavior is byte-for-byte identical. There is deliberately NO next/safeNextPath
+ * handling here (there never was — that passthrough lives in auth/callback/route.ts, untouched).
  */
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AuthScreen, IconAlert, IconClock, IconGoogle, IconMail } from "../_auth/AuthChrome";
+import "../_auth/auth.css";
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED === "true";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSending(true);
-    setMessage("");
+    setError("");
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     setSending(false);
-    setMessage(error ? error.message : "Check your email for the magic link.");
+    if (otpError) setError(otpError.message);
+    else setSent(true);
   }
 
   async function signInWithGoogle() {
@@ -38,40 +49,99 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-sm flex-col gap-4 px-6 py-16">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
-      {/* text-slate-400/300 (not -600/-700): legible on the global dark body (Prompt 20). This bare
-          page stays Tailwind; the full ds skin is the deferred /sign-in follow-up. */}
-      <p className="text-sm text-slate-400">
-        Private league — enter your allowlisted email and we&rsquo;ll send a magic link.
-      </p>
-      <form onSubmit={sendMagicLink} className="flex flex-col gap-2">
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="you@example.com"
-          className="rounded border border-slate-300 px-3 py-2"
-        />
-        <button
-          type="submit"
-          disabled={sending}
-          className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50"
-        >
-          {sending ? "Sending…" : "Send magic link"}
-        </button>
-      </form>
-      {GOOGLE_ENABLED && (
-        <button
-          type="button"
-          onClick={signInWithGoogle}
-          className="rounded border border-slate-300 px-3 py-2"
-        >
-          Continue with Google
-        </button>
+    <AuthScreen>
+      {sent ? (
+        // Submitted / confirmation state — the magic link is on its way.
+        <div className="au-view au-center">
+          <div className="au-icon tone-accent au-pop">
+            <IconMail s={26} />
+          </div>
+          <h1 className="au-title">Check your email</h1>
+          <p className="au-sub">
+            We sent a sign-in link to
+            <br />
+            <b className="au-email">{email}</b>
+          </p>
+          <div className="au-note">
+            <IconClock s={14} />
+            Open the link on this device to finish signing in. You can close this tab once you’ve
+            clicked it.
+          </div>
+          <div className="au-actions">
+            <button
+              className="btn btn-ghost btn-block"
+              type="button"
+              onClick={() => setSent(false)}
+            >
+              Use a different email
+            </button>
+          </div>
+        </div>
+      ) : (
+        // Email-input state — request the magic link (+ the env-gated Google option).
+        <form className="au-view" onSubmit={sendMagicLink}>
+          <div className="au-head">
+            <h1 className="au-title">Sign in to your league</h1>
+            <p className="au-sub">
+              Enter your allowlisted email and we’ll send a secure sign-in link. No password to
+              remember.
+            </p>
+          </div>
+
+          <label className="au-field">
+            <span className="au-label">Email address</span>
+            <input
+              className={"au-input" + (error ? " is-error" : "")}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              spellCheck={false}
+              autoFocus
+            />
+            {error && (
+              <span className="au-err">
+                <IconAlert s={13} />
+                {error}
+              </span>
+            )}
+          </label>
+
+          <button className="btn btn-primary btn-block au-magic" type="submit" disabled={sending}>
+            {sending ? (
+              <>
+                <span className="spinner" style={{ width: 16, height: 16 }} />
+                Sending…
+              </>
+            ) : (
+              <>
+                <IconMail s={17} />
+                Send magic link
+              </>
+            )}
+          </button>
+
+          {GOOGLE_ENABLED && (
+            <>
+              <div className="au-or">
+                <span>or</span>
+              </div>
+              <button className="au-google" type="button" onClick={signInWithGoogle}>
+                <IconGoogle />
+                Continue with Google
+              </button>
+            </>
+          )}
+
+          <p className="au-fineprint">
+            By continuing you agree to the league rules. Only invited emails can sign in — this
+            keeps the league private.
+          </p>
+        </form>
       )}
-      {message && <p className="text-sm text-slate-300">{message}</p>}
-    </main>
+    </AuthScreen>
   );
 }
