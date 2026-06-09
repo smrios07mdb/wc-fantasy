@@ -261,6 +261,13 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
     [state.myQueue, submitQueue],
   );
 
+  const onQueueReorder = useCallback(
+    (playerIds: string[]) => {
+      void submitQueue(playerIds);
+    },
+    [submitQueue],
+  );
+
   const handleClockUpdate = useCallback(async (seconds: number) => {
     const res = await fetch("/api/draft/clock", {
       method: "PATCH",
@@ -398,6 +405,7 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
                   <QueuePanel
                     state={state}
                     onQueueRemove={onQueueRemove}
+                    onQueueReorder={onQueueReorder}
                     submittingQueue={submittingQueue}
                   />
                 )}

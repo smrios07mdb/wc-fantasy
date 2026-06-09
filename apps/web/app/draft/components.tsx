@@ -8,7 +8,7 @@
  * the gated route + Realtime, and presence is live. ds.css supplies the tokens + generic classes;
  * draft.css supplies the `.dr-*` layout. These render — they hold no draft truth.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Position } from "@app/shared";
 import { SQUAD_COMPOSITION } from "@app/shared";
 import type { DraftManager, DraftPlayer, DraftRoomState } from "../../src/draft/types";
@@ -24,6 +24,7 @@ import {
 } from "../../src/draft/board";
 import { countdownView, type CountdownView } from "../../src/draft/countdown";
 import { flagStyle, nationName } from "./flags";
+import { reorderQueue } from "../../src/draft/queueReorder";
 
 // ─────────────────────────────────────────── atoms ───────────────────────────────────────────
 
@@ -399,15 +400,19 @@ export function AvailableList({
 export function QueuePanel({
   state,
   onQueueRemove,
+  onQueueReorder,
   submittingQueue,
 }: {
   state: DraftRoomState;
   onQueueRemove: (playerId: string) => void;
+  onQueueReorder: (playerIds: string[]) => void;
   submittingQueue: boolean;
 }) {
   const byId = new Map(state.availablePlayers.map((p) => [p.id, p]));
   const items = state.myQueue.map((id) => byId.get(id)).filter((p): p is DraftPlayer => Boolean(p));
   const takenCount = state.myQueue.length - items.length;
+  const dragIndex = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   return (
     <>
       <div className="alert alert-info" style={{ marginBottom: 12 }}>
@@ -418,7 +423,50 @@ export function QueuePanel({
       </div>
       {items.length === 0 && <Empty label="Your queue is empty." />}
       {items.map((p, i) => (
-        <div className="dr-qitem" key={p.id}>
+        <div
+          className="dr-qitem"
+          key={p.id}
+          draggable={!submittingQueue}
+          style={dragOverIndex === i ? { opacity: 0.4 } : undefined}
+          onDragStart={
+            submittingQueue
+              ? undefined
+              : () => {
+                  dragIndex.current = i;
+                }
+          }
+          onDragOver={
+            submittingQueue
+              ? undefined
+              : (e) => {
+                  e.preventDefault();
+                  setDragOverIndex(i);
+                }
+          }
+          onDragLeave={submittingQueue ? undefined : () => setDragOverIndex(null)}
+          onDrop={
+            submittingQueue
+              ? undefined
+              : (e) => {
+                  e.preventDefault();
+                  setDragOverIndex(null);
+                  const from = dragIndex.current;
+                  if (from === null || from === i) return;
+                  onQueueReorder(
+                    reorderQueue(
+                      items.map((x) => x.id),
+                      from,
+                      i,
+                    ),
+                  );
+                  dragIndex.current = null;
+                }
+          }
+          onDragEnd={() => {
+            dragIndex.current = null;
+            setDragOverIndex(null);
+          }}
+        >
           <span className="mono t-micro text-tertiary" style={{ width: 16 }}>
             {i + 1}
           </span>

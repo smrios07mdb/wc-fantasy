@@ -117,6 +117,22 @@ describe("draft queue editor — toggle + remove wiring (Prompt 32)", () => {
   });
 });
 
+describe("draft queue drag-to-reorder (Prompt 33)", () => {
+  it("QueuePanel accepts onQueueReorder prop", () => {
+    expect(components).toContain("onQueueReorder: (playerIds: string[]) => void");
+    expect(components).toContain("onQueueReorder(");
+  });
+
+  it("drag is disabled (draggable={false}) when submittingQueue is true", () => {
+    expect(components).toContain("draggable={!submittingQueue}");
+  });
+
+  it("DraftRoomClient passes onQueueReorder to QueuePanel", () => {
+    expect(client).toContain("onQueueReorder={onQueueReorder}");
+    expect(client).toContain("const onQueueReorder = useCallback(");
+  });
+});
+
 describe("draft re-skin — colour + shape invariants (BRAND.md §1, ARCHITECTURE §5)", () => {
   it("keeps draft.css fully tokenised — no literal hex, so no gold can leak into the body", () => {
     // Every colour resolves through the gold-free ds.css tokens (--accent cobalt, --live red, --pos-*
