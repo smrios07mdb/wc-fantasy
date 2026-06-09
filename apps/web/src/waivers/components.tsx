@@ -1,0 +1,361 @@
+/**
+ * Presentational pieces for the FAAB waivers screen — ported from `design/design_reference/waivers/
+ * components.jsx` into the codebase's conventions (typed props, ds.css classes). No IO, no data fetching;
+ * the client shell owns state + the `/api/faab/bid` round-trips and passes everything down.
+ *
+ * KIT CHIP: the design's flag-kit (`FaKit` + `JERSEY_BG`) was never ported into the app, so per the
+ * prompt we render the simple fallback — a nation code over a position-tinted chip. Critically this uses
+ * NO multi-layer `background` shorthand, so the project-wide "never `background-size: cover` on a kit
+ * chip" gotcha cannot bite here (there are no background layers to collapse).
+ */
+import type { Position } from "@app/shared";
+import type { WvPlayer } from "./types";
+import { isPlayerCutoffPassed } from "./waiversLogic";
+
+// ── icons (ported 1:1 from the design glyphs) ──────────────────────────────────
+function Sealed() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="11"
+      height="11"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      aria-hidden="true"
+    >
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+function Refund() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="13"
+      height="13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      aria-hidden="true"
+    >
+      <path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4" />
+    </svg>
+  );
+}
+function IconX() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6 6 18" />
+    </svg>
+  );
+}
+function IconEdit() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" />
+    </svg>
+  );
+}
+export { Sealed, Refund };
+
+// ── atoms ──────────────────────────────────────────────────────────────────────
+export function Pos({ p }: { p: Position }) {
+  return <span className={`pos pos-${p}`}>{p}</span>;
+}
+
+/** Nation code on a position-tinted chip (the no-image kit fallback). */
+export function KitChip({ player, sm }: { player: WvPlayer; sm?: boolean }) {
+  const code = (player.nation ?? "—").slice(0, 3).toUpperCase();
+  return (
+    <span
+      className={`wv-kit pos-${player.position}` + (sm ? " is-sm" : "")}
+      title={player.nation ?? undefined}
+      aria-hidden="true"
+    >
+      {code}
+    </span>
+  );
+}
+
+function fmtCountdown(ms: number): string {
+  if (ms <= 0) return "now";
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** Acquisition-cutoff status for a player: countdown to his kickoff, or "cutoff passed". */
+export function CutoffTag({ player, now }: { player: WvPlayer; now: Date }) {
+  if (player.kickoffAt === null) return null;
+  if (isPlayerCutoffPassed(player, now)) {
+    return <span className="wv-cutoff is-closed">cutoff passed</span>;
+  }
+  const ms = new Date(player.kickoffAt).getTime() - now.getTime();
+  const urgent = ms <= 18 * 60000;
+  return (
+    <span className={"wv-cutoff" + (urgent ? " is-urgent" : "")}>{fmtCountdown(ms)} to cutoff</span>
+  );
+}
+
+// ── FAAB budget bar ──────────────────────────────────────────────────────────────
+export function FaabBar({
+  available,
+  pending,
+  after,
+  budget,
+  compact,
+}: {
+  available: number;
+  pending: number;
+  after: number;
+  /** The full FAAB allotment ($100) — the track denominator. */
+  budget: number;
+  compact?: boolean;
+}) {
+  const leftPct = Math.min(100, Math.max(0, (available / budget) * 100));
+  const pendPct = Math.min(100, Math.max(0, (pending / budget) * 100));
+  const low = after <= budget * 0.2;
+  return (
+    <div className={"wv-faab" + (compact ? " is-compact" : "")}>
+      <div className="wv-faab-top">
+        <div className="wv-faab-stat">
+          <span className="t-label">FAAB available</span>
+          <b className="wv-faab-big mono">${available}</b>
+        </div>
+        <div className="wv-faab-stat is-right">
+          <span className="t-label">After pending</span>
+          <b className={"wv-faab-big mono" + (low ? " is-low" : "")}>${after}</b>
+        </div>
+      </div>
+      <div className="wv-faab-track">
+        <span className="wv-faab-fill" style={{ width: leftPct + "%" }} />
+        <span
+          className="wv-faab-pend"
+          style={{ width: pendPct + "%" }}
+          title={`$${pending} committed across pending bids`}
+        />
+      </div>
+      <div className="wv-faab-legend">
+        <span>
+          <span className="wv-dot wv-dot-left" />${available} budget
+        </span>
+        <span>
+          <span className="wv-dot wv-dot-pend" />${pending} in pending
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── rolling waiver order ─────────────────────────────────────────────────────────
+export function WaiverOrderRail({
+  order,
+  myPosition,
+}: {
+  order: ReadonlyArray<{ managerId: string; name: string; position: number; isMe: boolean }>;
+  myPosition: number | null;
+}) {
+  return (
+    <div className="wv-order">
+      <div className="wv-order-head">
+        <span className="t-label">Rolling waiver order</span>
+        {myPosition !== null && <span className="wv-order-mine">You&rsquo;re #{myPosition}</span>}
+      </div>
+      <div className="wv-order-list">
+        {order.map((seat) => (
+          <div key={seat.managerId} className={"wv-order-item" + (seat.isMe ? " is-me" : "")}>
+            <span className="wv-order-n">{seat.position}</span>
+            <span className="wv-order-name">{seat.name}</span>
+          </div>
+        ))}
+      </div>
+      <div className="wv-order-note t-micro">
+        Order rotates as claims are won · <b>equal bids break on this order</b>
+      </div>
+    </div>
+  );
+}
+
+// ── a single pending claim ───────────────────────────────────────────────────────
+export function ClaimRow({
+  claim,
+  now,
+  voided,
+  onEdit,
+  onCancel,
+  busy,
+}: {
+  claim: { bidId: string; amount: number; add: WvPlayer; drop: WvPlayer | null };
+  now: Date;
+  voided: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className={"wv-claim" + (voided ? " is-void" : "")}>
+      {/* TODO(confirm): pending-claim reorder (the design's up/down arrows) needs a `faab_bid.priority`
+          migration — deferred with the engine's priority-vs-amount tiebreak (Prompt 25). Claims render
+          amount-descending (the engine's own-bid resolution order) until then. */}
+      <div className="wv-claim-body">
+        <div className="wv-claim-line">
+          <span className="wv-claim-tag wv-tag-add">ADD</span>
+          <KitChip player={claim.add} sm />
+          <b className="wv-name">{claim.add.shortName}</b>
+          <Pos p={claim.add.position} />
+          <CutoffTag player={claim.add} now={now} />
+        </div>
+        {claim.drop && (
+          <div className="wv-claim-line is-drop">
+            <span className="wv-claim-tag wv-tag-drop">DROP</span>
+            <KitChip player={claim.drop} sm />
+            <b className="wv-name wv-name-drop">{claim.drop.shortName}</b>
+            <Pos p={claim.drop.position} />
+          </div>
+        )}
+      </div>
+
+      <div className="wv-claim-bid">
+        <span className="wv-bid-amt mono">${claim.amount}</span>
+        <span className="wv-bid-sealed">
+          <Sealed />
+          sealed bid
+        </span>
+      </div>
+
+      <div className="wv-claim-act">
+        {voided ? (
+          <span className="wv-void-tag">
+            <Refund />
+            Void · refund ${claim.amount}
+          </span>
+        ) : (
+          <>
+            <button
+              className="wv-icon-btn"
+              onClick={onEdit}
+              disabled={busy}
+              title="Edit bid"
+              aria-label="Edit bid"
+            >
+              <IconEdit />
+            </button>
+            <button
+              className="wv-icon-btn is-danger"
+              onClick={onCancel}
+              disabled={busy}
+              title="Cancel claim"
+              aria-label="Cancel claim"
+            >
+              <IconX />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── results history ──────────────────────────────────────────────────────────────
+function ResultRow({
+  result,
+}: {
+  result: {
+    bidId: string;
+    managerName: string;
+    isMine: boolean;
+    add: WvPlayer;
+    drop: WvPlayer | null;
+    amount: number;
+    outcome: "won" | "lost" | "void";
+  };
+}) {
+  const { outcome } = result;
+  return (
+    <div className={"wv-res" + (result.isMine ? " is-mine" : "")}>
+      <div className="wv-res-add">
+        <KitChip player={result.add} sm />
+        <div className="wv-res-id">
+          <b className="wv-name">{result.add.shortName}</b>
+          <span className="t-micro text-tertiary">
+            <Pos p={result.add.position} /> {result.add.nation ?? ""}
+          </span>
+        </div>
+      </div>
+      <div className="wv-res-mid">
+        {outcome === "void" ? (
+          <span className="wv-res-out wv-out-void">
+            <Refund />
+            Voided · refund ${result.amount}
+          </span>
+        ) : (
+          <span className="wv-res-winner">
+            <span className="wv-res-wname">{result.isMine ? "You" : result.managerName}</span>
+            <span className={"wv-res-out " + (outcome === "won" ? "wv-out-won" : "wv-out-lost")}>
+              {outcome === "won" ? "won" : "lost"}
+            </span>
+          </span>
+        )}
+      </div>
+      <div className="wv-res-bid">
+        {outcome !== "void" && <span className="wv-res-amt mono">${result.amount}</span>}
+        {outcome === "won" && result.drop && (
+          <span className="t-micro text-tertiary">dropped {result.drop.shortName}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ResultsBatch({
+  batch,
+  formatRunAt,
+}: {
+  batch: {
+    batchId: string;
+    runAt: string;
+    results: ReadonlyArray<{
+      bidId: string;
+      managerName: string;
+      isMine: boolean;
+      add: WvPlayer;
+      drop: WvPlayer | null;
+      amount: number;
+      outcome: "won" | "lost" | "void";
+    }>;
+  };
+  formatRunAt: (iso: string) => string;
+}) {
+  return (
+    <section className="wv-batch">
+      <header className="wv-batch-head">
+        <b className="wv-batch-when">{formatRunAt(batch.runAt)}</b>
+        <span className="t-micro text-tertiary">{batch.results.length} claims</span>
+      </header>
+      <div className="wv-batch-list">
+        {batch.results.map((r) => (
+          <ResultRow key={r.bidId} result={r} />
+        ))}
+      </div>
+    </section>
+  );
+}

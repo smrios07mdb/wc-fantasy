@@ -7,7 +7,7 @@
  * Labels are reused VERBATIM from the Prompt-16 hub (`app/page.tsx` FEATURES) so the strip and the hub
  * name the same screens identically. "Home" links back to that hub.
  */
-export type NavId = "home" | "draft" | "lineup" | "vsfield";
+export type NavId = "home" | "draft" | "lineup" | "vsfield" | "waivers";
 
 export interface NavItem {
   readonly id: NavId;
@@ -15,12 +15,13 @@ export interface NavItem {
   readonly label: string;
 }
 
-// Home first (the back-to-hub anchor), then the three peer feature screens.
+// Home first (the back-to-hub anchor), then the peer feature screens that exist today.
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: "home", href: "/", label: "Home" },
   { id: "draft", href: "/draft", label: "Draft room" },
   { id: "lineup", href: "/lineup", label: "Set lineup" },
   { id: "vsfield", href: "/vsfield", label: "Vs the field" },
+  { id: "waivers", href: "/waivers", label: "Waivers" },
 ];
 
 /**

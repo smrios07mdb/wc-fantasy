@@ -2,8 +2,14 @@ import { describe, it, expect } from "vitest";
 import { NAV_ITEMS, selectActiveNav } from "./crossNav";
 
 describe("crossNav config — the shared cross-nav link set (pure, presentational)", () => {
-  it("lists Home plus the three authenticated feature screens, in that order", () => {
-    expect(NAV_ITEMS.map((item) => item.id)).toEqual(["home", "draft", "lineup", "vsfield"]);
+  it("lists Home plus the authenticated feature screens, in that order", () => {
+    expect(NAV_ITEMS.map((item) => item.id)).toEqual([
+      "home",
+      "draft",
+      "lineup",
+      "vsfield",
+      "waivers",
+    ]);
   });
 
   it("reuses the Prompt-16 hub labels verbatim for the feature screens", () => {
@@ -11,6 +17,7 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
     expect(byId.draft).toMatchObject({ href: "/draft", label: "Draft room" });
     expect(byId.lineup).toMatchObject({ href: "/lineup", label: "Set lineup" });
     expect(byId.vsfield).toMatchObject({ href: "/vsfield", label: "Vs the field" });
+    expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
   });
 });
@@ -20,6 +27,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/draft")).toBe("draft");
     expect(selectActiveNav("/lineup")).toBe("lineup");
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
+    expect(selectActiveNav("/waivers")).toBe("waivers");
   });
 
   it("marks home active ONLY on the exact root path (never via prefix)", () => {
@@ -31,6 +39,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
   it("treats a trailing slash and nested sub-paths as the same screen", () => {
     expect(selectActiveNav("/draft/")).toBe("draft");
     expect(selectActiveNav("/lineup/edit")).toBe("lineup");
+    expect(selectActiveNav("/waivers/")).toBe("waivers");
   });
 
   it("does not false-match a sibling route that merely shares a prefix", () => {
