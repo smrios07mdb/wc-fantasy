@@ -182,6 +182,45 @@ describe("draft pool UX — country filter on available pool (Prompt 31)", () =>
   });
 });
 
+describe("draft Realtime resilience (Prompt 32 — resume + polling)", () => {
+  it("H2 confirmed wired: setAuth is called on every re-subscribe via onAuthStateChange (no new impl)", () => {
+    // resubscribe(token) → subscribeDraft → client.realtime.setAuth(token); TOKEN_REFRESHED fires this.
+    expect(client).toContain("onAuthStateChange");
+    expect(client).toContain("resubscribe(session?.access_token ?? null)");
+  });
+
+  it("H1: visibilitychange listener registered and removed in useEffect cleanup", () => {
+    expect(client).toContain('addEventListener("visibilitychange"');
+    expect(client).toContain('removeEventListener("visibilitychange"');
+  });
+
+  it("H1: online listener registered and removed for network-restore resume", () => {
+    expect(client).toContain('addEventListener("online"');
+    expect(client).toContain('removeEventListener("online"');
+  });
+
+  it("H1: pageshow listener registered and removed for bfcache restore", () => {
+    expect(client).toContain('addEventListener("pageshow"');
+    expect(client).toContain('removeEventListener("pageshow"');
+  });
+
+  it("§5: polling backstop wired with POLLING_FALLBACK_MS cadence and cleanup", () => {
+    expect(client).toContain("POLLING_FALLBACK_MS");
+    expect(client).toContain("startPolling(");
+    expect(client).toContain("stopPolling()");
+  });
+
+  it("currentTokenRef stores the latest access token for resume re-subscription", () => {
+    expect(client).toContain("currentTokenRef");
+    expect(client).toContain("currentTokenRef.current = accessToken");
+  });
+
+  it("connectedRef mirrors channel SUBSCRIBED state for event-handler resume guard", () => {
+    expect(client).toContain("connectedRef");
+    expect(client).toContain('connectedRef.current = status === "SUBSCRIBED"');
+  });
+});
+
 describe("draft re-skin — colour + shape invariants (BRAND.md §1, ARCHITECTURE §5)", () => {
   it("keeps draft.css fully tokenised — no literal hex, so no gold can leak into the body", () => {
     // Every colour resolves through the gold-free ds.css tokens (--accent cobalt, --live red, --pos-*

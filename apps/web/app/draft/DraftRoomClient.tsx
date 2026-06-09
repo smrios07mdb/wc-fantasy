@@ -17,11 +17,17 @@ import {
   applyDraftRowChange,
   applyPickRowChange,
   planDraftBroadcast,
+  type DraftRowChange,
   type PickRowChange,
 } from "../../src/draft/reducer";
-import { subscribeDraft, type RealtimeClientLike } from "../../src/draft/realtime";
+import {
+  subscribeDraft,
+  POLLING_FALLBACK_MS,
+  type RealtimeClientLike,
+} from "../../src/draft/realtime";
 import { submitDraftPick } from "../../src/draft/pickClient";
 import { fetchDraftState } from "../../src/draft/stateClient";
+import { handleResume, startPolling } from "../../src/draft/resilience";
 import {
   AvailableList,
   Board,
@@ -80,6 +86,11 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
   const toastSeq = useRef(0);
   // Monotonic id for authoritative re-fetches, so a slow earlier response can't overwrite newer state.
   const refetchSeq = useRef(0);
+  // Latest access token — kept current by resubscribe so resume handlers can re-subscribe without
+  // reading stale closure state. (onAuthStateChange closure would be stale inside event listeners.)
+  const currentTokenRef = useRef<string | null>(null);
+  // Mirrors the Realtime channel's SUBSCRIBED state in a ref (React state is stale inside event handlers).
+  const connectedRef = useRef(false);
 
   const draftId = initialState.draftId;
   const sessionManagerId = initialState.sessionManagerId;
@@ -101,6 +112,9 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
     let cancelled = false;
 
     const resubscribe = (accessToken: string | null) => {
+      // Mirror the latest token so resume event handlers can re-subscribe without stale closure state.
+      currentTokenRef.current = accessToken;
+      connectedRef.current = false;
       unsubscribe?.();
       unsubscribe = undefined;
       // Gate on an available session: an anon subscription joins but receives no row-change frames.
@@ -110,7 +124,10 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
         draftId,
         { sessionManagerId },
         {
-          onStatus: (status) => setConnected(status === "SUBSCRIBED"),
+          onStatus: (status) => {
+            connectedRef.current = status === "SUBSCRIBED";
+            setConnected(status === "SUBSCRIBED");
+          },
           onPresence: (ids) => setOnlineIds(new Set([sessionManagerId, ...ids])),
           onDraftChange: (payload) => {
             const plan = planDraftBroadcast(newRow(payload));
@@ -139,16 +156,52 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
 
     // onAuthStateChange fires INITIAL_SESSION (cookie session hydrated) then TOKEN_REFRESHED/SIGNED_*,
     // so the first subscribe waits for the session and each refresh re-subscribes with the fresh JWT.
+    // H2 (token expiry) is handled here: TOKEN_REFRESHED triggers resubscribe → subscribeDraft →
+    // setAuth(newToken) before the channel re-joins, so RLS never sees a stale/expired JWT.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       resubscribe(session?.access_token ?? null);
     });
 
+    // H1 (backgrounding) + §5 (polling backstop): event listeners + interval that self-heal the board
+    // without a manual re-entry. The deps object uses closures that always read the latest ref values.
+    const fetchStateFn = (): Promise<DraftRowChange | null> =>
+      fetchDraftState({ fetch: (input, init) => fetch(input, init) });
+    const applyPatchFn = (patch: DraftRowChange) => setState((s) => applyDraftRowChange(s, patch));
+
+    const resumeDeps = {
+      isHidden: () => document.hidden,
+      isConnected: () => connectedRef.current,
+      resubscribe: () => resubscribe(currentTokenRef.current),
+      fetchState: fetchStateFn,
+      applyPatch: applyPatchFn,
+    };
+
+    const onVisible = () => void handleResume(resumeDeps);
+    const onOnline = () => void handleResume(resumeDeps);
+    const onPageShow = (e: Event) => {
+      if ((e as PageTransitionEvent).persisted) void handleResume(resumeDeps);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("pageshow", onPageShow);
+
+    const stopPolling = startPolling({
+      isHidden: () => document.hidden,
+      fetchState: fetchStateFn,
+      applyPatch: applyPatchFn,
+      pollingMs: POLLING_FALLBACK_MS,
+    });
+
     return () => {
       cancelled = true;
       unsubscribe?.();
       subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("pageshow", onPageShow);
+      stopPolling();
     };
   }, [draftId, sessionManagerId]);
 
