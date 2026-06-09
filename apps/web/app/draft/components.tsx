@@ -478,6 +478,24 @@ export function QueuePanel({
           </div>
           <button
             className="btn-quiet btn-sm"
+            disabled={submittingQueue || i === 0}
+            onClick={() =>
+              onQueueReorder(reorderQueue(items.map((x) => x.id), i, i - 1))
+            }
+          >
+            ↑
+          </button>
+          <button
+            className="btn-quiet btn-sm"
+            disabled={submittingQueue || i === items.length - 1}
+            onClick={() =>
+              onQueueReorder(reorderQueue(items.map((x) => x.id), i, i + 1))
+            }
+          >
+            ↓
+          </button>
+          <button
+            className="btn-quiet btn-sm"
             disabled={submittingQueue}
             onClick={() => onQueueRemove(p.id)}
           >
