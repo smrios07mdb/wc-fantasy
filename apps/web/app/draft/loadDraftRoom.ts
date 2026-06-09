@@ -41,10 +41,7 @@ const PLAYER_SELECT = {
 } as const;
 
 /** Load the authoritative draft-room snapshot for `sessionManagerId`, or null if no draft exists yet. */
-export async function loadDraftRoom(
-  sessionManagerId: string,
-  sessionManagerIsCommissioner: boolean,
-): Promise<DraftRoomState | null> {
+export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoomState | null> {
   const draft = await prisma.draft.findFirst({
     select: {
       id: true,
@@ -59,7 +56,7 @@ export async function loadDraftRoom(
   });
   if (!draft) return null;
 
-  const [managers, pickRows, ownedRows, queueRows] = await Promise.all([
+  const [managers, pickRows, ownedRows, queueRows, sessionManagerRow] = await Promise.all([
     prisma.manager.findMany({
       where: { leagueId: draft.leagueId, draftSlot: { not: null } },
       orderBy: { draftSlot: "asc" },
@@ -85,7 +82,13 @@ export async function loadDraftRoom(
       orderBy: { position: "asc" },
       select: { playerId: true },
     }),
+    prisma.manager.findUnique({
+      where: { id: sessionManagerId },
+      select: { isCommissioner: true },
+    }),
   ]);
+
+  const sessionManagerIsCommissioner = sessionManagerRow?.isCommissioner ?? false;
 
   const ownedIds = ownedRows.map((r) => r.playerId);
   // The undrafted pool in EXACTLY the autopick order: `orderDraftPool` (@app/draft) is the SINGLE

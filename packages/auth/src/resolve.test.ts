@@ -107,6 +107,25 @@ describe("resolveSessionManager — the pure session→manager core", () => {
     });
     expect(result).toEqual({ kind: "not-allowlisted", email: "alice@example.com" });
   });
+
+  // Regression: srios@mdb.com was not flagged isCommissioner:true in provision.config.json, so the DB
+  // stored is_commissioner=false for that manager. The fix: provision.config.json + this contract test.
+  it("sessionManagerIsCommissioner is true when the manager row has is_commissioner = true", () => {
+    const result = resolveSessionManager({
+      session: { userId: "uid-srios", email: "srios@mdb.com" },
+      allowlist: [{ email: "srios@mdb.com" }],
+      managers: [
+        {
+          id: "mgr-srios",
+          userId: "uid-srios",
+          email: "srios@mdb.com",
+          isCommissioner: true,
+          displayName: "Sergio2",
+        },
+      ],
+    });
+    expect(result).toMatchObject({ kind: "ok", isCommissioner: true });
+  });
 });
 
 describe("assertSessionManager — the throw-style wrapper", () => {
