@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleResume, startPolling } from "./resilience";
-import type { ResumeDeps, PollDeps } from "./resilience";
+import type { ResumeDeps, PollDeps, PollTimerFns } from "./resilience";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,11 +25,17 @@ function makePollDeps(overrides: Partial<PollDeps> = {}): PollDeps {
   };
 }
 
-function makeFakeTimers() {
+function makeFakeTimers(): {
+  setIntervalFn: PollTimerFns["setInterval"];
+  clearIntervalFn: PollTimerFns["clearInterval"];
+} {
+  // vi.useFakeTimers() replaces globalThis.setInterval with a stub returning number — matches PollTimerFns.
   const setIntervalFn = vi.fn(
-    (cb: () => void, ms: number): ReturnType<typeof setInterval> => setInterval(cb, ms),
+    (cb: () => void, ms: number): number => setInterval(cb, ms) as unknown as number,
   );
-  const clearIntervalFn = vi.fn((id: ReturnType<typeof setInterval>) => clearInterval(id));
+  const clearIntervalFn = vi.fn((id: number) =>
+    clearInterval(id as unknown as ReturnType<typeof setInterval>),
+  );
   return { setIntervalFn, clearIntervalFn };
 }
 
@@ -117,16 +123,14 @@ describe("startPolling — §5 backstop interval", () => {
   it("does not fetch before the first interval fires", () => {
     const deps = makePollDeps({ fetchState: vi.fn(async () => activePatch) });
     const { setIntervalFn, clearIntervalFn } = makeFakeTimers();
-    startPolling(deps, {
-      setInterval: setIntervalFn as unknown as typeof setInterval,
-      clearInterval: clearIntervalFn as unknown as typeof clearInterval,
-    });
+    startPolling(deps, { setInterval: setIntervalFn, clearInterval: clearIntervalFn });
     expect(deps.fetchState).not.toHaveBeenCalled();
   });
 
   it("fetches and applies patch on each interval tick while foregrounded", async () => {
     const deps = makePollDeps({ fetchState: vi.fn(async () => activePatch) });
-    startPolling(deps);
+    const { setIntervalFn, clearIntervalFn } = makeFakeTimers();
+    startPolling(deps, { setInterval: setIntervalFn, clearInterval: clearIntervalFn });
     await vi.advanceTimersByTimeAsync(1000);
     expect(deps.fetchState).toHaveBeenCalledOnce();
     expect(deps.applyPatch).toHaveBeenCalledWith(activePatch);
@@ -139,14 +143,16 @@ describe("startPolling — §5 backstop interval", () => {
       isHidden: vi.fn(() => true),
       fetchState: vi.fn(async () => activePatch),
     });
-    startPolling(deps);
+    const { setIntervalFn, clearIntervalFn } = makeFakeTimers();
+    startPolling(deps, { setInterval: setIntervalFn, clearInterval: clearIntervalFn });
     await vi.advanceTimersByTimeAsync(3000);
     expect(deps.fetchState).not.toHaveBeenCalled();
   });
 
   it("self-cancels when fetchState returns a complete draft", async () => {
     const deps = makePollDeps({ fetchState: vi.fn(async () => completePatch) });
-    startPolling(deps);
+    const { setIntervalFn, clearIntervalFn } = makeFakeTimers();
+    startPolling(deps, { setInterval: setIntervalFn, clearInterval: clearIntervalFn });
     await vi.advanceTimersByTimeAsync(1000);
     expect(deps.applyPatch).toHaveBeenCalledWith(completePatch);
     // No further ticks after self-cancel:
@@ -156,7 +162,8 @@ describe("startPolling — §5 backstop interval", () => {
 
   it("cleanup fn clears the interval — no more fetches after cleanup", async () => {
     const deps = makePollDeps({ fetchState: vi.fn(async () => activePatch) });
-    const stop = startPolling(deps);
+    const { setIntervalFn, clearIntervalFn } = makeFakeTimers();
+    const stop = startPolling(deps, { setInterval: setIntervalFn, clearInterval: clearIntervalFn });
     stop();
     await vi.advanceTimersByTimeAsync(5000);
     expect(deps.fetchState).not.toHaveBeenCalled();
@@ -164,7 +171,8 @@ describe("startPolling — §5 backstop interval", () => {
 
   it("does not apply a null fetchState result (network error tick)", async () => {
     const deps = makePollDeps({ fetchState: vi.fn(async () => null) });
-    startPolling(deps);
+    const { setIntervalFn, clearIntervalFn } = makeFakeTimers();
+    startPolling(deps, { setInterval: setIntervalFn, clearInterval: clearIntervalFn });
     await vi.advanceTimersByTimeAsync(1000);
     expect(deps.fetchState).toHaveBeenCalledOnce();
     expect(deps.applyPatch).not.toHaveBeenCalled();
@@ -179,5 +187,34 @@ describe("H2 — TOKEN_REFRESHED / setAuth (already wired, confirmed)", () => {
     // BEFORE subscribing'. Confirmed: onAuthStateChange in DraftRoomClient fires on TOKEN_REFRESHED
     // → resubscribe(newToken) → subscribeDraft → client.realtime.setAuth(newToken). No new impl needed.
     expect(true).toBe(true);
+  });
+});
+
+// ── Illegal-invocation regression guard ──────────────────────────────────────
+// Unit tests (Node/jsdom) cannot prove browser safety: native timer fns brand-check their receiver
+// (this must be window), but Node/jsdom don't, so bare-ref defaults pass all tests yet crash in
+// browsers ("TypeError: Illegal invocation"). This structural smoke catches a future regression
+// back to bare refs by asserting the source uses window.* wrapper lambdas, not globalThis.* refs.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+describe("startPolling — window-receiver guard (structural, not a runtime browser proof)", () => {
+  const src = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "resilience.ts"),
+    "utf8",
+  );
+
+  it("default setInterval delegates via window.setInterval lambda (not a bare globalThis ref)", () => {
+    // Bare ref: `setInterval: globalThis.setInterval` → loses window receiver → Illegal invocation.
+    // Safe: `setInterval: (fn, ms) => window.setInterval(fn, ms)` preserves the window receiver.
+    expect(src).toContain("(fn, ms) => window.setInterval(fn, ms)");
+    expect(src).not.toMatch(/setInterval:\s*globalThis\.setInterval[^.]/);
+  });
+
+  it("default clearInterval delegates via window.clearInterval lambda (not a bare globalThis ref)", () => {
+    expect(src).toContain("(id) => window.clearInterval(id)");
+    expect(src).not.toMatch(/clearInterval:\s*globalThis\.clearInterval[^.]/);
   });
 });

@@ -52,17 +52,33 @@ export interface PollDeps {
 }
 
 /**
+ * Minimal timer abstraction — typed with `number` IDs (the browser contract). Using
+ * `typeof globalThis.setInterval` directly conflicts when @types/node is also present in the
+ * project: Node's overloads return `NodeJS.Timeout`, while `window.setInterval` returns `number`.
+ * A bespoke interface avoids the Node/browser type collision entirely.
+ */
+export interface PollTimerFns {
+  setInterval(fn: () => void, ms: number): number;
+  clearInterval(id: number): void;
+}
+
+/**
  * Start the §5 polling backstop. Fires every `deps.pollingMs`; skips when page is hidden;
  * self-cancels when the fetch returns a complete draft. Returns a cleanup fn (clears the interval).
  *
  * `timerFns` is injectable so tests can use vi.useFakeTimers() instead of real timers.
+ *
+ * Production default uses thin wrappers, NOT bare `globalThis.setInterval` refs. Bare refs lose
+ * their window receiver when stored as object properties → "TypeError: Illegal invocation" in
+ * browsers (which brand-check the receiver). Node/jsdom don't brand-check, so unit tests pass
+ * even with bare refs — this is an invisible gap. Wrappers always call window.* directly.
  */
 export function startPolling(
   deps: PollDeps,
-  timerFns: {
-    setInterval: typeof globalThis.setInterval;
-    clearInterval: typeof globalThis.clearInterval;
-  } = { setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval },
+  timerFns: PollTimerFns = {
+    setInterval: (fn, ms) => window.setInterval(fn, ms),
+    clearInterval: (id) => window.clearInterval(id),
+  },
 ): () => void {
   // Callback fires after `id` is assigned (JS event loop guarantees deferred execution).
   const id = timerFns.setInterval(() => {
