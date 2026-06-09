@@ -27,7 +27,9 @@ function mkState(over: Partial<DraftRoomState> = {}): DraftRoomState {
     picks: [],
     availablePlayers: [player("pX", "FWD"), player("pY", "MID")],
     sessionManagerId: "m1",
+    sessionManagerIsCommissioner: false,
     myQueue: [],
+    timerEnabled: true,
     ...over,
   };
 }

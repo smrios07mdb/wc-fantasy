@@ -16,7 +16,7 @@ export default async function DraftPage() {
   if (outcome.kind === "no-session") redirect("/sign-in");
   if (outcome.kind !== "ok") redirect("/auth/denied");
 
-  const state = await loadDraftRoom(outcome.manager.id);
+  const state = await loadDraftRoom(outcome.manager.id, outcome.isCommissioner);
   if (!state) {
     return (
       <div style={{ display: "grid", placeItems: "center", height: "100%", padding: 24 }}>

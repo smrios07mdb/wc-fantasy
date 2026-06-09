@@ -484,6 +484,8 @@ model Draft {
   currentManagerId String?     @map("current_manager_id")
   /// Server-authoritative per-pick deadline (UTC); length from league.draft_pick_seconds.
   pickDeadlineAt   DateTime?   @map("pick_deadline_at") @db.Timestamptz(6)
+  /// Commissioner-togglable. When false, pick_deadline_at is null on every advance → no autopick.
+  timerEnabled     Boolean     @default(true) @map("timer_enabled")
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 

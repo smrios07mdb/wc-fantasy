@@ -42,7 +42,9 @@ function mkState(over: Partial<DraftRoomState> = {}): DraftRoomState {
     ],
     availablePlayers: [],
     sessionManagerId: "m1",
+    sessionManagerIsCommissioner: false,
     myQueue: [],
+    timerEnabled: true,
     ...over,
   };
 }

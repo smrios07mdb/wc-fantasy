@@ -333,3 +333,68 @@ describe("tickDraft — autopick totality (queue → default_rank NULLS LAST →
     expect(res.pick?.playerId).toBe("p-leftover");
   });
 });
+
+describe("timer toggle (timerEnabled = false)", () => {
+  it("startDraft with timerEnabled=false writes pick_deadline_at = null", async () => {
+    const store = new MemoryDraftStore();
+    store.seedDraft({
+      draftId: "d",
+      leagueId: L,
+      orderedManagerIds: ["m1", "m2"],
+      draftPickSeconds: SECONDS,
+      timerEnabled: false,
+    });
+
+    const res = await startDraft(store, "d", T0);
+
+    expect(res.started).toBe(true);
+    const d = store.draftRow("d");
+    expect(d?.status).toBe("active");
+    expect(d?.pickDeadlineAt).toBeNull();
+  });
+
+  it("submitPick (buildCommit) with timerEnabled=false writes next pick_deadline_at = null", async () => {
+    const store = new MemoryDraftStore();
+    store.seedDraft({
+      draftId: "d",
+      leagueId: L,
+      orderedManagerIds: ["m1", "m2"],
+      draftPickSeconds: SECONDS,
+      timerEnabled: false,
+      status: "active",
+      currentPickNo: 1,
+      currentManagerId: "m1",
+      pickDeadlineAt: null,
+    });
+    store.seedPlayer("pl-1", "MID");
+
+    await submitPick(store, "d", "m1", "pl-1", T0);
+
+    const d = store.draftRow("d");
+    expect(d?.currentPickNo).toBe(2);
+    expect(d?.pickDeadlineAt).toBeNull();
+  });
+
+  it("tickDraft with null deadline is a safe no-op", async () => {
+    // timerEnabled=false: null deadline is a safe no-op
+    const store = new MemoryDraftStore();
+    store.seedDraft({
+      draftId: "d",
+      leagueId: L,
+      orderedManagerIds: ["m1", "m2"],
+      draftPickSeconds: SECONDS,
+      timerEnabled: false,
+      status: "active",
+      currentPickNo: 1,
+      currentManagerId: "m1",
+      pickDeadlineAt: null,
+    });
+    store.seedPlayer("pl-1", "MID");
+
+    const res = await tickDraft(store, "d", T0);
+
+    // timerEnabled=false: null deadline is a safe no-op
+    expect(res).toEqual({ acted: false, reason: "not-active" });
+    expect(store.pickRows("d")).toEqual([]);
+  });
+});

@@ -60,6 +60,10 @@ export interface DraftRoomState {
   availablePlayers: DraftPlayer[];
   /** The session manager (whose pick the screen can submit, and whose roster/queue it shows). */
   sessionManagerId: string;
+  /** True when the session manager is the league commissioner (gates the timer toggle button). */
+  sessionManagerIsCommissioner: boolean;
   /** The session manager's pre-set autopick queue, player ids in stored priority order. */
   myQueue: string[];
+  /** When false, pick_deadline_at is null on every advance — the ClockBar shows "No clock" instead of a countdown. */
+  timerEnabled: boolean;
 }

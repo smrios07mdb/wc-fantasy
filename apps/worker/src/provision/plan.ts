@@ -11,6 +11,8 @@ export interface ProvisionLeague {
   name: string;
   timezone: string;
   draftPickSeconds: number;
+  /** Default true; set false to start the draft with no clock (commissioner can also toggle mid-draft via the UI). */
+  timerEnabled?: boolean;
   seasonYear?: number;
   resultFreezeHours?: number;
   faabBatchLocalTime?: string;

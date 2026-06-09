@@ -70,7 +70,9 @@ function buildCommit(
           kind: "next",
           nextPickNo: pickNo + 1,
           nextManagerId: managerForPick(pickNo + 1, d.orderedManagerIds),
-          pickDeadlineAt: new Date(now.getTime() + d.draftPickSeconds * 1000),
+          pickDeadlineAt: d.timerEnabled
+            ? new Date(now.getTime() + d.draftPickSeconds * 1000)
+            : null,
         };
   return {
     draftId: d.draftId,
@@ -100,7 +102,9 @@ export async function startDraft(
     throw new DraftNotReadyError(draftId, "no managers have a draft_slot");
   }
   const currentManagerId = managerForPick(1, d.orderedManagerIds);
-  const pickDeadlineAt = new Date(now.getTime() + d.draftPickSeconds * 1000);
+  const pickDeadlineAt = d.timerEnabled
+    ? new Date(now.getTime() + d.draftPickSeconds * 1000)
+    : null;
   const started = await store.initDraft(draftId, {
     currentPickNo: 1,
     currentManagerId,

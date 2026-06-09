@@ -68,6 +68,7 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
   const [connected, setConnected] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [submittingPlayerId, setSubmittingPlayerId] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<Position | "ALL">("ALL");
   const [railTab, setRailTab] = useState<"available" | "queue" | "roster">("available");
@@ -178,6 +179,35 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
     [draftId, sessionManagerId, pushToast],
   );
 
+  const handleTimerToggle = useCallback(
+    async (enabled: boolean) => {
+      setToggling(true);
+      setState((s) => ({ ...s, timerEnabled: enabled }));
+      try {
+        const res = await fetch("/api/draft/timer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        if (!res.ok) {
+          setState((s) => ({ ...s, timerEnabled: !enabled }));
+          pushToast({
+            kind: "warn",
+            title: "Toggle failed",
+            sub: "Could not update timer setting",
+          });
+        }
+        // Success: Realtime broadcast confirms the DB change shortly after.
+      } catch {
+        setState((s) => ({ ...s, timerEnabled: !enabled }));
+        pushToast({ kind: "warn", title: "Toggle failed", sub: "Network error" });
+      } finally {
+        setToggling(false);
+      }
+    },
+    [pushToast],
+  );
+
   const n = state.managers.length;
   const total = SQUAD_SIZE * n;
   const phaseLine =
@@ -209,6 +239,15 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
           </span>
         </div>
         <ConnPill connected={connected} />
+        {state.sessionManagerIsCommissioner && state.status === "active" && (
+          <button
+            className="btn-secondary btn-sm"
+            onClick={() => void handleTimerToggle(!state.timerEnabled)}
+            disabled={toggling}
+          >
+            {state.timerEnabled ? "Disable clock" : "Enable clock"}
+          </button>
+        )}
         <div style={{ flex: 1 }} />
         <PresenceRow managers={state.managers} onlineIds={onlineIds} />
       </div>

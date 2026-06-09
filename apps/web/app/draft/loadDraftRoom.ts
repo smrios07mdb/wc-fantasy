@@ -41,7 +41,10 @@ const PLAYER_SELECT = {
 } as const;
 
 /** Load the authoritative draft-room snapshot for `sessionManagerId`, or null if no draft exists yet. */
-export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoomState | null> {
+export async function loadDraftRoom(
+  sessionManagerId: string,
+  sessionManagerIsCommissioner: boolean,
+): Promise<DraftRoomState | null> {
   const draft = await prisma.draft.findFirst({
     select: {
       id: true,
@@ -50,6 +53,7 @@ export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoom
       currentPickNo: true,
       currentManagerId: true,
       pickDeadlineAt: true,
+      timerEnabled: true,
       league: { select: { draftPickSeconds: true } },
     },
   });
@@ -110,6 +114,8 @@ export async function loadDraftRoom(sessionManagerId: string): Promise<DraftRoom
     currentManagerId: draft.currentManagerId,
     pickDeadlineAt: draft.pickDeadlineAt ? draft.pickDeadlineAt.toISOString() : null,
     draftPickSeconds: draft.league.draftPickSeconds,
+    timerEnabled: draft.timerEnabled,
+    sessionManagerIsCommissioner,
     managers: managers.map((m) => ({
       id: m.id,
       displayName: m.displayName,

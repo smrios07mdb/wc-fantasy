@@ -23,12 +23,15 @@ export interface DraftSnapshot {
   currentManagerId: string | null;
   pickDeadlineAt: Date | null;
   draftPickSeconds: number;
+  /** When false, pick_deadline_at is written as null on every advance — no countdown, no autopick. */
+  timerEnabled: boolean;
   orderedManagerIds: string[];
 }
 
-/** How the draft advances after a committed pick: to the next pick, or to completion. */
+/** How the draft advances after a committed pick: to the next pick, or to completion.
+ *  `pickDeadlineAt` is null when timerEnabled = false — the store writes null, the worker ignores it. */
 export type Advance =
-  | { kind: "next"; nextPickNo: number; nextManagerId: string; pickDeadlineAt: Date }
+  | { kind: "next"; nextPickNo: number; nextManagerId: string; pickDeadlineAt: Date | null }
   | { kind: "complete" };
 
 /** The atomic unit written for one pick: the `draft_pick` row + `roster_player` ownership + advance. */
@@ -44,11 +47,11 @@ export interface PickCommit {
   advance: Advance;
 }
 
-/** The initial pointer set when a pending draft starts. */
+/** The initial pointer set when a pending draft starts. `pickDeadlineAt` is null when timerEnabled = false. */
 export interface DraftInit {
   currentPickNo: number;
   currentManagerId: string;
-  pickDeadlineAt: Date;
+  pickDeadlineAt: Date | null;
 }
 
 export interface DraftStore {

@@ -81,6 +81,12 @@
   align-items: center;
   gap: 10px;
 }
+.dr-no-clock {
+  color: var(--text-secondary);
+  font-size: var(--t-sm, 0.8125rem);
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
 
 /* Recent ticker */
 .dr-ticker {

@@ -15,6 +15,7 @@ export interface DraftRowChange {
   current_pick_no?: number | null;
   current_manager_id?: string | null;
   pick_deadline_at?: string | null;
+  timer_enabled?: boolean;
 }
 
 /** Patch the pointer / deadline / status from a `draft` row broadcast. Partial-safe: only fields the
@@ -30,6 +31,7 @@ export function applyDraftRowChange(state: DraftRoomState, row: DraftRowChange):
       "current_manager_id" in row ? (row.current_manager_id ?? null) : state.currentManagerId,
     pickDeadlineAt:
       "pick_deadline_at" in row ? (row.pick_deadline_at ?? null) : state.pickDeadlineAt,
+    timerEnabled: row.timer_enabled !== undefined ? row.timer_enabled : state.timerEnabled,
   };
 }
 

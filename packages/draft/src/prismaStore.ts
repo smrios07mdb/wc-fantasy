@@ -33,6 +33,7 @@ export function createPrismaDraftStore(prisma: Db): DraftStore {
           currentPickNo: true,
           currentManagerId: true,
           pickDeadlineAt: true,
+          timerEnabled: true,
           league: { select: { draftPickSeconds: true } },
         },
       });
@@ -51,6 +52,7 @@ export function createPrismaDraftStore(prisma: Db): DraftStore {
         currentManagerId: d.currentManagerId,
         pickDeadlineAt: d.pickDeadlineAt,
         draftPickSeconds: d.league.draftPickSeconds,
+        timerEnabled: d.timerEnabled,
         orderedManagerIds: managers.map((m) => m.id),
       };
     },

@@ -21,6 +21,7 @@ interface DraftRow {
   currentManagerId: string | null;
   pickDeadlineAt: Date | null;
   draftPickSeconds: number;
+  timerEnabled: boolean;
   orderedManagerIds: string[];
 }
 
@@ -38,6 +39,7 @@ interface SeedDraft {
   leagueId: string;
   orderedManagerIds: string[];
   draftPickSeconds: number;
+  timerEnabled?: boolean;
   status?: DraftStatus;
   currentPickNo?: number | null;
   currentManagerId?: string | null;
@@ -65,6 +67,7 @@ export class MemoryDraftStore implements DraftStore {
       leagueId: row.leagueId,
       orderedManagerIds: [...row.orderedManagerIds],
       draftPickSeconds: row.draftPickSeconds,
+      timerEnabled: row.timerEnabled ?? true,
       status: row.status ?? "pending",
       currentPickNo: row.currentPickNo ?? null,
       currentManagerId: row.currentManagerId ?? null,

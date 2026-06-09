@@ -103,7 +103,8 @@ export function useServerCountdown(deadlineMs: number | null): CountdownView {
 // ───────────────────────────────────────── clock bar ─────────────────────────────────────────
 
 export function ClockBar({ state }: { state: DraftRoomState }) {
-  const deadlineMs = state.pickDeadlineAt ? new Date(state.pickDeadlineAt).getTime() : null;
+  const deadlineMs =
+    state.timerEnabled && state.pickDeadlineAt ? new Date(state.pickDeadlineAt).getTime() : null;
   const cd = useServerCountdown(deadlineMs);
   const mine = isMyTurnFn(state);
   const manager = onTheClockManager(state);
@@ -113,7 +114,13 @@ export function ClockBar({ state }: { state: DraftRoomState }) {
   const clockColor = cd.isUrgent ? "var(--live)" : mine ? "var(--accent)" : "var(--text-primary)";
 
   return (
-    <div className={"dr-clockbar" + (mine ? " is-mine" : "") + (cd.isUrgent ? " is-urgent" : "")}>
+    <div
+      className={
+        "dr-clockbar" +
+        (mine ? " is-mine" : "") +
+        (state.timerEnabled && cd.isUrgent ? " is-urgent" : "")
+      }
+    >
       <div className="dr-onclock">
         <Avatar manager={manager} size="md" ring={mine} online />
         <div>
@@ -127,10 +134,20 @@ export function ClockBar({ state }: { state: DraftRoomState }) {
         </div>
       </div>
       <div style={{ flex: 1 }} />
-      <div className="dr-clk" style={{ color: clockColor }} aria-label={`${cd.label} remaining`}>
-        {cd.label}
-      </div>
-      <ServerTimeNote />
+      {state.timerEnabled ? (
+        <>
+          <div
+            className="dr-clk"
+            style={{ color: clockColor }}
+            aria-label={`${cd.label} remaining`}
+          >
+            {cd.label}
+          </div>
+          <ServerTimeNote />
+        </>
+      ) : (
+        <div className="dr-no-clock">No clock</div>
+      )}
     </div>
   );
 }
@@ -468,6 +485,41 @@ export function Empty({ label }: { label: string }) {
 
 // ──────────────────────────────────────── lobby + summary ────────────────────────────────────
 
+function StartDraftButton() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleStart() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/draft/start", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError((body as Record<string, string>).error ?? `Error ${res.status}`);
+      }
+      // On success: Realtime delivers the status change; no client action needed.
+    } catch {
+      setError("Network error — try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <button className="btn btn-primary" onClick={handleStart} disabled={loading}>
+        {loading ? "Starting…" : "Start draft"}
+      </button>
+      {error && (
+        <p className="t-sm" style={{ color: "var(--error)", marginTop: 8 }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function Lobby({ state, onlineIds }: { state: DraftRoomState; onlineIds: Set<string> }) {
   const ready = state.managers.filter((m) => onlineIds.has(m.id)).length;
   return (
@@ -513,6 +565,7 @@ export function Lobby({ state, onlineIds }: { state: DraftRoomState; onlineIds: 
             </div>
           ))}
         </div>
+        {state.sessionManagerIsCommissioner && <StartDraftButton />}
       </div>
     </div>
   );
