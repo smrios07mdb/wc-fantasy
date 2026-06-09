@@ -312,6 +312,8 @@ export function AvailableList({
   setPosition,
   onDraft,
   submittingPlayerId,
+  onQueueToggle,
+  submittingQueue,
 }: {
   state: DraftRoomState;
   query: string;
@@ -320,6 +322,8 @@ export function AvailableList({
   setPosition: (p: Position | "ALL") => void;
   onDraft: (player: DraftPlayer) => void;
   submittingPlayerId: string | null;
+  onQueueToggle: (playerId: string) => void;
+  submittingQueue: boolean;
 }) {
   const mine = isMyTurnFn(state);
   const filtered = useMemo(
@@ -357,6 +361,7 @@ export function AvailableList({
       {filtered.length === 0 && <Empty label={`No players match “${query || position}”`} />}
       {filtered.map((p, i) => {
         const submitting = submittingPlayerId === p.id;
+        const queued = state.myQueue.includes(p.id);
         return (
           <div className="dr-prow" key={p.id}>
             <span className="mono t-micro text-tertiary" style={{ width: 18 }}>
@@ -368,6 +373,14 @@ export function AvailableList({
               <b>{p.displayName}</b>
               <span className="t-caption text-tertiary">{nationName(p.country)}</span>
             </div>
+            <button
+              className="btn-quiet btn-sm"
+              style={{ minHeight: 30, padding: "4px 8px" }}
+              disabled={submittingQueue || state.status === "complete"}
+              onClick={() => onQueueToggle(p.id)}
+            >
+              {queued ? "✓" : "＋"}
+            </button>
             <button
               className={"btn btn-sm " + (mine && !submitting ? "btn-primary" : "is-disabled")}
               style={{ minHeight: 30, padding: "4px 10px", color: "var(--text-on-accent)" }}
@@ -383,7 +396,15 @@ export function AvailableList({
   );
 }
 
-export function QueuePanel({ state }: { state: DraftRoomState }) {
+export function QueuePanel({
+  state,
+  onQueueRemove,
+  submittingQueue,
+}: {
+  state: DraftRoomState;
+  onQueueRemove: (playerId: string) => void;
+  submittingQueue: boolean;
+}) {
   const byId = new Map(state.availablePlayers.map((p) => [p.id, p]));
   const items = state.myQueue.map((id) => byId.get(id)).filter((p): p is DraftPlayer => Boolean(p));
   const takenCount = state.myQueue.length - items.length;
@@ -395,9 +416,6 @@ export function QueuePanel({ state }: { state: DraftRoomState }) {
           player that fills a need — then fall back to best available.
         </div>
       </div>
-      {/* TODO(prompt-NN: queue editor): set/reorder draft_queue (a `draft_queue` mutation + endpoint).
-          The engine already falls back to best-available, so the draft functions without it — shipping
-          the core first (ARCHITECTURE.md §5; Prompt 08 piece 5 "should-have, not blocking"). */}
       {items.length === 0 && <Empty label="Your queue is empty." />}
       {items.map((p, i) => (
         <div className="dr-qitem" key={p.id}>
@@ -410,6 +428,13 @@ export function QueuePanel({ state }: { state: DraftRoomState }) {
             <b className="t-sm">{p.lastName ?? p.displayName}</b>{" "}
             <span className="t-caption text-tertiary">{nationName(p.country)}</span>
           </div>
+          <button
+            className="btn-quiet btn-sm"
+            disabled={submittingQueue}
+            onClick={() => onQueueRemove(p.id)}
+          >
+            ✕
+          </button>
         </div>
       ))}
       {takenCount > 0 && (

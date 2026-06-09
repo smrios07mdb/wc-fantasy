@@ -80,6 +80,43 @@ describe("draft re-skin — preserves the behaviours it restyles (no mechanism c
   });
 });
 
+describe("draft queue editor — toggle + remove wiring (Prompt 32)", () => {
+  it("AvailableList accepts onQueueToggle and submittingQueue props", () => {
+    expect(components).toContain("onQueueToggle: (playerId: string) => void");
+    expect(components).toContain("submittingQueue: boolean");
+    expect(components).toContain("onQueueToggle(p.id)");
+  });
+
+  it("QueuePanel accepts onQueueRemove and submittingQueue props", () => {
+    expect(components).toContain("onQueueRemove: (playerId: string) => void");
+    expect(components).toContain("onQueueRemove(p.id)");
+  });
+
+  it("queue toggle button is disabled when submittingQueue or draft is complete", () => {
+    expect(components).toContain('submittingQueue || state.status === "complete"');
+  });
+
+  it("queue remove button is disabled when submittingQueue", () => {
+    expect(components).toContain("disabled={submittingQueue}");
+  });
+
+  it("DraftRoomClient passes onQueueToggle, onQueueRemove, and submittingQueue to components", () => {
+    expect(client).toContain("onQueueToggle={onQueueToggle}");
+    expect(client).toContain("onQueueRemove={onQueueRemove}");
+    expect(client).toContain("submittingQueue={submittingQueue}");
+  });
+
+  it("submitQueue reverts state.myQueue on a failed POST", () => {
+    expect(client).toContain("lastSavedQueueRef");
+    expect(client).toContain("Queue not saved");
+    expect(client).toContain("/api/draft/queue");
+  });
+
+  it("TODO(prompt-NN: queue editor) comment is removed", () => {
+    expect(components).not.toContain("TODO(prompt-NN: queue editor)");
+  });
+});
+
 describe("draft re-skin — colour + shape invariants (BRAND.md §1, ARCHITECTURE §5)", () => {
   it("keeps draft.css fully tokenised — no literal hex, so no gold can leak into the body", () => {
     // Every colour resolves through the gold-free ds.css tokens (--accent cobalt, --live red, --pos-*

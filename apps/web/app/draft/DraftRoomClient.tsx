@@ -68,7 +68,10 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
   const [connected, setConnected] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [submittingPlayerId, setSubmittingPlayerId] = useState<string | null>(null);
+  const [submittingQueue, setSubmittingQueue] = useState(false);
   const [toggling, setToggling] = useState(false);
+  // Tracks the last successfully saved queue for optimistic-revert on POST failure.
+  const lastSavedQueueRef = useRef<string[]>(initialState.myQueue);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<Position | "ALL">("ALL");
   const [railTab, setRailTab] = useState<"available" | "queue" | "roster">("available");
@@ -208,6 +211,56 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
     [pushToast],
   );
 
+  const submitQueue = useCallback(
+    async (playerIds: string[]) => {
+      const prev = lastSavedQueueRef.current;
+      setState((s) => ({ ...s, myQueue: playerIds }));
+      setSubmittingQueue(true);
+      try {
+        const res = await fetch("/api/draft/queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerIds }),
+        });
+        if (res.ok) {
+          lastSavedQueueRef.current = playerIds;
+        } else {
+          const b = (await res.json().catch(() => ({}))) as Record<string, string>;
+          setState((s) => ({ ...s, myQueue: prev }));
+          pushToast({
+            kind: "warn",
+            title: "Queue not saved",
+            sub: b.error ?? `Error ${res.status}`,
+          });
+        }
+      } catch {
+        setState((s) => ({ ...s, myQueue: prev }));
+        pushToast({ kind: "warn", title: "Queue not saved", sub: "Network error" });
+      } finally {
+        setSubmittingQueue(false);
+      }
+    },
+    [pushToast],
+  );
+
+  const onQueueToggle = useCallback(
+    (playerId: string) => {
+      const current = state.myQueue;
+      const next = current.includes(playerId)
+        ? current.filter((id) => id !== playerId)
+        : [...current, playerId];
+      void submitQueue(next);
+    },
+    [state.myQueue, submitQueue],
+  );
+
+  const onQueueRemove = useCallback(
+    (playerId: string) => {
+      void submitQueue(state.myQueue.filter((id) => id !== playerId));
+    },
+    [state.myQueue, submitQueue],
+  );
+
   const handleClockUpdate = useCallback(async (seconds: number) => {
     const res = await fetch("/api/draft/clock", {
       method: "PATCH",
@@ -337,9 +390,17 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
                     setPosition={setPosition}
                     onDraft={(p) => void makePick(p)}
                     submittingPlayerId={submittingPlayerId}
+                    onQueueToggle={onQueueToggle}
+                    submittingQueue={submittingQueue}
                   />
                 )}
-                {railTab === "queue" && <QueuePanel state={state} />}
+                {railTab === "queue" && (
+                  <QueuePanel
+                    state={state}
+                    onQueueRemove={onQueueRemove}
+                    submittingQueue={submittingQueue}
+                  />
+                )}
                 {railTab === "roster" && <RosterPanel state={state} />}
               </div>
             </div>
