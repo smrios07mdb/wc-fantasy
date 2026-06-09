@@ -372,19 +372,22 @@ describe("§6 Role outcomes — clean sheet & goals conceded (role played ∈ {G
     expect(only(C.cleanSheet, { role, minutesPlayed: 90, teamGoalsAgainst: 0 })).toBe(0);
   });
 
+  // updated: goals conceded now −1/1 per Prompt 28 (every goal conceded costs a point).
   it.each<[number, number]>([
-    [1, 0],
-    [2, -1],
-    [3, -1],
-    [4, -2],
-  ])("goals conceded while on %s -> %s (−1/2)", (goalsConcededWhileOn, expected) => {
+    [0, 0],
+    [1, -1],
+    [2, -2],
+    [3, -3],
+    [4, -4],
+  ])("goals conceded while on %s -> %s (−1/1)", (goalsConcededWhileOn, expected) => {
     expect(only(C.goalsConceded, { role: "GK", minutesPlayed: 90, goalsConcededWhileOn })).toBe(
       expected,
     );
   });
 
   it("DEF takes the goals-conceded penalty; MID/FWD do not", () => {
-    expect(only(C.goalsConceded, { role: "DEF", goalsConcededWhileOn: 4 })).toBe(-2);
+    // updated: goals conceded now −1/1 per Prompt 28
+    expect(only(C.goalsConceded, { role: "DEF", goalsConcededWhileOn: 4 })).toBe(-4);
     expect(only(C.goalsConceded, { role: "MID", goalsConcededWhileOn: 4 })).toBe(0);
     expect(only(C.goalsConceded, { role: "FWD", goalsConcededWhileOn: 4 })).toBe(0);
   });

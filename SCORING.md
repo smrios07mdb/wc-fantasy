@@ -74,7 +74,7 @@ given sufficient stat granularity. See DECISIONS.md → Data source, and the per
 | Stat | Value |
 |---|---|
 | Clean sheet (60+ min) | +4 |
-| Goals conceded | −1 / 2 |
+| Goals conceded | −1 / 1 _(was −1/2 before Prompt 28; updated for tighter defensive accountability)_ |
 
 ## 7. Penalties — all
 | Stat | Value |

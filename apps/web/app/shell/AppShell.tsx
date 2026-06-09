@@ -65,6 +65,13 @@ function NavIcon({ id }: { id: NavId }) {
         <path d="M8 11V8a4 4 0 0 1 8 0v3" />
       </>
     ),
+    // Scoring = a rulebook / lined document (the in-app scoring reference, Prompt 28).
+    scoring: (
+      <>
+        <rect x="5" y="3.5" width="14" height="17" rx="2" />
+        <path d="M8.5 8h7M8.5 12h7M8.5 16h4" />
+      </>
+    ),
   };
   return (
     <svg

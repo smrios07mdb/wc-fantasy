@@ -55,7 +55,7 @@ export interface ScoreInput {
   // §7 prescribes, so the engine (not upstream) owns the rule:
   /** Goals against the player's team over the WHOLE match. Clean sheet ⇔ this is 0 (+ 60' + role). */
   teamGoalsAgainst: number;
-  /** Goals conceded by the team WHILE this player was on the pitch. Drives the −1/2 line. */
+  /** Goals conceded by the team WHILE this player was on the pitch. Drives the −1/1 line. */
   goalsConcededWhileOn: number;
 
   // §7 Penalties (all). Won/committed are MANUAL (no feed field — operator-tagged).

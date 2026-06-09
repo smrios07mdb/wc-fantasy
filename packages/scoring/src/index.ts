@@ -180,10 +180,11 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
       add(C.cleanSheet, 4, `clean sheet (${input.minutesPlayed}′, 0 against) → +4`);
     }
     // Goals conceded keys off goals while the player was ON the pitch.
+    // updated: goals conceded now −1/1 per Prompt 28 (was −1/2; floor(n/1) = n).
     add(
       C.goalsConceded,
-      -floorPer(input.goalsConcededWhileOn, 2),
-      `${input.goalsConcededWhileOn} conceded ÷ 2`,
+      -floorPer(input.goalsConcededWhileOn, 1),
+      `${input.goalsConcededWhileOn} conceded ÷ 1`,
     );
   }
 

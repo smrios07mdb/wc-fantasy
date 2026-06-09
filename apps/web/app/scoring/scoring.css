@@ -1,0 +1,226 @@
+/*
+ * Route-scoped styles for the /scoring rules reference (Prompt 28). Layers on the GLOBAL ds.css token
+ * base (root layout, Prompt 20) — NO ds.css fork, no raw brand hex. All colour comes from ds tokens:
+ * position badges reuse ds's `--pos-gk/--pos-def/--pos-mid/--pos-fwd`; points use `--success`/`--danger`;
+ * interactive chrome uses the cobalt `--accent`. No gold anywhere (BRAND.md §1 — only the shell topbar
+ * carries gold). The page scrolls naturally inside the shell's `.sh-content` region — no fixed height.
+ */
+
+.sc-page {
+  padding: var(--sp-6, 24px) clamp(16px, 4vw, 40px) var(--sp-12, 48px);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.sc-head {
+  margin-bottom: var(--sp-6, 24px);
+}
+.sc-head h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
+  font-weight: var(--fw-black);
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-2, 8px);
+}
+.sc-head p {
+  color: var(--text-secondary);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  max-width: 60ch;
+  margin: 0;
+}
+
+/* §1–§8 rules — two-column grid, collapses to one on narrow viewports. */
+.sc-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4, 16px);
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .sc-rules-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sc-section {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: var(--sp-4, 16px) var(--sp-5, 20px) var(--sp-5, 20px);
+}
+.sc-section h2 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-1, 4px);
+}
+.sc-section .sc-note {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  margin: 0 0 var(--sp-3, 12px);
+}
+.sc-subhead {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin: var(--sp-4, 16px) 0 var(--sp-2, 8px);
+}
+
+/* Tables — semantic, zebra-free, hairline-separated rows. */
+.sc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+.sc-table th {
+  text-align: left;
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: var(--sp-1, 4px) var(--sp-2, 8px);
+  border-bottom: 1px solid var(--hairline-strong, var(--hairline));
+}
+.sc-table td {
+  padding: var(--sp-2, 8px);
+  border-top: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+.sc-table td:first-child {
+  color: var(--text-primary);
+}
+.sc-table .sc-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Points colour convention: positive → success, negative → danger, neutral → muted. */
+.sc-pos {
+  color: var(--success);
+  font-weight: var(--fw-semibold);
+}
+.sc-neg {
+  color: var(--danger);
+  font-weight: var(--fw-semibold);
+}
+.sc-zero {
+  color: var(--text-tertiary);
+}
+
+/* §9 Example games — four-column grid, collapses to two then one. */
+.sc-examples {
+  margin-top: var(--sp-8, 32px);
+}
+.sc-examples > h2 {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-4, 16px);
+}
+.sc-examples-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4, 16px);
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .sc-examples-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .sc-examples-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sc-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sc-card-head {
+  padding: var(--sp-4, 16px);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1, 4px);
+}
+.sc-card-head .sc-card-title {
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  font-size: var(--fs-body);
+}
+.sc-card-head .sc-card-meta {
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+}
+
+/* Position badge — colour driven by the per-card `--sc-pos-color` (mapped from ds `--pos-*`). */
+.sc-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-width: 40px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-black);
+  letter-spacing: 0.04em;
+  color: var(--surface-0);
+  background: var(--sc-pos-color, var(--accent));
+}
+.sc-badge[data-pos="GK"] {
+  --sc-pos-color: var(--pos-gk);
+}
+.sc-badge[data-pos="DEF"] {
+  --sc-pos-color: var(--pos-def);
+}
+.sc-badge[data-pos="MID"] {
+  --sc-pos-color: var(--pos-mid);
+}
+.sc-badge[data-pos="FWD"] {
+  --sc-pos-color: var(--pos-fwd);
+}
+
+.sc-card .sc-table {
+  padding: var(--sp-2, 8px) var(--sp-3, 12px);
+}
+.sc-card-total {
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--sp-3, 12px) var(--sp-4, 16px);
+  border-top: 1px solid var(--hairline-strong, var(--hairline));
+  background: var(--surface-2);
+}
+.sc-card-total span {
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.sc-card-total b {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-black);
+  color: var(--success);
+}

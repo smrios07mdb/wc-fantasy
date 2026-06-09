@@ -9,6 +9,7 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
       "lineup",
       "vsfield",
       "waivers",
+      "scoring",
     ]);
   });
 
@@ -18,6 +19,7 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
     expect(byId.lineup).toMatchObject({ href: "/lineup", label: "Set lineup" });
     expect(byId.vsfield).toMatchObject({ href: "/vsfield", label: "Vs the field" });
     expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
+    expect(byId.scoring).toMatchObject({ href: "/scoring", label: "Scoring" });
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
   });
 });
@@ -28,6 +30,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/lineup")).toBe("lineup");
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
     expect(selectActiveNav("/waivers")).toBe("waivers");
+    expect(selectActiveNav("/scoring")).toBe("scoring");
   });
 
   it("marks home active ONLY on the exact root path (never via prefix)", () => {
