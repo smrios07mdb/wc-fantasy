@@ -277,19 +277,42 @@ function impliedFromMarket(p: FIFAPlayerProp): { lineValue: number; prob: number
   return null;
 }
 
+// The prop types {@link MatchProps} can carry. Only `anytime_goal` + `assists` are read by computeRanking
+// today; the rest are in the union for future signal. The API also returns card/saves/tackles/etc. — those
+// are dropped here so the ranking only ever sees the modelled types (and the narrow below stays honest, no
+// blind cast on a raw vendor string).
+const RANKING_PROP_TYPES = new Set<MatchProps["propType"]>([
+  "anytime_goal",
+  "assists",
+  "shots",
+  "shots_on_target",
+  "first_goal",
+]);
+function isRankingPropType(t: string): t is MatchProps["propType"] {
+  return RANKING_PROP_TYPES.has(t as MatchProps["propType"]);
+}
+
 /**
- * Step 5 — de-vig: group DraftKings + FanDuel quotes by (player, match, propType, lineValue) and average
- * their implied probabilities into one {@link MatchProps} row. Only those two vendors are used (the spec's
- * DK+FD average); a single present vendor is used directly. Unusable markets/line values are dropped.
+ * Step 5 — de-vig: keep only the ranking-relevant prop types, group DraftKings + FanDuel quotes by
+ * (player, match, propType, lineValue), and average their implied probabilities into one {@link MatchProps}
+ * row. Only those two vendors are used (the spec's DK+FD average); a single present vendor is used directly.
+ * Unusable markets / line values / non-ranking prop types are dropped.
  */
 function devigProps(raw: FIFAPlayerProp[]): MatchProps[] {
   const VENDORS = new Set(["draftkings", "fanduel"]);
   const groups = new Map<
     string,
-    { matchId: number; playerId: number; propType: string; lineValue: number; probs: number[] }
+    {
+      matchId: number;
+      playerId: number;
+      propType: MatchProps["propType"];
+      lineValue: number;
+      probs: number[];
+    }
   >();
   for (const p of raw) {
     if (!VENDORS.has(p.vendor)) continue;
+    if (!isRankingPropType(p.prop_type)) continue;
     const m = impliedFromMarket(p);
     if (!m) continue;
     const key = `${p.player_id}|${p.match_id}|${p.prop_type}|${m.lineValue}`;
@@ -309,7 +332,7 @@ function devigProps(raw: FIFAPlayerProp[]): MatchProps[] {
   return [...groups.values()].map((g) => ({
     matchId: g.matchId,
     playerId: g.playerId,
-    propType: g.propType as MatchProps["propType"],
+    propType: g.propType,
     lineValue: g.lineValue,
     impliedProb: g.probs.reduce((a, b) => a + b, 0) / g.probs.length,
   }));
