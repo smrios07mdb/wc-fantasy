@@ -159,6 +159,60 @@ export async function submitPick(
 }
 
 /**
+ * Commissioner-triggered autopick: selects and commits the best autopick for the manager currently
+ * on the clock, bypassing ALL deadline checks. Used when the draft is running without a timer
+ * (timer_enabled = false) and the commissioner wants to force a pick for an idle manager.
+ *
+ * Identical to tickDraft except it skips the pickDeadlineAt null/expiry checks entirely.
+ * Do NOT use this from the worker tick loop — tickDraft is the authoritative timer-expiry path.
+ */
+export async function forceAutopick(
+  store: DraftStore,
+  draftId: string,
+  now: Date,
+): Promise<TickResult> {
+  const d = await store.loadDraft(draftId);
+  if (!d) throw new DraftNotFoundError(draftId);
+
+  const { status, currentPickNo, currentManagerId, leagueId } = d;
+  if (status !== "active" || currentPickNo === null || currentManagerId === null) {
+    return { acted: false, reason: "not-active" };
+  }
+
+  // No deadline check — commissioner forced.
+
+  const [owned, counts, queue, ranking] = await Promise.all([
+    store.listOwnedPlayerIds(leagueId),
+    store.getRosterCounts(currentManagerId),
+    store.getQueue(currentManagerId),
+    store.getDefaultRanking(leagueId),
+  ]);
+
+  const playerId = selectAutopick({ queue, ranking, counts, isAvailable: (id) => !owned.has(id) });
+  if (playerId === null) {
+    return { acted: false, reason: "no-eligible-player" };
+  }
+
+  const commit = buildCommit(d, currentPickNo, currentManagerId, playerId, true, now);
+  const committed = await store.commitPick(commit);
+  if (!committed) {
+    return { acted: false, reason: "already-advanced" };
+  }
+
+  return {
+    acted: true,
+    reason: "autopicked",
+    pick: {
+      pickNo: currentPickNo,
+      managerId: currentManagerId,
+      playerId,
+      isAuto: true,
+      complete: commit.advance.kind === "complete",
+    },
+  };
+}
+
+/**
  * The timer-expiry path the worker calls. If the current pick's deadline has passed, autopick for the
  * manager on the clock (queue → best-available) and advance — all through the same transactional
  * commit (`is_auto = true`). Idempotent: before the deadline, or once a pick already filled the slot,

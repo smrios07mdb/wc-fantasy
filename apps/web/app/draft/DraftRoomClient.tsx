@@ -208,6 +208,20 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
     [pushToast],
   );
 
+  const handleClockUpdate = useCallback(async (seconds: number) => {
+    const res = await fetch("/api/draft/clock", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seconds }),
+    });
+    if (!res.ok) {
+      const b = (await res.json().catch(() => ({}))) as Record<string, string>;
+      throw new Error(b.error ?? `Error ${res.status}`);
+    }
+    setState((s) => ({ ...s, draftPickSeconds: seconds }));
+    // If timer is enabled, the draft row deadline update broadcasts via Realtime automatically.
+  }, []);
+
   const n = state.managers.length;
   const total = SQUAD_SIZE * n;
   const phaseLine =
@@ -240,13 +254,19 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
         </div>
         <ConnPill connected={connected} />
         {state.sessionManagerIsCommissioner && state.status === "active" && (
-          <button
-            className="btn-secondary btn-sm"
-            onClick={() => void handleTimerToggle(!state.timerEnabled)}
-            disabled={toggling}
-          >
-            {state.timerEnabled ? "Disable clock" : "Enable clock"}
-          </button>
+          <>
+            <button
+              className="btn-secondary btn-sm"
+              onClick={() => void handleTimerToggle(!state.timerEnabled)}
+              disabled={toggling}
+            >
+              {state.timerEnabled ? "Disable clock" : "Enable clock"}
+            </button>
+            <ForcePickButton />
+          </>
+        )}
+        {state.sessionManagerIsCommissioner && (
+          <ClockEditor currentSeconds={state.draftPickSeconds} onUpdate={handleClockUpdate} />
         )}
         <div style={{ flex: 1 }} />
         <PresenceRow managers={state.managers} onlineIds={onlineIds} />
@@ -328,6 +348,109 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
       )}
 
       <Toasts toasts={toasts} />
+    </div>
+  );
+}
+
+// ─────────────────────────────── commissioner controls ───────────────────────────────
+
+function ForcePickButton() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleForce() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/draft/force-pick", { method: "POST" });
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as Record<string, string>;
+        setError(b.error ?? `Error ${res.status}`);
+      }
+      // On success: Realtime delivers the pick + pointer advance to all clients.
+    } catch {
+      setError("Network error — try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        className="btn-secondary btn-sm"
+        onClick={() => void handleForce()}
+        disabled={loading}
+      >
+        {loading ? "Forcing…" : "Force pick"}
+      </button>
+      {error && (
+        <p className="t-sm" style={{ color: "var(--error)", marginTop: 4 }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ClockEditor({
+  currentSeconds,
+  onUpdate,
+}: {
+  currentSeconds: number;
+  onUpdate: (seconds: number) => Promise<void>;
+}) {
+  const [value, setValue] = useState(String(currentSeconds));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    const seconds = parseInt(value, 10);
+    if (!Number.isInteger(seconds) || seconds < 15 || seconds > 600) {
+      setError("Enter a value between 15 and 600 seconds.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await onUpdate(seconds);
+    } catch {
+      setError("Failed to update clock.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <input
+        type="number"
+        min={15}
+        max={600}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        style={{
+          fontSize: 13,
+          padding: "4px 8px",
+          borderRadius: 6,
+          border: "1px solid var(--border)",
+          width: 64,
+        }}
+        aria-label="Pick clock seconds"
+      />
+      <span className="t-caption text-secondary">s</span>
+      <button
+        className="btn-secondary btn-sm"
+        onClick={() => void handleSubmit()}
+        disabled={loading}
+      >
+        {loading ? "Saving…" : "Set clock"}
+      </button>
+      {error && (
+        <span className="t-caption" style={{ color: "var(--error)" }}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

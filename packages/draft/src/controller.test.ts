@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { MemoryDraftStore } from "./memoryStore";
 import { managerForPick } from "./snake";
-import { startDraft, submitPick, tickDraft } from "./controller";
+import { forceAutopick, startDraft, submitPick, tickDraft } from "./controller";
+import type { PickCommit } from "./store";
 import {
   DraftNotActiveError,
   DraftNotReadyError,
@@ -331,6 +332,90 @@ describe("tickDraft — autopick totality (queue → default_rank NULLS LAST →
     expect(res.acted).toBe(true);
     expect(res.reason).toBe("autopicked");
     expect(res.pick?.playerId).toBe("p-leftover");
+  });
+});
+
+/** Store subclass that always rejects commitPick — simulates a concurrent writer winning the race. */
+class AlwaysRejectStore extends MemoryDraftStore {
+  override commitPick(_commit: PickCommit): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+}
+
+describe("forceAutopick (commissioner-triggered, bypasses deadline)", () => {
+  it("active draft with a ranked player → acts: true, autopicked", async () => {
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    store.seedRanking(L, [{ playerId: "pl-best", position: "MID" }]);
+
+    const res = await forceAutopick(store, "d", T0);
+
+    expect(res.acted).toBe(true);
+    expect(res.reason).toBe("autopicked");
+    expect(res.pick).toMatchObject({
+      pickNo: 1,
+      managerId: "m1",
+      playerId: "pl-best",
+      isAuto: true,
+    });
+    expect(store.isOwned(L, "pl-best")).toBe(true);
+  });
+
+  it("fires successfully when pick_deadline_at is null (key difference from tickDraft)", async () => {
+    const store = new MemoryDraftStore();
+    store.seedDraft({
+      draftId: "d",
+      leagueId: L,
+      orderedManagerIds: ["m1", "m2"],
+      draftPickSeconds: SECONDS,
+      timerEnabled: false,
+      status: "active",
+      currentPickNo: 1,
+      currentManagerId: "m1",
+      pickDeadlineAt: null,
+    });
+    store.seedRanking(L, [{ playerId: "pl-a", position: "DEF" }]);
+
+    const res = await forceAutopick(store, "d", T0);
+
+    expect(res.acted).toBe(true);
+    expect(res.reason).toBe("autopicked");
+  });
+
+  it("pending draft → { acted: false, reason: 'not-active' }", async () => {
+    const store = new MemoryDraftStore();
+    store.seedDraft({
+      draftId: "d",
+      leagueId: L,
+      orderedManagerIds: ["m1", "m2"],
+      draftPickSeconds: SECONDS,
+    });
+    store.seedRanking(L, [{ playerId: "pl-a", position: "MID" }]);
+
+    const res = await forceAutopick(store, "d", T0);
+
+    expect(res).toEqual({ acted: false, reason: "not-active" });
+  });
+
+  it("no eligible player → { acted: false, reason: 'no-eligible-player' }", async () => {
+    const store = new MemoryDraftStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    // No players seeded — pool is empty.
+
+    const res = await forceAutopick(store, "d", T0);
+
+    expect(res).toEqual({ acted: false, reason: "no-eligible-player" });
+    expect(store.pickRows("d")).toEqual([]);
+  });
+
+  it("concurrent pick already committed → { acted: false, reason: 'already-advanced' }", async () => {
+    const store = new AlwaysRejectStore();
+    seedActive(store, ["m1", "m2"], 1, T0);
+    store.seedRanking(L, [{ playerId: "pl-a", position: "MID" }]);
+
+    const res = await forceAutopick(store, "d", T0);
+
+    expect(res).toEqual({ acted: false, reason: "already-advanced" });
   });
 });
 
