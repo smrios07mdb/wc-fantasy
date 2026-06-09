@@ -191,10 +191,10 @@ export default async function ScoringPage() {
               <tr>
                 <td>Assist</td>
                 <td className="sc-num">
-                  <Pts value={3} />
+                  <Pts value={5} />
                 </td>
                 <td className="sc-num">
-                  <Pts value={3} />
+                  <Pts value={4} />
                 </td>
                 <td className="sc-num">
                   <Pts value={3} />
@@ -263,52 +263,29 @@ export default async function ScoringPage() {
                 <td>+1 / 3</td>
                 <td className="text-tertiary">5 → floor(5/3) = +1</td>
               </tr>
-            </tbody>
-          </table>
-
-          <p className="sc-subhead">Threshold-gated flat +1 (all-or-nothing)</p>
-          <p className="sc-note">
-            Both conditions must be met — there is no partial credit. Falling short on either yields
-            0.
-          </p>
-          <table className="sc-table">
-            <thead>
               <tr>
-                <th scope="col">Stat</th>
-                <th scope="col">Both conditions</th>
-                <th scope="col" className="sc-num">
-                  Points
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Dribbles</td>
-                <td>≥3 completed &amp; ≥60%</td>
-                <td className="sc-num">
-                  <Pts value={1} />
-                </td>
+                <td>Dribbles completed</td>
+                <td>All</td>
+                <td>+1 / 2</td>
+                <td className="text-tertiary">4 → floor(4/2) = +2</td>
               </tr>
               <tr>
                 <td>Duels won</td>
-                <td>≥3 won &amp; ≥50%</td>
-                <td className="sc-num">
-                  <Pts value={1} />
-                </td>
+                <td>All</td>
+                <td>+1 / 3</td>
+                <td className="text-tertiary">4 → floor(4/3) = +1</td>
               </tr>
               <tr>
-                <td>Passing accuracy</td>
-                <td>≥40 attempted &amp; ≥90%</td>
-                <td className="sc-num">
-                  <Pts value={1} />
-                </td>
+                <td>Accurate passes</td>
+                <td>All</td>
+                <td>+1 / 15</td>
+                <td className="text-tertiary">54 → floor(54/15) = +3</td>
               </tr>
               <tr>
-                <td>Long balls</td>
-                <td>≥3 accurate &amp; ≥60%</td>
-                <td className="sc-num">
-                  <Pts value={1} />
-                </td>
+                <td>Accurate long balls</td>
+                <td>All</td>
+                <td>+1 / 2</td>
+                <td className="text-tertiary">4 → floor(4/2) = +2</td>
               </tr>
             </tbody>
           </table>
@@ -448,7 +425,7 @@ export default async function ScoringPage() {
               <tr>
                 <td>Own goal</td>
                 <td className="sc-num">
-                  <Pts value={-2} />
+                  <Pts value={-4} />
                 </td>
               </tr>
             </tbody>

@@ -66,7 +66,8 @@ function redCardPoints(minute: number): number {
 
 /** §3 position weights by ROLE PLAYED (rarer for a position ⇒ worth more). */
 const GOAL_WEIGHT: Record<Position, number> = { GK: 6, DEF: 6, MID: 5, FWD: 4 };
-const ASSIST_WEIGHT: Record<Position, number> = { GK: 4, DEF: 4, MID: 3, FWD: 3 };
+// updated: GK assist +4 → +5 per Prompt 29.
+const ASSIST_WEIGHT: Record<Position, number> = { GK: 5, DEF: 4, MID: 3, FWD: 3 };
 
 // --- the engine ------------------------------------------------------------------------------
 
@@ -119,28 +120,24 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
   add(C.keyPasses, floorPer(input.keyPasses, 2), `${input.keyPasses} key passes ÷ 2`);
   add(C.wasFouled, floorPer(input.wasFouled, 3), `${input.wasFouled} fouls won ÷ 3`);
 
-  // §4 Universal accumulators — threshold-gated flat +1 (all-or-nothing; integer cross-multiply
-  // to keep the percentage gates exact, never a floating-point coin-flip).
-  if (input.dribblesCompleted >= 3 && input.dribblesCompleted * 5 >= input.dribblesAttempted * 3) {
-    add(
-      C.dribbles,
-      1,
-      `${input.dribblesCompleted}/${input.dribblesAttempted} dribbles (≥3, ≥60%) → +1`,
-    );
-  }
-  if (input.duelsWon >= 3 && input.duelsWon >= input.duelsLost) {
-    add(C.duels, 1, `${input.duelsWon} duels won (≥3, ≥50%) → +1`);
-  }
-  if (input.passesTotal >= 40 && input.passesAccurate * 10 >= input.passesTotal * 9) {
-    add(C.passing, 1, `${input.passesAccurate}/${input.passesTotal} passes (≥40, ≥90%) → +1`);
-  }
-  if (input.longBallsAccurate >= 3 && input.longBallsAccurate * 5 >= input.longBallsTotal * 3) {
-    add(
-      C.longBalls,
-      1,
-      `${input.longBallsAccurate}/${input.longBallsTotal} long balls (≥3, ≥60%) → +1`,
-    );
-  }
+  // §4 Universal accumulators — per-N buckets (round down); updated per Prompt 29
+  // (threshold-gated sub-table removed; all four stats converted to floor-division).
+  add(
+    C.dribbles,
+    floorPer(input.dribblesCompleted, 2),
+    `${input.dribblesCompleted} ÷ 2 dribbles completed`,
+  ); // updated: ÷2 dribbles completed per Prompt 29
+  add(C.duels, floorPer(input.duelsWon, 3), `${input.duelsWon} ÷ 3 duels won`); // updated: ÷3 duels won per Prompt 29
+  add(
+    C.passing,
+    floorPer(input.passesAccurate, 15),
+    `${input.passesAccurate} ÷ 15 accurate passes`,
+  ); // updated: ÷15 accurate passes per Prompt 29
+  add(
+    C.longBalls,
+    floorPer(input.longBallsAccurate, 2),
+    `${input.longBallsAccurate} ÷ 2 accurate long balls`,
+  ); // updated: ÷2 accurate long balls per Prompt 29
 
   // §4 Universal accumulators — OUTFIELD-only defensive buckets (role played ≠ GK).
   if (isOutfield) {
@@ -207,7 +204,8 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
     const pts = redCardPoints(input.redCardMinute);
     add(C.redCard, pts, `red card (${input.redCardMinute}′) → ${signed(pts)}`);
   }
-  add(C.ownGoal, input.ownGoals * -2, `${input.ownGoals} own goal(s) × −2`);
+  // updated: own goal −2 → −4 per Prompt 29.
+  add(C.ownGoal, input.ownGoals * -4, `${input.ownGoals} own goal(s) × −4`);
   // §8 remap: dispossessed → possession_lost (−1/3).
   add(
     C.possessionLost,

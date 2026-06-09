@@ -11,11 +11,12 @@ describe("scoringData — the static /scoring reference content (pure, IO-free)"
     expect(EXAMPLE_CARDS.map((c) => c.position)).toEqual(["GK", "DEF", "MID", "FWD"]);
   });
 
-  it("each card's breakdown rows sum to its stated total (14 / 20 / 13 / 20)", () => {
+  // updated: MID 13→17, FWD 20→21 per Prompt 29 (per-N bucket conversions)
+  it("each card's breakdown rows sum to its stated total (14 / 20 / 17 / 21)", () => {
     for (const card of EXAMPLE_CARDS) {
       const summed = card.lines.reduce((acc, l) => acc + l.pts, 0);
       expect(summed, `${card.position} card total`).toBe(card.total);
     }
-    expect(EXAMPLE_CARDS.map((c) => c.total)).toEqual([14, 20, 13, 20]);
+    expect(EXAMPLE_CARDS.map((c) => c.total)).toEqual([14, 20, 17, 21]);
   });
 });

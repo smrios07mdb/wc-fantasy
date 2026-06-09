@@ -44,22 +44,26 @@ given sufficient stat granularity. See DECISIONS.md → Data source, and the per
 | Stat | GK | DEF | MID | FWD |
 |---|---|---|---|---|
 | Goal | 6 | 6 | 5 | 4 |
-| Assist | 4 | 4 | 3 | 3 |
+| Assist | 5 | 4 | 3 | 3 |
+
+_(GK assist +4 → +5 in Prompt 29)_
 
 ## 4. Universal accumulators (buckets; any player)
 | Stat | Rate | Eligible |
 |---|---|---|
 | Key passes | +1 / 2 | all |
-| Successful dribbles (≥3, ≥60%) | +1 | all |
-| Duels won (≥3, ≥50%) | +1 | all |
-| Passing (≥40 passes, ≥90%) | +1 | all |
-| Long balls (≥3 accurate, ≥60%) | +1 | all |
+| Successful dribbles | +1 / 2 | all |
+| Duels won | +1 / 3 | all |
+| Accurate passes | +1 / 15 | all |
+| Accurate long balls | +1 / 2 | all |
 | Was fouled | +1 / 3 | all |
 | Clearances | +1 / 5 | outfield |
 | Shots blocked | +1 / 2 | outfield |
 | Interceptions | +1 / 3 | outfield |
 | Tackles won | +1 / 3 | outfield |
 | ~~Clearance off the line~~ → **dropped** (not in feed) | ~~+2~~ | all |
+
+_(threshold-gated sub-table removed in Prompt 29; dribbles, duels won, accurate passes, and accurate long balls converted to per-N floor-division buckets)_
 
 ## 5. Goalkeeping — GK / role played
 | Stat | Rate |
@@ -89,7 +93,7 @@ given sufficient stat granularity. See DECISIONS.md → Data source, and the per
 | Yellow card | −1 |
 | Second yellow (min 0–29 / 30–59 / ≥60) | −3 / −2 / −1 |
 | Red card (min 0–29 / 30–59 / ≥60) | −4 / −3 / −2 |
-| Own goal | −2 |
+| Own goal | −4 |
 | ~~Offsides~~ → **dropped** (player-level n/a; only team-level exists) | ~~−1 / 2~~ |
 | ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 3 |
 

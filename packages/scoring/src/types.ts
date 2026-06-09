@@ -26,7 +26,7 @@ export interface ScoreInput {
   goals: number;
   assists: number;
 
-  // §4 Universal accumulators (buckets / threshold gates)
+  // §4 Universal accumulators (per-N buckets only; threshold-gated sub-table removed in Prompt 29)
   keyPasses: number;
   dribblesAttempted: number;
   dribblesCompleted: number;

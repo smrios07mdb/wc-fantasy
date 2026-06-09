@@ -169,7 +169,7 @@ describe("§3 Attacking — position-weighted by role played", () => {
   });
 
   it.each<[Position, number]>([
-    ["GK", 4],
+    ["GK", 5], // updated: GK assist +4 → +5 per Prompt 29
     ["DEF", 4],
     ["MID", 3],
     ["FWD", 3],
@@ -254,47 +254,56 @@ describe("§4 Universal accumulators — per-N buckets (round down)", () => {
   });
 });
 
-describe("§4 Universal accumulators — threshold-gated flat +1 (all-or-nothing)", () => {
-  it.each<[number, number, number]>([
-    [2, 2, 0], // < 3 completed -> fails count gate (100% ratio is irrelevant)
-    [3, 5, 1], // 3 completed, 60% exactly -> pass
-    [3, 6, 0], // 3 completed, 50% -> fail ratio
-    [6, 10, 1], // 60% exactly, larger sample -> pass
-    [5, 9, 0], // ~55.6% -> fail
-  ])("dribbles %s/%s -> %s", (dribblesCompleted, dribblesAttempted, expected) => {
-    expect(only(C.dribbles, { dribblesCompleted, dribblesAttempted })).toBe(expected);
+// updated: threshold-gated sub-table removed per Prompt 29; dribbles, duels, passing, long balls
+// are now per-N floor-division buckets (same floorPer helper as key passes / tackles / etc.).
+describe("§4 Universal accumulators — per-N buckets (dribbles, duels, passing, long balls)", () => {
+  // updated: dribbles ÷2 per Prompt 29 (was threshold-gated ≥3 & ≥60%)
+  it.each<[number, number]>([
+    [0, 0],
+    [1, 0],
+    [2, 1],
+    [3, 1],
+    [4, 2],
+  ])("dribbles completed %s -> %s (+1/2)", (dribblesCompleted, expected) => {
+    expect(only(C.dribbles, { dribblesCompleted })).toBe(expected);
   });
 
-  it.each<[number, number, number]>([
-    [2, 0, 0], // < 3 won -> fail count
-    [3, 3, 1], // 3 won, 50% exactly -> pass
-    [3, 4, 0], // 3 won, ~43% -> fail
-    [5, 2, 1], // comfortably > 50% -> pass
-  ])("duels won %s / lost %s -> %s", (duelsWon, duelsLost, expected) => {
-    expect(only(C.duels, { duelsWon, duelsLost })).toBe(expected);
+  // updated: duels won ÷3 per Prompt 29 (was threshold-gated ≥3 & ≥50%)
+  it.each<[number, number]>([
+    [0, 0],
+    [2, 0],
+    [3, 1],
+    [5, 1],
+    [6, 2],
+  ])("duels won %s -> %s (+1/3)", (duelsWon, expected) => {
+    expect(only(C.duels, { duelsWon })).toBe(expected);
   });
 
-  it.each<[number, number, number]>([
-    [39, 37, 0], // 94.8% but < 40 passes -> fail count
-    [40, 36, 1], // 40 passes, 90% exactly -> pass
-    [40, 35, 0], // 87.5% -> fail ratio
-    [50, 44, 0], // 88% -> fail ratio
-  ])("passing %s/%s -> %s", (passesTotal, passesAccurate, expected) => {
-    expect(only(C.passing, { passesTotal, passesAccurate })).toBe(expected);
+  // updated: accurate passes ÷15 per Prompt 29 (was threshold-gated ≥40 att & ≥90%)
+  it.each<[number, number]>([
+    [0, 0],
+    [14, 0],
+    [15, 1],
+    [29, 1],
+    [30, 2],
+  ])("accurate passes %s -> %s (+1/15)", (passesAccurate, expected) => {
+    expect(only(C.passing, { passesAccurate })).toBe(expected);
   });
 
-  it.each<[number, number, number]>([
-    [2, 2, 0], // < 3 accurate -> fail count
-    [3, 5, 1], // 3 accurate, 60% exactly -> pass
-    [3, 6, 0], // 3 accurate, 50% -> fail
-    [6, 10, 1], // 60% -> pass
-  ])("long balls %s acc / %s total -> %s", (longBallsAccurate, longBallsTotal, expected) => {
-    expect(only(C.longBalls, { longBallsAccurate, longBallsTotal })).toBe(expected);
+  // updated: accurate long balls ÷2 per Prompt 29 (was threshold-gated ≥3 & ≥60%)
+  it.each<[number, number]>([
+    [0, 0],
+    [1, 0],
+    [2, 1],
+    [3, 1],
+    [4, 2],
+  ])("accurate long balls %s -> %s (+1/2)", (longBallsAccurate, expected) => {
+    expect(only(C.longBalls, { longBallsAccurate })).toBe(expected);
   });
 
-  it("threshold gates score for any position", () => {
+  it("per-N bucket stats score for any position (not role-locked)", () => {
     for (const role of ["GK", ...OUTFIELD] as Position[]) {
-      expect(only(C.duels, { role, duelsWon: 4, duelsLost: 1 })).toBe(1);
+      expect(only(C.duels, { role, duelsWon: 4 })).toBe(1);
     }
   });
 });
@@ -497,9 +506,10 @@ describe("§8 Discipline & negatives", () => {
     expect(only(C.redCard, { redCardMinute })).toBe(expected);
   });
 
+  // updated: own goal −2 → −4 per Prompt 29
   it.each<[number, number]>([
-    [1, -2],
-    [2, -4],
+    [1, -4],
+    [2, -8],
   ])("own goals x%s -> %s", (ownGoals, expected) => {
     expect(only(C.ownGoal, { ownGoals })).toBe(expected);
   });
