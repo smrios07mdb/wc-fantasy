@@ -133,6 +133,55 @@ describe("draft queue drag-to-reorder (Prompt 33)", () => {
   });
 });
 
+describe("draft pool UX — queue-row draft button (Prompt 31)", () => {
+  it("QueuePanel accepts onDraft and submittingPlayerId props", () => {
+    expect(components).toContain("onDraft: (player: DraftPlayer) => void");
+    expect(components).toContain("submittingPlayerId: string | null");
+  });
+
+  it("QueuePanel renders a Draft button for each row, gated on mine + submitting", () => {
+    expect(components).toContain("const mine = isMyTurnFn(state)");
+    expect(components).toContain("disabled={!mine || submitting}");
+    expect(components).toContain("onClick={() => onDraft(p)");
+  });
+
+  it("DraftRoomClient passes onDraft and submittingPlayerId to QueuePanel", () => {
+    expect(client).toContain("onDraft={(p) => void makePick(p)}");
+    expect(client).toContain("submittingPlayerId={submittingPlayerId}");
+  });
+});
+
+describe("draft pool UX — country filter on available pool (Prompt 31)", () => {
+  it("AvailableList accepts nation and setNation props", () => {
+    expect(components).toContain('nation: string | "ALL"');
+    expect(components).toContain('setNation: (n: string | "ALL") => void');
+  });
+
+  it("AvailableList passes nation to filterAvailable", () => {
+    expect(components).toContain(
+      "filterAvailable(state.availablePlayers, { query, position, nation })",
+    );
+  });
+
+  it("nation filter chips rendered for distinct pool nations with an All option", () => {
+    expect(components).toContain("nations.map((code) =>");
+    expect(components).toContain('setNation("ALL")');
+    expect(components).toContain("setNation(code)");
+    expect(components).toContain("nationName(code)");
+  });
+
+  it("DraftRoomClient owns nation state and passes it to AvailableList", () => {
+    expect(client).toContain("const [nation, setNation] = useState");
+    expect(client).toContain("nation={nation}");
+    expect(client).toContain("setNation={setNation}");
+  });
+
+  it("nation chips use cobalt --accent chip pattern, no gold", () => {
+    // chips share the same .chip/.chip.is-active class as position chips — no bespoke colour
+    expect(components).toContain('className={"chip" + (nation === code ? " is-active" : "")}');
+  });
+});
+
 describe("draft re-skin — colour + shape invariants (BRAND.md §1, ARCHITECTURE §5)", () => {
   it("keeps draft.css fully tokenised — no literal hex, so no gold can leak into the body", () => {
     // Every colour resolves through the gold-free ds.css tokens (--accent cobalt, --live red, --pos-*

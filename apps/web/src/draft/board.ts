@@ -102,9 +102,11 @@ export function positionCounts(picks: readonly DraftPick[]): Record<Position, nu
 export interface AvailableFilter {
   query: string;
   position: Position | "ALL";
+  /** ISO-3 nation code, or "ALL" to show all nations. Optional for backward compat. */
+  nation?: string | "ALL";
 }
 
-/** Filter the available pool by position + a case-insensitive query over name + country. */
+/** Filter the available pool by position, nation, and a case-insensitive query over name + country. */
 export function filterAvailable(
   players: readonly DraftPlayer[],
   filter: AvailableFilter,
@@ -112,6 +114,7 @@ export function filterAvailable(
   const q = filter.query.trim().toLowerCase();
   return players.filter((p) => {
     if (filter.position !== "ALL" && p.position !== filter.position) return false;
+    if (filter.nation && filter.nation !== "ALL" && p.country !== filter.nation) return false;
     if (!q) return true;
     return [p.displayName, p.firstName, p.lastName, p.country].some(
       (s) => s != null && s.toLowerCase().includes(q),

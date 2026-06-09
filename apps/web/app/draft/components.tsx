@@ -311,6 +311,8 @@ export function AvailableList({
   setQuery,
   position,
   setPosition,
+  nation,
+  setNation,
   onDraft,
   submittingPlayerId,
   onQueueToggle,
@@ -321,15 +323,26 @@ export function AvailableList({
   setQuery: (q: string) => void;
   position: Position | "ALL";
   setPosition: (p: Position | "ALL") => void;
+  nation: string | "ALL";
+  setNation: (n: string | "ALL") => void;
   onDraft: (player: DraftPlayer) => void;
   submittingPlayerId: string | null;
   onQueueToggle: (playerId: string) => void;
   submittingQueue: boolean;
 }) {
   const mine = isMyTurnFn(state);
+  const nations = useMemo(
+    () =>
+      [
+        ...new Set(
+          state.availablePlayers.map((p) => p.country).filter((c): c is string => c !== null),
+        ),
+      ].sort((a, b) => nationName(a).localeCompare(nationName(b))),
+    [state.availablePlayers],
+  );
   const filtered = useMemo(
-    () => filterAvailable(state.availablePlayers, { query, position }).slice(0, 80),
-    [state.availablePlayers, query, position],
+    () => filterAvailable(state.availablePlayers, { query, position, nation }).slice(0, 80),
+    [state.availablePlayers, query, position, nation],
   );
   return (
     <>
@@ -353,6 +366,25 @@ export function AvailableList({
           </span>
         ))}
       </div>
+      {nations.length > 0 && (
+        <div className="dr-filters">
+          <span
+            className={"chip" + (nation === "ALL" ? " is-active" : "")}
+            onClick={() => setNation("ALL")}
+          >
+            All
+          </span>
+          {nations.map((code) => (
+            <span
+              key={code}
+              className={"chip" + (nation === code ? " is-active" : "")}
+              onClick={() => setNation(code)}
+            >
+              {nationName(code)}
+            </span>
+          ))}
+        </div>
+      )}
       <div
         className="t-micro text-tertiary"
         style={{ margin: "4px 2px 8px", letterSpacing: ".04em" }}
@@ -399,15 +431,20 @@ export function AvailableList({
 
 export function QueuePanel({
   state,
+  onDraft,
+  submittingPlayerId,
   onQueueRemove,
   onQueueReorder,
   submittingQueue,
 }: {
   state: DraftRoomState;
+  onDraft: (player: DraftPlayer) => void;
+  submittingPlayerId: string | null;
   onQueueRemove: (playerId: string) => void;
   onQueueReorder: (playerIds: string[]) => void;
   submittingQueue: boolean;
 }) {
+  const mine = isMyTurnFn(state);
   const byId = new Map(state.availablePlayers.map((p) => [p.id, p]));
   const items = state.myQueue.map((id) => byId.get(id)).filter((p): p is DraftPlayer => Boolean(p));
   const takenCount = state.myQueue.length - items.length;
@@ -422,87 +459,110 @@ export function QueuePanel({
         </div>
       </div>
       {items.length === 0 && <Empty label="Your queue is empty." />}
-      {items.map((p, i) => (
-        <div
-          className="dr-qitem"
-          key={p.id}
-          draggable={!submittingQueue}
-          style={dragOverIndex === i ? { opacity: 0.4 } : undefined}
-          onDragStart={
-            submittingQueue
-              ? undefined
-              : () => {
-                  dragIndex.current = i;
-                }
-          }
-          onDragOver={
-            submittingQueue
-              ? undefined
-              : (e) => {
-                  e.preventDefault();
-                  setDragOverIndex(i);
-                }
-          }
-          onDragLeave={submittingQueue ? undefined : () => setDragOverIndex(null)}
-          onDrop={
-            submittingQueue
-              ? undefined
-              : (e) => {
-                  e.preventDefault();
-                  setDragOverIndex(null);
-                  const from = dragIndex.current;
-                  if (from === null || from === i) return;
-                  onQueueReorder(
-                    reorderQueue(
-                      items.map((x) => x.id),
-                      from,
-                      i,
-                    ),
-                  );
-                  dragIndex.current = null;
-                }
-          }
-          onDragEnd={() => {
-            dragIndex.current = null;
-            setDragOverIndex(null);
-          }}
-        >
-          <span className="mono t-micro text-tertiary" style={{ width: 16 }}>
-            {i + 1}
-          </span>
-          <Flag nat={p.country} />
-          <Pos p={p.position} />
-          <div className="nm" style={{ flex: 1 }}>
-            <b className="t-sm">{p.lastName ?? p.displayName}</b>{" "}
-            <span className="t-caption text-tertiary">{nationName(p.country)}</span>
+      {items.map((p, i) => {
+        const submitting = submittingPlayerId === p.id;
+        return (
+          <div
+            className="dr-qitem"
+            key={p.id}
+            draggable={!submittingQueue}
+            style={dragOverIndex === i ? { opacity: 0.4 } : undefined}
+            onDragStart={
+              submittingQueue
+                ? undefined
+                : () => {
+                    dragIndex.current = i;
+                  }
+            }
+            onDragOver={
+              submittingQueue
+                ? undefined
+                : (e) => {
+                    e.preventDefault();
+                    setDragOverIndex(i);
+                  }
+            }
+            onDragLeave={submittingQueue ? undefined : () => setDragOverIndex(null)}
+            onDrop={
+              submittingQueue
+                ? undefined
+                : (e) => {
+                    e.preventDefault();
+                    setDragOverIndex(null);
+                    const from = dragIndex.current;
+                    if (from === null || from === i) return;
+                    onQueueReorder(
+                      reorderQueue(
+                        items.map((x) => x.id),
+                        from,
+                        i,
+                      ),
+                    );
+                    dragIndex.current = null;
+                  }
+            }
+            onDragEnd={() => {
+              dragIndex.current = null;
+              setDragOverIndex(null);
+            }}
+          >
+            <span className="mono t-micro text-tertiary" style={{ width: 16 }}>
+              {i + 1}
+            </span>
+            <Flag nat={p.country} />
+            <Pos p={p.position} />
+            <div className="nm" style={{ flex: 1 }}>
+              <b className="t-sm">{p.lastName ?? p.displayName}</b>{" "}
+              <span className="t-caption text-tertiary">{nationName(p.country)}</span>
+            </div>
+            <button
+              className="btn-quiet btn-sm"
+              disabled={submittingQueue || i === 0}
+              onClick={() =>
+                onQueueReorder(
+                  reorderQueue(
+                    items.map((x) => x.id),
+                    i,
+                    i - 1,
+                  ),
+                )
+              }
+            >
+              ↑
+            </button>
+            <button
+              className="btn-quiet btn-sm"
+              disabled={submittingQueue || i === items.length - 1}
+              onClick={() =>
+                onQueueReorder(
+                  reorderQueue(
+                    items.map((x) => x.id),
+                    i,
+                    i + 1,
+                  ),
+                )
+              }
+            >
+              ↓
+            </button>
+            <button
+              className="btn-quiet btn-sm"
+              disabled={submittingQueue}
+              onClick={() => onQueueRemove(p.id)}
+            >
+              ✕
+            </button>
+            <button
+              className={"btn btn-sm " + (mine && !submitting ? "btn-primary" : "is-disabled")}
+              style={{ minHeight: 30, padding: "4px 10px", color: "var(--text-on-accent)" }}
+              disabled={!mine || submitting}
+              onClick={() => onDraft(p)}
+            >
+              {submitting ? "…" : "Draft"}
+            </button>
           </div>
-          <button
-            className="btn-quiet btn-sm"
-            disabled={submittingQueue || i === 0}
-            onClick={() =>
-              onQueueReorder(reorderQueue(items.map((x) => x.id), i, i - 1))
-            }
-          >
-            ↑
-          </button>
-          <button
-            className="btn-quiet btn-sm"
-            disabled={submittingQueue || i === items.length - 1}
-            onClick={() =>
-              onQueueReorder(reorderQueue(items.map((x) => x.id), i, i + 1))
-            }
-          >
-            ↓
-          </button>
-          <button
-            className="btn-quiet btn-sm"
-            disabled={submittingQueue}
-            onClick={() => onQueueRemove(p.id)}
-          >
-            ✕
-          </button>
-        </div>
-      ))}
+        );
+      })}
       {takenCount > 0 && (
         <div className="t-caption text-tertiary" style={{ marginTop: 8 }}>
           {takenCount} queued player(s) already drafted — auto-skipped.

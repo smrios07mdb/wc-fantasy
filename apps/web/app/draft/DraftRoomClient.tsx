@@ -74,6 +74,7 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
   const lastSavedQueueRef = useRef<string[]>(initialState.myQueue);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<Position | "ALL">("ALL");
+  const [nation, setNation] = useState<string | "ALL">("ALL");
   const [railTab, setRailTab] = useState<"available" | "queue" | "roster">("available");
   const [showBoardMobile, setShowBoardMobile] = useState(false);
   const toastSeq = useRef(0);
@@ -395,6 +396,8 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
                     setQuery={setQuery}
                     position={position}
                     setPosition={setPosition}
+                    nation={nation}
+                    setNation={setNation}
                     onDraft={(p) => void makePick(p)}
                     submittingPlayerId={submittingPlayerId}
                     onQueueToggle={onQueueToggle}
@@ -404,6 +407,8 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
                 {railTab === "queue" && (
                   <QueuePanel
                     state={state}
+                    onDraft={(p) => void makePick(p)}
+                    submittingPlayerId={submittingPlayerId}
                     onQueueRemove={onQueueRemove}
                     onQueueReorder={onQueueReorder}
                     submittingQueue={submittingQueue}

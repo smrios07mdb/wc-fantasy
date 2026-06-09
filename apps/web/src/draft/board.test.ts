@@ -166,3 +166,42 @@ describe("filterAvailable — search + position filter", () => {
     expect(filterAvailable(pool, { query: "mba", position: "GK" })).toHaveLength(0);
   });
 });
+
+describe("filterAvailable — nation filter", () => {
+  const pool = [
+    player("p1", "FWD", { country: "FRA" }),
+    player("p2", "MID", { country: "ENG" }),
+    player("p3", "GK", { country: "ARG" }),
+    player("p4", "DEF", { country: "FRA" }),
+  ];
+
+  it("filters by nation code (AND with position/query)", () => {
+    expect(
+      filterAvailable(pool, { query: "", position: "ALL", nation: "FRA" }).map((p) => p.id),
+    ).toEqual(["p1", "p4"]);
+    expect(
+      filterAvailable(pool, { query: "", position: "ALL", nation: "ENG" }).map((p) => p.id),
+    ).toEqual(["p2"]);
+  });
+
+  it("shows all nations when nation is ALL or omitted", () => {
+    expect(filterAvailable(pool, { query: "", position: "ALL", nation: "ALL" })).toHaveLength(4);
+    expect(filterAvailable(pool, { query: "", position: "ALL" })).toHaveLength(4);
+  });
+
+  it("composes with position filter (AND semantics)", () => {
+    expect(
+      filterAvailable(pool, { query: "", position: "FWD", nation: "FRA" }).map((p) => p.id),
+    ).toEqual(["p1"]);
+    expect(filterAvailable(pool, { query: "", position: "GK", nation: "FRA" })).toHaveLength(0);
+  });
+
+  it("composes with query filter (AND semantics)", () => {
+    // p1 is FRA FWD with displayName "p1" — query "p1" narrows to it within FRA
+    expect(
+      filterAvailable(pool, { query: "p1", position: "ALL", nation: "FRA" }).map((p) => p.id),
+    ).toEqual(["p1"]);
+    // query matches p4 but nation ENG excludes it
+    expect(filterAvailable(pool, { query: "p4", position: "ALL", nation: "ENG" })).toHaveLength(0);
+  });
+});
