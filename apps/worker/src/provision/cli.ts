@@ -4,21 +4,25 @@
  * DB edge with no unit test (it needs a live DB); the pure plan is fully unit-tested. SECRETS NEVER live
  * here — the config holds only names/emails/timer; the DB URL comes from the env (Render/Supabase).
  *
- *   pnpm --filter @app/worker provision provision   # league + periods + managers + allowlist + pending draft
- *   pnpm --filter @app/worker provision bind         # link each manager to the app_user created at sign-in
- *   pnpm --filter @app/worker provision rank <file>  # populate player.default_rank from a best-first id list
- *   pnpm --filter @app/worker provision draft         # START the draft via the controller's startDraft
- *   pnpm --filter @app/worker provision status       # print current provisioning state
+ *   pnpm --filter @app/worker provision provision      # league + periods + managers + allowlist + pending draft
+ *   pnpm --filter @app/worker provision bind            # link each manager to the app_user created at sign-in
+ *   pnpm --filter @app/worker provision rank:generate   # build ranking-draft.csv from GOAT props + futures odds
+ *   pnpm --filter @app/worker provision rank <file>     # populate player.default_rank (CSV from rank:generate, or JSON ids)
+ *   pnpm --filter @app/worker provision draft            # START the draft via the controller's startDraft
+ *   pnpm --filter @app/worker provision status          # print current provisioning state
  *
  * Config path: $PROVISION_CONFIG, else <repo-root>/provision.config.json (see provision.config.example.json).
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { prisma } from "@app/db";
 import { startDraft, DraftNotReadyError } from "@app/draft";
 import { createPrismaDraftStore } from "@app/draft/prisma";
+import { mapPosition } from "@app/ingest";
+import type { FIFAPlayerProp } from "@app/feed";
+import { feed } from "../wiring";
 import {
   buildDefaultRankUpdates,
   buildProvisionPlan,
@@ -26,6 +30,15 @@ import {
   validateConfig,
   type ProvisionConfig,
 } from "./plan";
+import {
+  americanOddsToProb,
+  computeRanking,
+  toRankingCsv,
+  parseRankingCsvIds,
+  type MatchProps,
+  type RankingCsvRow,
+  type SquadPlayer,
+} from "./rankGenerate";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../..");
@@ -210,16 +223,31 @@ async function rank(): Promise<void> {
   const path = process.argv[3] ?? process.env.PROVISION_RANKING;
   if (!path) {
     console.error(
-      "Usage: provision rank <ranking.json>  (a best-first JSON array of balldontlie player ids)",
+      "Usage: provision rank <ranking.csv|ranking.json>\n" +
+        "  .csv  → a rank:generate CSV (reads the balldontlieId column in row order)\n" +
+        "  .json → a best-first JSON array of balldontlie player ids",
     );
     process.exit(1);
   }
-  const ids = JSON.parse(readFileSync(resolve(repoRoot, path), "utf8")) as number[];
-  if (!Array.isArray(ids) || !ids.every((x) => typeof x === "number")) {
-    console.error(
-      "Ranking file must be a JSON array of balldontlie player ids (numbers), best-first.",
-    );
-    process.exit(1);
+  // The DB-write logic below is UNCHANGED; only the source parse differs. A .csv path is a rank:generate
+  // export (read the balldontlieId column in row order); anything else is the legacy best-first JSON array.
+  const raw = readFileSync(resolve(repoRoot, path), "utf8");
+  let ids: number[];
+  if (path.toLowerCase().endsWith(".csv")) {
+    ids = parseRankingCsvIds(raw);
+    if (ids.length === 0) {
+      console.error(
+        "Ranking CSV had no data rows (expected a rank:generate export with a header).",
+      );
+      process.exit(1);
+    }
+  } else {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || !parsed.every((x) => typeof x === "number")) {
+      console.error("Ranking JSON must be a best-first array of balldontlie player ids (numbers).");
+      process.exit(1);
+    }
+    ids = parsed as number[];
   }
   const updates = buildDefaultRankUpdates(ids);
   let ranked = 0;
@@ -231,6 +259,189 @@ async function rank(): Promise<void> {
     ranked += res.count;
   }
   console.log(`rank: set default_rank on ${ranked}/${ids.length} players (unmatched ids skipped).`);
+}
+
+/** American odds → implied prob for one bookmaker market (the OVER side of an over_under). null = unusable. */
+function impliedFromMarket(p: FIFAPlayerProp): { lineValue: number; prob: number } | null {
+  const line = Number.parseFloat(p.line_value);
+  if (!Number.isFinite(line)) return null;
+  const market = p.market;
+  if (!market) return null;
+  if (market.type === "milestone") {
+    return { lineValue: Math.round(line), prob: americanOddsToProb(market.odds) };
+  }
+  if (market.type === "over_under") {
+    // "over 0.5" ⇒ P(≥1), "over 1.5" ⇒ P(≥2): the integer threshold is ceil(line). Use the OVER price.
+    return { lineValue: Math.ceil(line), prob: americanOddsToProb(market.over_odds) };
+  }
+  return null;
+}
+
+/**
+ * Step 5 — de-vig: group DraftKings + FanDuel quotes by (player, match, propType, lineValue) and average
+ * their implied probabilities into one {@link MatchProps} row. Only those two vendors are used (the spec's
+ * DK+FD average); a single present vendor is used directly. Unusable markets/line values are dropped.
+ */
+function devigProps(raw: FIFAPlayerProp[]): MatchProps[] {
+  const VENDORS = new Set(["draftkings", "fanduel"]);
+  const groups = new Map<
+    string,
+    { matchId: number; playerId: number; propType: string; lineValue: number; probs: number[] }
+  >();
+  for (const p of raw) {
+    if (!VENDORS.has(p.vendor)) continue;
+    const m = impliedFromMarket(p);
+    if (!m) continue;
+    const key = `${p.player_id}|${p.match_id}|${p.prop_type}|${m.lineValue}`;
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        matchId: p.match_id,
+        playerId: p.player_id,
+        propType: p.prop_type,
+        lineValue: m.lineValue,
+        probs: [],
+      };
+      groups.set(key, g);
+    }
+    g.probs.push(m.prob);
+  }
+  return [...groups.values()].map((g) => ({
+    matchId: g.matchId,
+    playerId: g.playerId,
+    propType: g.propType as MatchProps["propType"],
+    lineValue: g.lineValue,
+    impliedProb: g.probs.reduce((a, b) => a + b, 0) / g.probs.length,
+  }));
+}
+
+/** Average the American tournament-winner odds per team (one quote per vendor) into a single number. */
+function teamWinOddsFromFutures(
+  winners: { subject?: { id: number } | null; american_odds?: number | null }[],
+): Record<number, number> {
+  const acc = new Map<number, number[]>();
+  for (const f of winners) {
+    const id = f.subject?.id;
+    if (id == null || f.american_odds == null) continue;
+    let odds = acc.get(id);
+    if (!odds) acc.set(id, (odds = []));
+    odds.push(f.american_odds);
+  }
+  const out: Record<number, number> = {};
+  for (const [id, odds] of acc) out[id] = Math.round(odds.reduce((a, b) => a + b, 0) / odds.length);
+  return out;
+}
+
+/**
+ * `rank:generate` — fetch GOAT props + futures + rosters, compute a projected-points ranking, and write
+ * apps/worker/ranking-draft.csv for review. IO edge only; the ranking math is the unit-tested pure core.
+ * Needs BALLDONTLIE_API_KEY (and ideally BALLDONTLIE_RPM=600 for the paid GOAT rate) in the env.
+ */
+async function generate(): Promise<void> {
+  // 1. Group-stage matches (the prop universe). `feed.matches` exhausts the cursor.
+  const matchesRes = await feed.matches({ seasons: [2026] });
+  const groupMatches = matchesRes.data.filter((m) => m.stage?.name === "Group Stage");
+  console.log(`matches: ${matchesRes.data.length} fetched, ${groupMatches.length} group-stage`);
+
+  // Build a teamId → name map from the match team refs (used for the CSV `team` column).
+  const teamNames: Record<number, string> = {};
+  for (const m of matchesRes.data) {
+    for (const t of [m.home_team, m.away_team]) {
+      if (t?.id != null && t.name && !teamNames[t.id]) teamNames[t.id] = t.name;
+    }
+  }
+
+  // 2. Player props per match — tolerate a per-match failure (log + continue), don't abort the run.
+  const rawProps: FIFAPlayerProp[] = [];
+  for (const m of groupMatches) {
+    try {
+      const res = await feed.playerProps({ matchId: m.id });
+      rawProps.push(...res.data);
+    } catch (err) {
+      console.warn(`  WARN props fetch failed for match ${m.id}: ${(err as Error).message}`);
+    }
+  }
+  console.log(`props: ${rawProps.length} bookmaker rows fetched`);
+
+  // 3. Team tournament-winner futures → expectedMatches multiplier. Missing data ⇒ all teams at 3.0.
+  let teamWinOdds: Record<number, number> = {};
+  try {
+    const fut = await feed.futures({ seasons: [2026] });
+    const winners = fut.data.filter((f) => f.market_type === "tournament_winner");
+    for (const f of winners) {
+      if (f.subject?.id != null && f.subject.name && !teamNames[f.subject.id]) {
+        teamNames[f.subject.id] = f.subject.name;
+      }
+    }
+    teamWinOdds = teamWinOddsFromFutures(winners);
+    if (winners.length === 0) {
+      console.warn(
+        "  WARN no tournament_winner futures — all teams default to 3.0 expected matches.",
+      );
+    } else {
+      for (const [id, odds] of Object.entries(teamWinOdds)) {
+        console.log(
+          `  futures: ${teamNames[Number(id)] ?? `team ${id}`} @ ${odds > 0 ? "+" : ""}${odds}`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn(
+      `  WARN futures fetch failed (${(err as Error).message}); all teams default to 3.0.`,
+    );
+  }
+
+  // 4. Rosters — the squad universe. Zero players ⇒ abort (a ranking with no players is meaningless).
+  const rostersRes = await feed.rosters({ seasons: [2026] });
+  if (rostersRes.data.length === 0) {
+    console.error("ABORT: rosters returned zero players — cannot rank an empty squad.");
+    process.exit(1);
+  }
+  const players: SquadPlayer[] = [];
+  const playerTeam: Record<number, number> = {};
+  for (const r of rostersRes.data) {
+    const id = r.player.id;
+    players.push({
+      balldontlieId: id,
+      name: r.player.name,
+      position: mapPosition(r.position ?? r.player.position),
+      teamId: r.team_id,
+    });
+    playerTeam[id] = r.team_id;
+    if (r.team_id != null && !teamNames[r.team_id] && r.player.country_name) {
+      teamNames[r.team_id] = r.player.country_name;
+    }
+  }
+  console.log(
+    `rosters: ${players.length} players across ${new Set(Object.values(playerTeam)).size} teams`,
+  );
+
+  // 5. De-vig the bookmaker quotes into per-line implied probabilities.
+  const props = devigProps(rawProps);
+  console.log(`props (de-vigged DK+FD): ${props.length} player×match×type×line rows`);
+
+  // 6. Pure ranking.
+  const ranked = computeRanking({ players, props, teamWinOdds, playerTeam });
+
+  // 7. Write the review CSV (gitignored). The row ORDER is the ranking the `rank` command will apply.
+  const rows: RankingCsvRow[] = ranked.map((r, i) => ({
+    rank: i + 1,
+    balldontlieId: r.balldontlieId,
+    name: r.name,
+    position: r.position,
+    team: teamNames[playerTeam[r.balldontlieId] ?? -1] ?? String(playerTeam[r.balldontlieId] ?? ""),
+    projectedPts: r.projectedPts,
+    expectedMatches: r.expectedMatches,
+    hasProps: r.hasProps,
+  }));
+  const outPath = resolve(here, "../../ranking-draft.csv"); // apps/worker/ranking-draft.csv
+  writeFileSync(outPath, toRankingCsv(rows), "utf8");
+  console.log(`Wrote ${rows.length} players to ranking-draft.csv`);
+
+  // 8. Next-step instructions.
+  console.log("\nReview ranking-draft.csv, adjust any rows, then run:");
+  console.log("  pnpm provision rank ranking-draft.csv");
+  console.log("to write default_rank to the database.");
 }
 
 async function status(): Promise<void> {
@@ -266,6 +477,9 @@ async function main(): Promise<void> {
     case "bind":
       await bind();
       break;
+    case "rank:generate":
+      await generate();
+      break;
     case "rank":
       await rank();
       break;
@@ -276,7 +490,7 @@ async function main(): Promise<void> {
       await status();
       break;
     default:
-      console.error("Usage: provision <provision|bind|rank|draft|status>");
+      console.error("Usage: provision <provision|bind|rank:generate|rank|draft|status>");
       process.exit(1);
   }
   await prisma.$disconnect();

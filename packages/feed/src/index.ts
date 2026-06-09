@@ -12,9 +12,12 @@ import type {
   FIFATeamMatchStats,
   FIFAShot,
   FIFARoster,
+  FIFAPlayerProp,
+  FIFAFuturesOdd,
   MatchListParams,
   MatchScopedParams,
   RostersParams,
+  FuturesParams,
 } from "./types";
 import type { FetchLike } from "./http";
 import { buildClient } from "./client";
@@ -33,6 +36,10 @@ export interface FeedClient {
   matchShots(params: MatchScopedParams): Promise<Paginated<FIFAShot>>;
   /** Per-edition squads (the source of `player` + `fifa_team`). Defaults to season 2026. */
   rosters(params?: RostersParams): Promise<Paginated<FIFARoster>>;
+  /** Pre-match player props for one match (anytime_goal/assists/shots/…). Confirmed available pre-kickoff. */
+  playerProps(params: MatchScopedParams): Promise<Paginated<FIFAPlayerProp>>;
+  /** Futures odds (tournament winner + others). Defaults to season 2026. */
+  futures(params?: FuturesParams): Promise<Paginated<FIFAFuturesOdd>>;
 }
 
 export interface FeedClientConfig {

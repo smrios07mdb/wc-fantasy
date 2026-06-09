@@ -10,6 +10,10 @@ node_modules/
 provision.config.json
 provision.ranking.json
 
+# rank:generate output (reviewed locally, then committed to default_rank via `provision rank`)
+ranking-draft.csv
+apps/worker/ranking-draft.csv
+
 # build output
 dist/
 build/

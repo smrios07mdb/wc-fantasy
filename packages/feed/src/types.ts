@@ -272,6 +272,55 @@ export interface FIFARoster {
   [key: string]: unknown;
 }
 
+// ── Odds (pre-match) ────────────────────────────────────────────────────────────
+
+/**
+ * A single bookmaker's player prop quote (GOAT `/odds/player_props`). `market` is a oneOf: a `milestone`
+ * market (yes/no, one `odds`) covers anytime_goal/first_goal/red_card; an `over_under` market carries
+ * `over_odds`/`under_odds`. `line_value` is a STRING ("1", "0.5", …). Odds are American integers.
+ */
+export interface FIFAPlayerProp {
+  id: number;
+  match_id: number;
+  player_id: number;
+  /** draftkings | fanduel | betmgm | betrivers | caesars | fanatics */
+  vendor: string;
+  /** anytime_goal | assists | shots | shots_on_target | first_goal | saves | tackles | card | … */
+  prop_type: string;
+  line_value: string;
+  market: FIFAPlayerPropMarketMilestone | FIFAPlayerPropMarketOverUnder;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+export interface FIFAPlayerPropMarketMilestone {
+  type: "milestone";
+  odds: number;
+  [key: string]: unknown;
+}
+export interface FIFAPlayerPropMarketOverUnder {
+  type: "over_under";
+  over_odds: number;
+  under_odds: number;
+  [key: string]: unknown;
+}
+
+/**
+ * A futures-market quote (GOAT `/odds/futures`). `market_type === "tournament_winner"` is the team
+ * win-the-cup market; `subject` is the team the odds are for (id → fifa_team). `american_odds` may be null.
+ */
+export interface FIFAFuturesOdd {
+  id: number;
+  /** e.g. "tournament_winner" */
+  market_type: string;
+  market_name?: string | null;
+  subject?: FIFATeamRef | null;
+  vendor?: string | null;
+  american_odds?: number | null;
+  decimal_odds?: number | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
 // ── Request params ────────────────────────────────────────────────────────────
 
 export interface ListParams {
@@ -291,4 +340,8 @@ export interface RostersParams extends ListParams {
   seasons?: number[];
   teamIds?: number[];
   playerIds?: number[];
+}
+export interface FuturesParams extends ListParams {
+  /** World Cup edition years; defaults to [2026] in the client when omitted. */
+  seasons?: number[];
 }

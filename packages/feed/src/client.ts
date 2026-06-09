@@ -15,9 +15,12 @@ import type {
   FIFATeamMatchStats,
   FIFAShot,
   FIFARoster,
+  FIFAPlayerProp,
+  FIFAFuturesOdd,
   MatchListParams,
   MatchScopedParams,
   RostersParams,
+  FuturesParams,
   ListParams,
 } from "./types";
 import type { FeedClient, FeedClientConfig } from "./index";
@@ -129,6 +132,17 @@ export function buildClient(config: FeedClientConfig): FeedClient {
         seasons: p?.seasons ?? [2026],
         team_ids: p?.teamIds,
         player_ids: p?.playerIds,
+      }),
+    // Pre-match player props for one match. `match_id` is the only param (no pagination — getAll stops
+    // when `meta.next_cursor` is absent, so a single page is returned unchanged).
+    playerProps: (p: MatchScopedParams) =>
+      getAll<FIFAPlayerProp>(b, "odds/player_props", scoped(p)),
+    // Team tournament-winner (and other) futures odds. Defaults to season 2026.
+    futures: (p?: FuturesParams) =>
+      getAll<FIFAFuturesOdd>(b, "odds/futures", {
+        cursor: p?.cursor,
+        per_page: p?.perPage,
+        seasons: p?.seasons ?? [2026],
       }),
   };
 }

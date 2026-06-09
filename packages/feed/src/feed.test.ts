@@ -81,4 +81,59 @@ describe("createBalldontlieClient", () => {
     const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
     await expect(client.matches()).rejects.toThrow(/HTTP 429/);
   });
+
+  it("scopes player props to a match and parses the milestone market", async () => {
+    let seenUrl = "";
+    const transport: FetchLike = (url) => {
+      seenUrl = url;
+      return Promise.resolve(
+        json({
+          data: [
+            {
+              id: 1,
+              match_id: 42,
+              player_id: 7,
+              vendor: "draftkings",
+              prop_type: "anytime_goal",
+              line_value: "1",
+              market: { type: "milestone", odds: -110 },
+            },
+          ],
+          meta: {},
+        }),
+      );
+    };
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    const res = await client.playerProps({ matchId: 42 });
+    expect(seenUrl).toContain("/fifa/worldcup/v1/odds/player_props");
+    expect(seenUrl).toContain("match_id=42");
+    expect(res.data[0]?.market).toMatchObject({ type: "milestone", odds: -110 });
+  });
+
+  it("requests futures for the default 2026 season", async () => {
+    let seenUrl = "";
+    const transport: FetchLike = (url) => {
+      seenUrl = url;
+      return Promise.resolve(
+        json({
+          data: [
+            {
+              id: 9,
+              market_type: "tournament_winner",
+              subject: { id: 3 },
+              vendor: "fanduel",
+              american_odds: 450,
+            },
+          ],
+          meta: {},
+        }),
+      );
+    };
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    const res = await client.futures();
+    expect(seenUrl).toContain("/fifa/worldcup/v1/odds/futures");
+    expect(seenUrl).toContain("seasons%5B%5D=2026");
+    expect(res.data[0]).toMatchObject({ market_type: "tournament_winner", american_odds: 450 });
+    expect(res.data).toHaveLength(1);
+  });
 });
