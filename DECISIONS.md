@@ -964,3 +964,61 @@ excluded** (no 9th period).
 `resolveSessionManager`: a uid↔email **cross-link mismatch throws `AmbiguousManagerLinkError`** rather
 than silently preferring the uid match. **Rationale:** a split link is a **data-integrity issue that
 must surface, not hide.**
+
+## FAAB batch engine (Prompt 25) — the locked §D algorithm in code; `@app/faab` pure resolver + bid route + cron
+
+The Prompt-25 build implements the **already-LOCKED** Theme D ("FAAB & Waivers") algorithm faithfully —
+"boring and reliable" over clever; **no rule re-derived**. Engine only, **no UI** (the `/waivers` screen
+is Prompt 26). Merged to `main` @ `2145700`. The decisions of record:
+
+- **The 8-step §D algorithm is implemented as specified** by the pure `resolveFaabBatch`
+  (`packages/faab/src/resolve.ts`, IO/clock/Prisma/Supabase-free — `now` + kickoffs are injected): void +
+  refund a bid whose add target already kicked off; highest-bid-first, player-by-player; tie → the rolling
+  waiver order; a manager's own multiple wins apply highest-first, skipping any that no longer fit; $0 bids
+  legal; every won claim is add/drop + a budget debit; the waiver order stays a contiguous 1..N permutation.
+- **Move-to-bottom fires ONLY when the tiebreak is actually USED** (an equal competing bid existed and the
+  waiver order decided the win). **Winning on bid amount alone never moves a manager.** The single
+  `tiebreakUsed` boolean both stamps the winning bid and gates the renumber, and the winner drops to the
+  bottom **immediately for the rest of that same batch** (so a tiebreak winner can't sweep all the tied
+  players).
+- **Own bids resolve by AMOUNT, highest-first-skip** — this is **emergent**, not special-cased: the loop
+  always awards the globally-highest live bid against the manager's *updated* budget / roster / ownership,
+  so a lower own bid that no longer fits (drop already consumed, budget exhausted, roster cap) is naturally
+  skipped (`drop-invalid` / `budget-exhausted` / `roster-illegal`).
+- **Cross-player equal-amount ordering = waiver order (locked).** When several DIFFERENT players are tied
+  at the top amount, they are processed in the order of their **leading bidder's `waiverOrderPosition`**
+  (lower first), **NOT** by player id / insertion / `createdAt` — because move-to-bottom sequencing (and
+  thus the final waiver order) depends on it. Waiver positions are unique per league, so the only tie is
+  the same manager leading both at equal amount → a deterministic player-id fallback (the intra-manager
+  equal-amount case; see `priority` below).
+- **Drop-lock validation (added, enforcing §B lock-on-play on the FAAB path).** A player **locked by play
+  in a still-active matchday cannot be dropped** until that matchday ends. Enforced via the existing
+  lock-on-play seam (no new clock): the bid route **rejects at submission** a `playerDropId` whose
+  `lineup_slot.locked_at` is set in a non-closed matchday (`drop-locked` `FaabBidError`), and the resolver's
+  `claimLegality` treats a locked-lineup drop as **`drop-invalid`**, so the batch skips that bid and the
+  player passes to the next valid bid. Once the matchday closes, the lock is historical and the player is
+  droppable again.
+- **Lineup-slot release is routed through `@app/lineup`, inside the batch transaction.** Scoring keys off
+  the starting lineup, so a won drop's UNLOCKED `lineup_slot` rows are released in the same `$transaction`
+  as the roster drop (a dropped starter must stop scoring) — but **faab must not touch `lineup_slot`
+  directly**. It calls the exported `@app/lineup/prisma` `releaseDroppedPlayerSlots(tx, { leagueId,
+  managerId, playerId })` (release only UNLOCKED slots; locked/historical slots are kept). The lock-on-play
+  read (`findLockedSlotPlayerIds`) lives in the same lineup module. The lineup domain owns `lineup_slot`.
+- **`addTargetKickoffAt` resolves through `fifa_match.kickoff_at` (the SAME field as lock-on-play, no
+  second clock).** The acquisition cutoff ("can't add a player once his match kicks off") reads the team's
+  next not-completed fixture's `kickoff_at` via `player.team_id` — exactly the schedule field `@app/ingest`
+  derives `lineup_slot.locked_at` from. The pure resolver compares it to the injected `now`.
+- **The single atomic transaction is the invariant guard.** `commitBatch` writes the whole resolved
+  outcome in one `$transaction` (assign winners + add/drop + debit, refund voids, mark losers, two-phase
+  move-to-bottom reorder preserving the non-deferrable `manager_waiver_order_uq`, stamp `batchId` +
+  terminal status, batch → `complete`). **Idempotent**: guarded `updateMany WHERE status='pending'` + a
+  no-pending-bids run creates no batch row, so a re-run is a clean no-op.
+- **`faab_bid.priority` is DEFERRED to Prompt 26.** DECISIONS §D locks own-bid resolution by **amount**;
+  the design's reorderable pending-claim *priority* would be the **intra-manager tiebreak for equal-amount
+  own bids** (+ a UI apply-order hint) — but there is **no `priority` column** today, so the engine
+  resolves purely by amount and the route does **not** expose reorder. Honoring priority needs a migration
+  (Prompt 26). The submission/cancel/edit-amount paths are wired now.
+- **Out of scope (flagged, not built):** the free-agency **FA `Acquire` route does not exist** (sibling
+  concern); the **playoff FAAB reset + waiver carry-forward** belong to the group→playoff transition prompt
+  (this engine only READS current budget/order). `faab_bid` **RLS is already present** (Theme F invariants
+  migration — own-pending read/write + public settled read), so no policy was added.
