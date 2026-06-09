@@ -1,4 +1,4 @@
-rank,balldontlieId,name,position,team
+﻿rank,balldontlieId,name,position,team
 1,463,Harry Kane,FWD,England
 2,149,Kylian Mbappé,FWD,France
 3,238,Lionel Messi,FWD,Argentina
@@ -30,244 +30,244 @@ rank,balldontlieId,name,position,team
 29,30237,Martin Ødegaard,MID,Norway
 30,29918,Bradley Barcola,FWD,France
 31,29943,Deniz Undav,FWD,Germany
-32,29917,Désiré Doué,FWD,France
-33,9085,Ferran Torres,FWD,Spain
-34,30314,Francisco Conceição,FWD,Portugal
-35,9318,Gonçalo Ramos,FWD,Portugal
-36,29609,Igor Thiago,FWD,Brazil
-37,29920,Jean Philippe Mateta,FWD,France
-38,9321,João Félix,FWD,Portugal
-39,9094,Kai Havertz,FWD,Germany
-40,477,Marcus Rashford,FWD,England
-41,8981,Marcus Thuram,FWD,France
-42,29607,Matheus Cunha,FWD,Brazil
-43,29944,Maximilian Beier,FWD,Germany
-44,30494,Mikel Oyarzabal,FWD,Spain
-45,29894,Ollie Watkins,FWD,England
-46,100,Bernardo Silva,MID,Portugal
-47,9245,Bruno Guimarães,MID,Brazil
-48,9079,Dani Olmo,MID,Spain
-49,29898,Eberechi Eze,MID,England
-50,9224,Lucas Paquetá,MID,Brazil
-51,30319,Pedro Neto,MID,Portugal
-52,30233,Alexander Sørloth,FWD,Norway
-53,232,Andrej Kramarić,FWD,Croatia
-54,30234,Antonio Nusa,FWD,Norway
-55,140,Ayoub El Kaabi,FWD,Morocco
-56,30183,Brian Brobbey,FWD,Netherlands
-57,9199,Charles De Ketelaere,FWD,Belgium
-58,29682,Cucho Hernández,FWD,Colombia
-59,30182,Donyell Malen,FWD,Netherlands
-60,29683,Jhon Córdoba,FWD,Colombia
-61,30236,Jørgen Strand Larsen,FWD,Norway
-62,9197,Leandro Trossard,FWD,Belgium
-63,29681,Luis Javier Suárez,FWD,Colombia
-64,8729,Noa Lang,FWD,Netherlands
-65,30151,Soufiane Rahimi,FWD,Morocco
-66,8723,Wout Weghorst,FWD,Netherlands
-67,9152,Abdessamad Ezzalzouli,MID,Morocco
-68,9140,Azzedine Ounahi,MID,Morocco
-69,9157,Bilal El Khannouss,MID,Morocco
-70,30153,Brahim Díaz,MID,Morocco
-71,30635,Brian Rodríguez,MID,Uruguay
-72,29563,Dodi Lukebakio,MID,Belgium
-73,3,Giorgian de Arrascaeta,MID,Uruguay
-74,223,Ivan Perišić,MID,Croatia
-75,530,James Rodríguez,MID,Colombia
-76,527,Juan Fernando Quintero,MID,Colombia
-77,217,Luka Modrić,MID,Croatia
-78,227,Mateo Kovačić,MID,Croatia
-79,9374,Nicolás de la Cruz,MID,Uruguay
-80,30238,Oscar Bobb,MID,Norway
-81,13,Rodrigo Bentancur,MID,Uruguay
-82,139,Achraf Hakimi,DEF,Morocco
-83,9170,Josip Stanišić,DEF,Croatia
-84,9068,Ayase Ueda,FWD,Japan
-85,322,Breel Embolo,FWD,Switzerland
-86,8818,Christian Pulišić,FWD,USA
-87,9057,Daizen Maeda,FWD,Japan
-88,30650,Folarin Balogun,FWD,USA
-89,8826,Haji Wright,FWD,USA
-90,9261,Noah Okafor,FWD,Switzerland
-91,9269,Ardon Jashari,MID,Switzerland
-92,8829,Giovanni Reyna,MID,USA
-93,9062,Junya Ito,MID,Japan
-94,30655,Malik Tillman,MID,USA
-95,9258,Rubén Vargas,MID,Switzerland
-96,9072,Takefusa Kubo,MID,Japan
-97,8824,Tim Weah,MID,USA
-98,8828,Weston McKennie,MID,USA
-99,8972,Adrien Rabiot,MID,France
-100,30506,Alejandro Grimaldo,MID,Spain
-101,8973,Aurélien Tchouaméni,MID,France
-102,296,Casemiro,MID,Brazil
-103,8809,Declan Rice,MID,England
-104,30505,Fabián Ruiz,MID,Spain
-105,474,Jordan Henderson,MID,England
-106,30318,João Neves,MID,Portugal
-107,29899,Kobbie Mainoo,MID,England
-108,29928,Manu Koné,MID,France
-109,30504,Martín Zubimendi,MID,Spain
-110,154,N'Golo Kanté,MID,France
-111,9082,Pablo Gavi,MID,Spain
-112,9331,Rúben Neves,MID,Portugal
-113,9223,Alex Sandro,DEF,Brazil
-114,9076,Aymeric Laporte,DEF,Spain
-115,9242,Bremer,DEF,Brazil
-116,304,Danilo,DEF,Brazil
-117,8975,Dayot Upamecano,DEF,France
-118,9316,Diogo Dalot,DEF,Portugal
-119,29619,Gabriel Magalhães,DEF,Brazil
-120,30331,Gonçalo Inácio,DEF,Portugal
-121,8969,Ibrahima Konaté,DEF,France
-122,465,John Stones,DEF,England
-123,9324,João Cancelo,DEF,Portugal
-124,8976,Jules Koundé,DEF,France
-125,30510,Marc Cucurella,DEF,Spain
-126,9092,Marcos Llorente,DEF,Spain
-127,309,Marquinhos,DEF,Brazil
-128,239,Nicolás Otamendi,DEF,Argentina
-129,252,Nicolás Tagliafico,DEF,Argentina
-130,9322,Nuno Mendes,DEF,Portugal
-131,30330,Nélson Semedo,DEF,Portugal
-132,30511,Pedro Porro,DEF,Spain
-133,770,Rúben Dias,DEF,Portugal
-134,8970,Theo Hernández,DEF,France
-135,8978,William Saliba,DEF,France
-136,9195,Amadou Onana,MID,Belgium
-137,8731,Denzel Dumfries,MID,Netherlands
-138,540,Jefferson Lerma,MID,Colombia
-139,30188,Ryan Gravenberch,MID,Netherlands
-140,8733,Teun Koopmeiners,MID,Netherlands
-141,30187,Tijjani Reijnders,MID,Netherlands
-142,454,Youri Tielemans,MID,Belgium
-143,531,Davinson Sánchez,DEF,Colombia
-144,30638,Joaquín Piquerez,DEF,Uruguay
-145,538,Johan Mojica,DEF,Colombia
-146,9176,Josip Šutalo,DEF,Croatia
-147,2,José María Giménez,DEF,Uruguay
-148,9165,Joško Gvardiol,DEF,Croatia
-149,8727,Jurriën Timber,DEF,Netherlands
-150,9362,Mathías Olivera,DEF,Uruguay
+32,139,Achraf Hakimi,DEF,Morocco
+33,9170,Josip Stanišić,DEF,Croatia
+34,29917,Désiré Doué,FWD,France
+35,9085,Ferran Torres,FWD,Spain
+36,30314,Francisco Conceição,FWD,Portugal
+37,9318,Gonçalo Ramos,FWD,Portugal
+38,29609,Igor Thiago,FWD,Brazil
+39,29920,Jean Philippe Mateta,FWD,France
+40,9321,João Félix,FWD,Portugal
+41,9094,Kai Havertz,FWD,Germany
+42,477,Marcus Rashford,FWD,England
+43,8981,Marcus Thuram,FWD,France
+44,29607,Matheus Cunha,FWD,Brazil
+45,29944,Maximilian Beier,FWD,Germany
+46,30494,Mikel Oyarzabal,FWD,Spain
+47,29894,Ollie Watkins,FWD,England
+48,100,Bernardo Silva,MID,Portugal
+49,9245,Bruno Guimarães,MID,Brazil
+50,9316,Diogo Dalot,DEF,Portugal
+51,9079,Dani Olmo,MID,Spain
+52,29898,Eberechi Eze,MID,England
+53,9224,Lucas Paquetá,MID,Brazil
+54,30319,Pedro Neto,MID,Portugal
+55,30233,Alexander Sørloth,FWD,Norway
+56,232,Andrej Kramarić,FWD,Croatia
+57,9324,João Cancelo,DEF,Portugal
+58,30234,Antonio Nusa,FWD,Norway
+59,140,Ayoub El Kaabi,FWD,Morocco
+60,30183,Brian Brobbey,FWD,Netherlands
+61,29966,Alexander Nübel,GK,Germany
+62,9199,Charles De Ketelaere,FWD,Belgium
+63,308,Alisson,GK,Brazil
+64,29682,Cucho Hernández,FWD,Colombia
+65,10691,David Raya,GK,Spain
+66,30182,Donyell Malen,FWD,Netherlands
+67,9335,Diogo Costa,GK,Portugal
+68,9322,Nuno Mendes,DEF,Portugal
+69,29683,Jhon Córdoba,FWD,Colombia
+70,9223,Alex Sandro,DEF,Brazil
+71,8891,Emiliano Martínez,GK,Argentina
+72,30236,Jørgen Strand Larsen,FWD,Norway
+73,9076,Aymeric Laporte,DEF,Spain
+74,471,Jordan Pickford,GK,England
+75,30510,Marc Cucurella,DEF,Spain
+76,9197,Leandro Trossard,FWD,Belgium
+77,29938,Mike Maignan,GK,France
+78,29681,Luis Javier Suárez,FWD,Colombia
+79,9242,Bremer,DEF,Brazil
+80,8970,Theo Hernández,DEF,France
+81,8729,Noa Lang,FWD,Netherlands
+82,8975,Dayot Upamecano,DEF,France
+83,8976,Jules Koundé,DEF,France
+84,30151,Soufiane Rahimi,FWD,Morocco
+85,252,Nicolás Tagliafico,DEF,Argentina
+86,30511,Pedro Porro,DEF,Spain
+87,8723,Wout Weghorst,FWD,Netherlands
+88,304,Danilo,DEF,Brazil
+89,9152,Abdessamad Ezzalzouli,MID,Morocco
+90,9140,Azzedine Ounahi,MID,Morocco
+91,30331,Gonçalo Inácio,DEF,Portugal
+92,9157,Bilal El Khannouss,MID,Morocco
+93,465,John Stones,DEF,England
+94,30255,Ørjan Nyland,GK,Norway
+95,8969,Ibrahima Konaté,DEF,France
+96,30153,Brahim Díaz,MID,Morocco
+97,30506,Alejandro Grimaldo,MID,Spain
+98,30203,Bart Verbruggen,GK,Netherlands
+99,29619,Gabriel Magalhães,DEF,Brazil
+100,30635,Brian Rodríguez,MID,Uruguay
+101,29563,Dodi Lukebakio,MID,Belgium
+102,2023,Camilo Vargas,GK,Colombia
+103,3,Giorgian de Arrascaeta,MID,Uruguay
+104,223,Ivan Perišić,MID,Croatia
+105,443,Thibaut Courtois,GK,Belgium
+106,530,James Rodríguez,MID,Colombia
+107,239,Nicolás Otamendi,DEF,Argentina
+108,527,Juan Fernando Quintero,MID,Colombia
+109,9092,Marcos Llorente,DEF,Spain
+110,217,Luka Modrić,MID,Croatia
+111,640,Bono,GK,Morocco
+112,227,Mateo Kovačić,MID,Croatia
+113,9374,Nicolás de la Cruz,MID,Uruguay
+114,1122,Dominik Livaković,GK,Croatia
+115,30238,Oscar Bobb,MID,Norway
+116,309,Marquinhos,DEF,Brazil
+117,13,Rodrigo Bentancur,MID,Uruguay
+118,9068,Ayase Ueda,FWD,Japan
+119,30330,Nélson Semedo,DEF,Portugal
+120,322,Breel Embolo,FWD,Switzerland
+121,8818,Christian Pulišić,FWD,USA
+122,9057,Daizen Maeda,FWD,Japan
+123,770,Rúben Dias,DEF,Portugal
+124,30650,Folarin Balogun,FWD,USA
+125,8978,William Saliba,DEF,France
+126,9265,Gregor Kobel,GK,Switzerland
+127,8826,Haji Wright,FWD,USA
+128,8822,Matt Turner,GK,USA
+129,9261,Noah Okafor,FWD,Switzerland
+130,30095,Zion Suzuki,GK,Japan
+131,9269,Ardon Jashari,MID,Switzerland
+132,8829,Giovanni Reyna,MID,USA
+133,9062,Junya Ito,MID,Japan
+134,531,Davinson Sánchez,DEF,Colombia
+135,30655,Malik Tillman,MID,USA
+136,30638,Joaquín Piquerez,DEF,Uruguay
+137,9258,Rubén Vargas,MID,Switzerland
+138,9072,Takefusa Kubo,MID,Japan
+139,8824,Tim Weah,MID,USA
+140,538,Johan Mojica,DEF,Colombia
+141,8828,Weston McKennie,MID,USA
+142,8972,Adrien Rabiot,MID,France
+143,2,José María Giménez,DEF,Uruguay
+144,8727,Jurriën Timber,DEF,Netherlands
+145,8973,Aurélien Tchouaméni,MID,France
+146,296,Casemiro,MID,Brazil
+147,8731,Denzel Dumfries,MID,Netherlands
+148,9176,Josip Šutalo,DEF,Croatia
+149,8825,Antonee Robinson,DEF,USA
+150,8809,Declan Rice,MID,England
 151,8725,Nathan Aké,DEF,Netherlands
-152,9137,Nayef Aguerd,DEF,Morocco
-153,9146,Noussair Mazraoui,DEF,Morocco
-154,30636,Ronald Araújo,DEF,Uruguay
-155,445,Thomas Meunier,DEF,Belgium
-156,9190,Timothy Castagne,DEF,Belgium
-157,8724,Virgil van Dijk,DEF,Netherlands
-158,9053,Ao Tanaka,MID,Japan
-159,9067,Daichi Kamada,MID,Japan
-160,326,Denis Zakaria,MID,Switzerland
-161,315,Granit Xhaka,MID,Switzerland
-162,9051,Ritsu Doan,MID,Japan
-163,8819,Tyler Adams,MID,USA
-164,8825,Antonee Robinson,DEF,USA
-165,313,Manuel Akanji,DEF,Switzerland
-166,311,Ricardo Rodríguez,DEF,Switzerland
-167,8834,Sergiño Dest,DEF,USA
-168,9066,Takehiro Tomiyasu,DEF,Japan
-169,8823,Tim Ream,DEF,USA
-170,29966,Alexander Nübel,GK,Germany
-171,308,Alisson,GK,Brazil
-172,10691,David Raya,GK,Spain
-173,9335,Diogo Costa,GK,Portugal
-174,8891,Emiliano Martínez,GK,Argentina
-175,471,Jordan Pickford,GK,England
-176,29938,Mike Maignan,GK,France
-177,9086,Unai Simón,GK,Spain
-178,30203,Bart Verbruggen,GK,Netherlands
-179,640,Bono,GK,Morocco
-180,2023,Camilo Vargas,GK,Colombia
-181,1122,Dominik Livaković,GK,Croatia
-182,443,Thibaut Courtois,GK,Belgium
-183,30255,Ørjan Nyland,GK,Norway
-184,9265,Gregor Kobel,GK,Switzerland
-185,8822,Matt Turner,GK,USA
-186,30095,Zion Suzuki,GK,Japan
-187,29892,Anthony Gordon,FWD,England
-188,30496,Borja Iglesias,FWD,Spain
-189,29606,Endrick,FWD,Brazil
-190,9244,Gabriel Martinelli,FWD,Brazil
-191,29895,Ivan Toney,FWD,England
-192,29478,José Manuel López,FWD,Argentina
-193,8882,Julián Alvarez,FWD,Argentina
-194,8899,Lautaro Martínez,FWD,Argentina
-195,292,Neymar,FWD,Brazil
-196,29942,Nick Woltemade,FWD,Germany
-197,29893,Noni Madueke,FWD,England
-198,30493,Victor Muñoz,FWD,Spain
-199,10699,Yéremy Pino,FWD,Spain
-200,29950,Aleksandar Pavlović,MID,Germany
-201,30507,Alex Baena,MID,Spain
-202,8880,Alexis Mac Allister,MID,Argentina
-203,29952,Angelo Stiller,MID,Germany
-204,34957,Assan Ouédraogo,MID,Germany
-205,29617,Danilo Oliveira,MID,Brazil
-206,29901,Elliot Anderson,MID,England
-207,8879,Enzo Fernández,MID,Argentina
-208,8898,Exequiel Palacios,MID,Argentina
-209,9228,Fabinho,MID,Brazil
-210,29954,Felix Nmecha,MID,Germany
-211,30321,Francisco Trincão,MID,Portugal
-212,1258,Giovani Lo Celso,MID,Argentina
-213,29485,Giuliano Simeone,MID,Argentina
-214,102,Gonçalo Guedes,MID,Portugal
-215,29956,Jamie Leweling,MID,Germany
-216,422,Joshua Kimmich,MID,Germany
-217,8881,Leandro Paredes,MID,Argentina
-218,428,Leon Goretzka,MID,Germany
-219,9101,Leroy Sané,MID,Germany
-220,29616,Luiz Henrique,MID,Brazil
-221,29927,Maghnes Akliouche,MID,France
-222,29921,Michael Olise,MID,France
-223,30503,Mikel Merino,MID,Spain
-224,29900,Morgan Rogers,MID,England
-225,29955,Nadiem Amiri,MID,Germany
-226,29480,Nico Paz,MID,Argentina
-227,29486,Nicolás González,MID,Argentina
-228,29953,Pascal Groß,MID,Germany
-229,29613,Rayan,MID,Brazil
-230,29923,Rayan Cherki,MID,France
-231,8888,Rodrigo De Paul,MID,Argentina
-232,30323,Samú Costa,MID,Portugal
-233,8887,Thiago Almada,MID,Argentina
-234,29488,Valentín Barco,MID,Argentina
-235,29925,Warren Zaïre-Emery,MID,France
-236,37131,Éderson,MID,Brazil
-237,430,Antonio Rüdiger,DEF,Germany
-238,8892,Cristian Romero,DEF,Argentina
-239,29910,Dan Burn,DEF,England
-240,9096,David Raum,DEF,Germany
-241,29909,Djed Spence,DEF,England
-242,29625,Douglas Santos,DEF,Brazil
-243,10694,Eric García,DEF,Spain
-244,29911,Ezri Konsa,DEF,England
-245,29497,Facundo Medina,DEF,Argentina
-246,8897,Gonzalo Montiel,DEF,Argentina
-247,29907,Jarell Quansah,DEF,England
-248,29959,Jonathan Tah,DEF,Germany
-249,8890,Lisandro Martínez,DEF,Argentina
-250,29937,Lucas Digne,DEF,France
-251,162,Lucas Hernández,DEF,France
-252,29623,Léo Pereira,DEF,Brazil
-253,29960,Malick Thiaw,DEF,Germany
-254,29933,Malo Gusto,DEF,France
-255,29905,Marc Guéhi,DEF,England
-256,30514,Marc Pubill,DEF,Spain
-257,9332,Matheus Nunes,DEF,Portugal
-258,29936,Maxence Lacroix,DEF,France
-259,8894,Nahuel Molina,DEF,Argentina
-260,29963,Nathaniel Brown,DEF,Germany
-261,29904,Nico O'Reilly,DEF,England
-262,9102,Nico Schlotterbeck,DEF,Germany
-263,30508,Pau Cubarsí,DEF,Spain
-264,29903,Reece James,DEF,England
-265,30329,Renato Veiga,DEF,Portugal
-266,29626,Roger Ibañez,DEF,Brazil
-267,29908,Tino Livramento,DEF,England
-268,30332,Tomás Araújo,DEF,Portugal
-269,29962,Waldemar Anton,DEF,Germany
+152,9362,Mathías Olivera,DEF,Uruguay
+153,30505,Fabián Ruiz,MID,Spain
+154,474,Jordan Henderson,MID,England
+155,9165,Joško Gvardiol,DEF,Croatia
+156,445,Thomas Meunier,DEF,Belgium
+157,30318,João Neves,MID,Portugal
+158,29899,Kobbie Mainoo,MID,England
+159,29928,Manu Koné,MID,France
+160,9137,Nayef Aguerd,DEF,Morocco
+161,9190,Timothy Castagne,DEF,Belgium
+162,8834,Sergiño Dest,DEF,USA
+163,30504,Martín Zubimendi,MID,Spain
+164,30636,Ronald Araújo,DEF,Uruguay
+165,154,N'Golo Kanté,MID,France
+166,9146,Noussair Mazraoui,DEF,Morocco
+167,8724,Virgil van Dijk,DEF,Netherlands
+168,9082,Pablo Gavi,MID,Spain
+169,9331,Rúben Neves,MID,Portugal
+170,311,Ricardo Rodríguez,DEF,Switzerland
+171,9066,Takehiro Tomiyasu,DEF,Japan
+172,313,Manuel Akanji,DEF,Switzerland
+173,8823,Tim Ream,DEF,USA
+174,9195,Amadou Onana,MID,Belgium
+175,540,Jefferson Lerma,MID,Colombia
+176,30188,Ryan Gravenberch,MID,Netherlands
+177,8733,Teun Koopmeiners,MID,Netherlands
+178,30187,Tijjani Reijnders,MID,Netherlands
+179,454,Youri Tielemans,MID,Belgium
+180,9086,Unai Simón,GK,Spain
+181,9053,Ao Tanaka,MID,Japan
+182,9067,Daichi Kamada,MID,Japan
+183,326,Denis Zakaria,MID,Switzerland
+184,315,Granit Xhaka,MID,Switzerland
+185,9051,Ritsu Doan,MID,Japan
+186,8819,Tyler Adams,MID,USA
+187,430,Antonio Rüdiger,DEF,Germany
+188,29892,Anthony Gordon,FWD,England
+189,29910,Dan Burn,DEF,England
+190,30496,Borja Iglesias,FWD,Spain
+191,8892,Cristian Romero,DEF,Argentina
+192,9096,David Raum,DEF,Germany
+193,29606,Endrick,FWD,Brazil
+194,9244,Gabriel Martinelli,FWD,Brazil
+195,29895,Ivan Toney,FWD,England
+196,29909,Djed Spence,DEF,England
+197,29478,José Manuel López,FWD,Argentina
+198,8882,Julián Alvarez,FWD,Argentina
+199,8899,Lautaro Martínez,FWD,Argentina
+200,292,Neymar,FWD,Brazil
+201,29911,Ezri Konsa,DEF,England
+202,29942,Nick Woltemade,FWD,Germany
+203,10694,Eric García,DEF,Spain
+204,29625,Douglas Santos,DEF,Brazil
+205,29497,Facundo Medina,DEF,Argentina
+206,29893,Noni Madueke,FWD,England
+207,30493,Victor Muñoz,FWD,Spain
+208,29959,Jonathan Tah,DEF,Germany
+209,10699,Yéremy Pino,FWD,Spain
+210,8897,Gonzalo Montiel,DEF,Argentina
+211,29950,Aleksandar Pavlović,MID,Germany
+212,29907,Jarell Quansah,DEF,England
+213,30507,Alex Baena,MID,Spain
+214,8880,Alexis Mac Allister,MID,Argentina
+215,29952,Angelo Stiller,MID,Germany
+216,8890,Lisandro Martínez,DEF,Argentina
+217,34957,Assan Ouédraogo,MID,Germany
+218,29904,Nico O'Reilly,DEF,England
+219,29937,Lucas Digne,DEF,France
+220,29960,Malick Thiaw,DEF,Germany
+221,29617,Danilo Oliveira,MID,Brazil
+222,29901,Elliot Anderson,MID,England
+223,8879,Enzo Fernández,MID,Argentina
+224,8898,Exequiel Palacios,MID,Argentina
+225,9228,Fabinho,MID,Brazil
+226,29903,Reece James,DEF,England
+227,29905,Marc Guéhi,DEF,England
+228,29954,Felix Nmecha,MID,Germany
+229,30514,Marc Pubill,DEF,Spain
+230,30321,Francisco Trincão,MID,Portugal
+231,1258,Giovani Lo Celso,MID,Argentina
+232,29485,Giuliano Simeone,MID,Argentina
+233,29963,Nathaniel Brown,DEF,Germany
+234,102,Gonçalo Guedes,MID,Portugal
+235,162,Lucas Hernández,DEF,France
+236,29956,Jamie Leweling,MID,Germany
+237,29623,Léo Pereira,DEF,Brazil
+238,422,Joshua Kimmich,MID,Germany
+239,9102,Nico Schlotterbeck,DEF,Germany
+240,8881,Leandro Paredes,MID,Argentina
+241,29933,Malo Gusto,DEF,France
+242,428,Leon Goretzka,MID,Germany
+243,9101,Leroy Sané,MID,Germany
+244,29616,Luiz Henrique,MID,Brazil
+245,9332,Matheus Nunes,DEF,Portugal
+246,29927,Maghnes Akliouche,MID,France
+247,29936,Maxence Lacroix,DEF,France
+248,29921,Michael Olise,MID,France
+249,8894,Nahuel Molina,DEF,Argentina
+250,30503,Mikel Merino,MID,Spain
+251,29900,Morgan Rogers,MID,England
+252,29955,Nadiem Amiri,MID,Germany
+253,29480,Nico Paz,MID,Argentina
+254,30508,Pau Cubarsí,DEF,Spain
+255,29486,Nicolás González,MID,Argentina
+256,29953,Pascal Groß,MID,Germany
+257,30329,Renato Veiga,DEF,Portugal
+258,29613,Rayan,MID,Brazil
+259,29626,Roger Ibañez,DEF,Brazil
+260,29923,Rayan Cherki,MID,France
+261,29908,Tino Livramento,DEF,England
+262,8888,Rodrigo De Paul,MID,Argentina
+263,30332,Tomás Araújo,DEF,Portugal
+264,30323,Samú Costa,MID,Portugal
+265,29962,Waldemar Anton,DEF,Germany
+266,8887,Thiago Almada,MID,Argentina
+267,29488,Valentín Barco,MID,Argentina
+268,29925,Warren Zaïre-Emery,MID,France
+269,37131,Éderson,MID,Brazil
 270,29939,Brice Samba,GK,France
 271,29914,Dean Henderson,GK,England
 272,1788,Ederson,GK,Brazil
@@ -281,114 +281,114 @@ rank,balldontlieId,name,position,team
 280,29940,Robin Risser,GK,France
 281,30335,Rui Silva,GK,Portugal
 282,9243,Weverton,GK,Brazil
-283,9180,Ante Budimir,FWD,Croatia
-284,30152,Ayoube Amaimouni Echghouyab,FWD,Morocco
-285,30625,Federico Viñas,FWD,Uruguay
-286,29735,Igor Matanović,FWD,Croatia
-287,30235,Jens Petter Hauge,FWD,Norway
-288,29555,Matías Fernández-Pardo,FWD,Belgium
-289,29736,Petar Musa,FWD,Croatia
-290,30626,Rodrigo Aguirre,FWD,Uruguay
-291,30624,Rodrigo Zalazar,FWD,Uruguay
-292,9371,Agustín Canobbio,MID,Uruguay
-293,29561,Alexis Saelemaekers,MID,Belgium
-294,30239,Andreas Schjelderup,MID,Norway
-295,29691,Andrés Gómez,MID,Colombia
-296,455,Axel Witsel,MID,Belgium
-297,30162,Ayyoub Bouaddi,MID,Morocco
-298,30160,Chemsdine Talbi,MID,Morocco
-299,30193,Crysencio Summerville,MID,Netherlands
-300,29690,Daniel Muñoz,MID,Colombia
-301,29562,Diego Moreira,MID,Belgium
-302,30633,Emiliano Martínez,MID,Uruguay
-303,9376,Facundo Pellistri,MID,Uruguay
-304,30240,Fredrik Aursnes,MID,Norway
-305,30161,Gessime Yassine,MID,Morocco
-306,29694,Gustavo Puerta,MID,Colombia
-307,30194,Guus Til,MID,Netherlands
-308,10400,Hans Vanaken,MID,Belgium
-309,30158,Ismael Saibari,MID,Morocco
-310,29695,Jaminton Campaz,MID,Colombia
-311,29687,Jhon Arias,MID,Colombia
-312,29688,Jorge Carrascal,MID,Colombia
-313,29696,Juan Portilla,MID,Colombia
-314,30242,Julian Ryerson,MID,Norway
-315,30192,Justin Kluivert,MID,Netherlands
-316,29693,Kevin Castaño,MID,Colombia
-317,30245,Kristian Thorstvedt,MID,Norway
-318,10377,Kristijan Jakić,MID,Croatia
-319,10375,Luka Sučić,MID,Croatia
-320,10837,Manuel Ugarte,MID,Uruguay
-321,29745,Marco Pašalić,MID,Croatia
-322,30247,Marcus Pedersen,MID,Norway
-323,9177,Mario Pašalić,MID,Croatia
-324,8735,Marten de Roon,MID,Netherlands
-325,29740,Martin Baturina,MID,Croatia
-326,30246,Morten Thorsby,MID,Norway
-327,30159,Neil El Aynaoui,MID,Morocco
-328,29565,Nicolas Raskin,MID,Belgium
-329,29747,Nikola Moro,MID,Croatia
-330,9179,Nikola Vlašić,MID,Croatia
-331,30243,Patrick Berg,MID,Norway
-332,29741,Petar Sučić,MID,Croatia
-333,30190,Quinten Timber,MID,Netherlands
-334,29686,Richard Ríos,MID,Colombia
-335,30163,Samir El Mourabet,MID,Morocco
-336,30244,Sander Berge,MID,Norway
-337,143,Sofyan Amrabat,MID,Morocco
-338,30241,Thelo Aasgaard,MID,Norway
-339,29746,Toni Fruk,MID,Croatia
-340,30169,Anass Salah-Eddine,DEF,Morocco
-341,10399,Arthur Theate,DEF,Belgium
-342,29574,Brandon Mechele,DEF,Belgium
-343,30168,Chadi Riad,DEF,Morocco
-344,30250,David Møller Wolfe,DEF,Norway
-345,29702,Deiver Machado,DEF,Colombia
-346,233,Duje Ćaleta-Car,DEF,Croatia
-347,30252,Fredrik André Bjørkan,DEF,Norway
-348,5,Guillermo Varela,DEF,Uruguay
-349,30253,Henrik Sælebakke Falchener,DEF,Norway
-350,30170,Issa Diop,DEF,Morocco
-351,30201,Jan Paul van Hecke,DEF,Netherlands
-352,29699,Jhon Lucumí,DEF,Colombia
-353,29573,Joaquin Seys,DEF,Belgium
-354,30199,Jorrel Hato,DEF,Netherlands
-355,30645,Juan Sanabria,DEF,Uruguay
-356,29568,Koni De Winter,DEF,Belgium
-357,30249,Kristoffer Ajer,DEF,Norway
-358,30248,Leo Østigård,DEF,Norway
-359,29750,Luka Vušković,DEF,Croatia
-360,32696,Lutsharel Geertruida,DEF,Netherlands
-361,29754,Marin Pongračić,DEF,Croatia
-362,10371,Martin Erlić,DEF,Croatia
-363,30202,Mats Wieffer,DEF,Netherlands
-364,9375,Matías Viña,DEF,Uruguay
-365,29566,Maxim De Cuyper,DEF,Belgium
-366,30641,Maximiliano Araújo,DEF,Uruguay
-367,30200,Micky van de Ven,DEF,Netherlands
-368,29571,Nathan Ngoy,DEF,Belgium
-369,30173,Redouane Halhal,DEF,Morocco
-370,535,Santiago Arias,DEF,Colombia
-371,30643,Santiago Bueno,DEF,Uruguay
-372,30644,Sebastián Cáceres,DEF,Uruguay
-373,30254,Sondre Langås,DEF,Norway
-374,30251,Torbjørn Heggem,DEF,Norway
-375,29703,Willer Ditta,DEF,Colombia
-376,526,Yerry Mina,DEF,Colombia
-377,30171,Youssef Belammari,DEF,Morocco
-378,30172,Zakaria El Ouahdi,DEF,Morocco
-379,10397,Zeno Debast,DEF,Belgium
-380,6142,Ahmed Reda Tagnaouti,GK,Morocco
+283,11,Fernando Muslera,GK,Uruguay
+284,29690,Daniel Muñoz,MID,Colombia
+285,9180,Ante Budimir,FWD,Croatia
+286,30152,Ayoube Amaimouni Echghouyab,FWD,Morocco
+287,30625,Federico Viñas,FWD,Uruguay
+288,29735,Igor Matanović,FWD,Croatia
+289,30235,Jens Petter Hauge,FWD,Norway
+290,29555,Matías Fernández-Pardo,FWD,Belgium
+291,29736,Petar Musa,FWD,Croatia
+292,30626,Rodrigo Aguirre,FWD,Uruguay
+293,30624,Rodrigo Zalazar,FWD,Uruguay
+294,30250,David Møller Wolfe,DEF,Norway
+295,9371,Agustín Canobbio,MID,Uruguay
+296,29561,Alexis Saelemaekers,MID,Belgium
+297,30239,Andreas Schjelderup,MID,Norway
+298,10399,Arthur Theate,DEF,Belgium
+299,29691,Andrés Gómez,MID,Colombia
+300,30252,Fredrik André Bjørkan,DEF,Norway
+301,455,Axel Witsel,MID,Belgium
+302,30162,Ayyoub Bouaddi,MID,Morocco
+303,29574,Brandon Mechele,DEF,Belgium
+304,30160,Chemsdine Talbi,MID,Morocco
+305,29702,Deiver Machado,DEF,Colombia
+306,30193,Crysencio Summerville,MID,Netherlands
+307,30169,Anass Salah-Eddine,DEF,Morocco
+308,30253,Henrik Sælebakke Falchener,DEF,Norway
+309,29562,Diego Moreira,MID,Belgium
+310,30633,Emiliano Martínez,MID,Uruguay
+311,9376,Facundo Pellistri,MID,Uruguay
+312,30168,Chadi Riad,DEF,Morocco
+313,30240,Fredrik Aursnes,MID,Norway
+314,5,Guillermo Varela,DEF,Uruguay
+315,30161,Gessime Yassine,MID,Morocco
+316,233,Duje Ćaleta-Car,DEF,Croatia
+317,29694,Gustavo Puerta,MID,Colombia
+318,30201,Jan Paul van Hecke,DEF,Netherlands
+319,30194,Guus Til,MID,Netherlands
+320,29699,Jhon Lucumí,DEF,Colombia
+321,10400,Hans Vanaken,MID,Belgium
+322,30249,Kristoffer Ajer,DEF,Norway
+323,30158,Ismael Saibari,MID,Morocco
+324,29573,Joaquin Seys,DEF,Belgium
+325,29695,Jaminton Campaz,MID,Colombia
+326,30199,Jorrel Hato,DEF,Netherlands
+327,29687,Jhon Arias,MID,Colombia
+328,30248,Leo Østigård,DEF,Norway
+329,29688,Jorge Carrascal,MID,Colombia
+330,30170,Issa Diop,DEF,Morocco
+331,29696,Juan Portilla,MID,Colombia
+332,30645,Juan Sanabria,DEF,Uruguay
+333,30242,Julian Ryerson,MID,Norway
+334,29568,Koni De Winter,DEF,Belgium
+335,30192,Justin Kluivert,MID,Netherlands
+336,29566,Maxim De Cuyper,DEF,Belgium
+337,29693,Kevin Castaño,MID,Colombia
+338,9375,Matías Viña,DEF,Uruguay
+339,30245,Kristian Thorstvedt,MID,Norway
+340,10377,Kristijan Jakić,MID,Croatia
+341,32696,Lutsharel Geertruida,DEF,Netherlands
+342,10375,Luka Sučić,MID,Croatia
+343,29750,Luka Vušković,DEF,Croatia
+344,10837,Manuel Ugarte,MID,Uruguay
+345,29745,Marco Pašalić,MID,Croatia
+346,30247,Marcus Pedersen,MID,Norway
+347,9177,Mario Pašalić,MID,Croatia
+348,29754,Marin Pongračić,DEF,Croatia
+349,8735,Marten de Roon,MID,Netherlands
+350,29740,Martin Baturina,MID,Croatia
+351,30246,Morten Thorsby,MID,Norway
+352,535,Santiago Arias,DEF,Colombia
+353,30159,Neil El Aynaoui,MID,Morocco
+354,30254,Sondre Langås,DEF,Norway
+355,29565,Nicolas Raskin,MID,Belgium
+356,29747,Nikola Moro,MID,Croatia
+357,30202,Mats Wieffer,DEF,Netherlands
+358,9179,Nikola Vlašić,MID,Croatia
+359,30243,Patrick Berg,MID,Norway
+360,29741,Petar Sučić,MID,Croatia
+361,10371,Martin Erlić,DEF,Croatia
+362,30641,Maximiliano Araújo,DEF,Uruguay
+363,30190,Quinten Timber,MID,Netherlands
+364,29703,Willer Ditta,DEF,Colombia
+365,30200,Micky van de Ven,DEF,Netherlands
+366,29686,Richard Ríos,MID,Colombia
+367,29571,Nathan Ngoy,DEF,Belgium
+368,30163,Samir El Mourabet,MID,Morocco
+369,30244,Sander Berge,MID,Norway
+370,143,Sofyan Amrabat,MID,Morocco
+371,30251,Torbjørn Heggem,DEF,Norway
+372,30643,Santiago Bueno,DEF,Uruguay
+373,30241,Thelo Aasgaard,MID,Norway
+374,30644,Sebastián Cáceres,DEF,Uruguay
+375,29746,Toni Fruk,MID,Croatia
+376,30173,Redouane Halhal,DEF,Morocco
+377,526,Yerry Mina,DEF,Colombia
+378,10397,Zeno Debast,DEF,Belgium
+379,30171,Youssef Belammari,DEF,Morocco
+380,30172,Zakaria El Ouahdi,DEF,Morocco
 381,529,David Ospina,GK,Colombia
-382,29757,Dominik Kotarski,GK,Croatia
+382,6142,Ahmed Reda Tagnaouti,GK,Morocco
 383,30257,Egil Selvik,GK,Norway
-384,11,Fernando Muslera,GK,Uruguay
-385,29758,Ivor Pandur,GK,Croatia
-386,30204,Mark Flekken,GK,Netherlands
+384,29757,Dominik Kotarski,GK,Croatia
+385,30204,Mark Flekken,GK,Netherlands
+386,29758,Ivor Pandur,GK,Croatia
 387,29577,Mike Penders,GK,Belgium
-388,141,Munir El Kajoui,GK,Morocco
+388,30256,Sander Tangvik,GK,Norway
 389,30205,Robin Roefs,GK,Netherlands
-390,30256,Sander Tangvik,GK,Norway
+390,141,Munir El Kajoui,GK,Morocco
 391,30648,Santiago Mele,GK,Uruguay
 392,29576,Senne Lammens,GK,Belgium
 393,9366,Sergio Rochet,GK,Uruguay
@@ -471,131 +471,131 @@ rank,balldontlieId,name,position,team
 470,30083,Keito Nakamura,MID,Japan
 471,29845,Kendry Páez,MID,Ecuador
 472,8756,Krépin Diatta,MID,Senegal
-473,30425,Lamine Camara,MID,Senegal
-474,30479,Lee Tae-seok,MID,South Korea
-475,8923,Luis Chávez,MID,Mexico
-476,29531,Marcel Sabitzer,MID,Austria
-477,30662,Maximilian Arfsten,MID,USA
-478,9266,Michel Aebischer,MID,Switzerland
-479,30559,Miro Muheim,MID,Switzerland
-480,8769,Moisés Caicedo,MID,Ecuador
-481,29533,Nicolas Seiwald,MID,Austria
-482,29848,Nilson Angulo,MID,Ecuador
-483,30132,Obed Vargas,MID,Mexico
-484,8934,Orbelín Pineda,MID,Mexico
-485,30602,Orkun Kökçü,MID,Türkiye
-486,30607,Oğuz Aydın,MID,Türkiye
-487,8749,Pape Gueye,MID,Senegal
-488,8745,Pape Matar Sarr,MID,Senegal
-489,8754,Pathé Ismaël Ciss,MID,Senegal
-490,29536,Patrick Wimmer,MID,Austria
-491,29532,Paul Wanner,MID,Austria
-492,29851,Pedro Vite,MID,Ecuador
-493,8766,Pervis Estupiñán,MID,Ecuador
-494,29539,Phillipp Mwene,MID,Austria
-495,1636,Remo Freuler,MID,Switzerland
-496,29535,Romano Schmid,MID,Austria
-497,571,Sadio Mané,MID,Senegal
-498,30609,Salih Özcan,MID,Türkiye
-499,30660,Sebastian Berhalter,MID,USA
-500,9339,Seung Ho Paik,MID,South Korea
-501,9247,Silvan Widmer,MID,Switzerland
-502,1892,Wataru Endo,MID,Japan
-503,29534,Xaver Schlager,MID,Austria
-504,30085,Yuito Suzuki,MID,Japan
-505,30605,Yunus Akgün,MID,Türkiye
-506,30133,Álvaro Fidalgo,MID,Mexico
-507,8763,Ángelo Preciado,MID,Ecuador
-508,30606,İrfan Can Kahveci,MID,Türkiye
-509,30608,İsmail Yüksek,MID,Türkiye
-510,30436,Abdoulaye Seck,DEF,Senegal
-511,30611,Abdülkerim Bardakcı,DEF,Türkiye
-512,30668,Alexander Freeman,DEF,USA
-513,30435,Antoine Mendy,DEF,Senegal
-514,30565,Aurèle Amenda,DEF,Switzerland
-515,30667,Auston Trusty,DEF,USA
-516,30093,Ayumu Seko,DEF,Japan
-517,30665,Chris Richards,DEF,USA
-518,8924,César Montes,DEF,Mexico
-519,29545,David Affengruber,DEF,Austria
-520,29541,David Alaba,DEF,Austria
-521,30432,El Hadji Malick Diouf,DEF,Senegal
-522,9268,Eray Cömert,DEF,Switzerland
-523,30612,Eren Elmalı,DEF,Türkiye
-524,30144,Erik Lira,DEF,Mexico
-525,30610,Ferdi Kadıoğlu,DEF,Türkiye
-526,8761,Félix Torres,DEF,Ecuador
-527,30487,Gi-Hyuk Lee,DEF,South Korea
-528,30484,Han-Beom Lee,DEF,South Korea
-529,9069,Hiroki Itō,DEF,Japan
-530,8751,Ismail Jakobs,DEF,Senegal
-531,30143,Israel Reyes,DEF,Mexico
-532,8768,Jackson Porozo,DEF,Ecuador
-533,388,Jesús Gallardo,DEF,Mexico
-534,9441,Joe Scally,DEF,USA
-535,29856,Joel Ordóñez,DEF,Ecuador
-536,9966,Johan Vásquez,DEF,Mexico
-537,8938,Jorge Sánchez,DEF,Mexico
-538,30091,Junnosuke Suzuki,DEF,Japan
-539,30614,Kaan Ayhan,DEF,Türkiye
-540,578,Kalidou Koulibaly,DEF,Senegal
-541,29543,Kevin Danso,DEF,Austria
-542,9347,Kim Min-jae,DEF,South Korea
-543,9345,Kim Moon-hwan,DEF,South Korea
-544,30486,Kim Tae-hyeon,DEF,South Korea
-545,9052,Ko Itakura,DEF,Japan
-546,29542,Konrad Laimer,DEF,Austria
-547,30567,Luca Jaquez,DEF,Switzerland
-548,9968,Luis Romo,DEF,Mexico
-549,30430,Mamadou Sarr,DEF,Senegal
-550,29547,Marco Friedl,DEF,Austria
-551,30669,Mark McKenzie,DEF,USA
-552,30140,Mateo Chávez,DEF,Mexico
-553,30613,Merih Demiral,DEF,Türkiye
-554,30617,Mert Müldür,DEF,Türkiye
-555,29548,Michael Svoboda,DEF,Austria
-556,30671,Miles Robinson,DEF,USA
-557,30433,Moussa Niakhaté,DEF,Senegal
-558,1633,Nico Elvedi,DEF,Switzerland
-559,30618,Ozan Kabak,DEF,Türkiye
-560,29546,Philipp Lienhart,DEF,Austria
-561,8767,Piero Hincapié,DEF,Ecuador
-562,30619,Samet Akaydın,DEF,Türkiye
+473,30436,Abdoulaye Seck,DEF,Senegal
+474,30425,Lamine Camara,MID,Senegal
+475,30611,Abdülkerim Bardakcı,DEF,Türkiye
+476,30479,Lee Tae-seok,MID,South Korea
+477,30668,Alexander Freeman,DEF,USA
+478,8923,Luis Chávez,MID,Mexico
+479,30565,Aurèle Amenda,DEF,Switzerland
+480,30093,Ayumu Seko,DEF,Japan
+481,29531,Marcel Sabitzer,MID,Austria
+482,30662,Maximilian Arfsten,MID,USA
+483,30435,Antoine Mendy,DEF,Senegal
+484,9266,Michel Aebischer,MID,Switzerland
+485,30559,Miro Muheim,MID,Switzerland
+486,30667,Auston Trusty,DEF,USA
+487,8769,Moisés Caicedo,MID,Ecuador
+488,8924,César Montes,DEF,Mexico
+489,29533,Nicolas Seiwald,MID,Austria
+490,29545,David Affengruber,DEF,Austria
+491,29848,Nilson Angulo,MID,Ecuador
+492,30665,Chris Richards,DEF,USA
+493,30132,Obed Vargas,MID,Mexico
+494,8934,Orbelín Pineda,MID,Mexico
+495,29541,David Alaba,DEF,Austria
+496,9268,Eray Cömert,DEF,Switzerland
+497,30602,Orkun Kökçü,MID,Türkiye
+498,30607,Oğuz Aydın,MID,Türkiye
+499,29550,Alexander Schlager,GK,Austria
+500,30432,El Hadji Malick Diouf,DEF,Senegal
+501,8749,Pape Gueye,MID,Senegal
+502,30612,Eren Elmalı,DEF,Türkiye
+503,30620,Altay Bayındır,GK,Türkiye
+504,8745,Pape Matar Sarr,MID,Senegal
+505,30144,Erik Lira,DEF,Mexico
+506,30149,Carlos Acevedo,GK,Mexico
+507,8761,Félix Torres,DEF,Ecuador
+508,8754,Pathé Ismaël Ciss,MID,Senegal
+509,30487,Gi-Hyuk Lee,DEF,South Korea
+510,29536,Patrick Wimmer,MID,Austria
+511,8759,Edouard Mendy,GK,Senegal
+512,9069,Hiroki Itō,DEF,Japan
+513,30610,Ferdi Kadıoğlu,DEF,Türkiye
+514,29532,Paul Wanner,MID,Austria
+515,8763,Ángelo Preciado,MID,Ecuador
+516,29851,Pedro Vite,MID,Ecuador
+517,30484,Han-Beom Lee,DEF,South Korea
+518,29861,Gonzalo Valle,GK,Ecuador
+519,8766,Pervis Estupiñán,MID,Ecuador
+520,29539,Phillipp Mwene,MID,Austria
+521,1636,Remo Freuler,MID,Switzerland
+522,402,Jo Hyeonwoo,GK,South Korea
+523,29535,Romano Schmid,MID,Austria
+524,8768,Jackson Porozo,DEF,Ecuador
+525,30143,Israel Reyes,DEF,Mexico
+526,571,Sadio Mané,MID,Senegal
+527,8751,Ismail Jakobs,DEF,Senegal
+528,30609,Salih Özcan,MID,Türkiye
+529,30660,Sebastian Berhalter,MID,USA
+530,9339,Seung Ho Paik,MID,South Korea
+531,388,Jesús Gallardo,DEF,Mexico
+532,29856,Joel Ordóñez,DEF,Ecuador
+533,30091,Junnosuke Suzuki,DEF,Japan
+534,9247,Silvan Widmer,MID,Switzerland
+535,1892,Wataru Endo,MID,Japan
+536,29534,Xaver Schlager,MID,Austria
+537,30085,Yuito Suzuki,MID,Japan
+538,9966,Johan Vásquez,DEF,Mexico
+539,30605,Yunus Akgün,MID,Türkiye
+540,30133,Álvaro Fidalgo,MID,Mexico
+541,30614,Kaan Ayhan,DEF,Türkiye
+542,29543,Kevin Danso,DEF,Austria
+543,8938,Jorge Sánchez,DEF,Mexico
+544,9347,Kim Min-jae,DEF,South Korea
+545,30606,İrfan Can Kahveci,MID,Türkiye
+546,9441,Joe Scally,DEF,USA
+547,578,Kalidou Koulibaly,DEF,Senegal
+548,30608,İsmail Yüksek,MID,Türkiye
+549,9052,Ko Itakura,DEF,Japan
+550,9345,Kim Moon-hwan,DEF,South Korea
+551,30567,Luca Jaquez,DEF,Switzerland
+552,30486,Kim Tae-hyeon,DEF,South Korea
+553,29542,Konrad Laimer,DEF,Austria
+554,29547,Marco Friedl,DEF,Austria
+555,30430,Mamadou Sarr,DEF,Senegal
+556,30613,Merih Demiral,DEF,Türkiye
+557,1633,Nico Elvedi,DEF,Switzerland
+558,30617,Mert Müldür,DEF,Türkiye
+559,29548,Michael Svoboda,DEF,Austria
+560,30669,Mark McKenzie,DEF,USA
+561,9968,Luis Romo,DEF,Mexico
+562,8767,Piero Hincapié,DEF,Ecuador
 563,9060,Shogo Taniguchi,DEF,Japan
-564,29544,Stefan Posch,DEF,Austria
-565,30090,Tsuyoshi Watanabe,DEF,Japan
-566,30488,Wi-je Cho,DEF,South Korea
+564,30671,Miles Robinson,DEF,USA
+565,30140,Mateo Chávez,DEF,Mexico
+566,30433,Moussa Niakhaté,DEF,Senegal
 567,26787,Willian Pacho,DEF,Ecuador
-568,29858,Yaimar Medina,DEF,Ecuador
-569,30483,Young-woo Seol,DEF,South Korea
-570,30089,Yukinari Sugawara,DEF,Japan
-571,557,Yuto Nagatomo,DEF,Japan
-572,30616,Zeki Çelik,DEF,Türkiye
-573,30615,Çağlar Söyüncü,DEF,Türkiye
-574,29550,Alexander Schlager,GK,Austria
-575,30620,Altay Bayındır,GK,Türkiye
-576,30149,Carlos Acevedo,GK,Mexico
-577,30674,Chris Brady,GK,USA
-578,8759,Edouard Mendy,GK,Senegal
-579,29551,Florian Wiegele,GK,Austria
-580,29861,Gonzalo Valle,GK,Ecuador
-581,383,Guillermo Ochoa,GK,Mexico
-582,8773,Hernán Galíndez,GK,Ecuador
-583,402,Jo Hyeonwoo,GK,South Korea
-584,1491,Kim Seung-gyu,GK,South Korea
-585,30570,Marvin Keller,GK,Switzerland
+568,30488,Wi-je Cho,DEF,South Korea
+569,30618,Ozan Kabak,DEF,Türkiye
+570,29858,Yaimar Medina,DEF,Ecuador
+571,29546,Philipp Lienhart,DEF,Austria
+572,30090,Tsuyoshi Watanabe,DEF,Japan
+573,30619,Samet Akaydın,DEF,Türkiye
+574,29544,Stefan Posch,DEF,Austria
+575,30089,Yukinari Sugawara,DEF,Japan
+576,557,Yuto Nagatomo,DEF,Japan
+577,30483,Young-woo Seol,DEF,South Korea
+578,30616,Zeki Çelik,DEF,Türkiye
+579,30615,Çağlar Söyüncü,DEF,Türkiye
+580,30674,Chris Brady,GK,USA
+581,29551,Florian Wiegele,GK,Austria
+582,383,Guillermo Ochoa,GK,Mexico
+583,8773,Hernán Galíndez,GK,Ecuador
+584,30570,Marvin Keller,GK,Switzerland
+585,1491,Kim Seung-gyu,GK,South Korea
 586,30673,Matthew Freese,GK,USA
 587,30622,Mert Günok,GK,Türkiye
 588,26785,Moisés Ramírez,GK,Ecuador
-589,30438,Mory Diaw,GK,Senegal
-590,30096,Osako Keisuke,GK,Japan
+589,30096,Osako Keisuke,GK,Japan
+590,30438,Mory Diaw,GK,Senegal
 591,29549,Patrick Pentz,GK,Austria
 592,30148,Raúl Rangel,GK,Mexico
-593,10947,Song Bum-keun,GK,South Korea
-594,30097,Tomoki Hayakawa,GK,Japan
+593,30097,Tomoki Hayakawa,GK,Japan
+594,10947,Song Bum-keun,GK,South Korea
 595,30621,Uğurcan Çakır,GK,Türkiye
-596,30439,Yehvann Diouf,GK,Senegal
-597,1630,Yvon Mvogo,GK,Switzerland
+596,1630,Yvon Mvogo,GK,Switzerland
+597,30439,Yehvann Diouf,GK,Senegal
 598,29787,Adam Hložek,FWD,Czechia
 599,8789,Ahmed Alaaeldin,FWD,Qatar
 600,29453,Ahmed Nadhir Benbouali,FWD,Algeria
@@ -747,173 +747,173 @@ rank,balldontlieId,name,position,team
 746,30530,Mattias Svanberg,MID,Sweden
 747,30294,Matías Galarza,MID,Paraguay
 748,30292,Mauricio,MID,Paraguay
-749,30028,Mehdi Ghayedi,MID,Iran
-750,29793,Michal Sadílek,MID,Czechia
-751,30291,Miguel Almirón,MID,Paraguay
-752,30583,Mohamed Belhadj Mahmoud,MID,Tunisia
-753,30348,Mohamed Naceur Almanai,MID,Qatar
-754,63,Mohamed Salah,MID,Egypt
-755,30032,Mohammad Ghorbani,MID,Iran
-756,29875,Mohanad Lasheen,MID,Egypt
-757,30584,Mortadha Ben Ouanes,MID,Tunisia
-758,29876,Mostafa Ziko,MID,Egypt
-759,29461,Nabil Bentaleb,MID,Algeria
-760,29873,Nabil Donga,MID,Egypt
-761,29664,Nathan-Dylan Saliba,MID,Canada
-762,29508,Nishan Velupillay,MID,Australia
-763,29721,Parfait Guiagon,MID,Côte d'Ivoire
-764,29512,Paul Okon-Engstler,MID,Australia
-765,29462,Rafik Belghali,MID,Algeria
-766,113,Ramin Rezaeian,MID,Iran
-767,29460,Ramiz Zerrouki,MID,Algeria
-768,30582,Rani Khedira,MID,Tunisia
-769,29454,Riyad Mahrez,MID,Algeria
-770,30399,Ryan Christie,MID,Scotland
-771,122,Saeid Ezatolahi,MID,Iran
-772,123,Saman Ghoddos,MID,Iran
-773,30393,Scott McTominay,MID,Scotland
-774,30579,Sebastian Tounekti,MID,Tunisia
-775,29716,Seko Fofana,MID,Côte d'Ivoire
-776,29714,Simon Adingra,MID,Côte d'Ivoire
-777,9202,Stephen Eustaquio,MID,Canada
-778,30528,Taha Abdi Ali,MID,Sweden
-779,9219,Tajon Buchanan,MID,Canada
-780,9379,Thomas Partey,MID,Ghana
-781,29792,Tomáš Souček,MID,Czechia
-782,30396,Tyler Fletcher,MID,Scotland
-783,29794,Vladimír Darida,MID,Czechia
-784,30527,Yasin Ayari,MID,Sweden
-785,29463,Yassine Titraoui,MID,Algeria
-786,29867,Zizo,MID,Egypt
-787,30404,Aaron Hickey,DEF,Scotland
-788,29988,Abdul Mumin,DEF,Ghana
-789,29471,Achref Abada,DEF,Algeria
-790,30592,Adem Arous,DEF,Tunisia
-791,29882,Ahmed Fatouh,DEF,Egypt
-792,29516,Alessandro Circati,DEF,Australia
-793,30305,Alexandro Maidana,DEF,Paraguay
-794,29677,Alfie Jones,DEF,Canada
-795,30358,Alhashmi Mohialdin,DEF,Qatar
-796,9024,Ali Abdi,DEF,Tunisia
-797,30041,Ali Nemati,DEF,Iran
-798,9385,Alidu Seidu,DEF,Ghana
-799,9217,Alistair Johnston,DEF,Canada
-800,9207,Alphonso Davies,DEF,Canada
-801,30591,Amine Ben Hmida,DEF,Tunisia
-802,30401,Andy Robertson,DEF,Scotland
-803,30357,Ayoub Al Oui,DEF,Qatar
-804,213,Aziz Behich,DEF,Australia
-805,29466,Aïssa Mandi,DEF,Algeria
-806,8792,Boualem Khoukhi,DEF,Qatar
-807,29521,Cameron Burgess,DEF,Australia
-808,30538,Carl Starfelt,DEF,Sweden
-809,29729,Christopher Operi,DEF,Côte d'Ivoire
-810,30042,Danial Eiri,DEF,Iran
-811,29802,David Jurásek,DEF,Czechia
-812,29804,David Zima,DEF,Czechia
-813,10242,Derek Cornelius,DEF,Canada
-814,29990,Derrick Luckassen,DEF,Ghana
-815,30410,Dominic Hyam,DEF,Scotland
-816,486,Dylan Bronn,DEF,Tunisia
-817,114,Ehsan Hajsafi,DEF,Iran
-818,29727,Emmanuel Agbadou,DEF,Côte d'Ivoire
-819,30541,Eric Smith,DEF,Sweden
-820,29725,Evan Ndicka,DEF,Côte d'Ivoire
-821,30302,Fabián Balbuena,DEF,Paraguay
+749,30401,Andy Robertson,DEF,Scotland
+750,30028,Mehdi Ghayedi,MID,Iran
+751,29793,Michal Sadílek,MID,Czechia
+752,30291,Miguel Almirón,MID,Paraguay
+753,30583,Mohamed Belhadj Mahmoud,MID,Tunisia
+754,30404,Aaron Hickey,DEF,Scotland
+755,30348,Mohamed Naceur Almanai,MID,Qatar
+756,29988,Abdul Mumin,DEF,Ghana
+757,63,Mohamed Salah,MID,Egypt
+758,29471,Achref Abada,DEF,Algeria
+759,30032,Mohammad Ghorbani,MID,Iran
+760,30592,Adem Arous,DEF,Tunisia
+761,29875,Mohanad Lasheen,MID,Egypt
+762,29882,Ahmed Fatouh,DEF,Egypt
+763,30584,Mortadha Ben Ouanes,MID,Tunisia
+764,29516,Alessandro Circati,DEF,Australia
+765,29876,Mostafa Ziko,MID,Egypt
+766,30305,Alexandro Maidana,DEF,Paraguay
+767,29461,Nabil Bentaleb,MID,Algeria
+768,29677,Alfie Jones,DEF,Canada
+769,29873,Nabil Donga,MID,Egypt
+770,30358,Alhashmi Mohialdin,DEF,Qatar
+771,29664,Nathan-Dylan Saliba,MID,Canada
+772,29508,Nishan Velupillay,MID,Australia
+773,30041,Ali Nemati,DEF,Iran
+774,9024,Ali Abdi,DEF,Tunisia
+775,29721,Parfait Guiagon,MID,Côte d'Ivoire
+776,29512,Paul Okon-Engstler,MID,Australia
+777,9385,Alidu Seidu,DEF,Ghana
+778,29462,Rafik Belghali,MID,Algeria
+779,9217,Alistair Johnston,DEF,Canada
+780,113,Ramin Rezaeian,MID,Iran
+781,29460,Ramiz Zerrouki,MID,Algeria
+782,30582,Rani Khedira,MID,Tunisia
+783,9207,Alphonso Davies,DEF,Canada
+784,29454,Riyad Mahrez,MID,Algeria
+785,30591,Amine Ben Hmida,DEF,Tunisia
+786,30357,Ayoub Al Oui,DEF,Qatar
+787,30399,Ryan Christie,MID,Scotland
+788,213,Aziz Behich,DEF,Australia
+789,122,Saeid Ezatolahi,MID,Iran
+790,29466,Aïssa Mandi,DEF,Algeria
+791,123,Saman Ghoddos,MID,Iran
+792,30393,Scott McTominay,MID,Scotland
+793,30538,Carl Starfelt,DEF,Sweden
+794,30579,Sebastian Tounekti,MID,Tunisia
+795,8792,Boualem Khoukhi,DEF,Qatar
+796,29729,Christopher Operi,DEF,Côte d'Ivoire
+797,29716,Seko Fofana,MID,Côte d'Ivoire
+798,29521,Cameron Burgess,DEF,Australia
+799,29714,Simon Adingra,MID,Côte d'Ivoire
+800,29802,David Jurásek,DEF,Czechia
+801,30042,Danial Eiri,DEF,Iran
+802,9202,Stephen Eustaquio,MID,Canada
+803,30528,Taha Abdi Ali,MID,Sweden
+804,29804,David Zima,DEF,Czechia
+805,9219,Tajon Buchanan,MID,Canada
+806,9379,Thomas Partey,MID,Ghana
+807,29792,Tomáš Souček,MID,Czechia
+808,30396,Tyler Fletcher,MID,Scotland
+809,29990,Derrick Luckassen,DEF,Ghana
+810,10242,Derek Cornelius,DEF,Canada
+811,29794,Vladimír Darida,MID,Czechia
+812,30410,Dominic Hyam,DEF,Scotland
+813,30527,Yasin Ayari,MID,Sweden
+814,29727,Emmanuel Agbadou,DEF,Côte d'Ivoire
+815,29463,Yassine Titraoui,MID,Algeria
+816,114,Ehsan Hajsafi,DEF,Iran
+817,486,Dylan Bronn,DEF,Tunisia
+818,30541,Eric Smith,DEF,Sweden
+819,29867,Zizo,MID,Egypt
+820,30302,Fabián Balbuena,DEF,Paraguay
+821,29725,Evan Ndicka,DEF,Côte d'Ivoire
 822,30537,Gabriel Gudmundsson,DEF,Sweden
 823,29728,Ghislain Konan,DEF,Côte d'Ivoire
 824,9383,Gideon Mensah,DEF,Ghana
 825,30409,Grant Hanley,DEF,Scotland
-826,30539,Gustaf Lagerbielke,DEF,Sweden
-827,30299,Gustavo Gómez,DEF,Paraguay
+826,30299,Gustavo Gómez,DEF,Paraguay
+827,30539,Gustaf Lagerbielke,DEF,Sweden
 828,30304,Gustavo Velázquez,DEF,Paraguay
-829,29723,Guéla Doué,DEF,Côte d'Ivoire
-830,8993,Harry Souttar,DEF,Australia
-831,30540,Hjalmar Ekdal,DEF,Sweden
+829,8993,Harry Souttar,DEF,Australia
+830,29881,Hossam Abdelmaguid,DEF,Egypt
+831,29723,Guéla Doué,DEF,Côte d'Ivoire
 832,8795,Homam Al-Amin,DEF,Qatar
-833,29881,Hossam Abdelmaguid,DEF,Egypt
+833,30540,Hjalmar Ekdal,DEF,Sweden
 834,8857,Hossein Kanaani,DEF,Iran
-835,30536,Isak Hien,DEF,Sweden
+835,29467,Jaouen Hadjam,DEF,Algeria
 836,30355,Issa Laye,DEF,Qatar
-837,30408,Jack Hendry,DEF,Scotland
-838,29467,Jaouen Hadjam,DEF,Algeria
-839,29807,Jaroslav Zelený,DEF,Czechia
+837,29807,Jaroslav Zelený,DEF,Czechia
+838,30536,Isak Hien,DEF,Sweden
+839,30408,Jack Hendry,DEF,Scotland
 840,29523,Jason Geria,DEF,Australia
-841,29987,Jerome Opoku,DEF,Ghana
-842,10241,Joel Waterman,DEF,Canada
-843,30407,John Souttar,DEF,Scotland
-844,29983,Jonas Adjei Adjetey,DEF,Ghana
-845,29517,Jordan Bos,DEF,Australia
-846,30306,José Canale,DEF,Paraguay
-847,30303,Juan Cáceres,DEF,Paraguay
-848,30301,Junior Alonso,DEF,Paraguay
-849,29883,Karim Hafez,DEF,Egypt
-850,30402,Kieran Tierney,DEF,Scotland
-851,29985,Kojo Peprah Oppong,DEF,Ghana
-852,29800,Ladislav Krejčí,DEF,Czechia
-853,29675,Luc De Fougerolles,DEF,Canada
-854,29522,Lucas Herrington,DEF,Australia
-855,30354,Lucas Mendes,DEF,Qatar
-856,29989,Marvin Senaya,DEF,Ghana
-857,112,Milad Mohammadi,DEF,Iran
-858,874,Miloš Degenek,DEF,Australia
-859,30590,Moataz Nefati,DEF,Tunisia
-860,29877,Mohamed Abdelmonem,DEF,Egypt
-861,29878,Mohamed Hany,DEF,Egypt
-862,29469,Mohamed Tougai,DEF,Algeria
-863,29673,Moise Bombito,DEF,Canada
-864,9014,Montassar Talbi,DEF,Tunisia
-865,30405,Nathan Patterson,DEF,Scotland
-866,29670,Niko Sigur,DEF,Canada
-867,29724,Odilon Kossounou,DEF,Côte d'Ivoire
-868,30300,Omar Alderete,DEF,Paraguay
-869,30589,Omar Rekik,DEF,Tunisia
-870,29726,Ousmane Diomande,DEF,Côte d'Ivoire
-871,8785,Pedro Miguel,DEF,Qatar
-872,30593,Raed Chikhaoui,DEF,Tunisia
-873,9395,Rahman Baba,DEF,Ghana
-874,29880,Rami Rabia,DEF,Egypt
-875,29465,Ramy Bensebaini,DEF,Algeria
-876,29464,Rayan Aït-Nouri,DEF,Algeria
-877,9205,Richie Laryea,DEF,Canada
-878,29803,Robin Hranáč,DEF,Czechia
-879,111,Roozbeh Cheshmi,DEF,Iran
-880,30039,Saleh Hardani,DEF,Iran
-881,29468,Samir Sophian Chergui,DEF,Algeria
-882,30403,Scott McKenna,DEF,Scotland
-883,9420,Shoja Khalilzadeh,DEF,Iran
-884,30356,Sultan Al-Brake,DEF,Qatar
-885,29884,Tarek Alaa,DEF,Egypt
-886,29805,Tomáš Holeš,DEF,Czechia
-887,30406,Tony Ralston,DEF,Scotland
-888,374,Victor Lindelöf,DEF,Sweden
-889,29801,Vladimír Coufal,DEF,Czechia
-890,29722,Wilfried Singo,DEF,Côte d'Ivoire
-891,30587,Yan Valery,DEF,Tunisia
-892,29879,Yasser Ibrahim,DEF,Egypt
-893,29470,Zineddine Belaid,DEF,Algeria
-894,29806,Štěpán Chaloupek,DEF,Czechia
-895,30595,Abdelmouhib Chamakh,GK,Tunisia
-896,29731,Alban Lafont,GK,Côte d'Ivoire
-897,110,Alireza Beiranvand,GK,Iran
-898,30411,Angus Gunn,GK,Scotland
-899,9011,Aymen Dahmen,GK,Tunisia
-900,29991,Benjamin Asare,GK,Ghana
-901,30413,Craig Gordon,GK,Scotland
-902,10240,Dayne St. Clair,GK,Canada
-903,30309,Gastón Olveira,GK,Paraguay
-904,8856,Hossein Hosseini,GK,Iran
-905,30543,Jacob Widell Zetterström,GK,Sweden
-906,29810,Jindřich Staněk,GK,Czechia
-907,29993,Joseph Anang,GK,Ghana
-908,1374,Kristoffer Nordfeldt,GK,Sweden
-909,9389,Lawrence Ati Zigi,GK,Ghana
-910,30412,Liam Kelly,GK,Scotland
-911,29472,Luca Zidane,GK,Algeria
-912,29809,Lukáš Horníček,GK,Czechia
-913,29887,Mahdi Soliman,GK,Egypt
-914,30361,Mahmud Abunad,GK,Qatar
-915,209,Mathew Ryan,GK,Australia
+841,30595,Abdelmouhib Chamakh,GK,Tunisia
+842,29987,Jerome Opoku,DEF,Ghana
+843,29731,Alban Lafont,GK,Côte d'Ivoire
+844,10241,Joel Waterman,DEF,Canada
+845,110,Alireza Beiranvand,GK,Iran
+846,30411,Angus Gunn,GK,Scotland
+847,30407,John Souttar,DEF,Scotland
+848,29991,Benjamin Asare,GK,Ghana
+849,29983,Jonas Adjei Adjetey,DEF,Ghana
+850,30306,José Canale,DEF,Paraguay
+851,29883,Karim Hafez,DEF,Egypt
+852,29517,Jordan Bos,DEF,Australia
+853,10240,Dayne St. Clair,GK,Canada
+854,30309,Gastón Olveira,GK,Paraguay
+855,30303,Juan Cáceres,DEF,Paraguay
+856,30543,Jacob Widell Zetterström,GK,Sweden
+857,29800,Ladislav Krejčí,DEF,Czechia
+858,29810,Jindřich Staněk,GK,Czechia
+859,29675,Luc De Fougerolles,DEF,Canada
+860,29472,Luca Zidane,GK,Algeria
+861,30354,Lucas Mendes,DEF,Qatar
+862,112,Milad Mohammadi,DEF,Iran
+863,30301,Junior Alonso,DEF,Paraguay
+864,29887,Mahdi Soliman,GK,Egypt
+865,29877,Mohamed Abdelmonem,DEF,Egypt
+866,30590,Moataz Nefati,DEF,Tunisia
+867,30361,Mahmud Abunad,GK,Qatar
+868,30402,Kieran Tierney,DEF,Scotland
+869,209,Mathew Ryan,GK,Australia
+870,29469,Mohamed Tougai,DEF,Algeria
+871,29985,Kojo Peprah Oppong,DEF,Ghana
+872,29878,Mohamed Hany,DEF,Egypt
+873,29522,Lucas Herrington,DEF,Australia
+874,9014,Montassar Talbi,DEF,Tunisia
+875,29989,Marvin Senaya,DEF,Ghana
+876,874,Miloš Degenek,DEF,Australia
+877,29724,Odilon Kossounou,DEF,Côte d'Ivoire
+878,29673,Moise Bombito,DEF,Canada
+879,30405,Nathan Patterson,DEF,Scotland
+880,29465,Ramy Bensebaini,DEF,Algeria
+881,29880,Rami Rabia,DEF,Egypt
+882,29670,Niko Sigur,DEF,Canada
+883,29464,Rayan Aït-Nouri,DEF,Algeria
+884,30300,Omar Alderete,DEF,Paraguay
+885,29803,Robin Hranáč,DEF,Czechia
+886,30589,Omar Rekik,DEF,Tunisia
+887,29726,Ousmane Diomande,DEF,Côte d'Ivoire
+888,111,Roozbeh Cheshmi,DEF,Iran
+889,8785,Pedro Miguel,DEF,Qatar
+890,30593,Raed Chikhaoui,DEF,Tunisia
+891,9395,Rahman Baba,DEF,Ghana
+892,9205,Richie Laryea,DEF,Canada
+893,29805,Tomáš Holeš,DEF,Czechia
+894,30039,Saleh Hardani,DEF,Iran
+895,29468,Samir Sophian Chergui,DEF,Algeria
+896,30403,Scott McKenna,DEF,Scotland
+897,9420,Shoja Khalilzadeh,DEF,Iran
+898,30356,Sultan Al-Brake,DEF,Qatar
+899,29884,Tarek Alaa,DEF,Egypt
+900,30406,Tony Ralston,DEF,Scotland
+901,374,Victor Lindelöf,DEF,Sweden
+902,29801,Vladimír Coufal,DEF,Czechia
+903,29722,Wilfried Singo,DEF,Côte d'Ivoire
+904,30587,Yan Valery,DEF,Tunisia
+905,29879,Yasser Ibrahim,DEF,Egypt
+906,29470,Zineddine Belaid,DEF,Algeria
+907,29806,Štěpán Chaloupek,DEF,Czechia
+908,9011,Aymen Dahmen,GK,Tunisia
+909,30413,Craig Gordon,GK,Scotland
+910,8856,Hossein Hosseini,GK,Iran
+911,29993,Joseph Anang,GK,Ghana
+912,1374,Kristoffer Nordfeldt,GK,Sweden
+913,9389,Lawrence Ati Zigi,GK,Ghana
+914,30412,Liam Kelly,GK,Scotland
+915,29809,Lukáš Horníček,GK,Czechia
 916,29808,Matěj Kovář,GK,Czechia
 917,29679,Maxime Crépeau,GK,Canada
 918,29474,Melvin Mastil,GK,Algeria
@@ -1075,174 +1075,174 @@ rank,balldontlieId,name,position,team
 1074,30107,Noor Al-Deen Al Rawabdeh,MID,Jordan
 1075,30681,Odiljon Khamrobekov,MID,Uzbekistan
 1076,30678,Oston Urunov,MID,Uzbekistan
-1077,30444,Oswin Appollis,MID,South Africa
-1078,30680,Otabek Shukurov,MID,Uzbekistan
-1079,30111,Rajaei Ayed,MID,Jordan
-1080,30443,Relebohile Mofokeng,MID,South Africa
-1081,30003,Ruben Providence,MID,Haiti
-1082,29638,Ryan Mendes,MID,Cabo Verde
-1083,30217,Ryan Thomas,MID,New Zealand
-1084,41,Salem Al-Dawsari,MID,Saudi Arabia
-1085,29821,Samuel Moutoussamy,MID,DR Congo
-1086,30210,Sarpreet Singh,MID,New Zealand
-1087,8954,Saud Abdulhamid,MID,Saudi Arabia
-1088,30687,Sherzod Esanov,MID,Uzbekistan
-1089,30450,Siphephelo Sithole,MID,South Africa
-1090,29763,Tahith Chong,MID,Curaçao
-1091,30446,Teboho Mokoena,MID,South Africa
-1092,29637,Telmo Arcanjo,MID,Cabo Verde
-1093,30448,Thalente Mbatha,MID,South Africa
-1094,30452,Thapelo Maseko,MID,South Africa
-1095,30445,Themba Zwane,MID,South Africa
-1096,29816,Théo Bongonda,MID,DR Congo
-1097,30447,Tshepang Moremi,MID,South Africa
-1098,29768,Tyrese Noslin,MID,Curaçao
-1099,32766,Víctor Griffith,MID,Panama
-1100,29635,Willy Semedo,MID,Cabo Verde
-1101,30006,Woodensky Pierre,MID,Haiti
-1102,29644,Yannick Semedo,MID,Cabo Verde
-1103,507,Yoel Bárcenas,MID,Panama
-1104,30052,Youssef Amyn,MID,Iraq
-1105,30059,Zaid Ismail,MID,Iraq
-1106,30051,Zidane Iqbal,MID,Iraq
-1107,30374,Ziyad Aljohani,MID,Saudi Arabia
-1108,29827,Aaron Wan-Bissaka,DEF,DR Congo
-1109,30114,Abdallah Nasib,DEF,Jordan
-1110,30689,Abdukodir Khusanov,DEF,Uzbekistan
-1111,8953,Abdulelah Al-Amri,DEF,Saudi Arabia
-1112,37580,Ahmed Hasan Maknazi,DEF,Iraq
-1113,30063,Akam Hashem,DEF,Iraq
-1114,30379,Ali Lajami,DEF,Saudi Arabia
-1115,30382,Ali Majrashi,DEF,Saudi Arabia
-1116,29593,Amar Dedić,DEF,Bosnia & Herzegovina
-1117,525,Amir Murillo,DEF,Panama
-1118,30120,Anas Badawi,DEF,Jordan
-1119,30274,Andrés Andrade,DEF,Panama
-1120,29775,Ar'Jany Martha,DEF,Curaçao
-1121,29772,Armando Obispo,DEF,Curaçao
-1122,29828,Arthur Masuaku,DEF,DR Congo
-1123,30456,Aubrey Modiba,DEF,South Africa
-1124,30697,Avazbek Ulmasaliyev,DEF,Uzbekistan
-1125,29829,Axel Tuanzebe,DEF,DR Congo
-1126,30696,Bekhruz Karimov,DEF,Uzbekistan
-1127,30460,Bradley Cross,DEF,South Africa
-1128,30228,Callan Elliot,DEF,New Zealand
-1129,30014,Carl Fred Sainté,DEF,Haiti
-1130,30008,Carlens Arcus,DEF,Haiti
-1131,29826,Chancel Mbemba,DEF,DR Congo
-1132,30273,César Blackman,DEF,Panama
-1133,29598,Dennis Hadžikadunić,DEF,Bosnia & Herzegovina
-1134,29779,Deveron Fonville,DEF,Curaçao
-1135,29651,Diney Borges,DEF,Cabo Verde
+1077,29827,Aaron Wan-Bissaka,DEF,DR Congo
+1078,30444,Oswin Appollis,MID,South Africa
+1079,30114,Abdallah Nasib,DEF,Jordan
+1080,30680,Otabek Shukurov,MID,Uzbekistan
+1081,30689,Abdukodir Khusanov,DEF,Uzbekistan
+1082,30111,Rajaei Ayed,MID,Jordan
+1083,8953,Abdulelah Al-Amri,DEF,Saudi Arabia
+1084,30443,Relebohile Mofokeng,MID,South Africa
+1085,37580,Ahmed Hasan Maknazi,DEF,Iraq
+1086,30003,Ruben Providence,MID,Haiti
+1087,29638,Ryan Mendes,MID,Cabo Verde
+1088,30063,Akam Hashem,DEF,Iraq
+1089,30217,Ryan Thomas,MID,New Zealand
+1090,30379,Ali Lajami,DEF,Saudi Arabia
+1091,41,Salem Al-Dawsari,MID,Saudi Arabia
+1092,29593,Amar Dedić,DEF,Bosnia & Herzegovina
+1093,29821,Samuel Moutoussamy,MID,DR Congo
+1094,525,Amir Murillo,DEF,Panama
+1095,30210,Sarpreet Singh,MID,New Zealand
+1096,30382,Ali Majrashi,DEF,Saudi Arabia
+1097,8954,Saud Abdulhamid,MID,Saudi Arabia
+1098,30120,Anas Badawi,DEF,Jordan
+1099,30687,Sherzod Esanov,MID,Uzbekistan
+1100,29775,Ar'Jany Martha,DEF,Curaçao
+1101,30274,Andrés Andrade,DEF,Panama
+1102,30450,Siphephelo Sithole,MID,South Africa
+1103,29763,Tahith Chong,MID,Curaçao
+1104,29772,Armando Obispo,DEF,Curaçao
+1105,30446,Teboho Mokoena,MID,South Africa
+1106,30456,Aubrey Modiba,DEF,South Africa
+1107,29828,Arthur Masuaku,DEF,DR Congo
+1108,29637,Telmo Arcanjo,MID,Cabo Verde
+1109,30448,Thalente Mbatha,MID,South Africa
+1110,30697,Avazbek Ulmasaliyev,DEF,Uzbekistan
+1111,30452,Thapelo Maseko,MID,South Africa
+1112,30445,Themba Zwane,MID,South Africa
+1113,29816,Théo Bongonda,MID,DR Congo
+1114,29829,Axel Tuanzebe,DEF,DR Congo
+1115,30228,Callan Elliot,DEF,New Zealand
+1116,30460,Bradley Cross,DEF,South Africa
+1117,30447,Tshepang Moremi,MID,South Africa
+1118,30696,Bekhruz Karimov,DEF,Uzbekistan
+1119,30014,Carl Fred Sainté,DEF,Haiti
+1120,29768,Tyrese Noslin,MID,Curaçao
+1121,32766,Víctor Griffith,MID,Panama
+1122,30008,Carlens Arcus,DEF,Haiti
+1123,29635,Willy Semedo,MID,Cabo Verde
+1124,30006,Woodensky Pierre,MID,Haiti
+1125,29644,Yannick Semedo,MID,Cabo Verde
+1126,29598,Dennis Hadžikadunić,DEF,Bosnia & Herzegovina
+1127,507,Yoel Bárcenas,MID,Panama
+1128,30273,César Blackman,DEF,Panama
+1129,29651,Diney Borges,DEF,Cabo Verde
+1130,29826,Chancel Mbemba,DEF,DR Congo
+1131,30052,Youssef Amyn,MID,Iraq
+1132,30059,Zaid Ismail,MID,Iraq
+1133,29779,Deveron Fonville,DEF,Curaçao
+1134,30051,Zidane Iqbal,MID,Iraq
+1135,30374,Ziyad Aljohani,MID,Saudi Arabia
 1136,30011,Duke Lacroix,DEF,Haiti
-1137,29831,Dylan Batubinsika,DEF,DR Congo
-1138,30276,Edgardo Fariña,DEF,Panama
-1139,30694,Farrukh Sayfiev,DEF,Uzbekistan
-1140,519,Fidel Escobar,DEF,Panama
-1141,30222,Finn Surman,DEF,New Zealand
-1142,30223,Francis De Vries,DEF,New Zealand
+1137,30276,Edgardo Fariña,DEF,Panama
+1138,30222,Finn Surman,DEF,New Zealand
+1139,29831,Dylan Batubinsika,DEF,DR Congo
+1140,30694,Farrukh Sayfiev,DEF,Uzbekistan
+1141,30223,Francis De Vries,DEF,New Zealand
+1142,519,Fidel Escobar,DEF,Panama
 1143,30062,Frans Putros,DEF,Iraq
-1144,29832,Gedeon Kalulu,DEF,DR Congo
-1145,30009,Hannes Delcroix,DEF,Haiti
-1146,8952,Hassan Altambakti,DEF,Saudi Arabia
-1147,30383,Hassan Kadesh,DEF,Saudi Arabia
-1148,30119,Husam Ali Mohammad Abudahab,DEF,Jordan
-1149,30061,Hussein Ali,DEF,Iraq
-1150,30459,Ime Okon,DEF,South Africa
-1151,32779,Iván Anderson,DEF,Panama
-1152,30693,Jakhongir Urozov,DEF,Uzbekistan
+1144,30009,Hannes Delcroix,DEF,Haiti
+1145,8952,Hassan Altambakti,DEF,Saudi Arabia
+1146,30119,Husam Ali Mohammad Abudahab,DEF,Jordan
+1147,29832,Gedeon Kalulu,DEF,DR Congo
+1148,30383,Hassan Kadesh,DEF,Saudi Arabia
+1149,30459,Ime Okon,DEF,South Africa
+1150,30061,Hussein Ali,DEF,Iraq
+1151,30693,Jakhongir Urozov,DEF,Uzbekistan
+1152,32779,Iván Anderson,DEF,Panama
 1153,30012,Jean-Kévin Duverne,DEF,Haiti
 1154,30384,Jehad Thakri,DEF,Saudi Arabia
-1155,30280,Jiovany Ramos,DEF,Panama
-1156,31527,Jorge Gutiérrez,DEF,Panama
-1157,29830,Joris Kayembe,DEF,DR Congo
-1158,29778,Joshua Brenet,DEF,Curaçao
-1159,30272,José Córdoba,DEF,Panama
-1160,29781,Jurien Gaari,DEF,Curaçao
-1161,30015,Keeto Thermoncy,DEF,Haiti
-1162,29652,Kelvin Pires,DEF,Cabo Verde
-1163,30691,Khozhiakbar Alizhonov,DEF,Uzbekistan
-1164,30454,Khuliso Mudau,DEF,South Africa
-1165,30458,Khulumani Ndamane,DEF,South Africa
-1166,29773,Livano Comenencia,DEF,Curaçao
-1167,29646,Logan Costa,DEF,Cabo Verde
-1168,30068,Manaf Younis,DEF,Iraq
-1169,30013,Martin Expérience,DEF,Haiti
-1170,30453,Mbekezeli Mbokazi,DEF,South Africa
-1171,30060,Merchas Doski,DEF,Iraq
-1172,30224,Michael Boxall,DEF,New Zealand
-1173,30115,Mo Abualnadi,DEF,Jordan
-1174,30116,Mohammad Ali Hasheesh,DEF,Jordan
-1175,30381,Moteb Al-Harbi,DEF,Saudi Arabia
-1176,30067,Mustafa Saadoon,DEF,Iraq
-1177,30225,Nando Pijnaker,DEF,New Zealand
-1178,30377,Nawaf Boushal,DEF,Saudi Arabia
-1179,29597,Nidal Čelik,DEF,Bosnia & Herzegovina
-1180,29600,Nihad Mujakić,DEF,Bosnia & Herzegovina
-1181,29596,Nikola Katić,DEF,Bosnia & Herzegovina
-1182,30455,Nkosinathi Sibisi,DEF,South Africa
-1183,30461,Olwethu Makhanya,DEF,South Africa
-1184,29649,Pico,DEF,Cabo Verde
-1185,30064,Rebin Sulaka,DEF,Iraq
-1186,30010,Ricardo Adé,DEF,Haiti
-1187,29774,Riechedly Bazoer,DEF,Curaçao
-1188,30279,Roderick Miller,DEF,Panama
-1189,29780,Roshon van Eijma,DEF,Curaçao
-1190,30690,Rustam Ashurmatov,DEF,Uzbekistan
-1191,30117,Saad Al Rousan,DEF,Jordan
-1192,30118,Saleem Obaid,DEF,Jordan
-1193,30457,Samukelo Kabini,DEF,South Africa
-1194,29595,Sead Kolašinac,DEF,Bosnia & Herzegovina
-1195,29777,Sherel Constancio Floranus,DEF,Curaçao
-1196,30692,Sherzod Nasrullaev,DEF,Uzbekistan
-1197,29776,Shurandy Sambo,DEF,Curaçao
-1198,29645,Sidny Lopes Cabral,DEF,Cabo Verde
-1199,29833,Steve Kapuadi,DEF,DR Congo
-1200,29650,Steven Moreira,DEF,Cabo Verde
-1201,29599,Stjepan Radeljić,DEF,Bosnia & Herzegovina
-1202,29648,Stopira,DEF,Cabo Verde
-1203,29594,Tarik Muharemović,DEF,Bosnia & Herzegovina
-1204,30462,Tholo Thabang Matuludi,DEF,South Africa
-1205,30220,Tim Payne,DEF,New Zealand
-1206,30227,Tommy Smith,DEF,New Zealand
-1207,30221,Tyler Bindon,DEF,New Zealand
-1208,30695,Umarbek Eshmuradov,DEF,Uzbekistan
-1209,29647,Wagner Pina,DEF,Cabo Verde
-1210,30016,Wilguens Paugain,DEF,Haiti
-1211,30113,Yazan Al-Arab,DEF,Jordan
-1212,30065,Zaid Tahseen,DEF,Iraq
-1213,524,Éric Davis,DEF,Panama
-1214,30122,Abdallah Al-Fakhouri,GK,Jordan
-1215,35395,Abdulquddus Atiah,GK,Saudi Arabia
-1216,35393,Abdulrahman Al Sanbi,GK,Saudi Arabia
-1217,30698,Abduvokhid Nematov,GK,Uzbekistan
-1218,30387,Ahmed Al-Kassar,GK,Saudi Arabia
-1219,30070,Ahmed Basil,GK,Iraq
-1220,30229,Alex Paulsen,GK,New Zealand
-1221,30018,Alexandre Pierre,GK,Haiti
-1222,30700,Botirali Ergashev,GK,Uzbekistan
-1223,29653,CJ Dos Santos,GK,Cabo Verde
-1224,30283,César Samudio,GK,Panama
-1225,29782,Eloy Room,GK,Curaçao
-1226,30071,Fahad Talib,GK,Iraq
-1227,32782,JD Gunn,GK,Panama
-1228,30069,Jalal Hassan,GK,Iraq
-1229,30017,Johny Placide,GK,Haiti
-1230,30019,Josué Duverger,GK,Haiti
-1231,29834,Lionel Mpasi Nzau,GK,DR Congo
-1232,30282,Luis Mejía,GK,Panama
-1233,29602,Martin Zlomislić,GK,Bosnia & Herzegovina
-1234,29835,Matthieu Epolo,GK,DR Congo
-1235,30230,Max Crocombe,GK,New Zealand
-1236,30231,Michael Woud,GK,New Zealand
-1237,29603,Mladen Jurkas,GK,Bosnia & Herzegovina
-1238,52,Mohammed Al-Owais,GK,Saudi Arabia
-1239,29655,Márcio Rosa,GK,Cabo Verde
-1240,9941,Nawaf Al-Aqidi,GK,Saudi Arabia
-1241,29601,Nikola Vasilj,GK,Bosnia & Herzegovina
-1242,30123,Noureddin Bani Ateyah,GK,Jordan
-1243,30281,Orlando Mosquera,GK,Panama
-1244,30465,Ricardo Goss,GK,South Africa
+1155,29778,Joshua Brenet,DEF,Curaçao
+1156,29652,Kelvin Pires,DEF,Cabo Verde
+1157,29781,Jurien Gaari,DEF,Curaçao
+1158,30122,Abdallah Al-Fakhouri,GK,Jordan
+1159,35395,Abdulquddus Atiah,GK,Saudi Arabia
+1160,30015,Keeto Thermoncy,DEF,Haiti
+1161,30454,Khuliso Mudau,DEF,South Africa
+1162,29646,Logan Costa,DEF,Cabo Verde
+1163,30698,Abduvokhid Nematov,GK,Uzbekistan
+1164,30691,Khozhiakbar Alizhonov,DEF,Uzbekistan
+1165,30280,Jiovany Ramos,DEF,Panama
+1166,30458,Khulumani Ndamane,DEF,South Africa
+1167,31527,Jorge Gutiérrez,DEF,Panama
+1168,30070,Ahmed Basil,GK,Iraq
+1169,29830,Joris Kayembe,DEF,DR Congo
+1170,30229,Alex Paulsen,GK,New Zealand
+1171,29773,Livano Comenencia,DEF,Curaçao
+1172,30068,Manaf Younis,DEF,Iraq
+1173,30018,Alexandre Pierre,GK,Haiti
+1174,30272,José Córdoba,DEF,Panama
+1175,29653,CJ Dos Santos,GK,Cabo Verde
+1176,30224,Michael Boxall,DEF,New Zealand
+1177,30283,César Samudio,GK,Panama
+1178,30453,Mbekezeli Mbokazi,DEF,South Africa
+1179,30115,Mo Abualnadi,DEF,Jordan
+1180,29782,Eloy Room,GK,Curaçao
+1181,30060,Merchas Doski,DEF,Iraq
+1182,30116,Mohammad Ali Hasheesh,DEF,Jordan
+1183,29597,Nidal Čelik,DEF,Bosnia & Herzegovina
+1184,30225,Nando Pijnaker,DEF,New Zealand
+1185,29834,Lionel Mpasi Nzau,GK,DR Congo
+1186,29600,Nihad Mujakić,DEF,Bosnia & Herzegovina
+1187,30013,Martin Expérience,DEF,Haiti
+1188,29602,Martin Zlomislić,GK,Bosnia & Herzegovina
+1189,29596,Nikola Katić,DEF,Bosnia & Herzegovina
+1190,29649,Pico,DEF,Cabo Verde
+1191,30381,Moteb Al-Harbi,DEF,Saudi Arabia
+1192,30067,Mustafa Saadoon,DEF,Iraq
+1193,30377,Nawaf Boushal,DEF,Saudi Arabia
+1194,30465,Ricardo Goss,GK,South Africa
+1195,30455,Nkosinathi Sibisi,DEF,South Africa
+1196,30117,Saad Al Rousan,DEF,Jordan
+1197,30461,Olwethu Makhanya,DEF,South Africa
+1198,30064,Rebin Sulaka,DEF,Iraq
+1199,29595,Sead Kolašinac,DEF,Bosnia & Herzegovina
+1200,30010,Ricardo Adé,DEF,Haiti
+1201,29774,Riechedly Bazoer,DEF,Curaçao
+1202,30279,Roderick Miller,DEF,Panama
+1203,29645,Sidny Lopes Cabral,DEF,Cabo Verde
+1204,29780,Roshon van Eijma,DEF,Curaçao
+1205,30690,Rustam Ashurmatov,DEF,Uzbekistan
+1206,29650,Steven Moreira,DEF,Cabo Verde
+1207,30118,Saleem Obaid,DEF,Jordan
+1208,30457,Samukelo Kabini,DEF,South Africa
+1209,29777,Sherel Constancio Floranus,DEF,Curaçao
+1210,30692,Sherzod Nasrullaev,DEF,Uzbekistan
+1211,30220,Tim Payne,DEF,New Zealand
+1212,29776,Shurandy Sambo,DEF,Curaçao
+1213,29833,Steve Kapuadi,DEF,DR Congo
+1214,29599,Stjepan Radeljić,DEF,Bosnia & Herzegovina
+1215,29648,Stopira,DEF,Cabo Verde
+1216,29594,Tarik Muharemović,DEF,Bosnia & Herzegovina
+1217,30462,Tholo Thabang Matuludi,DEF,South Africa
+1218,30227,Tommy Smith,DEF,New Zealand
+1219,30221,Tyler Bindon,DEF,New Zealand
+1220,30695,Umarbek Eshmuradov,DEF,Uzbekistan
+1221,29647,Wagner Pina,DEF,Cabo Verde
+1222,30016,Wilguens Paugain,DEF,Haiti
+1223,30113,Yazan Al-Arab,DEF,Jordan
+1224,30065,Zaid Tahseen,DEF,Iraq
+1225,524,Éric Davis,DEF,Panama
+1226,35393,Abdulrahman Al Sanbi,GK,Saudi Arabia
+1227,30387,Ahmed Al-Kassar,GK,Saudi Arabia
+1228,30700,Botirali Ergashev,GK,Uzbekistan
+1229,30071,Fahad Talib,GK,Iraq
+1230,32782,JD Gunn,GK,Panama
+1231,30069,Jalal Hassan,GK,Iraq
+1232,30017,Johny Placide,GK,Haiti
+1233,30019,Josué Duverger,GK,Haiti
+1234,30282,Luis Mejía,GK,Panama
+1235,29835,Matthieu Epolo,GK,DR Congo
+1236,30230,Max Crocombe,GK,New Zealand
+1237,30231,Michael Woud,GK,New Zealand
+1238,29603,Mladen Jurkas,GK,Bosnia & Herzegovina
+1239,52,Mohammed Al-Owais,GK,Saudi Arabia
+1240,29655,Márcio Rosa,GK,Cabo Verde
+1241,9941,Nawaf Al-Aqidi,GK,Saudi Arabia
+1242,29601,Nikola Vasilj,GK,Bosnia & Herzegovina
+1243,30123,Noureddin Bani Ateyah,GK,Jordan
+1244,30281,Orlando Mosquera,GK,Panama
 1245,30463,Ronwen Williams,GK,South Africa
 1246,30464,Sipho Chaine,GK,South Africa
 1247,29836,Timothy Fayulu,GK,DR Congo
