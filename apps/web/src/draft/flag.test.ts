@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flagEmoji, toIso2, countryFlag, ISO3_TO_ISO2 } from "./flag";
+import { flagEmoji, toIso2, countryFlag, ISO3_TO_ISO2, HOME_NATIONS, isHomeNation } from "./flag";
 
 // Pure-logic unit tests for the draft-pool flag util (Prompt 33). The mapping country → ISO-3166-1
 // alpha-2 → emoji is the only place flags are derived; `<Flag>` (apps/web/app/draft/Flag.tsx) is the thin
@@ -66,14 +66,17 @@ describe("toIso2 — resolve the pool's country value (code OR name) to an alpha
     expect(toIso2("Atlantis")).toBeNull();
   });
 
-  it("resolves home nations to GB (no independent ISO code; rendered as 🇬🇧)", () => {
-    expect(toIso2("England")).toBe("GB");
-    expect(toIso2("Scotland")).toBe("GB");
+  it("England and Scotland resolve to null — they use inline SVG via isHomeNation, not emoji", () => {
+    expect(toIso2("England")).toBeNull(); // GB alias removed; Flag.tsx intercepts via isHomeNation
+    expect(toIso2("Scotland")).toBeNull();
+    // FIFA codes for England/Scotland also removed — no contradictory mapping
+    expect(toIso2("ENG")).toBeNull();
+    expect(toIso2("SCO")).toBeNull();
+  });
+
+  it("Wales and Northern Ireland still resolve to GB (not in 48-team set; kept for completeness)", () => {
     expect(toIso2("Wales")).toBe("GB");
     expect(toIso2("Northern Ireland")).toBe("GB");
-    // FIFA 3-letter codes for home nations
-    expect(toIso2("ENG")).toBe("GB");
-    expect(toIso2("SCO")).toBe("GB");
     expect(toIso2("WAL")).toBe("GB");
     expect(toIso2("NIR")).toBe("GB");
   });
@@ -139,6 +142,27 @@ describe("countryFlag — convenience country → emoji used at the row/chip cal
     expect(countryFlag(null)).toBeNull();
     expect(countryFlag("")).toBeNull();
     expect(countryFlag("Narnia")).toBeNull();
+  });
+});
+
+describe("HOME_NATIONS / isHomeNation — home-nation predicate for the inline SVG path", () => {
+  it("HOME_NATIONS contains exactly England and Scotland", () => {
+    expect(HOME_NATIONS.has("England")).toBe(true);
+    expect(HOME_NATIONS.has("Scotland")).toBe(true);
+    expect(HOME_NATIONS.size).toBe(2);
+  });
+
+  it("isHomeNation returns true only for England and Scotland (exact feed strings)", () => {
+    expect(isHomeNation("England")).toBe(true);
+    expect(isHomeNation("Scotland")).toBe(true);
+    // control: other 46 nations and home-nation codes are NOT home nations for SVG purposes
+    expect(isHomeNation("Brazil")).toBe(false);
+    expect(isHomeNation("Wales")).toBe(false);
+    expect(isHomeNation("Northern Ireland")).toBe(false);
+    expect(isHomeNation("ENG")).toBe(false);
+    expect(isHomeNation(null)).toBe(false);
+    expect(isHomeNation(undefined)).toBe(false);
+    expect(isHomeNation("")).toBe(false);
   });
 });
 

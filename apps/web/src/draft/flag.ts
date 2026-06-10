@@ -56,9 +56,7 @@ const FIFA_TO_ISO2: Record<string, string> = {
   CHI: "CL", // Chile (ISO CHL)
   PHI: "PH", // Philippines (ISO PHL)
   ZAM: "ZM", // Zambia (ISO ZMB)
-  // Home nations — not independent ISO 3166-1 states; rendered as 🇬🇧 (regional-indicator, no tag sequences)
-  ENG: "GB",
-  SCO: "GB",
+  // Wales / N. Ireland — not in the 48-team set but kept for completeness; rendered as 🇬🇧
   WAL: "GB",
   NIR: "GB",
   // Curaçao: ISO 3166-1 alpha-3 CUW → alpha-2 CW; omitted from the compact ISO string above
@@ -91,9 +89,7 @@ const NAME_TO_ISO2: Record<string, string> = (() => {
     russia: "RU",
     iran: "IR",
     "czech republic": "CZ",
-    // Home nations — not independent ISO 3166-1 states; rendered as 🇬🇧 (no tag-sequence emojis)
-    england: "GB",
-    scotland: "GB",
+    // Wales / N. Ireland — not in the 48-team set but kept for completeness; rendered as 🇬🇧
     wales: "GB",
     "northern ireland": "GB",
     // Curaçao — ISO 3166-1 alpha-3 CUW → CW; accent and plain variants
@@ -163,4 +159,16 @@ export function flagEmoji(iso2: string | null | undefined): string | null {
 /** Convenience for call sites: a pool `country` value straight to its emoji flag (or null). */
 export function countryFlag(country: string | null | undefined): string | null {
   return flagEmoji(toIso2(country));
+}
+
+/**
+ * The exact feed strings for home nations that use inline SVG flags instead of emoji (they have no ISO
+ * 3166-1 alpha-2 code, so the emoji regional-indicator mechanism cannot produce a correct glyph).
+ * England → St George's Cross; Scotland → Saltire. Wales / N. Ireland are NOT in the 48-team set.
+ */
+export const HOME_NATIONS: ReadonlySet<string> = new Set(["England", "Scotland"]);
+
+/** True when the country value is one of the home nations that render via inline SVG. */
+export function isHomeNation(country: string | null | undefined): boolean {
+  return country != null && HOME_NATIONS.has(country);
 }

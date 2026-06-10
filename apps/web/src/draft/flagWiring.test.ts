@@ -16,8 +16,8 @@ const flagComp = read("draft/Flag.tsx");
 const components = read("draft/components.tsx");
 const css = read("draft/draft.css");
 
-describe("Flag.tsx — the sole emoji render surface", () => {
-  it("renders the emoji via flagEmoji and never a broken glyph (graceful empty placeholder)", () => {
+describe("Flag.tsx — the sole flag-rendering surface", () => {
+  it("renders emoji via flagEmoji and never a broken glyph (graceful empty placeholder)", () => {
     expect(flagComp).toContain('from "../../src/draft/flag"');
     expect(flagComp).toContain("flagEmoji(code)");
     // empty fallback keeps alignment; no raw/broken-glyph path
@@ -25,10 +25,16 @@ describe("Flag.tsx — the sole emoji render surface", () => {
     expect(flagComp).toContain('className={"flag-emoji"');
   });
 
-  it("is an emoji surface — no SVG/image flag dependency, no gradient style", () => {
+  it("intercepts home nations before the emoji path via isHomeNation + inline SVG", () => {
+    // imports the home-nation predicate from the resolver (single source of truth)
+    expect(flagComp).toContain("isHomeNation");
+    // inline SVG for England (St George's Cross) and Scotland (Saltire)
+    expect(flagComp).toContain('"England"');
+    expect(flagComp).toContain('"Scotland"');
+    expect(flagComp).toContain("<svg");
+    // old gradient-based flag surface is gone
     expect(flagComp).not.toContain("flagStyle");
     expect(flagComp).not.toContain("<img");
-    expect(flagComp).not.toContain("<svg");
     expect(flagComp).not.toContain("background");
   });
 });
