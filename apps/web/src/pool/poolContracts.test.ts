@@ -16,6 +16,14 @@ const loader = read("loadPool.ts");
 const client = read("PoolClient.tsx");
 const components = read("components.tsx");
 
+/**
+ * Strip block + line comments so the NEGATIVE leak-guard greps target CODE, not the doc prose that names
+ * the very things being excluded ("NO Realtime", "postgres_changes is Prompt-43-out", …). The line-comment
+ * pattern keeps a leading non-`:` char so it never eats the `//` in a `http://`-style literal.
+ */
+const codeOnly = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
 describe("pool loader — reveal is server-enforced via the anti-copying read", () => {
   it("sources the picks-view reveal from store.readVisiblePicks (own always + others post-kickoff)", () => {
     expect(loader).toContain("store.readVisiblePicks");
@@ -62,5 +70,38 @@ describe("pool client — lock disable + reveal render + route 409 surfacing", (
 
   it("disables the pick buttons when locked (the lock-on-play affordance)", () => {
     expect(components).toContain("disabled={locked || busy}");
+  });
+});
+
+describe("pool client — P43 live updates (clock-reveal + leaderboard poll) with NO Realtime", () => {
+  it("wires the clock-reveal timer from poolLive over ALL fixtures, refetching via the gated loader", () => {
+    expect(client).toContain("startRevealClock");
+    expect(client).toContain("flattenPickFixtures(view.picks)");
+    // The reveal refetch IS the existing gated path — router.refresh() re-runs loadPool under the
+    // server kickoff gate; the client never receives a raw pre-kickoff pick frame.
+    expect(client).toMatch(/onReveal:\s*\(\)\s*=>\s*router\.refresh\(\)/);
+  });
+
+  it("runs the visibility-gated leaderboard poll ONLY while the Leaderboard tab is active", () => {
+    expect(client).toContain("startLeaderboardPoll");
+    expect(client).toContain("LEADERBOARD_POLL_MS");
+    // The poll effect early-returns (so it's torn down) whenever the Picks tab is active.
+    expect(client).toMatch(/tab !==\s*"leaderboard"/);
+  });
+
+  it("gates the poll on document visibility + refetches immediately on visibilitychange→visible", () => {
+    expect(client).toContain("!document.hidden");
+    expect(client).toContain('addEventListener("visibilitychange"');
+    expect(client).toContain("handleLeaderboardVisible");
+  });
+
+  it("REVEAL-LEAK GUARD: others' picks come ONLY from the gated loader — no Realtime/subscription client", () => {
+    // The P43 decision record: NO pool_pick subscription. Raw postgres_changes frames would bypass the
+    // server's clock-gated anti-copying read and leak pre-kickoff predictions. Assert the CODE wires no
+    // such client under ANY refetch path; every refetch is router.refresh() → loadPool.
+    const code = codeOnly(client);
+    expect(code).not.toMatch(/postgres_changes|\.channel\(|\.subscribe\(|@supabase|createClient/i);
+    // Reveal source is unchanged from P42: server-revealed others' picks, rendered in components.tsx.
+    expect(components).toContain("fixture.others");
   });
 });
