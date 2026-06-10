@@ -186,6 +186,9 @@ model Manager {
   scoreManagerPeriods ScoreManagerPeriod[]
   standings           Standing[]
   poolPicks           PoolPick[]
+  pushSubscriptions   PushSubscription[]
+  notificationPref    NotificationPreference?
+  notificationsSent   NotificationSent[]
   currentDraftPointer Draft[]              @relation("DraftCurrentManager")
 
   @@unique([leagueId, userId])
@@ -866,4 +869,64 @@ model PoolPick {
   @@index([leagueId, matchId])
   @@index([matchId])
   @@map("pool_pick")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Notifications (Prompt 41a; DECISIONS.md → Notifications) — server→device Web Push over the PWA.
+// No new vendor (Render + Supabase only) and NO Realtime/publication involvement: push is server→
+// device, so it sidesteps the postgres_changes/RLS-broadcast path entirely. Three ADDITIVE tables,
+// all SELF-ONLY RLS (a manager sees/writes only their own rows). Transport + delivery policy live in
+// @app/notify; the triggers that EMIT (draft-turn / player-not-starting / match-starting) are 41b.
+// ────────────────────────────────────────────────────────────────────────────
+
+/// A browser PushSubscription persisted server-side so the worker (41b) can push to the device.
+/// `endpoint` is globally UNIQUE (the push service's per-device URL); re-subscribing upserts on it.
+/// Self-only RLS (insert/select/delete where manager_id = caller).
+model PushSubscription {
+  id        String   @id @default(uuid())
+  managerId String   @map("manager_id")
+  endpoint  String   @unique
+  /// Base64url client public key (ECDH P-256) — used to encrypt the payload to the device.
+  p256dh    String
+  /// Base64url client auth secret.
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@index([managerId])
+  @@map("push_subscription")
+}
+
+/// Per-manager notification opt-in — one row per manager (PK = manager_id). All channels DEFAULT true;
+/// the row is LAZILY upserted-with-defaults on first read (no provisioning step seeds it). Self-only RLS.
+model NotificationPreference {
+  managerId         String   @id @map("manager_id")
+  draftTurn         Boolean  @default(true) @map("draft_turn")
+  playerNotStarting Boolean  @default(true) @map("player_not_starting")
+  matchStarting     Boolean  @default(true) @map("match_starting")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preference")
+}
+
+/// The idempotency LEDGER. One row per (manager, kind, subject) actually dispatched; the UNIQUE
+/// (manager_id, kind, subject_id) constraint is the load-bearing guard that lets 41b's polling
+/// triggers re-fire without re-sending. Written by the server (table-owner / service-role) ONLY —
+/// there is NO client RLS read policy (a notification-history UI is a later seam).
+model NotificationSent {
+  id        String   @id @default(uuid())
+  managerId String   @map("manager_id")
+  /// One of the NotificationKind values: 'draft_turn' | 'player_not_starting' | 'match_starting'.
+  kind      String
+  subjectId String   @map("subject_id")
+  sentAt    DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([managerId, kind, subjectId], map: "notification_sent_uq")
+  @@index([managerId])
+  @@map("notification_sent")
 }

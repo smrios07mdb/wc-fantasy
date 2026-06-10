@@ -56,12 +56,19 @@ describe("/settings page — server-rendered gate + profile section", () => {
     expect(page).toContain("SettingsClient");
   });
 
-  it("leaves the other sections as explicit TODO(confirm) seams", () => {
+  it("mounts the NotificationsClient island seeded from current prefs (Prompt 41a)", () => {
+    expect(page).toContain("NotificationsClient");
+    expect(page).toContain("createPrismaNotifyStore");
+    expect(page).toContain("getPreference(outcome.manager.id)");
+  });
+
+  it("leaves the REMAINING sections as explicit TODO(confirm) seams (Notifications now built)", () => {
     expect(page).toContain("TODO(confirm): Account");
-    expect(page).toContain("TODO(confirm): Notifications");
     expect(page).toContain("TODO(confirm): Appearance");
     expect(page).toContain("TODO(confirm): League");
     expect(page).toContain("TODO(confirm): Danger");
+    // The Notifications seam is FILLED in Prompt 41a — it must no longer be a TODO.
+    expect(page).not.toContain("TODO(confirm): Notifications");
   });
 });
 

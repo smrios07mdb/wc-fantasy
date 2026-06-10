@@ -256,6 +256,23 @@ describe("render.yaml — env reconciliation (required keys on the right service
       expect(svc(name).scalars.schedule).toMatch(/\d+\s+/);
     }
   });
+
+  it("web + worker carry the VAPID keypair (Prompt 41a); the private key is a sync:false secret", () => {
+    // sendPush needs all three on BOTH services: the public key for setVapidDetails + the browser
+    // subscribe (web), the private key + subject to sign. The worker copy is inert until 41b's triggers.
+    for (const name of ["wc-fantasy-web", "wc-fantasy-worker"]) {
+      const keys = effectiveKeys(svc(name));
+      for (const k of ["NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT"]) {
+        expect(keys, `${name} must carry ${k}`).toContain(k);
+      }
+      // The private key is a secret — never a committed value.
+      expect(findEntry(svc(name), "VAPID_PRIVATE_KEY")!.sync).toBe(false);
+      expect(findEntry(svc(name), "VAPID_PRIVATE_KEY")!.value).toBeUndefined();
+    }
+    // The private key must never be exposed to the browser bundle.
+    const all = bp.services.flatMap((s) => inlineKeys(s));
+    expect(all.some((k) => /^NEXT_PUBLIC_.*VAPID_PRIVATE/.test(k))).toBe(false);
+  });
 });
 
 describe("render.yaml — migrate/runtime pooler split & secret hygiene", () => {
