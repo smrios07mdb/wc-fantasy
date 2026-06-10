@@ -40,17 +40,31 @@ describe("selectAutopick — queue first, then best-available fallback", () => {
     expect(playerId).toBe("p-free");
   });
 
-  it("skips a queue entry whose position bucket is already full", () => {
+  it("takes the FWD queue entry even when counts.FWD=3 — positional caps are lifted", () => {
     const playerId = selectAutopick(
       input({
         queue: [
           { playerId: "p-fwd", position: "FWD" },
           { playerId: "p-mid", position: "MID" },
         ],
-        counts: { GK: 0, DEF: 0, MID: 0, FWD: 3 }, // FWD bucket is full (cap 3)
+        counts: { GK: 0, DEF: 0, MID: 0, FWD: 3 }, // total=3, well under 15 — both legal
       }),
     );
-    expect(playerId).toBe("p-mid");
+    expect(playerId).toBe("p-fwd");
+  });
+
+  it("skips a queue entry only when the squad total is already 15", () => {
+    const playerId = selectAutopick(
+      input({
+        queue: [
+          { playerId: "p-fwd", position: "FWD" },
+          { playerId: "p-mid", position: "MID" },
+        ],
+        ranking: [{ playerId: "p-mid", position: "MID" }],
+        counts: { GK: 2, DEF: 5, MID: 5, FWD: 3 }, // total=15, squad full
+      }),
+    );
+    expect(playerId).toBeNull();
   });
 
   it("falls back to best-available by ranking when the queue yields nobody eligible", () => {
@@ -79,19 +93,21 @@ describe("selectAutopick — queue first, then best-available fallback", () => {
     expect(playerId).toBe("p-best");
   });
 
-  it("filters the ranking fallback by availability and legality too", () => {
+  it("filters the ranking fallback by availability and squad-total legality", () => {
+    // GK: 2 is no longer a position cap — but if total=15, no pick is legal.
+    // Here total=2 so GK pick is legal; only unavailability filters p-taken.
     const playerId = selectAutopick(
       input({
         ranking: [
-          { playerId: "p-taken", position: "DEF" }, // unavailable
-          { playerId: "p-full", position: "GK" }, // GK bucket full
-          { playerId: "p-ok", position: "DEF" }, // the winner
+          { playerId: "p-taken", position: "DEF" }, // unavailable — skipped
+          { playerId: "p-gk", position: "GK" }, // total=2 < 15, legal — the winner
+          { playerId: "p-ok", position: "DEF" },
         ],
         isAvailable: (id) => id !== "p-taken",
         counts: { GK: 2, DEF: 0, MID: 0, FWD: 0 },
       }),
     );
-    expect(playerId).toBe("p-ok");
+    expect(playerId).toBe("p-gk");
   });
 
   it("returns null when nobody is eligible anywhere (the stall edge)", () => {
