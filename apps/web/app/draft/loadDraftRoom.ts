@@ -17,17 +17,17 @@ interface PlayerRow {
   firstName: string | null;
   lastName: string | null;
   position: Position;
-  country: string | null;
+  team: { name: string } | null;
 }
 
-function toPlayer(p: PlayerRow): DraftPlayer {
+export function toPlayer(p: PlayerRow): DraftPlayer {
   return {
     id: p.id,
     displayName: p.displayName,
     firstName: p.firstName,
     lastName: p.lastName,
     position: p.position,
-    country: p.country,
+    country: p.team?.name ?? null,
   };
 }
 
@@ -37,7 +37,7 @@ const PLAYER_SELECT = {
   firstName: true,
   lastName: true,
   position: true,
-  country: true,
+  team: { select: { name: true } },
 } as const;
 
 /** Load the authoritative draft-room snapshot for `sessionManagerId`, or null if no draft exists yet. */
