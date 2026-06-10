@@ -1,0 +1,160 @@
+/**
+ * Server-side data loader for the /pool pick'em screen (Prompt 42) — the thin owner-bypass Prisma edge
+ * that assembles everything `PoolClient` renders (mirrors `loadVsField` / `loadWaivers`). READS ONLY:
+ * every pick mutation is a `POST /api/pool/pick` round-trip (Prompt 40 §3) followed by `router.refresh()`.
+ * Like the other loaders this IO edge has no unit test (it needs a live DB); `tsc` + the pure `poolView`
+ * suite cover the shapes, and a source-contract smoke pins the reveal source.
+ *
+ * Two pick-read paths, deliberately:
+ *   - PICKS VIEW reveal — `store.readVisiblePicks` (own picks ALWAYS + others' ONLY post-kickoff). The
+ *     anti-copying time gate lives in that query (Prompt 40 §3), not in RLS (RLS has no clock).
+ *   - LEADERBOARD — ALL league picks read directly. Safe: the leaderboard aggregates only COMPLETED
+ *     matches (`derivePoolResult` is null otherwise), and completed ⊆ kicked-off ⊆ revealable, so no
+ *     unrevealed individual pick is exposed — only per-manager counts.
+ *
+ * The group↔knockout split + every result derivation key off `period.kind` (NEVER `fifa_match.round`;
+ * DECISIONS → Pool). `round` is used ONLY to feed the reused P38 `selectTournamentPhase`, whose own
+ * documented contract reads `round` for the tournament-level phase.
+ */
+import { prisma } from "@app/db";
+import { derivePoolResult, type LeaderboardMatch, type PoolPick } from "@app/pool";
+import { selectTournamentPhase } from "@/src/dashboard/selectTournamentPhase";
+import { createPrismaPoolPickStore } from "./prismaStore";
+import { selectPoolPicksView, buildPoolLeaderboardView } from "./poolView";
+import type { PoolFixture, PoolOtherPick, PoolTeam, PoolView } from "./types";
+
+/** The fifa_match select shared by the fixtures + the leaderboard projection. */
+const MATCH_SELECT = {
+  id: true,
+  status: true,
+  kickoffAt: true,
+  round: true,
+  homeScore: true,
+  awayScore: true,
+  homeScoreEt: true,
+  awayScoreEt: true,
+  homeScorePens: true,
+  awayScorePens: true,
+  period: { select: { kind: true, label: true } },
+  homeTeam: { select: { name: true, country: true } },
+  awayTeam: { select: { name: true, country: true } },
+} as const;
+
+function team(t: { name: string; country: string | null } | null): PoolTeam | null {
+  // code = the raw country value for the flag resolver, falling back to the name (which IS the country
+  // for a World Cup side, e.g. "England") so the resolver / home-nation SVG path can still fire.
+  return t ? { name: t.name, code: t.country ?? t.name } : null;
+}
+
+export async function loadPool(viewerManagerId: string): Promise<PoolView | null> {
+  const manager = await prisma.manager.findUnique({
+    where: { id: viewerManagerId },
+    select: { id: true, leagueId: true },
+  });
+  if (!manager) return null;
+  const leagueId = manager.leagueId;
+
+  const store = createPrismaPoolPickStore(prisma);
+  const now = new Date();
+
+  const [matchRows, managerRows, visiblePicks, allPickRows] = await Promise.all([
+    prisma.fifaMatch.findMany({ select: MATCH_SELECT, orderBy: { kickoffAt: "asc" } }),
+    prisma.manager.findMany({
+      where: { leagueId },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    }),
+    // Reveal-gated: own always + others only once their match has kicked off.
+    store.readVisiblePicks({ leagueId, managerId: viewerManagerId, now }),
+    // Full league picks for the (aggregate-only, completed-match) leaderboard.
+    prisma.poolPick.findMany({
+      where: { leagueId },
+      select: { managerId: true, matchId: true, prediction: true },
+    }),
+  ]);
+
+  const nameById = new Map(managerRows.map((m) => [m.id, m.displayName] as const));
+
+  // Per-fixture revealed picks: the viewer's own + every other manager's revealed pick on that match.
+  const myPickByMatch = new Map<string, PoolFixture["myPick"]>();
+  const othersByMatch = new Map<string, PoolOtherPick[]>();
+  for (const p of visiblePicks) {
+    if (p.managerId === viewerManagerId) {
+      myPickByMatch.set(p.matchId, p.prediction);
+    } else {
+      const list = othersByMatch.get(p.matchId) ?? [];
+      list.push({
+        managerId: p.managerId,
+        managerName: nameById.get(p.managerId) ?? "Manager",
+        prediction: p.prediction,
+      });
+      othersByMatch.set(p.matchId, list);
+    }
+  }
+
+  const fixtures: PoolFixture[] = matchRows.map((m) => {
+    const periodKind = m.period?.kind ?? null;
+    const result = derivePoolResult({
+      status: m.status,
+      kickoffAt: m.kickoffAt,
+      periodKind,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      homeScoreEt: m.homeScoreEt,
+      awayScoreEt: m.awayScoreEt,
+      homeScorePens: m.homeScorePens,
+      awayScorePens: m.awayScorePens,
+    });
+    return {
+      matchId: m.id,
+      home: team(m.homeTeam),
+      away: team(m.awayTeam),
+      kickoffAt: m.kickoffAt.toISOString(),
+      status: m.status,
+      periodKind,
+      periodLabel: m.period?.label ?? null,
+      result,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      myPick: myPickByMatch.get(m.id) ?? null,
+      others: (othersByMatch.get(m.id) ?? []).sort((a, b) =>
+        a.managerName < b.managerName ? -1 : a.managerName > b.managerName ? 1 : 0,
+      ),
+    };
+  });
+
+  const phase = selectTournamentPhase(matchRows.map((m) => ({ status: m.status, round: m.round })));
+
+  // The leaderboard projection: a LeaderboardMatch per fixture (result derivation + canonical label).
+  const leaderboardMatches: LeaderboardMatch[] = matchRows.map((m) => ({
+    matchId: m.id,
+    status: m.status,
+    kickoffAt: m.kickoffAt,
+    periodKind: m.period?.kind ?? null,
+    periodLabel: m.period?.label ?? null,
+    homeScore: m.homeScore,
+    awayScore: m.awayScore,
+    homeScoreEt: m.homeScoreEt,
+    awayScoreEt: m.awayScoreEt,
+    homeScorePens: m.homeScorePens,
+    awayScorePens: m.awayScorePens,
+  }));
+  const allPicks: PoolPick[] = allPickRows.map((p) => ({
+    managerId: p.managerId,
+    matchId: p.matchId,
+    prediction: p.prediction,
+  }));
+
+  return {
+    managerId: viewerManagerId,
+    phase,
+    picks: selectPoolPicksView(fixtures, phase),
+    leaderboard: buildPoolLeaderboardView(
+      allPicks,
+      leaderboardMatches,
+      managerRows,
+      viewerManagerId,
+    ),
+    nowIso: now.toISOString(),
+  };
+}
