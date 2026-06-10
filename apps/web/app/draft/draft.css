@@ -289,6 +289,52 @@
   margin-bottom: 6px;
   flex-wrap: wrap;
 }
+/* Nation filter — collapsible grid with toggle + active-selection visibility (Prompt 35) */
+.dr-nation-filter {
+  margin-bottom: 6px;
+}
+.dr-nation-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+.dr-nation-toggle {
+  font-size: var(--fs-caption, 0.75rem);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+}
+.dr-nation-toggle:hover {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+/* Clear button inside the active-nation chip shown in the collapsed header */
+.chip-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.chip-clear:hover {
+  background: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  color: var(--text-primary);
+}
 /* Emoji flag glyph (Prompt 33) — content imagery, sole render surface is <Flag>. The fixed width keeps
    rows/chips aligned even when a code is unmappable (empty placeholder, never a broken glyph). */
 .flag-emoji {

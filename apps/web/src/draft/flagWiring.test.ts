@@ -64,3 +64,27 @@ describe("draft.css — emoji flag glyph styling (route-scoped, content imagery)
     expect(css).toMatch(/\.flag-emoji\.flag-lg\s*\{/);
   });
 });
+
+describe("components.tsx — collapsible nation filter (Prompt 35)", () => {
+  it("defaults collapsed (useState false) and toggles open on click", () => {
+    expect(components).toContain("const [nationGridOpen, setNationGridOpen] = useState(false)");
+    expect(components).toContain("setNationGridOpen((o) => !o)");
+    // expanded grid is conditionally rendered
+    expect(components).toContain("{nationGridOpen && (");
+  });
+
+  it("shows active nation in collapsed header with a clear control", () => {
+    expect(components).toContain('{nation !== "ALL" && !nationGridOpen && (');
+    expect(components).toContain('className="chip-clear"');
+    expect(components).toContain('setNation("ALL")');
+  });
+});
+
+describe("draft.css — collapsible nation filter styles (Prompt 35)", () => {
+  it("defines .dr-nation-filter, .dr-nation-header, .dr-nation-toggle, and .chip-clear", () => {
+    expect(css).toMatch(/\.dr-nation-filter\s*\{/);
+    expect(css).toMatch(/\.dr-nation-header\s*\{/);
+    expect(css).toMatch(/\.dr-nation-toggle\s*\{/);
+    expect(css).toMatch(/\.chip-clear\s*\{/);
+  });
+});

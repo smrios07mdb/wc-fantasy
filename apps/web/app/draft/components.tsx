@@ -328,6 +328,7 @@ export function AvailableList({
   submittingQueue: boolean;
 }) {
   const mine = isMyTurnFn(state);
+  const [nationGridOpen, setNationGridOpen] = useState(false);
   const nations = useMemo(
     () =>
       [
@@ -364,23 +365,47 @@ export function AvailableList({
         ))}
       </div>
       {nations.length > 0 && (
-        <div className="dr-filters">
-          <span
-            className={"chip" + (nation === "ALL" ? " is-active" : "")}
-            onClick={() => setNation("ALL")}
-          >
-            All
-          </span>
-          {nations.map((code) => (
-            <span
-              key={code}
-              className={"chip" + (nation === code ? " is-active" : "")}
-              onClick={() => setNation(code)}
-            >
-              <Flag code={toIso2(code)} label={nationName(code)} />
-              {nationName(code)}
+        <div className="dr-nation-filter">
+          <div className="dr-nation-header">
+            <span className="dr-nation-toggle" onClick={() => setNationGridOpen((o) => !o)}>
+              Nations {nationGridOpen ? "▾" : "▸"}
             </span>
-          ))}
+            {nation !== "ALL" && !nationGridOpen && (
+              <span className="chip is-active">
+                <Flag code={toIso2(nation)} label={nationName(nation)} />
+                {nationName(nation)}
+                <span
+                  className="chip-clear"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNation("ALL");
+                  }}
+                >
+                  ✕
+                </span>
+              </span>
+            )}
+          </div>
+          {nationGridOpen && (
+            <div className="dr-filters">
+              <span
+                className={"chip" + (nation === "ALL" ? " is-active" : "")}
+                onClick={() => setNation("ALL")}
+              >
+                All
+              </span>
+              {nations.map((code) => (
+                <span
+                  key={code}
+                  className={"chip" + (nation === code ? " is-active" : "")}
+                  onClick={() => setNation(code)}
+                >
+                  <Flag code={toIso2(code)} label={nationName(code)} />
+                  {nationName(code)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div

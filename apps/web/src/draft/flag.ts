@@ -97,7 +97,7 @@ const NAME_TO_ISO2: Record<string, string> = (() => {
     wales: "GB",
     "northern ireland": "GB",
     // Curaçao — ISO 3166-1 alpha-3 CUW → CW; accent and plain variants
-    "curaçao": "CW",
+    curaçao: "CW",
     curacao: "CW",
     // DR Congo — Intl gives "Congo - Kinshasa"; feed/FIFA uses multiple spellings
     "dr congo": "CD",
@@ -114,11 +114,11 @@ const NAME_TO_ISO2: Record<string, string> = (() => {
     "bosnia & herzegovina": "BA",
     // FIFA formal names that differ from Intl.DisplayNames output
     "ir iran": "IR",
-    "türkiye": "TR",      // FIFA official since 2022 (was "Turkey")
-    turkey: "TR",          // still common in many feeds
+    türkiye: "TR", // FIFA official since 2022 (was "Turkey")
+    turkey: "TR", // still common in many feeds
     "korea republic": "KR",
     "korea, republic of": "KR",
-    "dpr korea": "KP",     // FIFA formal name for North Korea
+    "dpr korea": "KP", // FIFA formal name for North Korea
     "korea dpr": "KP",
     "republic of ireland": "IE", // FIFA/UEFA name (Intl gives "Ireland")
     // Cabo Verde — Intl now returns "Cabo Verde" but FIFA/older feeds say "Cape Verde"
