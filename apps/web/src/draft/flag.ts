@@ -56,9 +56,6 @@ const FIFA_TO_ISO2: Record<string, string> = {
   CHI: "CL", // Chile (ISO CHL)
   PHI: "PH", // Philippines (ISO PHL)
   ZAM: "ZM", // Zambia (ISO ZMB)
-  // Wales / N. Ireland — not in the 48-team set but kept for completeness; rendered as 🇬🇧
-  WAL: "GB",
-  NIR: "GB",
   // Curaçao: ISO 3166-1 alpha-3 CUW → alpha-2 CW; omitted from the compact ISO string above
   CUW: "CW",
 };
@@ -89,9 +86,6 @@ const NAME_TO_ISO2: Record<string, string> = (() => {
     russia: "RU",
     iran: "IR",
     "czech republic": "CZ",
-    // Wales / N. Ireland — not in the 48-team set but kept for completeness; rendered as 🇬🇧
-    wales: "GB",
-    "northern ireland": "GB",
     // Curaçao — ISO 3166-1 alpha-3 CUW → CW; accent and plain variants
     curaçao: "CW",
     curacao: "CW",

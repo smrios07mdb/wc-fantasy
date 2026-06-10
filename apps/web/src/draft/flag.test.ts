@@ -74,11 +74,11 @@ describe("toIso2 — resolve the pool's country value (code OR name) to an alpha
     expect(toIso2("SCO")).toBeNull();
   });
 
-  it("Wales and Northern Ireland still resolve to GB (not in 48-team set; kept for completeness)", () => {
-    expect(toIso2("Wales")).toBe("GB");
-    expect(toIso2("Northern Ireland")).toBe("GB");
-    expect(toIso2("WAL")).toBe("GB");
-    expect(toIso2("NIR")).toBe("GB");
+  it("Wales and Northern Ireland resolve to null — all home-nation GB fallbacks removed", () => {
+    expect(toIso2("Wales")).toBeNull();
+    expect(toIso2("Northern Ireland")).toBeNull();
+    expect(toIso2("WAL")).toBeNull();
+    expect(toIso2("NIR")).toBeNull();
   });
 
   it("resolves DR Congo variants to CD", () => {
