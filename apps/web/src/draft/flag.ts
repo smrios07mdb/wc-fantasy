@@ -121,7 +121,8 @@ const NAME_TO_ISO2: Record<string, string> = (() => {
     "dpr korea": "KP", // FIFA formal name for North Korea
     "korea dpr": "KP",
     "republic of ireland": "IE", // FIFA/UEFA name (Intl gives "Ireland")
-    // Cabo Verde — Intl now returns "Cabo Verde" but FIFA/older feeds say "Cape Verde"
+    // Cabo Verde — Intl returns "Cape Verde" on Node 25; feed sends "Cabo Verde" (modern official name)
+    "cabo verde": "CV",
     "cape verde": "CV",
     // Chinese Taipei — FIFA name for Taiwan (ISO TW)
     "chinese taipei": "TW",

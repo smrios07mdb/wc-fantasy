@@ -108,6 +108,11 @@ describe("toIso2 — resolve the pool's country value (code OR name) to an alpha
     expect(toIso2("CUW")).toBe("CW");
   });
 
+  it("resolves Cabo Verde to CV (feed sends modern name; Intl returns 'Cape Verde' on this runtime)", () => {
+    expect(toIso2("Cabo Verde")).toBe("CV");
+    expect(toIso2("Cape Verde")).toBe("CV"); // Intl path / older feed spelling
+  });
+
   it("resolves FIFA formal names that differ from Intl.DisplayNames output", () => {
     expect(toIso2("IR Iran")).toBe("IR");
     expect(toIso2("Türkiye")).toBe("TR");
