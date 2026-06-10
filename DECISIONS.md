@@ -1378,6 +1378,8 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
 
 ## Player avatars (P46)
 
+- **`player.country` column is never populated; country must come from the `fifa_team.name` join.** `ingestRosters` stores the national team via `team_id` FK but does not write the denormalized `player.country` text column. Any loader feeding a player card must use `team: { select: { name: true } }` in its Prisma select and map `country: p.team?.name ?? null` — the pattern established in `loadDraftRoom.toPlayer` (P34) and now mirrored in `loadLineup` (fix/avatar-flag-badge). This was the root cause of `.pa-flag` being invisible on the lineup surface: the lineup loader read the never-populated column, `FlagBadge` received `null`, and its early-return guard fired. Source-contract guards: `playerAvatarWiring.test.ts` "joins team name instead of reading player.country".
+
 - **Player photos: generated avatars only — real photos explicitly deferred.** Neither the GOAT feed nor
   the `player` table carries an image URL; Sofascore exposes none and the scraper's player-matching is
   stubbed. `<PlayerAvatar>` renders deterministic initials + position-color disc + country flag badge with

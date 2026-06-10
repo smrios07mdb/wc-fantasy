@@ -246,6 +246,15 @@ not by hopeful application code:
 
 **Football reference (mirrored from feed)**
 - `fifa_team`, `player` (id <-> balldontlie player_id, position, team, country),
+  - **`player.country` is never populated by ingestion.** `ingestRosters` stores the national team as a
+    `team_id` FK (→ `fifa_team`) but does not write the denormalized `player.country` text column. Any
+    loader that feeds a player card **must** derive country from the `fifa_team.name` join at query time
+    (`country: p.team?.name ?? null`) — reading `player.country` directly returns `null` for every row and
+    the flag badge never renders. Both `loadDraftRoom` (`toPlayer` mapper, `app/draft/loadDraftRoom.ts`) and
+    `loadLineup` (`app/lineup/loadLineup.ts`) follow this pattern; future player-card surfaces (vsfield,
+    waivers, etc.) must do the same. The source-contract guard lives in
+    `apps/web/src/draft/playerAvatarWiring.test.ts` ("joins team name instead of reading player.country").
+
   `fifa_match` (datetime **UTC**, status, scores incl. ET/pens, stage/group/round, formations,
   referee), `fifa_stage`, `fifa_group`.
   - **`period_id` (Prompt 05a) — the structural match→period link.** Set at schedule-sync from the
