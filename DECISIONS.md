@@ -1375,3 +1375,11 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
 - **`@app/notify` added to the worker `package.json`** (the 41a note that the worker "already depends on
   @app/notify" was not yet true — only the VAPID env was wired). Device delivery remains a **live-only**
   inference (the test runner has no push service) — flagged to confirm on deploy.
+
+## Player avatars (P46)
+
+- **Player photos: generated avatars only — real photos explicitly deferred.** Neither the GOAT feed nor
+  the `player` table carries an image URL; Sofascore exposes none and the scraper's player-matching is
+  stubbed. `<PlayerAvatar>` renders deterministic initials + position-color disc + country flag badge with
+  no network fetch, no new dependency, no schema column. Real photos are a deferred post-launch option;
+  there is no clean image source today.
