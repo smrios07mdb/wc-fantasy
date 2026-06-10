@@ -11,4 +11,5 @@ export * from "./store";
 export * from "./standing";
 export * from "./guillotine";
 export * from "./recompute";
+export * from "./freeze";
 export { MemoryStore } from "./memoryStore";
