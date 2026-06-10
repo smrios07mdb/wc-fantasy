@@ -1211,6 +1211,33 @@ write/read path. NO UI / nav / bracket / leaderboard screen / Realtime client �
   (`purity.test.ts`). Mirrors `standing.ts` discipline.
   This behavior is acceptable and is noted in the route's JSDoc.
 
+### P42 — the `/pool` pick'em UI (picks + leaderboard; merged to main)
+
+The user-facing surface on the P40 engine. **No Realtime** (deferred to P43 — reads on load/refetch,
+form-driven CRUD through `POST /api/pool/pick` then `router.refresh()`). The P40 engine + RLS were
+**not touched**; all UI decisions live in `apps/web/{app,src}/pool/`.
+
+- **Leaderboard shows ALL league members.** The loader **left-joins league membership over the untouched
+  `buildPoolLeaderboard`** (the pure engine still emits only managers who have picked); non-pickers are
+  padded to **0/0/0** and the view is ranked **points desc → name → id** (the engine sorts by id; the
+  screen re-sorts by name per the screen's contract). The engine stays pure — "show everyone" is a
+  presentation concern, not a data one.
+- **Knockout bracket = the fixed R32→Final skeleton, knockout phase ONLY.** In group/pre-kickoff phase
+  the picks view is matchday lists only; once the tournament reaches knockout phase the full five-round
+  frame renders. Empty rounds are present but fixture-less — **honest TBD, never a fabricated matchup**
+  (the Guillotine "projected, not invented" principle).
+- **The group↔knockout split + every result derivation key off `period.kind`** (NEVER `fifa_match.round`
+  — the P40 trap holds in the UI too). `round` is read in exactly one place: feeding the reused P38
+  `selectTournamentPhase`, whose own documented contract reads `round` for the tournament-level phase.
+- **The reveal gate stays owned by the P40 store.** Own picks are always visible; others' picks only
+  post-kickoff — enforced in `readVisiblePicks`'s query (the anti-copying gate that can't live in RLS,
+  which has no clock). The UI renders exactly what that gated read returns and never bypasses it; the
+  leaderboard's separate all-league read is safe because it aggregates only completed matches
+  (completed ⊆ kicked-off ⊆ revealable — no individual unrevealed pick is exposed, only counts).
+- **Nav entry deferred (parallel staging).** `/pool` shipped reachable by direct URL only; "pool" is not
+  yet a `NavId` (adding it touches the shared `crossNav.ts` + `AppShell.tsx` glyph map). The layout
+  passes a non-member `active` so nothing falsely highlights — a one-line cleanup once the nav entry lands.
+
 ## Notifications — Web Push transport + preference model (Prompt 41a; 41b wires triggers)
 
 - **Channel = Web Push over the PWA. NO new vendor.** Notifications ship as browser Web Push (a service

@@ -417,6 +417,17 @@ Minimal, for a private league of friends.
     name. Writes ONLY `manager.display_name`; `app_user.display_name` is NOT touched. Renames propagate
     to other clients on next server render / navigation (no Realtime broadcast — intentional; see DECISIONS
     → "Profile rename / Settings route").
+  - **Prompt 42 — `/pool` pick'em UI (built; the P40 engine's user-facing surface):** a new authenticated
+    route `/pool` (`app/pool/`), server-rendered, **dynamic (`ƒ`)**, AppShell-mounted, auth-gated via
+    `getSessionManager()` (no-session → `/sign-in`; not-allowlisted / no-manager → `/auth/denied`). Two
+    tabs — **Picks** (per-match Home/Draw/Away picks; knockout phase adds the fixed R32→Final bracket
+    skeleton with honest TBD slots) and **Leaderboard** (all league members, ranked by pool points). It is
+    **form-driven CRUD**: every pick is a `POST /api/pool/pick` round-trip (the Prompt-40 gated route)
+    followed by `router.refresh()` — **NO Realtime, NO polling** (the Realtime subscription is **P43**).
+    A SELF-scoped surface (the viewer's own picks), so no 403-not-your-manager at the page; the per-pick
+    write gate lives in the route. **NAV ENTRY DEFERRED:** unlike the other AppShell screens, `/pool` is
+    **not** in the §1 nav list yet — it's reachable by direct URL only; "pool" isn't a `NavId`, so the
+    layout passes a non-member `active` (nothing falsely highlights) until the post-merge nav-wiring step.
 
 ---
 
