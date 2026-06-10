@@ -40,6 +40,14 @@ export default tseslint.config(
       globals: { ...globals.browser, ...globals.node },
     },
   },
+  // The plain service worker (Prompt 41a) runs in the ServiceWorkerGlobalScope (`self`, `clients`,
+  // `registration`) — not the window/node scopes above.
+  {
+    files: ["apps/web/public/sw.js"],
+    languageOptions: {
+      globals: { ...globals.serviceworker },
+    },
+  },
   // Prettier last: turn off rules that conflict with the formatter.
   prettier,
 );

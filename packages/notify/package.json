@@ -1,0 +1,33 @@
+{
+  "name": "@app/notify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./send": {
+      "types": "./src/send.ts",
+      "default": "./src/send.ts"
+    },
+    "./prisma": {
+      "types": "./src/prismaStore.ts",
+      "default": "./src/prismaStore.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app/db": "workspace:*",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/web-push": "^3.6.4"
+  }
+}

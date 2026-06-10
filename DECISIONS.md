@@ -1210,3 +1210,64 @@ write/read path. NO UI / nav / bracket / leaderboard screen / Realtime client �
   `handleSubmitPick`/`handleReadPicks` handlers) behind `/api/pool/pick`. Purity is grep-proven
   (`purity.test.ts`). Mirrors `standing.ts` discipline.
   This behavior is acceptable and is noted in the route's JSDoc.
+
+## Notifications — Web Push transport + preference model (Prompt 41a; 41b wires triggers)
+
+- **Channel = Web Push over the PWA. NO new vendor.** Notifications ship as browser Web Push (a service
+  worker + the push services FCM/Mozilla/Apple), signed with VAPID from the existing Render compute —
+  it adds **no third vendor** to the two-vendor (Render + Supabase) stance. **Email is deferred** (and
+  why: it needs a sending vendor + deliverability/unsubscribe handling — a separate decision; Web Push
+  reuses the PWA we already ship and costs nothing).
+
+- **41a / 41b split.** 41a lands the **transport + preference model + Settings UI** with the sender
+  **inert** — `@app/notify`'s `dispatchToManager` is built + unit-tested but invoked by nothing (the
+  same plumbing-first pattern as the faab/period-close crons). 41b wires the three triggers
+  (draft-turn / player-not-starting / match-starting) to it in the worker. Nothing in 41a fires a
+  notification except the manual `/api/notifications/test` probe.
+
+- **Three additive tables + the idempotency ledger** (`20260610140000_notifications`):
+  `push_subscription` (one row per device; `endpoint` UNIQUE), `notification_preference`
+  (PK `manager_id`; three bools DEFAULT true; **lazily upserted-with-defaults on first read** — no
+  provisioning step seeds it), and `notification_sent` (**UNIQUE(manager_id, kind, subject_id)**). The
+  unique constraint on `notification_sent` is the **load-bearing idempotency guard** for 41b's polling
+  triggers: a poller can re-fire "match starting" every minute and `claimLedger`
+  (`createMany({skipDuplicates})` → `count === 1`) lets only the first claim send. `dispatchToManager`
+  claims **after** confirming a subscription exists (so a no-device dispatch doesn't burn the only
+  chance) but **before** sending (**at-most-once** — a transient send failure is not retried next poll;
+  the chosen trade vs. spamming a lock screen).
+
+- **Self-only RLS.** `push_subscription` (SELECT/INSERT/DELETE own) + `notification_preference`
+  (SELECT/INSERT/UPDATE own) mirror the `pool_pick`/`faab_bid` `auth.uid()→manager` idiom but **self-
+  only**, NOT league-scoped (a manager's subscriptions/prefs are private). `notification_sent` is **RLS
+  ENABLED with ZERO policies = default-deny** for every JWT role — "service-role write only, no client
+  read"; a history-read policy is an intentional `TODO(confirm)` seam. Every write also flows through a
+  gated server route (Prisma owner, RLS-exempt), so RLS is defence-in-depth. Self-test verified against
+  a **uuid-returning `auth.uid()`** on a throwaway Postgres (the cast-trap discipline from the pool /
+  Prompt-13 threads), negative-control-proven, zero drift.
+
+- **NO Realtime / NO publication (deliberate).** Push is **server→device** over the push services, not
+  Supabase `postgres_changes`. None of the three tables is added to the `supabase_realtime` publication —
+  this **sidesteps the RLS-broadcast trap entirely** (unlike `pool_pick`, which had to be published).
+  Stated explicitly in the migration header.
+
+- **Service worker = plain `apps/web/public/sw.js`** (served at `/sw.js`), manually registered by the
+  Settings "Enable" button — **no `next-pwa` dependency**, no build step. It does exactly two things
+  (show a push, focus/open on click) and deliberately **no fetch interception / no caching** (boring +
+  reliable). The Prompt-18 manifest + metadata are untouched.
+
+- **Package layout: `@app/notify` core is pure; IO on subpaths.** The `.` surface (payload builders,
+  preference validator, `dispatchToManager`, the `NotifyStore` port, the memory double) is grep-proven
+  IO-free (`purity.test.ts`); `sendPush` (web-push/VAPID) is `@app/notify/send` and the Prisma adapter
+  is `@app/notify/prisma`. Mirrors `@app/faab`'s `./prisma` split. The browser enrolment lives in
+  `apps/web/src/notifications/pushClient.ts` as the **injectable** `enableBrowserPush(env)` so the
+  permission→register→subscribe→POST path is unit-testable in Node with fakes (the test runner has no
+  DOM).
+
+- **VAPID env on web + worker.** `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (build-time inlined for the browser
+  subscribe AND read server-side by `sendPush`'s `setVapidDetails`), `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT`
+  (server-only) — all `sync:false`, set in the Render dashboard from `npx web-push generate-vapid-keys`
+  (**never committed**). The worker carries the same keypair for 41b but is inert until the triggers land.
+
+- **Platform reality (live-deploy-only).** iOS delivers Web Push **only to an installed (Add-to-Home-
+  Screen) PWA**; Android delivers in-browser **or** installed. The real OS permission prompt + actual
+  device delivery are not in-session verifiable — flagged as go-live inferences.

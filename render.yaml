@@ -70,6 +70,16 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED
         value: "false"
+      # Web Push / VAPID (Prompt 41a). The PUBLIC key is build-time (inlined into the client bundle so
+      # the browser can subscribe) AND read server-side by sendPush; the PRIVATE key + SUBJECT are
+      # server-only runtime. Generate ONCE with `npx web-push generate-vapid-keys` and set in the Render
+      # dashboard — NEVER commit the keypair. The SAME keypair must be set on the worker (for 41b).
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY # build-time + server runtime — the application server key
+        sync: false
+      - key: VAPID_PRIVATE_KEY # server-only RUNTIME secret — signs the push (NEVER NEXT_PUBLIC_)
+        sync: false
+      - key: VAPID_SUBJECT # mailto:/https: contact URL (push-service contract), e.g. mailto:you@example.com
+        sync: false
       - key: SITE_URL # public origin for server-side auth redirects (callback/sign-out). Non-secret.
         value: https://wc-fantasy-web.onrender.com
 
@@ -102,6 +112,15 @@ services:
         value: "2000"
       - key: WORKER_ROSTERS_SYNC_EVERY_TICKS # boot + ~daily roster re-pull, self-scheduled (no cron)
         value: "1440"
+      # Web Push / VAPID (Prompt 41a wiring; CONSUMED in 41b). The worker gains the @app/notify dep but
+      # no behavior until the three triggers (draft-turn / player-not-starting / match-starting) land in
+      # 41b — these vars are inert until then. Set the SAME keypair as the web service.
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY # the application server key (sendPush setVapidDetails)
+        sync: false
+      - key: VAPID_PRIVATE_KEY # server-only RUNTIME secret — signs the push
+        sync: false
+      - key: VAPID_SUBJECT # mailto:/https: contact URL (push-service contract)
+        sync: false
 
   # ── Isolated Sofascore rating scraper (apps/scraper, Playwright). NON-GATING at launch ───────────
   # The league launches on the BALLDONTLIE rating fallback; the scrape flips on once stats land
