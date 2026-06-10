@@ -1124,4 +1124,89 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   (unlike a draft pick). Renaming propagates to other clients on their next server render or navigation.
   Adding `manager` to a `postgres_changes` publication is out of scope — it would require a new RLS
   SELECT policy for the broadcast and is documented as the "RLS-publication trap" in DECISIONS.
+
+## Pick'em pool — data layer + engine (Prompt 40)
+
+The pool is a **per-match 1X2 pick'em** bolted onto the existing schedule, scored **separately** from
+the player engine (SCORING.md addendum). Prompt 40 ships the data model + pure engine + server
+write/read path. NO UI / nav / bracket / leaderboard screen / Realtime client — those are Prompt 41.
+
+- **Option A (per-match 1X2), NOT option B (advancement bracket).** Managers pick each fixture's
+  result (HOME/DRAW/AWAY for a group game; the advancer for a knockout); +1 per correct pick. A
+  predictive knockout *bracket* (pick who reaches each round) was rejected as the data model — the
+  "March Madness feel" is a Prompt-41 **presentation** concern layered over option A's per-match
+  picks, not a different model. This reads results that ALREADY land in `fifa_match`; **no feed/ingest
+  change**.
+
+- **Phase discriminator = `period.kind`, NEVER `fifa_match.round`** (the load-bearing correction —
+  Chat-caught during grounding). The prompt's first cut said "`round == null` → group"; that is
+  **FALSE against the data**: `@app/ingest`'s `mapMatchRow` writes `round = round_name ??
+  String(round_number)`, so `round` is the **matchday number ("1"/"2"/"3") for group games (NON-NULL)**
+  and the raw round name ("Round of 16"/"Final") for knockouts, and `fifa_match.groupId`/`stageId` are
+  **never populated** (`upsertMatch` omits them). Implementing the literal contract would misclassify
+  all 72 group matches as knockout (DRAW silently rejected, advancer logic on null ET/pens → defensive
+  null → nothing ever scores). So `derivePoolResult` takes a **resolved `periodKind`**
+  (`group_md`/`knockout_round`/`null`) that the IO loader joins from `fifa_match.periodId →
+  period.kind` — the same canonical signal locking / recompute / period-close already trust. The stale
+  `fifa_match.round` schema comment was corrected to record the trap so it isn't re-stepped.
+
+- **`periodKind == null` → `null` result (honest unscored), NO round-string regex fallback.** If a
+  match's period isn't seeded yet, the pool declines to score it (the loader can flag it) rather than
+  guessing the phase from `round` text. Symmetrically, write-time **DRAW rejection keys off
+  `periodKind === "knockout_round"`**; when `periodKind` is null the write is **permissive** (all three
+  allowed) and the pick simply scores null until the period is linked.
+
+- **Result derivation.** `status !== "completed"` → null (pending). Group → HOME/DRAW/AWAY from
+  full-time goals (defensive null if a score is missing). Knockout → the advancer via **full-time →
+  extra-time → penalties** (never DRAW; defensive null if no decider). Robust to the feed's ET
+  semantics: ET only exists when FT was level, so comparing the two ET fields yields the right advancer
+  whether the feed stores ET cumulative or period-only (the equal FT portion cancels).
+
+- **Flat +1, weight-parameterised.** `scorePick(prediction, result, weight)` = `weight` on a hit, else
+  0 (a DRAW pick on a knockout scores 0 naturally — the knockout result is never DRAW).
+  `weightForPeriod(periodKind, periodLabel)` returns a flat **1** today; the escalating-knockout knob
+  (e.g. R32→Final 1/2/3/5/8) is a **seam** that will key off the canonical `period.label`
+  (R32/R16/QF/SF/Final), **renamed** from the prompt's `weightForRound(round)` so it never reads raw
+  `round`. `buildPoolLeaderboard` → `{ played, correct, points }`, sorted `points desc → managerId asc`
+  (deterministic, like `standing.ts`).
+
+- **Per-match kickoff lock; server time authoritative.** `isPickLocked(match, now)` =
+  `now >= kickoffAt || status !== "scheduled"`. A submit is rejected once locked; `now` is the server
+  clock (like the draft `pick_deadline_at`), never the client.
+
+- **RLS mirrors `faab_bid`'s auth.uid()→manager→league idiom, with the pool's twists.** `pool_pick`
+  carries `league_id`, so the SELECT policy is the simple `standing_select_league_member` shape (no
+  SECURITY DEFINER helper — the predicate only needs the caller's own manager row). **SELECT is
+  league-scoped** (a member reads the whole field's picks — the leaderboard + the post-kickoff reveal),
+  NOT the blind-bid own-only secrecy faab uses. **INSERT/UPDATE are own-`manager_id` only**
+  (defence-in-depth; every write also goes through the server, which bypasses RLS as table owner). No
+  DELETE policy (default-deny — the write path is submit/upsert only; the prompt enumerated
+  SELECT/INSERT/UPDATE).
+
+- **Anti-copying is enforced in the read QUERY, NOT in RLS** (there is no clock in RLS). RLS only
+  league-scopes reads; the read path returns the caller's OWN picks always + OTHER managers' picks ONLY
+  for matches with `kickoffAt <= serverNow` (the `OR [{ managerId }, { match: { kickoffAt: { lte: now }
+  } }]` WHERE clause). This is the deliberate split the prompt called out.
+
+- **Realtime publication added now; client hook deferred to P41.** `pool_pick` is added to the
+  `supabase_realtime` publication in the migration (the §RLS-publication trap: a table outside the
+  publication silently delivers zero `postgres_changes`). The browser subscription
+  (`realtime.setAuth(token)` before subscribe, gated on `INITIAL_SESSION`, re-subscribe on
+  `TOKEN_REFRESHED`) is **Prompt 41**.
+
+- **Migration self-test (Theme-F) — valid uuid literals + verified against a UUID-returning shim.**
+  `20260610130000_pool_pick`'s embedded self-test proves cross-league read isolation + own-row write
+  enforcement by evaluating each policy's exact predicate (faithful because every predicate filters
+  `manager.user_id = auth.uid()`, so the owner-run result equals the role-run result). Verified on a
+  throwaway Postgres pre-seeded with a **uuid-returning `auth.uid()`** (the bare-Postgres text shim
+  masks the `sub::uuid` cast — the known false-green from the Prompt-13 thread); proven the cast is live
+  (a non-uuid `sub` `22P02`s) and the predicate discriminates a filter-less (leaky) policy — closing
+  **both** false-green traps (text-shim cast + owner-bypass). Applies clean with **zero drift**
+  (`migrate diff` → empty).
+
+- **Package layout: `@app/pool` is strictly pure.** `packages/pool` holds only the engine + error
+  vocabulary (no `prismaStore` — unlike `@app/faab`/`@app/recompute`); the entire IO write/read path
+  lives in `apps/web/src/pool/` (store port + memory double + Prisma adapter + the
+  `handleSubmitPick`/`handleReadPicks` handlers) behind `/api/pool/pick`. Purity is grep-proven
+  (`purity.test.ts`). Mirrors `standing.ts` discipline.
   This behavior is acceptable and is noted in the route's JSDoc.

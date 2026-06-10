@@ -67,3 +67,13 @@ export type StandingScope = (typeof STANDING_SCOPES)[number];
  */
 export const RECOMPUTE_SCOPES = ["manager_period", "standing"] as const;
 export type RecomputeScope = (typeof RECOMPUTE_SCOPES)[number];
+
+/**
+ * A pick-pool prediction for one fixture (Prompt 40 — the per-match 1X2 pick'em, a SEPARATE scoring
+ * system from the §1–§8 player engine; see SCORING.md addendum). `DRAW` is valid for a GROUP match
+ * only; a knockout pick is the advancer (HOME / AWAY). The group-vs-knockout phase is decided by
+ * `period.kind`, NEVER by `fifa_match.round` (raw feed text — see DECISIONS → Pool). Mirrors the
+ * Prisma `PoolPrediction` enum.
+ */
+export const POOL_PREDICTIONS = ["HOME", "DRAW", "AWAY"] as const;
+export type PoolPrediction = (typeof POOL_PREDICTIONS)[number];

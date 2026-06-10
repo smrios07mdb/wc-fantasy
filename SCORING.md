@@ -148,3 +148,24 @@ record, matchday matches) **READ-ONLY** from the dashboard loader. No scoring lo
 pipeline, standings math, or `score_*` / `standing` table was touched. This note records the
 boundary explicitly so future readers know the P38 dashboard modules draw from the **already-computed
 derived layer** (§4 "Derived layer") and introduce no new scoring path.
+
+---
+
+## ℹ️ P40 — the pick'em pool is a SEPARATE scoring system (do NOT conflate with §1–§8)
+
+Prompt 40 adds a per-match **pick'em pool** (`pool_pick` + the pure `@app/pool`): managers predict each
+fixture's result and earn a flat **+1 per correct pick**. This is a **distinct scoring system** from the
+player engine above — do not mix the two:
+
+- It scores **picks against match results**, not player stat lines. No rating ladder, no position
+  weighting, no recompute-dirty pipeline. A pool result/leaderboard is a **pure function** of
+  `pool_pick` + `fifa_match` (`derivePoolResult` / `buildPoolLeaderboard`, mirroring `standing.ts`
+  purity), recomputable on read with **no stored `score_*` row**.
+- **Group vs knockout** is read from `period.kind` (`group_md` → HOME/DRAW/AWAY; `knockout_round` →
+  the advancer via full-time→extra-time→penalties, **never DRAW**), **never** from `fifa_match.round`
+  (raw feed text — see DECISIONS → Pool). The player engine never touches picks; the pool never
+  touches player scoring.
+- **Weight seam:** `weightForPeriod(periodKind, periodLabel)` returns a flat **1** today; an escalating
+  knockout weight (e.g. R32→Final 1/2/3/5/8) is a future knob keyed on the canonical `period.label`.
+- Separate **leaderboard** (`{ played, correct, points }`, sorted `points desc → managerId asc`) —
+  distinct from the all-play-all `standing`. **No §1–§8 value changed.**

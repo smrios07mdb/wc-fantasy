@@ -15,6 +15,7 @@
     "@app/faab": "workspace:*",
     "@app/feed": "workspace:*",
     "@app/lineup": "workspace:*",
+    "@app/pool": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
     "@app/vsfield": "workspace:*",

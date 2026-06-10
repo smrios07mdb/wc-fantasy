@@ -17,7 +17,7 @@
 //   5. frozen-period seam (period.frozen_at + a documented gate for the recompute sweeper)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // `native` covers local + CI (macOS/Linux). The explicit Linux target guarantees `prisma generate`
   // always emits the engine the Render runtime loads (Debian/Ubuntu, OpenSSL 3) — so a client built
   // anywhere is deployable, and we never hit "could not locate the Query Engine" at runtime.
@@ -107,6 +107,14 @@ enum RecomputeScope {
   standing
 }
 
+/// Pick'em pool prediction (Prompt 40; DECISIONS.md → Pool). `DRAW` is valid for a GROUP match only; a
+/// knockout pick is the advancer (HOME / AWAY). Mirrors @app/shared `POOL_PREDICTIONS`.
+enum PoolPrediction {
+  HOME
+  DRAW
+  AWAY
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // League / managers / users
 // ────────────────────────────────────────────────────────────────────────────
@@ -135,6 +143,7 @@ model League {
   rosters     RosterPlayer[]
   standings   Standing[]
   allowlist   AllowlistEmail[]
+  poolPicks   PoolPick[]
 
   @@map("league")
 }
@@ -167,16 +176,17 @@ model Manager {
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  league               League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  user                 AppUser?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  rosters              RosterPlayer[]
-  lineupSlots          LineupSlot[]
-  draftPicks           DraftPick[]
-  draftQueue           DraftQueue[]
-  faabBids             FaabBid[]
-  scoreManagerPeriods  ScoreManagerPeriod[]
-  standings            Standing[]
-  currentDraftPointer  Draft[]             @relation("DraftCurrentManager")
+  league              League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user                AppUser?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  rosters             RosterPlayer[]
+  lineupSlots         LineupSlot[]
+  draftPicks          DraftPick[]
+  draftQueue          DraftQueue[]
+  faabBids            FaabBid[]
+  scoreManagerPeriods ScoreManagerPeriod[]
+  standings           Standing[]
+  poolPicks           PoolPick[]
+  currentDraftPointer Draft[]              @relation("DraftCurrentManager")
 
   @@unique([leagueId, userId])
   @@unique([leagueId, draftSlot])
@@ -224,13 +234,13 @@ model AllowlistEmail {
 // ────────────────────────────────────────────────────────────────────────────
 
 model FifaStage {
-  id              String   @id @default(uuid())
-  balldontlieId   Int?     @unique @map("balldontlie_stage_id")
-  name            String
+  id            String   @id @default(uuid())
+  balldontlieId Int?     @unique @map("balldontlie_stage_id")
+  name          String
   /// Ordinal for sorting stages (group stage → R32 → … → Final).
-  ordering        Int?
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  ordering      Int?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   groups  FifaGroup[]
   matches FifaMatch[]
@@ -263,33 +273,33 @@ model FifaTeam {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  group       FifaGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  group       FifaGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
   players     Player[]
-  homeMatches FifaMatch[]      @relation("HomeTeam")
-  awayMatches FifaMatch[]      @relation("AwayTeam")
+  homeMatches FifaMatch[]     @relation("HomeTeam")
+  awayMatches FifaMatch[]     @relation("AwayTeam")
   teamStats   StatTeamMatch[]
 
   @@map("fifa_team")
 }
 
 model Player {
-  id            String   @id @default(uuid())
-  balldontlieId Int      @unique @map("balldontlie_player_id")
+  id                String   @id @default(uuid())
+  balldontlieId     Int      @unique @map("balldontlie_player_id")
   /// Sofascore player id (Prompt 05b). Nullable; populated by the verified one-time keyMatch pass
   /// (unambiguous auto-written; ambiguous flagged for manual entry). Scrape resolves by stored id only.
-  sofascorePlayerId Int? @unique @map("sofascore_player_id")
-  firstName     String?  @map("first_name")
-  lastName      String?  @map("last_name")
-  displayName   String   @map("display_name")
-  position      Position
-  teamId        String?  @map("team_id")
-  country       String?
+  sofascorePlayerId Int?     @unique @map("sofascore_player_id")
+  firstName         String?  @map("first_name")
+  lastName          String?  @map("last_name")
+  displayName       String   @map("display_name")
+  position          Position
+  teamId            String?  @map("team_id")
+  country           String?
   /// Best-available draft ranking (1-based, lower = better; NULL = unranked, sorts last). Drives the
   /// autopick "best-available" fallback (@app/draft `getDefaultRanking`) + the draft-room pool ordering.
   /// Populated by the provisioning ranking step (from a feed rating or a manual list); NULL until then.
-  defaultRank   Int?     @map("default_rank")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  defaultRank       Int?     @map("default_rank")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   team FifaTeam? @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
@@ -323,18 +333,22 @@ model Player {
 }
 
 model FifaMatch {
-  id            String      @id @default(uuid())
-  balldontlieId Int         @unique @map("balldontlie_match_id")
+  id                  String      @id @default(uuid())
+  balldontlieId       Int         @unique @map("balldontlie_match_id")
   /// Sofascore match id (Prompt 05b). Nullable; populated by the verified one-time keyMatch pass. The
   /// scraper resolves targets by STORED id ONLY (no live name-matching). Mirrors `balldontlieId`.
-  sofascoreMatchId Int?     @unique @map("sofascore_match_id")
+  sofascoreMatchId    Int?        @unique @map("sofascore_match_id")
   /// Kickoff in UTC.
-  kickoffAt     DateTime    @map("kickoff_at") @db.Timestamptz(6)
-  status        MatchStatus @default(scheduled)
-  stageId       String?     @map("stage_id")
-  groupId       String?     @map("group_id")
-  /// Knockout round label (R32/R16/QF/SF/Final), null for group games.
-  round         String?
+  kickoffAt           DateTime    @map("kickoff_at") @db.Timestamptz(6)
+  status              MatchStatus @default(scheduled)
+  stageId             String?     @map("stage_id")
+  groupId             String?     @map("group_id")
+  /// RAW feed round value — NOT a structural phase signal. Set by @app/ingest `mapMatchRow` to the
+  /// matchday number ("1"/"2"/"3") for GROUP games (NON-NULL) and the raw round name ("Round of 16"/
+  /// "Final") for knockouts. The canonical group-vs-knockout phase + label live in `period.kind` /
+  /// `period.label`; consumers (e.g. the Prompt-40 pick'em pool) MUST discriminate on those, never on
+  /// `round` (DECISIONS.md → Pool records this trap — `round == null → group` is FALSE here).
+  round               String?
   /// Structural fantasy-period link (ARCHITECTURE.md §3 / Prompt 05a). Set at schedule-sync from the
   /// fixture's STRUCTURAL round/matchday — NEVER from kickoff-time inference (a postponement reorders
   /// kickoffs and would corrupt a time-derived matchday). Single source of truth: locking, the
@@ -342,23 +356,23 @@ model FifaMatch {
   /// ASSUMPTION (permanent, ARCHITECTURE.md §4): ONE private league per tournament, so a single FK
   /// holds (fifa_match is global; period is per-league). A multi-league deployment would instead need a
   /// per-league match→period link — explicitly out of scope for this product.
-  periodId      String?     @map("period_id")
+  periodId            String?     @map("period_id")
   /// Per-match lock-on-play fallback (Theme B / §3). false = lock-on-play (default); true = revert to
   /// kickoff-locking when live appearance data is missing. The operator UI that flips it is a later prompt.
-  kickoffLockFallback Boolean @default(false) @map("kickoff_lock_fallback")
-  homeTeamId    String?     @map("home_team_id")
-  awayTeamId    String?     @map("away_team_id")
-  homeScore     Int?        @map("home_score")
-  awayScore     Int?        @map("away_score")
-  homeScoreEt   Int?        @map("home_score_et")
-  awayScoreEt   Int?        @map("away_score_et")
-  homeScorePens Int?        @map("home_score_pens")
-  awayScorePens Int?        @map("away_score_pens")
-  homeFormation String?     @map("home_formation")
-  awayFormation String?     @map("away_formation")
-  referee       String?
-  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  kickoffLockFallback Boolean     @default(false) @map("kickoff_lock_fallback")
+  homeTeamId          String?     @map("home_team_id")
+  awayTeamId          String?     @map("away_team_id")
+  homeScore           Int?        @map("home_score")
+  awayScore           Int?        @map("away_score")
+  homeScoreEt         Int?        @map("home_score_et")
+  awayScoreEt         Int?        @map("away_score_et")
+  homeScorePens       Int?        @map("home_score_pens")
+  awayScorePens       Int?        @map("away_score_pens")
+  homeFormation       String?     @map("home_formation")
+  awayFormation       String?     @map("away_formation")
+  referee             String?
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   stage    FifaStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   group    FifaGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -373,6 +387,7 @@ model FifaMatch {
   ratings     RatingPlayerMatch[]
   manualStats ManualStatPlayerMatch[]
   scores      ScorePlayerMatch[]
+  poolPicks   PoolPick[]
 
   @@index([kickoffAt])
   @@index([status])
@@ -492,8 +507,8 @@ model Draft {
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  league         League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  currentManager Manager?  @relation("DraftCurrentManager", fields: [currentManagerId], references: [id], onDelete: SetNull)
+  league         League      @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  currentManager Manager?    @relation("DraftCurrentManager", fields: [currentManagerId], references: [id], onDelete: SetNull)
   picks          DraftPick[]
 
   @@map("draft")
@@ -597,35 +612,35 @@ model FaabBid {
 /// PK (match_id, player_id). The FIFAPlayerMatchStats fields the scoring model consumes; extra
 /// feed fields land in `extra` (JSON). Upserted on re-poll (self-correcting).
 model StatPlayerMatch {
-  matchId             String   @map("match_id")
-  playerId            String   @map("player_id")
-  minutesPlayed       Int?     @map("minutes_played")
-  goals               Int?
-  assists             Int?
-  keyPasses           Int?     @map("key_passes")
-  dribblesAttempted   Int?     @map("dribbles_attempted")
-  dribblesCompleted   Int?     @map("dribbles_completed")
-  duelsWon            Int?     @map("duels_won")
-  duelsLost           Int?     @map("duels_lost")
-  passesTotal         Int?     @map("passes_total")
-  passesAccurate      Int?     @map("passes_accurate")
-  longBallsTotal      Int?     @map("long_balls_total")
-  longBallsAccurate   Int?     @map("long_balls_accurate")
-  wasFouled           Int?     @map("was_fouled")
-  clearances          Int?
-  interceptions       Int?
-  tacklesWon          Int?     @map("tackles_won")
-  blockedShots        Int?     @map("blocked_shots")
-  saves               Int?
-  savesInsideBox      Int?     @map("saves_inside_box")
-  punches             Int?
-  highClaims          Int?     @map("high_claims")
-  possessionLost      Int?     @map("possession_lost")
+  matchId           String   @map("match_id")
+  playerId          String   @map("player_id")
+  minutesPlayed     Int?     @map("minutes_played")
+  goals             Int?
+  assists           Int?
+  keyPasses         Int?     @map("key_passes")
+  dribblesAttempted Int?     @map("dribbles_attempted")
+  dribblesCompleted Int?     @map("dribbles_completed")
+  duelsWon          Int?     @map("duels_won")
+  duelsLost         Int?     @map("duels_lost")
+  passesTotal       Int?     @map("passes_total")
+  passesAccurate    Int?     @map("passes_accurate")
+  longBallsTotal    Int?     @map("long_balls_total")
+  longBallsAccurate Int?     @map("long_balls_accurate")
+  wasFouled         Int?     @map("was_fouled")
+  clearances        Int?
+  interceptions     Int?
+  tacklesWon        Int?     @map("tackles_won")
+  blockedShots      Int?     @map("blocked_shots")
+  saves             Int?
+  savesInsideBox    Int?     @map("saves_inside_box")
+  punches           Int?
+  highClaims        Int?     @map("high_claims")
+  possessionLost    Int?     @map("possession_lost")
   /// Any additional FIFAPlayerMatchStats fields not promoted to columns.
-  extra               Json?
+  extra             Json?
   /// Recompute marker: true when this input changed and the score is stale.
-  dirty               Boolean  @default(true)
-  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  dirty             Boolean  @default(true)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   match  FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -637,23 +652,23 @@ model StatPlayerMatch {
 
 /// One row per feed match event (goal, card, substitution, …). Keyed by the feed event id.
 model EventMatch {
-  id              String   @id @default(uuid())
-  balldontlieId   Int      @unique @map("balldontlie_event_id")
-  matchId         String   @map("match_id")
-  incidentType    String   @map("incident_type")
-  incidentClass   String?  @map("incident_class")
-  timeMinute      Int?     @map("time_minute")
-  addedTime       Int?     @map("added_time")
+  id             String   @id @default(uuid())
+  balldontlieId  Int      @unique @map("balldontlie_event_id")
+  matchId        String   @map("match_id")
+  incidentType   String   @map("incident_type")
+  incidentClass  String?  @map("incident_class")
+  timeMinute     Int?     @map("time_minute")
+  addedTime      Int?     @map("added_time")
   /// 1H / 2H / ET / PEN, etc.
-  period          String?
-  playerId        String?  @map("player_id")
-  assistPlayerId  String?  @map("assist_player_id")
-  playerInId      String?  @map("player_in_id")
-  playerOutId     String?  @map("player_out_id")
-  rescinded       Boolean  @default(false)
-  extra           Json?
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  period         String?
+  playerId       String?  @map("player_id")
+  assistPlayerId String?  @map("assist_player_id")
+  playerInId     String?  @map("player_in_id")
+  playerOutId    String?  @map("player_out_id")
+  rescinded      Boolean  @default(false)
+  extra          Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   match     FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player    Player?   @relation("EventPlayer", fields: [playerId], references: [id], onDelete: SetNull)
@@ -783,15 +798,15 @@ model ScoreManagerPeriod {
 
 /// All-play-all standings derived across managers. Unique per (league, manager, scope).
 model Standing {
-  id           String        @id @default(uuid())
-  leagueId     String        @map("league_id")
-  managerId    String        @map("manager_id")
-  scope        StandingScope
-  allPlayAllW  Int           @default(0) @map("all_play_all_w")
-  allPlayAllL  Int           @default(0) @map("all_play_all_l")
-  totalPoints  Int           @default(0) @map("total_points")
-  seed         Int?
-  computedAt   DateTime      @default(now()) @map("computed_at") @db.Timestamptz(6)
+  id          String        @id @default(uuid())
+  leagueId    String        @map("league_id")
+  managerId   String        @map("manager_id")
+  scope       StandingScope
+  allPlayAllW Int           @default(0) @map("all_play_all_w")
+  allPlayAllL Int           @default(0) @map("all_play_all_l")
+  totalPoints Int           @default(0) @map("total_points")
+  seed        Int?
+  computedAt  DateTime      @default(now()) @map("computed_at") @db.Timestamptz(6)
 
   league  League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
@@ -819,4 +834,36 @@ model RecomputeDirty {
 
   @@index([scope, processedAt])
   @@map("recompute_dirty")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pick'em pool (Prompt 40; DECISIONS.md → Pool) — a SEPARATE scoring system from the player engine.
+// Managers predict each fixture's result; +1 per correct pick (weight seam). The group-vs-knockout
+// phase is read from the linked `period.kind` (NEVER `fifa_match.round`). RLS mirrors `faab_bid`
+// (auth.uid → manager → league); anti-copying — hiding others' picks before kickoff — is enforced in
+// the read QUERY, not RLS (no clock in RLS). UI + Realtime subscription = Prompt 41.
+// ────────────────────────────────────────────────────────────────────────────
+
+/// One manager's prediction for one fixture. UNIQUE (manager_id, match_id) = one pick per match per
+/// manager (upserted on change). `league_id` is carried for league-scoped RLS + the leaderboard query.
+/// Result derivation joins `match.period.kind`; `round` is NOT consulted (see the `fifa_match.round`
+/// note + DECISIONS.md → Pool). RLS policies + the Realtime publication entry live in the raw-SQL
+/// migration, mirroring `faab_bid`.
+model PoolPick {
+  id          String         @id @default(uuid())
+  leagueId    String         @map("league_id")
+  managerId   String         @map("manager_id")
+  matchId     String         @map("match_id")
+  prediction  PoolPrediction
+  submittedAt DateTime       @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league  League    @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  manager Manager   @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  match   FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([managerId, matchId], map: "pool_pick_manager_match_uq")
+  @@index([leagueId, matchId])
+  @@index([matchId])
+  @@map("pool_pick")
 }

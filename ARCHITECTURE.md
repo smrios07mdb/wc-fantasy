@@ -619,3 +619,43 @@ them (`modulesFor` returns `[]` for those phases). STOP(P38) seams documented in
 **`PrimaryBanner.tsx` signature change:** added `vsField: VsFieldView | null` and
 `earliestGroupKickoff: string | null` props (both null-safe; pre-draft and draft branches
 ignore them).
+
+## 12. Pick'em pool (Prompt 40)
+
+A per-match **pick'em pool** layered on the existing schedule — a SEPARATE scoring system from the
+player engine (SCORING.md addendum; DECISIONS → Pool). Prompt 40 = data model + pure engine + server
+write/read path only; the pick UI, knockout-bracket layout, leaderboard screen, nav entry, and the
+Realtime **client** are **Prompt 41**.
+
+**`pool_pick` table** (`prediction PoolPrediction {HOME DRAW AWAY}`; `UNIQUE(manager_id, match_id)`;
+indexes `(league_id, match_id)` + `match_id`; FKs → league / manager / fifa_match, all cascade). RLS
+mirrors `faab_bid` (auth.uid() → manager → league): a **league-scoped `authenticated` SELECT** (a
+member reads the whole field's picks — for the leaderboard + the post-kickoff reveal — the
+`standing_select_league_member` shape, no SECURITY DEFINER helper since the row carries `league_id`),
+**own-`manager_id` INSERT/UPDATE**, no DELETE. `pool_pick` is added to the `supabase_realtime`
+publication now so Prompt 41's subscription isn't silently empty — the **Realtime-RLS trap**: a table
+outside the publication delivers zero `postgres_changes`, and a browser-read table needs its own SELECT
+policy or the client sees zero rows (P41 also: `realtime.setAuth(token)` before subscribe, gate on
+`INITIAL_SESSION`, re-subscribe on `TOKEN_REFRESHED`). The migration (`20260610130000_pool_pick`)
+carries the Theme-F embedded self-test (cross-league isolation + own-row write), verified against a
+uuid-returning `auth.uid()`.
+
+**`@app/pool` (pure engine)** mirrors `recompute/standing.ts` purity — no IO/clock/DB, grep-proven by
+`purity.test.ts`: `derivePoolResult` (group → H/D/A; knockout → advancer via FT→ET→pens; pending or
+`periodKind == null` → null), `scorePick`, `weightForPeriod` (flat 1, escalating-weight seam),
+`buildPoolLeaderboard` (`{ played, correct, points }`, deterministic sort), `isPickLocked`,
+`validatePickSubmission`.
+
+**Phase discriminator = `period.kind`.** Group-vs-knockout is read from the linked
+`fifa_match.periodId → period.kind` (the same signal §3 locking + recompute use), **never** from
+`fifa_match.round` (raw feed text — non-null for group games; see the schema comment + DECISIONS). The
+IO loader performs this join and hands the pure engine a resolved `periodKind`.
+
+**Write/read path** (`apps/web/src/pool/` + `app/api/pool/pick/route.ts`, the `/api/faab/bid`
+template): a store port (Memory + Prisma doubles) + framework-agnostic `handleSubmitPick` /
+`handleReadPicks` returning `{ status, body }`. Submit = resolve session → 401/403 (scope "self", no
+commissioner override) BEFORE any write → `validatePickSubmission` (locked? DRAW-on-knockout?) →
+upsert `(manager, match) → prediction` (server `now` authoritative, like the draft `pick_deadline_at`).
+Read = the caller's OWN picks always + OTHER managers' picks ONLY for kicked-off matches — **anti-copying
+lives in the query** (`OR [{ managerId }, { match: { kickoffAt: { lte: now } } }]`), NOT in RLS (no
+clock in RLS).

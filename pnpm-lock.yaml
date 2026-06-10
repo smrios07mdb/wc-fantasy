@@ -78,6 +78,9 @@ importers:
       '@app/lineup':
         specifier: workspace:*
         version: link:../../packages/lineup
+      '@app/pool':
+        specifier: workspace:*
+        version: link:../../packages/pool
       '@app/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
@@ -262,6 +265,16 @@ importers:
       '@app/db':
         specifier: workspace:*
         version: link:../db
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+
+  packages/pool:
+    dependencies:
       '@app/shared':
         specifier: workspace:*
         version: link:../shared
