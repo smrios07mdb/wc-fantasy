@@ -360,6 +360,12 @@ authoritative in Postgres and **broadcast on change**.
   controller exposes state + `submitPick` / `tickDraft` for them to call. **Auth + the identity gate
   landed in Prompt 06's hand-off prompt (07):** `POST /api/draft/pick` now resolves the session manager
   and rejects 401/403 BEFORE calling the unchanged `submitPick` (see §6).
+- **⚠️ AMENDMENT (Prompt 44 — positional caps lifted):** draft roster legality is now **total-based**,
+  not per-position — `isPositionLegal` / `isSquadComplete` gate purely on a new **`squadTotal(counts)`**
+  helper vs the 15-man `SQUAD_SIZE` (the `2/5/5/3` per-position ceilings above are retired). The draft is
+  **shape-unconstrained up to 15**; the XI/formation bounds (DECISIONS Theme B) are unchanged, so an
+  over-drafted squad can be locked out of a legal lineup **by choice**. `PositionFullError` is **retained
+  but defensive/unreachable** in the snake flow (squad-full now coincides with draft completion at 15×N).
 
 ### Live "vs the field" screen
 - Subscribe to the relevant `score_manager_period` / `standing` rows; when the recompute sweeper
@@ -670,6 +676,21 @@ upsert `(manager, match) → prediction` (server `now` authoritative, like the d
 Read = the caller's OWN picks always + OTHER managers' picks ONLY for kicked-off matches — **anti-copying
 lives in the query** (`OR [{ managerId }, { match: { kickoffAt: { lte: now } } }]`), NOT in RLS (no
 clock in RLS).
+
+### Live updates (Prompt 43) — clock-reveal + leaderboard poll, NO `postgres_changes`
+
+`/pool` is made live **without a Realtime subscription** — two on-read mechanisms, no schema/migration,
+no stored score table. This is **explicitly distinct from `/draft` and `/vsfield` (§5), which DO
+subscribe to `postgres_changes`**: (1) a **clock-reveal timer** scheduled to the soonest future kickoff
+among still-hidden matches → on fire it `router.refresh()`es the gated loader (the server re-applies the
+`kickoffAt <= now` reveal gate above), so others' picks reveal the instant their match locks; (2) a
+**visibility-gated leaderboard poll** (60s, Page Visibility API) that refetches the on-read loader only
+while the Leaderboard tab is active and the document is visible. **No `pool_pick` subscription by design**
+(DECISIONS → Pool P43): the anti-copying gate is the clock-based query above and RLS has no clock, so a
+raw frame would leak pre-kickoff predictions — and revealable ⇒ past-kickoff ⇒ locked, so there is
+nothing live to stream. The live logic is a pure, IO-free `apps/web/src/pool/poolLive.ts` (injected
+timers/visibility/clock — the draft `resilience.ts` / vsfield `liveController.ts` shape). The **dormant
+P40 `supabase_realtime` publication entry is left in place** (out of scope to remove).
 
 ---
 
