@@ -567,3 +567,38 @@ and `export const dynamic = "force-dynamic"` are **byte-for-byte unchanged**. `/
 2. Per-manager `is_ready` — does not exist on any server-readable table; readiness grid deferred
    (all dots off; "Live status visible in the draft room."). Candidate future migration or Realtime
    presence hook. Both flagged `STOP(P37)` at the exact render site in source.
+
+### Dashboard group phase extension (Prompt 38)
+
+**`DashboardPhase` widened to a six-member union:** `"pre-draft" | "draft" | "pre-kickoff" |
+"group" | "playoff" | "complete"`. The `never`-guard exhaustiveness constraint is on
+`modulesFor(phase: DashboardPhase)` in `Dashboard.tsx` — adding a seventh member is a compile
+error until handled.
+
+**`selectTournamentPhase(matches: ReadonlyArray<{status, round}>): TournamentPhase`** —
+pure, IO-free. Composition point is `loadDashboard.ts`: when `selectDashboardPhase` returns
+`"post-draft"`, the loader queries `fifa_match` (`status`, `round`, `kickoffAt` — SELECT only,
+no write) and calls `selectTournamentPhase`. The `fifaMatch` table is global (no `league_id`);
+the read is inside the authenticated server loader, gated by `requireManager` upstream in
+`page.tsx`. No RLS bypass, no engine/scoring touch.
+
+**Group phase data path:** when phase is `"group"`, `loadDashboard` calls
+`loadVsField(sessionManagerId)` **READ-ONLY** — reuses the already-built `@app/vsfield` output
+without any re-derivation. `DashboardData` extended with `vsField: VsFieldView | null` and
+`earliestGroupKickoff: string | null`.
+
+**Group modules** (sourced entirely from `VsFieldView`):
+- `RecordModule` — `vsField.season[me]` (W/L/pts/rank) + `vsField.field[me]` (period provisional record).
+- `StandingsModule` — `vsField.season` sorted by rank.
+- `MatchdayModule` — `vsField.matches` + `vsField.currentPeriod` + starters lock count.
+
+**Banner phase colour** — always via the inline `--phc` CSS custom property set on `.db-banner`
+(e.g., `var(--live)` for group/playoff, `var(--info)` for pre-kickoff, `var(--success)` for
+complete). `--accent` = cobalt; it is **never** used for phase colour in the banner. The
+dashboard.css module carries deferred `.db-br-row` and `.db-pod-row` `.is-me` styles (ported
+from the design_reference bracket/podium sections) — but no playoff/complete component renders
+them (`modulesFor` returns `[]` for those phases). STOP(P38) seams documented inline.
+
+**`PrimaryBanner.tsx` signature change:** added `vsField: VsFieldView | null` and
+`earliestGroupKickoff: string | null` props (both null-safe; pre-draft and draft branches
+ignore them).

@@ -1057,4 +1057,30 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   `is_ready` field; readiness is Realtime **presence** in the draft room only. **DEFERRED: a candidate
   future migration (or a Realtime presence hook writing to a new column) adds this state.** For P37,
   `ReadinessModule` renders all manager dots off (gray `db-ready-dot` with no modifier class), plus the
-  footer note "Live status visible in the draft room." (flagged `STOP(P37)` in source).
+  footer note "Live status visible in the draft room." (flagged `STOP(P37)` in source)
+
+## Dashboard group phase (Prompt 38) — tournament phase, group modules, STOP seams
+
+- **Tournament phase derived from `fifa_match.status + round`; NO migration.** `round: String?`
+  (null = group-stage game, non-null = knockout round label e.g. "R32"/"QF"/"SF"/"Final") and
+  `kickoffAt` both pre-existed on `fifa_match`. No `ALTER TABLE` required.
+- **`selectTournamentPhase(matches[])` is IO-free and takes only `{status, round}`.** `kickoffAt`
+  is **excluded** from the selector's input — it carries no structural information about tournament
+  phase. `kickoffAt` is used only in the `loadDashboard` loader, solely to populate the
+  pre-kickoff countdown display. No clock-based structural inference.
+- **Composed with `selectDashboardPhase` via a private `"post-draft"` intermediate.** The exported
+  `DashboardPhase` union is the six-member `pre-draft | draft | pre-kickoff | group | playoff |
+  complete`; `"post-draft"` is a `type PostDraft = "post-draft"` private alias inside
+  `selectDashboardPhase.ts` only — it never reaches rendered output. `selectDashboardPhase`'s
+  function signature is **unchanged from P37**; the loader narrows with `if (draftPhase !==
+  "post-draft")`.
+- **MD "X of N" sources from provisioning-stored `period.label` + count of `kind === "group_md"`
+  periods.** `period.label` (e.g. "MD1") is a stored DB column written at provisioning time, NOT
+  derived at read time from `derivePeriodLabel` (an ingest-time function that sets
+  `fifa_match.periodId` only). `byPeriod.length` = count of ALL provisioned `group_md` periods —
+  a stable total, not a running count of completed matchdays. Null-guarded: renders `currentLabel ??
+  "—"` when `byPeriod` is empty.
+- **`playoff` and `complete` phases remain honest interims (`// STOP(P38)`).** No Guillotine
+  bracket, no playoff-real data, no tournament-complete recap. `modulesFor("playoff")` and
+  `modulesFor("complete")` both return `[]`; `PrimaryBanner` shows "Knockouts underway" /
+  "Tournament complete" minimal content. Unblocked by a future Guillotine prompt..

@@ -138,3 +138,13 @@ field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 de
   so slightly over-counts; accepted).
 - **⚠️ Confirm during the GOAT trial:** whether `duels_won` includes aerials (affects the duel
   bucket); own-goal `incident_class` label; that `match_shots.situation` flags `penalty` reliably.
+
+---
+
+## ℹ️ P38 — group-phase dashboard (READ-ONLY reuse; no scoring changes)
+
+Prompt 38 (dashboard group phase) consumed `loadVsField` output (all-play-all standings, field
+record, matchday matches) **READ-ONLY** from the dashboard loader. No scoring logic, recompute
+pipeline, standings math, or `score_*` / `standing` table was touched. This note records the
+boundary explicitly so future readers know the P38 dashboard modules draw from the **already-computed
+derived layer** (§4 "Derived layer") and introduce no new scoring path.
