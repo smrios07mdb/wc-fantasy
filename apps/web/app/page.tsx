@@ -25,63 +25,13 @@ import { selectLandingView } from "@/src/landing/selectLandingView";
 import { BrandLink, LpRoot, SignOutButton } from "./_landing/chrome";
 import { MarketingLanding } from "./_landing/MarketingLanding";
 import { AppShell } from "./shell/AppShell";
+import { loadDashboard } from "./_dashboard/loadDashboard";
+import { Dashboard } from "./_dashboard/Dashboard";
 import "./_landing/ds.css";
 import "./_landing/landing.css";
 
 // Reads the session on every request — never statically cache the front door (matches the feature pages).
 export const dynamic = "force-dynamic";
-
-const FEATURES = [
-  {
-    href: "/draft",
-    label: "Draft room",
-    blurb: "Make your picks when the draft is live.",
-    icon: (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      >
-        <path d="M3 7h18v12H3zM3 7l3-4h12l3 4M8 12h8" />
-      </svg>
-    ),
-  },
-  {
-    href: "/lineup",
-    label: "Set lineup",
-    blurb: "Choose your formation and starters each matchday.",
-    icon: (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      >
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <path d="M3 9h18M9 21V9" />
-      </svg>
-    ),
-  },
-  {
-    href: "/vsfield",
-    label: "Vs the field",
-    blurb: "Live scores and standings across the league.",
-    icon: (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.8}
-      >
-        <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
-      </svg>
-    ),
-  },
-];
 
 export default async function Home() {
   const outcome = await getSessionManager();
@@ -89,7 +39,7 @@ export default async function Home() {
 
   // `hub` is reachable only from the `ok` outcome (see selectLandingView), so this narrow always holds.
   if (view === "hub" && outcome.kind === "ok")
-    return <Hub displayName={outcome.manager.displayName} />;
+    return <Hub displayName={outcome.manager.displayName} managerId={outcome.manager.id} />;
   if (view === "unlinked") return <Unlinked />;
   if (view === "denied") return <Denied />;
   // view === "signin" (plus the unreachable hub-without-ok) → the logged-out front door.
@@ -102,38 +52,20 @@ function SignIn() {
 }
 
 /**
- * Signed-in, resolved manager → the post-login signpost into the three live screens. Prompt 20 nests
- * this into the global `AppShell` (the `home` nav id): the shell's top bar supersedes the hub's own
- * `.lp-nav` (Brand + sign-out now live there; "Signed in as …" rides the shell's right cluster). The
- * welcome body below is the Prompt-19 `.lp-section` content unchanged — the shell wraps it, it isn't
- * re-skinned. This is the only landing state the shell wraps: the others (`signin`/`unlinked`/`denied`)
- * are not authenticated feature surfaces, so they keep their landing chrome.
+ * Signed-in, resolved manager → the phase-aware dashboard home (Prompt 37). Replaces the
+ * Prompt-16/19 nav-card hub with `<Dashboard>`. `selectLandingView()`, the four-outcome branch,
+ * the session read, and the non-hub renders are byte-for-byte. The AppShell wrap + active="home"
+ * stay. The FEATURES constant above is no longer rendered but kept for reference (the dashboard's
+ * PrimaryBanner CTAs link the same targets). `/` stays `ƒ` (force-dynamic above).
+ *
+ * `managerId` is the resolved manager's DB id — passed to `loadDashboard` which reuses
+ * `loadDraftRoom` (the same read /draft uses; no second draft source).
  */
-function Hub({ displayName }: { displayName: string }) {
+async function Hub({ displayName, managerId }: { displayName: string; managerId: string }) {
+  const data = await loadDashboard(managerId);
   return (
     <AppShell active="home" signedInAs={displayName}>
-      <section className="lp-section" style={{ borderTop: "none" }}>
-        <div className="lp-container">
-          <div className="lp-section-head">
-            <p className="lp-eyebrow">Your league</p>
-            <h2>Welcome back.</h2>
-            <p>Jump straight in — draft your squad, name your XI, and follow the league live.</p>
-          </div>
-          <div className="lp-peek-grid">
-            {FEATURES.map((feature) => (
-              <a className="lp-peek" href={feature.href} key={feature.href}>
-                <span className="lp-peek-ic">{feature.icon}</span>
-                <span className="lp-peek-txt">
-                  <h4>
-                    {feature.label} <span className="arr">↗</span>
-                  </h4>
-                  <p>{feature.blurb}</p>
-                </span>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
+      <Dashboard data={data} />
     </AppShell>
   );
 }

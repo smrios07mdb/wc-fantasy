@@ -1,0 +1,499 @@
+/* dashboard.css — phase-aware home dashboard, ported from design_reference/Dashboard.html.
+   Layered on top of the GLOBAL ds.css (tokens, btn, pos, avatar, chip, etc.). No literal hex —
+   every colour resolves through ds.css tokens (cobalt/red/slate; no gold leak per BRAND §1/§5).
+   The --phc custom property is set inline on .db-banner for phase-colour without per-phase rules.
+
+   Layout: .db-page lives inside the shell's .sh-content (flex:1, overflow-y:auto), so no scroll
+   wrapper is needed here — .db-page supplies padding + flex column only. */
+
+/* ─── page shell ─────────────────────────────────────────────────────────────────────────── */
+.db-page {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── primary banner ─────────────────────────────────────────────────────────────────────── */
+.db-banner {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 26px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  padding: 20px 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 4px 0 0 var(--phc);
+}
+.db-banner-main {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+}
+.db-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--phc);
+  background: color-mix(in srgb, var(--phc) 16%, transparent);
+}
+.db-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--phc);
+}
+.db-banner-title {
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.db-banner-sub {
+  margin: 0;
+  max-width: 560px;
+}
+.db-banner-cta {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.db-banner-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding-left: 24px;
+  border-left: 1px solid var(--hairline);
+}
+.db-banner-big {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.db-banner-secs {
+  display: flex;
+  gap: 18px;
+}
+.db-bsec {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+.db-bsec b {
+  font-size: var(--fs-body-lg);
+}
+
+/* ─── grid layouts ───────────────────────────────────────────────────────────────────────── */
+.db-grid {
+  column-count: 3;
+  column-gap: 14px;
+}
+.db-grid-cell {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+.db-spotlight {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.db-spot-main,
+.db-spot-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ─── module shell ───────────────────────────────────────────────────────────────────────── */
+.db-mod {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+}
+.db-mod-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.db-mod-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.db-mod-cta:hover {
+  color: var(--accent-hover);
+}
+
+/* ─── league info module ─────────────────────────────────────────────────────────────────── */
+.db-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.db-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-sm);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.db-info-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.db-info-row b {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ─── readiness module ───────────────────────────────────────────────────────────────────── */
+.db-ready {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.db-ready-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+}
+.db-ready-name {
+  flex: 1;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-ready-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex: none;
+}
+.db-ready-dot.is-ready {
+  background: var(--success);
+}
+.db-ready-note {
+  margin-top: 10px;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
+/* ─── draft forming module ───────────────────────────────────────────────────────────────── */
+.db-forming {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.db-forming-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.db-forming-cell .mono b {
+  font-size: 18px;
+}
+.db-forming-note {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
+/* ─── recent picks module ────────────────────────────────────────────────────────────────── */
+.db-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.db-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.db-pick-row.is-me {
+  background: var(--accent-soft);
+}
+.db-pick-no {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  width: 30px;
+}
+.db-pick-player {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-pick-by {
+  font-weight: 700;
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+.db-pick-row.is-me .db-pick-by {
+  color: var(--accent);
+}
+
+/* ─── post-draft interim ─────────────────────────────────────────────────────────────────── */
+.db-interim {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* ─── record module (group stage — future) ───────────────────────────────────────────────── */
+.db-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.db-rec-season {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: none;
+}
+.db-rec-wl {
+  font-weight: 800;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.db-rec-dash {
+  color: var(--text-tertiary);
+  margin: 0 1px;
+}
+.db-rec-split {
+  display: flex;
+  gap: 18px;
+}
+.db-rec-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.db-rec-stat b {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+.db-rec-prov {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ─── standings module (group stage — future) ────────────────────────────────────────────── */
+.db-stand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.db-stand-row {
+  display: grid;
+  grid-template-columns: 22px 24px 1fr auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+}
+.db-stand-row.is-me {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.db-stand-rank {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+.db-stand-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-stand-wl {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.db-stand-pts {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ─── bracket (playoff — future) ────────────────────────────────────────────────────────── */
+.db-bracket {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.db-br-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+.db-br-row.is-me {
+  box-shadow: inset 3px 0 0 var(--accent);
+  border-color: var(--accent);
+}
+.db-br-row.is-risk {
+  background: var(--elim-soft);
+  border-color: color-mix(in srgb, var(--elim) 40%, var(--hairline));
+}
+.db-br-seed {
+  width: 18px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+.db-br-name {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.db-br-pts {
+  font-weight: 700;
+  font-size: var(--fs-sm);
+}
+
+/* ─── podium (complete — future) ─────────────────────────────────────────────────────────── */
+.db-podium {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.db-pod-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+.db-pod-row.is-champ {
+  background: color-mix(in srgb, var(--win) 12%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--win) 35%, var(--hairline));
+}
+.db-pod-row.is-me {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.db-pod-medal {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+.db-pod-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.db-pod-pts {
+  font-weight: 700;
+}
+
+/* ─── responsive ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .db-grid {
+    column-count: 2;
+  }
+  .db-spotlight {
+    grid-template-columns: 1fr;
+  }
+  .db-banner {
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+  }
+  .db-banner-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border-left: none;
+    border-top: 1px solid var(--hairline);
+    padding-left: 0;
+    padding-top: 12px;
+  }
+  .db-banner-title {
+    font-size: 24px;
+  }
+  .db-banner-big {
+    font-size: 32px;
+  }
+}
+@media (max-width: 600px) {
+  .db-grid {
+    column-count: 1;
+  }
+  .db-forming {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

@@ -45,10 +45,11 @@ describe("landing page — each state still renders its key affordance", () => {
   it("hub → POST sign-out + the three live screens, with the brand mark in the header", () => {
     expect(chrome).toContain('action="/auth/sign-out"');
     expect(chrome).toContain('method="post"');
-    // The hub cards bind `href={feature.href}`, so the routes live as string values in FEATURES.
-    for (const route of ["/draft", "/lineup", "/vsfield"]) {
-      expect(page, route).toContain(`"${route}"`);
-    }
+    // Prompt-37 replaced the inline nav-card hub (FEATURES array with /draft,/lineup,/vsfield hrefs)
+    // with <Dashboard data={data} />. The three feature routes are now rendered by Dashboard /
+    // PrimaryBanner rather than inline in page.tsx. Verify the hub delegates to Dashboard.
+    expect(page).toContain("<Dashboard data={data} />");
+    expect(page).toContain("loadDashboard");
     expect(chrome).toContain("BrandMark"); // <Brand/> in the header (the prompt's required placement)
   });
 
