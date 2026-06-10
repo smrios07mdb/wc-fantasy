@@ -5,26 +5,33 @@
  * inset box-shadow stripe). This keeps per-phase styling to ONE injection point.
  *
  * BRAND §1/§5: accent (cobalt) is reserved for "you + primary actions". Phase banners use
- * FUNCTIONAL colours via --phc: info (pre-draft), live-red (draft), info (post-draft interim).
- * No gold, no cobalt in the banner stripe.
+ * FUNCTIONAL colours via --phc: info (pre-draft/pre-kickoff), live-red (draft/group/playoff),
+ * success-green (complete). No gold, no cobalt in the banner stripe.
  *
  * Server component — no "use client" needed; all data comes from the server loader.
  */
 import type { DashboardPhase } from "../../src/dashboard/selectDashboardPhase";
 import type { DraftRoomState } from "../../src/draft/types";
+import type { VsFieldView } from "@app/vsfield";
 
 // Phase → CSS custom-property value (functional colours from ds.css, not hex).
 const PHASE_COLOR: Record<DashboardPhase, string> = {
   "pre-draft": "var(--info)",
   draft: "var(--live)",
-  "post-draft": "var(--info)",
+  "pre-kickoff": "var(--info)",
+  group: "var(--live)",
+  playoff: "var(--live)",
+  complete: "var(--success)",
 };
 
 // Phase → eyebrow label
 const PHASE_EYEBROW: Record<DashboardPhase, string> = {
   "pre-draft": "Draft day",
   draft: "Draft is live",
-  "post-draft": "Tournament underway",
+  "pre-kickoff": "Group stage",
+  group: "Group stage live",
+  playoff: "Knockouts live",
+  complete: "Tournament complete",
 };
 
 function ArrowIcon() {
@@ -54,12 +61,17 @@ interface BannerContent {
   secondary: Array<{ l: string; v: string }>;
 }
 
-/** Derive the banner content from phase + draft state. Pure — no IO. */
-function bannerContent(phase: DashboardPhase, draft: DraftRoomState | null): BannerContent {
+/** Derive the banner content from phase + available data. Pure — no IO. */
+function bannerContent(
+  phase: DashboardPhase,
+  draft: DraftRoomState | null,
+  vsField: VsFieldView | null,
+  earliestGroupKickoff: string | null,
+): BannerContent {
   const N = draft?.managers.length ?? 0;
 
   if (phase === "pre-draft") {
-    const rounds = 15; // SQUAD_SIZE (constant, locked in DECISIONS)
+    const rounds = 15;
     const perPick = draft?.draftPickSeconds ?? 60;
     return {
       eyebrow: PHASE_EYEBROW["pre-draft"],
@@ -87,10 +99,9 @@ function bannerContent(phase: DashboardPhase, draft: DraftRoomState | null): Ban
     const myPick = draft.managers.find((m) => m.id === draft.sessionManagerId);
     const myPickCount = draft.picks.filter((p) => p.managerId === draft.sessionManagerId).length;
 
-    // Picks until my turn: walk the snake order from currentPick+1 to find my next slot.
     let picksUntilMine: number | null = null;
     if (myPick && N > 0) {
-      const mySlot = myPick.draftSlot; // 1-based
+      const mySlot = myPick.draftSlot;
       const totalPicks = N * 15;
       for (let p = currentPick + 1; p <= totalPicks; p++) {
         const posInRound = ((p - 1) % N) + 1;
@@ -128,32 +139,160 @@ function bannerContent(phase: DashboardPhase, draft: DraftRoomState | null): Ban
     };
   }
 
-  // post-draft: draft complete, group/playoff/complete are the next prompts.
-  const myPickCount =
-    draft?.picks.filter((p) => p.managerId === draft.sessionManagerId).length ?? 0;
+  if (phase === "pre-kickoff") {
+    const myPickCount =
+      draft?.picks.filter((p) => p.managerId === draft.sessionManagerId).length ?? 0;
+    // Real kickoff datetime from fifa_match (unlike P37's draft countdown which had no datetime).
+    const kickoffLabel = earliestGroupKickoff
+      ? formatKickoffDate(earliestGroupKickoff)
+      : "fixtures loading…";
+    return {
+      eyebrow: PHASE_EYEBROW["pre-kickoff"],
+      title: "Group stage begins soon",
+      sub: `Your squad is set. Head to Set Lineup to lock in your starting XI before the first whistle.`,
+      big: kickoffLabel,
+      bigMono: false,
+      ctaLabel: "Set lineup",
+      ctaHref: "/lineup",
+      secondary: [
+        { l: "Your squad", v: `${myPickCount} / 15` },
+        {
+          l: "First kick",
+          v: earliestGroupKickoff ? formatKickoffShort(earliestGroupKickoff) : "TBD",
+        },
+      ],
+    };
+  }
+
+  if (phase === "group") {
+    const myEntry = vsField?.field.find((e) => e.isMe);
+    const mySeasonEntry = vsField?.season.find((e) => e.isMe);
+    const currentLabel = vsField?.currentPeriod?.label ?? null;
+    const totalGroupMds = mySeasonEntry?.byPeriod.length ?? 0;
+    const mdLabel =
+      currentLabel && totalGroupMds > 0
+        ? `${currentLabel} of ${totalGroupMds}`
+        : (currentLabel ?? "—");
+    const W = mySeasonEntry?.allPlayAllW ?? 0;
+    const L = mySeasonEntry?.allPlayAllL ?? 0;
+    const pts = mySeasonEntry?.totalPoints ?? 0;
+    const rank = mySeasonEntry?.rank ?? 0;
+    return {
+      eyebrow: PHASE_EYEBROW.group,
+      title: myEntry ? `You're ranked #${rank}` : "Group stage underway",
+      sub: `All-play-all group stage · ${W}-${L} record · ${pts} pts total`,
+      big: mdLabel,
+      bigMono: true,
+      ctaLabel: "Vs the field",
+      ctaHref: "/vsfield",
+      secondary: [
+        { l: "Record", v: `${W}-${L}` },
+        { l: "Points", v: `${pts}` },
+      ],
+    };
+  }
+
+  if (phase === "playoff") {
+    // STOP(P38): Guillotine / playoff bracket are deferred — no real data to show here.
+    return {
+      eyebrow: PHASE_EYEBROW["playoff"],
+      title: "Knockouts underway",
+      sub: "The group stage is done. Playoff bracket is coming in a later update.",
+      big: "KO",
+      bigMono: true,
+      ctaLabel: "Vs the field",
+      ctaHref: "/vsfield",
+      secondary: [],
+    };
+  }
+
+  if (phase === "complete") {
+    // STOP(P38): Tournament-complete recap is deferred.
+    return {
+      eyebrow: PHASE_EYEBROW["complete"],
+      title: "Tournament complete",
+      sub: "The tournament has finished. Final standings recap is coming in a later update.",
+      big: "FT",
+      bigMono: true,
+      ctaLabel: "Vs the field",
+      ctaHref: "/vsfield",
+      secondary: [],
+    };
+  }
+
+  // Fallback — should be unreachable (all phases handled above).
   return {
-    eyebrow: PHASE_EYEBROW["post-draft"],
-    title: "Draft complete — squad set",
-    sub: "Head to Set Lineup to prepare your starting XI for the group stage.",
-    big: `${myPickCount}/15`,
+    eyebrow: PHASE_EYEBROW["pre-draft"],
+    title: "Loading…",
+    sub: "",
+    big: "—",
     bigMono: true,
-    ctaLabel: "Set lineup",
-    ctaHref: "/lineup",
-    secondary: [
-      { l: "Your squad", v: `${myPickCount} / 15` },
-      { l: "Next", v: "Group stage" },
-    ],
+    ctaLabel: "Home",
+    ctaHref: "/",
+    secondary: [],
   };
+}
+
+/** Format a UTC ISO string as "Thu 12 Jun · 17:00 UTC" for the banner big display. */
+function formatKickoffDate(iso: string): string {
+  const d = new Date(iso);
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const day = days[d.getUTCDay()];
+  const mon = months[d.getUTCMonth()];
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${d.getUTCDate()} ${mon} · ${hh}:${mm}`;
+}
+
+/** Shorter kickoff label for the secondary stat: "12 Jun 17:00". */
+function formatKickoffShort(iso: string): string {
+  const d = new Date(iso);
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const mon = months[d.getUTCMonth()];
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${d.getUTCDate()} ${mon} ${hh}:${mm}`;
 }
 
 export function PrimaryBanner({
   phase,
   draft,
+  vsField,
+  earliestGroupKickoff,
 }: {
   phase: DashboardPhase;
   draft: DraftRoomState | null;
+  vsField: VsFieldView | null;
+  earliestGroupKickoff: string | null;
 }) {
-  const content = bannerContent(phase, draft);
+  const content = bannerContent(phase, draft, vsField, earliestGroupKickoff);
   const phcColor = PHASE_COLOR[phase];
 
   return (

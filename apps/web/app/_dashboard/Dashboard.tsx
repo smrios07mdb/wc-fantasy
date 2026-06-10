@@ -6,9 +6,9 @@
  *   - Pure SERVER component — no "use client". All data comes from `DashboardData` (loadDashboard).
  *   - `modulesFor(phase)` → `renderModule(key, data)` mirrors the design's desktop.jsx exactly.
  *   - `PrimaryBanner` (in ./PrimaryBanner.tsx) handles the phase-coloured headline strip.
- *   - Module components are defined below — small enough to live inline; each maps to one
- *     key in `modulesFor`. Only pre-draft + draft modules are built this prompt; group/playoff/
- *     complete return null (their data doesn't exist yet — see STOP seams below).
+ *   - Pre-draft + draft modules: built in Prompt 37.
+ *   - Group modules: built in Prompt 38 — record, standings, matchday.
+ *   - Playoff + complete: minimal honest interims (Guillotine + recap deferred to later prompts).
  *
  * STOP seams (data not available in production this prompt):
  *   1. No scheduledStartAt on draft — pre-draft countdown renders as "waiting for commissioner".
@@ -16,9 +16,12 @@
  *   2. No per-manager "ready" flag — ReadinessModule renders all dots off (presence-only in the
  *      draft room via Realtime; server-side there is no readiness concept).
  *      (flagged in ReadinessModule below)
+ *   3. Playoff bracket / Guillotine — deferred; renders "Knockouts underway" interim only.
+ *   4. Tournament-complete recap — deferred; renders "Tournament complete" interim only.
  */
 import type { Position } from "@app/shared";
 import { SQUAD_COMPOSITION } from "@app/shared";
+import type { VsFieldView, FieldEntry, SeasonEntry, MatchView } from "@app/vsfield";
 import { toIso2 } from "../../src/draft/flag";
 import { Flag } from "../draft/Flag";
 import type { DraftRoomState } from "../../src/draft/types";
@@ -207,7 +210,6 @@ function DraftFormingModule({ draft }: { draft: DraftRoomState }) {
 
 /** Recent picks — last N picks across all managers. */
 function RecentPicksModule({ draft }: { draft: DraftRoomState }) {
-  // Show the 6 most recent picks (reverse pick order = highest pickNo first).
   const recent = [...draft.picks]
     .filter((p) => p.player !== null)
     .sort((a, b) => b.pickNo - a.pickNo)
@@ -247,9 +249,202 @@ function RecentPicksModule({ draft }: { draft: DraftRoomState }) {
   );
 }
 
+// ─── group phase modules ──────────────────────────────────────────────────────────────────
+
+/**
+ * My season record + provisional current-period W-L.
+ * Data: view.season (my SeasonEntry) + view.field (my FieldEntry).
+ * CSS: .db-record (pre-stubbed in dashboard.css).
+ */
+function RecordModule({ vsField }: { vsField: VsFieldView }) {
+  const me: SeasonEntry | undefined = vsField.season.find((e) => e.isMe);
+  const meField: FieldEntry | undefined = vsField.field.find((e) => e.isMe);
+
+  if (!me) {
+    return (
+      <Module title="Your record" cta={{ label: "Vs the field", href: "/vsfield" }}>
+        <p className="t-caption text-secondary db-empty-note">Record loading…</p>
+      </Module>
+    );
+  }
+
+  const prov = meField?.record;
+
+  return (
+    <Module title="Your record" cta={{ label: "Vs the field", href: "/vsfield" }}>
+      <div className="db-record">
+        <div className="db-rec-season">
+          <div className="db-rec-wl">
+            <span>{me.allPlayAllW}</span>
+            <span className="db-rec-dash">-</span>
+            <span>{me.allPlayAllL}</span>
+          </div>
+          <span className="t-micro text-tertiary">season W-L</span>
+        </div>
+        <div className="db-rec-split">
+          <div className="db-rec-stat">
+            <b>{me.totalPoints}</b>
+            <span className="t-micro text-tertiary">total pts</span>
+          </div>
+          <div className="db-rec-stat">
+            <b>#{me.rank}</b>
+            <span className="t-micro text-tertiary">rank</span>
+          </div>
+        </div>
+      </div>
+      {prov && (
+        <div className="db-rec-prov">
+          <span className="t-caption text-secondary">
+            {vsField.currentPeriod?.label ?? "This period"}
+          </span>
+          <span className="t-caption">
+            <span className="wld-W db-wld-chip">{prov.w}W</span>{" "}
+            <span className="wld-L db-wld-chip">{prov.l}L</span>{" "}
+            {prov.d > 0 && <span className="wld-D db-wld-chip">{prov.d}D</span>}
+          </span>
+        </div>
+      )}
+    </Module>
+  );
+}
+
+/**
+ * Season standings table — all managers ranked by allPlayAllW + totalPoints.
+ * Data: view.season (SeasonEntry[]).
+ * CSS: .db-stand (pre-stubbed in dashboard.css).
+ */
+function StandingsModule({ vsField }: { vsField: VsFieldView }) {
+  const entries = [...vsField.season].sort((a, b) => a.rank - b.rank);
+
+  if (entries.length === 0) {
+    return (
+      <Module title="Standings" cta={{ label: "Vs the field", href: "/vsfield" }}>
+        <p className="t-caption text-secondary db-empty-note">Standings loading…</p>
+      </Module>
+    );
+  }
+
+  return (
+    <Module title="Standings" cta={{ label: "Vs the field", href: "/vsfield" }}>
+      <div className="db-stand">
+        {entries.map((e) => (
+          <div className={"db-stand-row" + (e.isMe ? " is-me" : "")} key={e.managerId}>
+            <span className="db-stand-rank mono">{e.rank}</span>
+            <MgrAvatar id={e.managerId} displayName={e.displayName} size="sm" />
+            <span className="db-stand-name">{e.isMe ? "You" : e.displayName}</span>
+            <span className="db-stand-wl">
+              {e.allPlayAllW}-{e.allPlayAllL}
+            </span>
+            <span className="db-stand-pts mono">{e.totalPoints}</span>
+          </div>
+        ))}
+      </div>
+    </Module>
+  );
+}
+
+/**
+ * Current matchday match results — fixtures for the current period with live statuses.
+ * Also shows my squad's lock ratio (locked starters / total starters).
+ * Data: view.matches, view.currentPeriod, view.field (my entry starters).
+ * CSS: .db-matchday-* (new rules added to dashboard.css).
+ */
+function MatchdayModule({ vsField }: { vsField: VsFieldView }) {
+  const { matches, currentPeriod } = vsField;
+  const meField: FieldEntry | undefined = vsField.field.find((e) => e.isMe);
+  const myStarters = meField?.starters ?? [];
+  const lockedCount = myStarters.filter((s) => s.locked).length;
+  const totalStarters = myStarters.length;
+
+  const title = currentPeriod ? `Matchday · ${currentPeriod.label}` : "Matchday";
+
+  if (!currentPeriod) {
+    return (
+      <Module title={title}>
+        <p className="t-caption text-secondary db-empty-note">No active matchday.</p>
+      </Module>
+    );
+  }
+
+  return (
+    <Module title={title} cta={{ label: "Vs the field", href: "/vsfield" }}>
+      {totalStarters > 0 && (
+        <div className="db-md-lock">
+          <span className="t-caption text-secondary">Your XI locked</span>
+          <span className="t-caption mono">
+            <b>{lockedCount}</b>
+            <span className="text-tertiary">/{totalStarters}</span>
+          </span>
+        </div>
+      )}
+      {matches.length === 0 ? (
+        <p className="t-caption text-secondary db-empty-note">No fixtures this period.</p>
+      ) : (
+        <div className="db-match-list">
+          {matches.map((m) => (
+            <MatchRow key={m.matchId} match={m} />
+          ))}
+        </div>
+      )}
+    </Module>
+  );
+}
+
+function MatchStatusPill({ status }: { status: MatchView["status"] }) {
+  if (status === "in_progress") return <span className="pill pill-live">Live</span>;
+  if (status === "completed") return <span className="pill pill-win">FT</span>;
+  if (status === "postponed") return <span className="pill">PPD</span>;
+  if (status === "abandoned") return <span className="pill">ABN</span>;
+  return null; // scheduled — no pill
+}
+
+function MatchRow({ match }: { match: MatchView }) {
+  const isLive = match.status === "in_progress";
+  const isDone = match.status === "completed";
+  const hasScore = match.homeScore !== null && match.awayScore !== null;
+
+  return (
+    <div className={"db-match-row" + (isLive ? " is-live" : "")}>
+      <span className="db-match-team db-match-home">{match.homeTeamName ?? "—"}</span>
+      <span className="db-match-score mono">
+        {hasScore ? (
+          <>
+            <b>{match.homeScore}</b>
+            <span className="text-tertiary"> – </span>
+            <b>{match.awayScore}</b>
+          </>
+        ) : isDone ? (
+          <span className="text-tertiary">—</span>
+        ) : match.status === "scheduled" && match.startsInMinutes !== null ? (
+          <span className="text-tertiary db-match-kick">
+            {match.startsInMinutes <= 0
+              ? "KO"
+              : match.startsInMinutes < 60
+                ? `${match.startsInMinutes}m`
+                : formatKickoffTime(match.kickoffAt)}
+          </span>
+        ) : (
+          <span className="text-tertiary">vs</span>
+        )}
+      </span>
+      <span className="db-match-team db-match-away">{match.awayTeamName ?? "—"}</span>
+      <MatchStatusPill status={match.status} />
+    </div>
+  );
+}
+
+/** Format an ISO datetime string as "HH:mm" (UTC) for scheduled match display. */
+function formatKickoffTime(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 // ─── module router ────────────────────────────────────────────────────────────────────────
 
-type ModuleKey = "info" | "ready" | "forming" | "picks";
+type PreDraftKey = "info" | "ready";
+type DraftKey = "forming" | "picks";
+type GroupKey = "record" | "standings" | "matchday";
+type ModuleKey = PreDraftKey | DraftKey | GroupKey;
 
 /** Which modules render for each phase — mirrors design's `modulesFor()`. */
 function modulesFor(phase: DashboardPhase): ModuleKey[] {
@@ -258,13 +453,25 @@ function modulesFor(phase: DashboardPhase): ModuleKey[] {
       return ["info", "ready"];
     case "draft":
       return ["forming", "picks", "ready"];
-    case "post-draft":
-      // Group/playoff/complete modules are the next prompts.
+    case "pre-kickoff":
+      // No per-module content — the PrimaryBanner carries the countdown; interim is enough.
       return [];
+    case "group":
+      return ["record", "standings", "matchday"];
+    case "playoff":
+      // STOP(P38): Guillotine / bracket deferred — no real modules yet.
+      return [];
+    case "complete":
+      // STOP(P38): Tournament-complete recap deferred.
+      return [];
+    default: {
+      const _exhaustive: never = phase;
+      return _exhaustive;
+    }
   }
 }
 
-function renderModule(key: ModuleKey, draft: DraftRoomState | null) {
+function renderModule(key: ModuleKey, draft: DraftRoomState | null, vsField: VsFieldView | null) {
   switch (key) {
     case "info":
       return <LeagueInfoModule key={key} draft={draft} />;
@@ -274,6 +481,12 @@ function renderModule(key: ModuleKey, draft: DraftRoomState | null) {
       return draft ? <DraftFormingModule key={key} draft={draft} /> : null;
     case "picks":
       return draft ? <RecentPicksModule key={key} draft={draft} /> : null;
+    case "record":
+      return vsField ? <RecordModule key={key} vsField={vsField} /> : null;
+    case "standings":
+      return vsField ? <StandingsModule key={key} vsField={vsField} /> : null;
+    case "matchday":
+      return vsField ? <MatchdayModule key={key} vsField={vsField} /> : null;
     default: {
       const _exhaustive: never = key;
       return _exhaustive;
@@ -284,35 +497,55 @@ function renderModule(key: ModuleKey, draft: DraftRoomState | null) {
 // ─── main export ─────────────────────────────────────────────────────────────────────────
 
 export function Dashboard({ data }: { data: DashboardData }) {
-  const { phase, draft } = data;
+  const { phase, draft, vsField, earliestGroupKickoff } = data;
   const keys = modulesFor(phase);
+
+  // The group layout uses the spotlight (wider main + rail) for standings prominence.
+  // All other phases with modules use the masonry grid.
+  const useSpotlight = phase === "group";
 
   return (
     <div className="db-page">
-      <PrimaryBanner phase={phase} draft={draft} />
+      <PrimaryBanner
+        phase={phase}
+        draft={draft}
+        vsField={vsField}
+        earliestGroupKickoff={earliestGroupKickoff}
+      />
 
-      {phase === "post-draft" && (
-        // STOP: group/playoff/complete module sets are the next prompts.
-        // For now, show a minimal "tournament underway" interim state.
-        <div className="db-interim">
-          <p className="t-body text-secondary">
-            Group stage dashboard modules are coming in the next prompt.
-          </p>
-          <div style={{ display: "flex", gap: 10 }}>
-            <a className="btn btn-ghost" href="/lineup">
-              Set lineup
-            </a>
-            <a className="btn btn-ghost" href="/vsfield">
-              Vs the field
-            </a>
+      {(phase === "pre-kickoff" || phase === "playoff" || phase === "complete") &&
+        keys.length === 0 && (
+          // Honest interim for phases without modules yet — shows the banner already rendered above.
+          // STOP(P38): Playoff bracket + complete recap are deferred.
+          <div className="db-interim">
+            <div style={{ display: "flex", gap: 10 }}>
+              <a className="btn btn-ghost" href="/lineup">
+                Set lineup
+              </a>
+              <a className="btn btn-ghost" href="/vsfield">
+                Vs the field
+              </a>
+            </div>
+          </div>
+        )}
+
+      {keys.length > 0 && useSpotlight && vsField && (
+        <div className="db-spotlight">
+          <div className="db-spot-main">
+            {/* Standings gets the wide column */}
+            {renderModule("standings", draft, vsField)}
+          </div>
+          <div className="db-spot-rail">
+            {renderModule("record", draft, vsField)}
+            {renderModule("matchday", draft, vsField)}
           </div>
         </div>
       )}
 
-      {keys.length > 0 && (
+      {keys.length > 0 && !useSpotlight && (
         <div className="db-grid">
           {keys.map((k) => {
-            const mod = renderModule(k, draft);
+            const mod = renderModule(k, draft, vsField);
             return mod ? (
               <div className="db-grid-cell" key={k}>
                 {mod}

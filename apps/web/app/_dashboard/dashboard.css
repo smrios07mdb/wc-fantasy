@@ -294,6 +294,68 @@
   color: var(--text-secondary);
 }
 
+/* ─── group phase shared utilities ──────────────────────────────────────────────────────── */
+.db-empty-note {
+  padding: 8px 0;
+}
+/* W/L/D chips within the record prov row — reuse the .wld-* classes from ds.css. */
+.db-wld-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+
+/* ─── matchday module ────────────────────────────────────────────────────────────────────── */
+.db-md-lock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0 10px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 10px;
+}
+.db-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.db-match-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-caption);
+}
+.db-match-row.is-live {
+  background: var(--live-soft);
+}
+.db-match-home {
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-match-away {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-match-score {
+  min-width: 48px;
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+.db-match-kick {
+  font-size: var(--fs-caption);
+}
+
 /* ─── record module (group stage — future) ───────────────────────────────────────────────── */
 .db-record {
   display: flex;
