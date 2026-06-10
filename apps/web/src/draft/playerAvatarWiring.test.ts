@@ -14,6 +14,7 @@ const avatarComp = read("components/PlayerAvatar.tsx");
 const initials = read("src/draft/playerInitials.ts");
 const draftComps = read("app/draft/components.tsx");
 const lineupComps = read("app/lineup/components.tsx");
+const loadLineup = read("app/lineup/loadLineup.ts");
 const ds = read("app/styles/ds.css");
 const draftCss = read("app/draft/draft.css");
 const lineupCss = read("app/lineup/lineup.css");
@@ -136,6 +137,19 @@ describe("lineup/components.tsx — PlayerAvatar wired into PitchToken and Bench
   });
   it("player country is passed through to the avatar", () => {
     expect(lineupComps).toMatch(/country=\{player\.country\}/);
+  });
+});
+
+describe("loadLineup.ts — country sourced from fifa_team join, not player.country column", () => {
+  // player.country DB column is never written by ingestion; the draft loader works around this
+  // via toPlayer: `country: p.team?.name ?? null`. The lineup loader must do the same — reading
+  // the bare column returns null for every player and the flag badge never renders.
+  it("joins team name instead of reading player.country directly", () => {
+    expect(loadLineup).toContain("team: { select: { name: true } }");
+    expect(loadLineup).not.toContain("country: true");
+  });
+  it("maps country from team.name in the squad mapping", () => {
+    expect(loadLineup).toContain("r.player.team?.name ?? null");
   });
 });
 

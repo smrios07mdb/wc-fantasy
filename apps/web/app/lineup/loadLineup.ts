@@ -29,7 +29,9 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
             firstName: true,
             lastName: true,
             position: true,
-            country: true,
+            // player.country DB column is never written by ingestion; country comes from the
+            // fifa_team join, matching how loadDraftRoom.toPlayer derives it.
+            team: { select: { name: true } },
           },
         },
       },
@@ -48,7 +50,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     firstName: r.player.firstName,
     lastName: r.player.lastName,
     position: r.player.position,
-    country: r.player.country,
+    country: r.player.team?.name ?? null,
   }));
 
   const periodIds = periodRows.map((p) => p.id);
