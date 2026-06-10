@@ -526,3 +526,44 @@ infrastructure to enforce them already lives in this doc:
   webhooks at GOAT), so **no webhook receiver is built**; (c) tier confirmed **GOAT $39.99/mo**
   (not ALL-ACCESS); (d) live latency ≈ a few minutes (reinforces recompute). The "confirm which
   tier / webhooks" open item is resolved.
+
+---
+
+## 11. Dashboard home (Prompt 37)
+
+**`loadDashboard` server loader** (`apps/web/app/_dashboard/loadDashboard.ts`) — mirrors the
+placement and thin-IO-edge convention of `loadDraftRoom` / `loadVsField`. Reuses
+`loadDraftRoom(sessionManagerId)` DIRECTLY: one call, no second draft-table read, no
+re-derivation of draft state. Returns `DashboardData { phase: DashboardPhase; draft:
+DraftRoomState | null }`. A null draft (no draft row yet) collapses to `{ phase: "pre-draft",
+draft: null }`. The `sessionManagerId` is extracted and session-gated upstream in `page.tsx`
+(`outcome.kind === "ok"` guard) before `loadDashboard` is ever called.
+
+**`app/_dashboard/` component directory (new):**
+- `src/dashboard/selectDashboardPhase.ts` — pure `DraftStatus → DashboardPhase` selector;
+  IO-free; `never` exhaustiveness guard prevents silent fall-through on new `DraftStatus` values;
+  5 unit tests in `selectDashboardPhase.test.ts`.
+- `PrimaryBanner.tsx` — phase-coloured headline strip. `--phc` is set as a **single** CSS custom
+  property on the `.db-banner` container so all children inherit it (eyebrow pill, inset box-shadow
+  stripe). `PHASE_COLOR`: `pre-draft → var(--info)`, `draft → var(--live)`, `post-draft →
+  var(--info)`. No hex — all functional tokens from the global `ds.css` (BRAND §1/§5: no gold, no
+  raw cobalt in the phase stripe).
+- `Dashboard.tsx` — pure server component; `modulesFor(phase) → ModuleKey[]` + `renderModule(key,
+  data)` router mirrors the design's `desktop.jsx` exactly. Four modules shipped: `LeagueInfoModule`
+  + `ReadinessModule` (pre-draft); `DraftFormingModule` + `RecentPicksModule` (draft). All data
+  sourced from the `DraftRoomState` passed through from `loadDashboard` — no additional DB reads.
+- `dashboard.css` — route-scoped on the global `ds.css` (the `shell.css` / `_auth/auth.css`
+  convention). Zero hex, no gold, `--phc` for phase colour, `var(--surface-*)` / `var(--accent)` /
+  `var(--hairline)` for structure. `.db-*` class vocabulary.
+
+**`page.tsx` ok→hub branch.** `Hub` is now `async`; it calls `await loadDashboard(managerId)` and
+renders `<AppShell active="home" signedInAs={displayName}><Dashboard data={data} /></AppShell>`.
+All non-hub branches (`signin` / `unlinked` / `denied`), `selectLandingView()`, `getSessionManager()`,
+and `export const dynamic = "force-dynamic"` are **byte-for-byte unchanged**. `/` stays `ƒ`.
+
+**Two STOP seams (data not available in production this prompt):**
+1. `draft.scheduled_start_at` — column does not exist; pre-draft countdown deferred (honest empty:
+   "waiting for commissioner"). Candidate future migration.
+2. Per-manager `is_ready` — does not exist on any server-readable table; readiness grid deferred
+   (all dots off; "Live status visible in the draft room."). Candidate future migration or Realtime
+   presence hook. Both flagged `STOP(P37)` at the exact render site in source.

@@ -1029,3 +1029,32 @@ P34 — Draft nation binding. /draft country chips (P31) and flags (P33) now sou
 P35 — All 48 distinct FifaTeam.name values in the 2026 dataset now resolve to flags (zero placeholders). Flag resolver gaps closed: home nations (England/Scotland/Wales/Northern Ireland), Curaçao (CUW→CW, omitted from ISO table), DR Congo variants, Côte d'Ivoire variants, Bosnia & Herzegovina variants, Cabo Verde (Intl.DisplayNames returns "Cape Verde" on Node 25 but the feed sends "Cabo Verde"), and 11 FIFA formal names that differ from Intl output (IR Iran, Türkiye/Turkey, Korea Republic, DPR Korea, Republic of Ireland, Chinese Taipei, Trinidad and Tobago, Czechia). Collapsible nation filter added: chip grid collapsed by default behind a "Nations ▾/▸" toggle; position chips (All/GK/DEF/MID/FWD) always visible; active-selection shown in collapsed header with ✕ clear control. CLIENT-ONLY — `src/draft/flag.ts`, `flag.test.ts`, `components.tsx`, `draft.css` only. **Home nation interim decision (superseded by P36):** England/Scotland/Wales/Northern Ireland rendered the Union Jack (🇬🇧) as a pre-launch INTERIM — correct inline-SVG flags delivered in P36.
 
 P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Saltire, as inline SVG (universal; no dep, no asset files, no emoji tag sequences). All home-nation → GB fallbacks removed from the resolver (England/Scotland/Wales/N. Ireland → null); `Flag.tsx` intercepts via `isHomeNation()` before the emoji path. `HOME_NATIONS` set + `isHomeNation()` predicate exported from `src/draft/flag.ts` as single source of truth; `Flag.tsx` is the sole render surface (unchanged contract). Supersedes the P35 Union Jack interim. 48/48 distinct countries now render their correct flag. CLIENT-ONLY — `src/draft/flag.ts`, `flag.test.ts`, `flagWiring.test.ts`, `app/draft/Flag.tsx` only.
+
+## Dashboard home (Prompt 37) — phase taxonomy, STOP seams, and hub route architecture
+
+- **Phase taxonomy locked: `pre-draft | draft | post-draft`.** Derived entirely from `draft.status` (the
+  existing `DraftStatus` enum: `pending → pre-draft`; `active | paused → draft`; `complete →
+  post-draft`). No new column, no new data source — the same `draft` row `loadDraftRoom` already reads.
+  The `selectDashboardPhase` pure selector (`src/dashboard/selectDashboardPhase.ts`) is the single
+  derivation point; it carries a `never` exhaustiveness guard so adding a new `DraftStatus` value is a
+  compile error until the dashboard handles it.
+- **`post-draft` phase = a minimal "tournament underway" interim.** The group-phase module set (standings,
+  current-period score, matchday schedule) is the **next prompt**; playoff/complete are further deferred.
+  For P37 the post-draft render is a stub CTA block (Set lineup + Vs the field) with no data modules.
+- **Route ownership for `/draft`, `/lineup`, `/vsfield` promoted from `page.tsx` to
+  `Dashboard`/`PrimaryBanner`.** The old `FEATURES` nav-card array (a `page.tsx`-local constant listing
+  the three feature hrefs inline) is gone; the `ok → hub` branch now renders `<Dashboard data={data} />`.
+  The three routes are exposed via `PrimaryBanner`'s phase-dependent `ctaHref` values and the post-draft
+  stub CTAs. `selectLandingView()`, the four-outcome branch, the session read, and the
+  `signin`/`unlinked`/`denied` states are **byte-for-byte unchanged**.
+- **STOP seam — countdown: `scheduledStartAt` does not exist on the `draft` table.** The design's
+  pre-draft banner shows a countdown to draft start. `draft` has no `scheduled_start_at` column.
+  **DEFERRED: a candidate future migration adds this column.** For P37, `PrimaryBanner`'s pre-draft `sub`
+  renders the honest empty: `"… — commissioner will start when everyone is ready."` (flagged `STOP(P37)`
+  in source). No clock-based logic is built.
+- **STOP seam — manager readiness: no per-manager ready flag exists server-side.** The design's pre-draft
+  readiness grid shows each manager's online/ready dot. The `draft` and `manager` tables carry no
+  `is_ready` field; readiness is Realtime **presence** in the draft room only. **DEFERRED: a candidate
+  future migration (or a Realtime presence hook writing to a new column) adds this state.** For P37,
+  `ReadinessModule` renders all manager dots off (gray `db-ready-dot` with no modifier class), plus the
+  footer note "Live status visible in the draft room." (flagged `STOP(P37)` in source).
