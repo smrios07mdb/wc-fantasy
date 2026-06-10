@@ -596,9 +596,9 @@ behavioral checks ride on go-live (below).
   verified under `''` pre-merge). Catalog-verified on live (deploy self-test). Behavioral lock-enforcement
   confirm deferred to first kickoff / GOAT-trial smoke (no live locks pre-tournament) — same deferral as
   the Prompt-10 lock-freeze check.
-- **Item 3 — Auth leaked-password protection (HaveIBeenPwned).** **STILL PENDING** — operator dashboard
-  toggle (Authentication → Sign In / Providers → Password security; the `auth_leaked_password_protection`
-  advisor lint deep-links to it). Code does not toggle it.
+- **Item 3 — Auth leaked-password protection (HaveIBeenPwned).** **CLOSED — decided: NOT enabling.**
+  Accepted risk for a private, invite-only ~12-manager league with no self-serve signup. Removed from the
+  go-live gate. All three pre-prod security follow-ups are now fully resolved.
 - **Learning.** Ship `SECURITY DEFINER` functions with a pinned `search_path` + `EXECUTE` revoked from
   `PUBLIC` at creation; the consolidated migration guards both with a fail-safe **catalog-only** self-test
   (`has_function_privilege(...) = false` + `proconfig` `c IN ('search_path=""', 'search_path=')`, tolerant

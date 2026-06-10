@@ -229,10 +229,8 @@ Realtime, and worker autopick** — on the deployed stack. **Put the Realtime-AU
 - [ ] **Security follow-up 2 (§570) — code fix landed in the same migration:** `enforce_lineup_lock`'s
       `search_path` is pinned (`SET search_path = ''`; body/logic unchanged). **Post-deploy gate (Sergio):** a
       played/locked player still can't be swapped (the lock-on-play latch holds).
-- [ ] **Security follow-up 3 (§572) — operator dashboard action; Code does NOT toggle it:** enable Auth
-      **leaked-password protection** (HaveIBeenPwned) in Supabase → **Authentication → Sign In / Providers →
-      Password security** (TODO(confirm): exact dashboard nav — the Security Advisor's
-      `auth_leaked_password_protection` lint deep-links to the toggle).
+- ~~**Security follow-up 3 (§572) — NOT enabling (closed).** Private, invite-only ~12-manager league with no
+  self-serve signup; accepted risk. Removed from go-live gate. All three security follow-ups resolved.~~
 - [ ] **GOAT-trial ingestion smoke:** with a drafted roster, run a live ingestion window and confirm the
       recompute pipeline (player → manager-period → standing) lands scores. **This is where the vs-the-field
       `JWT-postgres_changes` check folds in:** on `/vsfield`, confirm `score_manager_period` + `standing`
