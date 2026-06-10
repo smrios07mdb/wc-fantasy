@@ -16,6 +16,7 @@ const draftComps = read("app/draft/components.tsx");
 const lineupComps = read("app/lineup/components.tsx");
 const ds = read("app/styles/ds.css");
 const draftCss = read("app/draft/draft.css");
+const lineupCss = read("app/lineup/lineup.css");
 
 describe("playerInitials.ts — pure initials helper", () => {
   it("exports playerInitials function", () => {
@@ -135,5 +136,24 @@ describe("lineup/components.tsx — PlayerAvatar wired into PitchToken and Bench
   });
   it("player country is passed through to the avatar", () => {
     expect(lineupComps).toMatch(/country=\{player\.country\}/);
+  });
+});
+
+describe("lineup.css — <button> overflow fix so .pa-flag badge is not clipped by WebKit", () => {
+  it(".sl-tok has overflow:visible (WebKit clips <button border-radius> without it)", () => {
+    // Tailwind Preflight sets -webkit-appearance:button on all <button>s; combined with
+    // border-radius this causes Safari to clip absolute children unless overridden.
+    const tokBlock = lineupCss.slice(
+      lineupCss.indexOf(".sl-tok {"),
+      lineupCss.indexOf("}", lineupCss.indexOf(".sl-tok {")),
+    );
+    expect(tokBlock).toContain("overflow: visible");
+  });
+  it(".sl-bench-row has overflow:visible (same WebKit button-clip fix)", () => {
+    const benchBlock = lineupCss.slice(
+      lineupCss.indexOf(".sl-bench-row {"),
+      lineupCss.indexOf("}", lineupCss.indexOf(".sl-bench-row {")),
+    );
+    expect(benchBlock).toContain("overflow: visible");
   });
 });

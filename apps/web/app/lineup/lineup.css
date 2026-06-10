@@ -204,6 +204,10 @@
   width: 78px;
   padding: 8px 6px;
   border-radius: 12px;
+  /* overflow:visible overrides WebKit's implicit clip on <button border-radius> so the
+     .pa-flag badge can protrude outside the disc without being clipped by the native
+     button paint boundary (-webkit-appearance:button set by Tailwind Preflight). */
+  overflow: visible;
   background: var(--surface-2);
   border: 1px solid var(--surface-4);
   color: var(--text-primary);
@@ -281,6 +285,7 @@
   gap: 8px;
   padding: 7px 9px;
   border-radius: 9px;
+  overflow: visible; /* same WebKit button-clip fix as .sl-tok */
   background: var(--surface-2);
   border: 1px solid var(--surface-4);
   color: var(--text-primary);
