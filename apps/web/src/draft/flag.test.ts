@@ -65,6 +65,62 @@ describe("toIso2 — resolve the pool's country value (code OR name) to an alpha
     expect(toIso2("ZZZ")).toBeNull();
     expect(toIso2("Atlantis")).toBeNull();
   });
+
+  it("resolves home nations to GB (no independent ISO code; rendered as 🇬🇧)", () => {
+    expect(toIso2("England")).toBe("GB");
+    expect(toIso2("Scotland")).toBe("GB");
+    expect(toIso2("Wales")).toBe("GB");
+    expect(toIso2("Northern Ireland")).toBe("GB");
+    // FIFA 3-letter codes for home nations
+    expect(toIso2("ENG")).toBe("GB");
+    expect(toIso2("SCO")).toBe("GB");
+    expect(toIso2("WAL")).toBe("GB");
+    expect(toIso2("NIR")).toBe("GB");
+  });
+
+  it("resolves DR Congo variants to CD", () => {
+    expect(toIso2("DR Congo")).toBe("CD");
+    expect(toIso2("Congo DR")).toBe("CD");
+    expect(toIso2("Democratic Republic of the Congo")).toBe("CD");
+    expect(toIso2("Democratic Republic of Congo")).toBe("CD");
+    // ISO alpha-3 path
+    expect(toIso2("COD")).toBe("CD");
+  });
+
+  it("resolves Côte d'Ivoire variants to CI", () => {
+    expect(toIso2("Côte d'Ivoire")).toBe("CI");
+    expect(toIso2("Cote d'Ivoire")).toBe("CI");
+    expect(toIso2("Ivory Coast")).toBe("CI"); // existing alias
+    // ISO alpha-3 path
+    expect(toIso2("CIV")).toBe("CI");
+  });
+
+  it("resolves Bosnia & Herzegovina variants to BA", () => {
+    expect(toIso2("Bosnia and Herzegovina")).toBe("BA");
+    expect(toIso2("Bosnia & Herzegovina")).toBe("BA");
+    expect(toIso2("Bosnia-Herzegovina")).toBe("BA");
+    expect(toIso2("BIH")).toBe("BA");
+  });
+
+  it("resolves Curaçao (ISO CUW→CW) with and without accent", () => {
+    expect(toIso2("Curaçao")).toBe("CW");
+    expect(toIso2("Curacao")).toBe("CW");
+    expect(toIso2("CUW")).toBe("CW");
+  });
+
+  it("resolves FIFA formal names that differ from Intl.DisplayNames output", () => {
+    expect(toIso2("IR Iran")).toBe("IR");
+    expect(toIso2("Türkiye")).toBe("TR");
+    expect(toIso2("Turkey")).toBe("TR");
+    expect(toIso2("Korea Republic")).toBe("KR");
+    expect(toIso2("DPR Korea")).toBe("KP");
+    expect(toIso2("Republic of Ireland")).toBe("IE");
+    expect(toIso2("Cape Verde")).toBe("CV");
+    expect(toIso2("Chinese Taipei")).toBe("TW");
+    expect(toIso2("Trinidad and Tobago")).toBe("TT");
+    expect(toIso2("Trinidad & Tobago")).toBe("TT");
+    expect(toIso2("Czechia")).toBe("CZ");
+  });
 });
 
 describe("countryFlag — convenience country → emoji used at the row/chip call sites", () => {
