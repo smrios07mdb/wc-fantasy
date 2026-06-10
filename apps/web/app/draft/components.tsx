@@ -27,6 +27,7 @@ import { nationName } from "./flags";
 import { Flag } from "./Flag";
 import { toIso2 } from "../../src/draft/flag";
 import { reorderQueue } from "../../src/draft/queueReorder";
+import { PlayerAvatar } from "../../components/PlayerAvatar";
 
 // ─────────────────────────────────────────── atoms ───────────────────────────────────────────
 
@@ -423,8 +424,14 @@ export function AvailableList({
             <span className="mono t-micro text-tertiary" style={{ width: 18 }}>
               {i + 1}
             </span>
-            <CountryFlag country={p.country} />
-            <Pos p={p.position} />
+            <PlayerAvatar
+              displayName={p.displayName}
+              firstName={p.firstName}
+              lastName={p.lastName}
+              country={p.country}
+              position={p.position}
+              size="sm"
+            />
             <div className="nm">
               <b>{p.displayName}</b>
               <span className="t-caption text-tertiary">{nationName(p.country)}</span>
@@ -532,8 +539,14 @@ export function QueuePanel({
             <span className="mono t-micro text-tertiary" style={{ width: 16 }}>
               {i + 1}
             </span>
-            <CountryFlag country={p.country} />
-            <Pos p={p.position} />
+            <PlayerAvatar
+              displayName={p.displayName}
+              firstName={p.firstName}
+              lastName={p.lastName}
+              country={p.country}
+              position={p.position}
+              size="sm"
+            />
             <div className="nm" style={{ flex: 1 }}>
               <b className="t-sm">{p.lastName ?? p.displayName}</b>{" "}
               <span className="t-caption text-tertiary">{nationName(p.country)}</span>
@@ -629,8 +642,16 @@ export function RosterPanel({ state }: { state: DraftRoomState }) {
                 .filter((p) => p.player?.position === pp)
                 .map((p) => (
                   <div className="pcard" key={p.pickNo} style={{ marginBottom: 6 }}>
-                    <CountryFlag country={p.player?.country ?? null} />
-                    <Pos p={pp} />
+                    {p.player && (
+                      <PlayerAvatar
+                        displayName={p.player.displayName}
+                        firstName={p.player.firstName}
+                        lastName={p.player.lastName}
+                        country={p.player.country}
+                        position={pp}
+                        size="sm"
+                      />
+                    )}
                     <div className="stack" style={{ flex: 1 }}>
                       <b className="t-sm">{p.player?.displayName}</b>
                       <span className="t-caption text-tertiary">
@@ -770,7 +791,16 @@ export function Summary({ state }: { state: DraftRoomState }) {
                 .filter((p) => p.player?.position === pp)
                 .map((p) => (
                   <div className="pcard" key={p.pickNo} style={{ marginBottom: 6 }}>
-                    <CountryFlag country={p.player?.country ?? null} />
+                    {p.player && (
+                      <PlayerAvatar
+                        displayName={p.player.displayName}
+                        firstName={p.player.firstName}
+                        lastName={p.player.lastName}
+                        country={p.player.country}
+                        position={pp}
+                        size="sm"
+                      />
+                    )}
                     <div className="stack" style={{ flex: 1, minWidth: 0 }}>
                       <b
                         className="t-caption"

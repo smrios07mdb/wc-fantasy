@@ -15,6 +15,7 @@ const read = (rel: string) => readFileSync(resolve(appDir, rel), "utf8");
 const flagComp = read("draft/Flag.tsx");
 const components = read("draft/components.tsx");
 const css = read("draft/draft.css");
+const ds = read("styles/ds.css");
 
 describe("Flag.tsx — the sole flag-rendering surface", () => {
   it("renders emoji via flagEmoji and never a broken glyph (graceful empty placeholder)", () => {
@@ -48,11 +49,12 @@ describe("components.tsx — flags on rows + queue + filter chips, mapped throug
     expect(components).not.toMatch(/export function Flag\b/);
   });
 
-  it("maps country → alpha-2 at the call sites via a single CountryFlag wrapper", () => {
+  it("maps country → alpha-2 at the call sites via a single CountryFlag wrapper (board ticker + board cell)", () => {
     expect(components).toContain("function CountryFlag(");
     expect(components).toContain("<Flag code={toIso2(country)}");
-    // rows and queue use CountryFlag (country value carries code OR name)
-    expect(components).toContain("<CountryFlag country={p.country} />");
+    // CountryFlag still used for the board ticker (dr-tick) and board cell (dr-cell) compact contexts;
+    // pool rows / queue / pcard now use <PlayerAvatar> (P46)
+    expect(components).toContain("<CountryFlag country={p.player.country}");
   });
 
   it("renders a flag inside each nation filter chip (reusing Prompt-31's derived list, not re-derived)", () => {
@@ -64,10 +66,13 @@ describe("components.tsx — flags on rows + queue + filter chips, mapped throug
   });
 });
 
-describe("draft.css — emoji flag glyph styling (route-scoped, content imagery)", () => {
+describe("ds.css — emoji flag glyph styling (promoted to global in P46, shared across all surfaces)", () => {
   it("defines .flag-emoji with a fixed width so unmappable codes keep alignment", () => {
-    expect(css).toMatch(/\.flag-emoji\s*\{/);
-    expect(css).toMatch(/\.flag-emoji\.flag-lg\s*\{/);
+    expect(ds).toContain(".flag-emoji");
+    expect(ds).toContain(".flag-emoji.flag-lg");
+  });
+  it("draft.css no longer duplicates .flag-emoji (removed in P46)", () => {
+    expect(css).not.toMatch(/\.flag-emoji\s*\{/);
   });
 });
 

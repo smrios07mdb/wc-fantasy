@@ -26,6 +26,7 @@
 import type { Position } from "@app/shared";
 import type { PitchSlot, PitchView } from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup } from "../../src/lineup/types";
+import { PlayerAvatar } from "../../components/PlayerAvatar";
 
 const LANE_ORDER: Position[] = ["FWD", "MID", "DEF", "GK"];
 
@@ -92,7 +93,14 @@ export function PitchToken({ slot, selected, eligible, onSelect }: TokenProps) {
       title={`${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`}
     >
       <span className="sl-tok-top">
-        <Pos position={player.position} />
+        <PlayerAvatar
+          displayName={player.displayName}
+          firstName={player.firstName}
+          lastName={player.lastName}
+          country={player.country}
+          position={player.position}
+          size="sm"
+        />
         {!movable && <IcoLock />}
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
@@ -150,7 +158,14 @@ export function BenchRow({ slot, selected, eligible, onSelect }: TokenProps) {
       disabled={!movable && !eligible}
       onClick={() => onSelect(player.id)}
     >
-      <Pos position={player.position} />
+      <PlayerAvatar
+        displayName={player.displayName}
+        firstName={player.firstName}
+        lastName={player.lastName}
+        country={player.country}
+        position={player.position}
+        size="sm"
+      />
       <span className="sl-bench-name">{shortName(player)}</span>
       <LockTag movable={movable} mini />
     </button>

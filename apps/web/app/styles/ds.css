@@ -281,6 +281,29 @@ button { font-family: inherit; }
 .presence-dot { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--surface-1); background: var(--text-tertiary); }
 .presence-dot.is-online { background: var(--success); }
 
+/* PlayerAvatar (P46) — generated avatar: position-color disc + initials + flag badge.
+   Composes with .avatar / .avatar-{sm,md,lg}; no gold, no accent leak. */
+.player-avatar.pos-GK  { background: var(--pos-gk);  color: #fff; }
+.player-avatar.pos-DEF { background: var(--pos-def);  color: #04140e; }
+.player-avatar.pos-MID { background: var(--pos-mid);  color: #04140e; }
+.player-avatar.pos-FWD { background: var(--pos-fwd);  color: #1a0710; }
+/* Flag badge: tiny emoji or SVG inset at bottom-right of the disc. overflow:hidden on .avatar clips it,
+   so we use overflow:visible here and contain the badge just outside the circle edge. */
+.player-avatar { overflow: visible; }
+.pa-flag { position: absolute; bottom: -2px; right: -3px; line-height: 1; pointer-events: none; }
+.avatar-sm .pa-flag { font-size: 9px; }
+.avatar-md .pa-flag { font-size: 11px; }
+.avatar-lg .pa-flag { font-size: 14px; }
+.pa-flag-svg { display: block; border-radius: 1px; }
+.avatar-sm .pa-flag-svg { width: 10px; height: 6px; }
+.avatar-md .pa-flag-svg { width: 12px; height: 7px; }
+.avatar-lg .pa-flag-svg { width: 16px; height: 10px; }
+
+/* Emoji flag glyph — shared across all surfaces that render <Flag> or <PlayerAvatar>.
+   Fixed width keeps rows/chips aligned even when a code is unmappable (empty placeholder). */
+.flag-emoji { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; font-size: 15px; line-height: 1; }
+.flag-emoji.flag-lg { width: 26px; font-size: 20px; }
+
 /* Data rows / tables */
 .dtable { width: 100%; border-collapse: collapse; }
 .dtable th { text-align: left; font-size: var(--fs-micro); font-weight: var(--fw-bold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); padding: 8px 12px; border-bottom: 1px solid var(--hairline); white-space: nowrap; }

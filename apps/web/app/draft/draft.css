@@ -335,21 +335,7 @@
   background: color-mix(in srgb, var(--text-primary) 15%, transparent);
   color: var(--text-primary);
 }
-/* Emoji flag glyph (Prompt 33) — content imagery, sole render surface is <Flag>. The fixed width keeps
-   rows/chips aligned even when a code is unmappable (empty placeholder, never a broken glyph). */
-.flag-emoji {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  font-size: 15px;
-  line-height: 1;
-}
-.flag-emoji.flag-lg {
-  width: 26px;
-  font-size: 20px;
-}
+/* .flag-emoji promoted to ds.css (P46) — shared across all avatar/flag surfaces. */
 .dr-prow {
   display: flex;
   align-items: center;
