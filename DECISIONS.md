@@ -72,6 +72,16 @@ item, ARCHITECTURE §7). **No point values changed** — purely disambiguating; 
   (see locking), so there is no auto-sub list to rank.
 - **Undrafted players → FAAB pool.**
 
+### ⚠️ AMENDMENT (Prompt 44 — draft positional caps lifted)
+**Draft positional caps LIFTED — the draft is shape-unconstrained up to the 15-man total.** The
+per-position ceilings above (2 GK / 5 DEF / 5 MID / 3 FWD) were the *draft* caps; only that per-position
+draft ceiling is removed — the **squad total stays 15**. Lineup/formation bounds (**exactly 1 GK,
+min 3 DEF / 2 MID / 1 FWD**) are **UNCHANGED**, so managers must still self-assemble a fieldable XI; an
+over-drafted squad (e.g. zero keepers, or ten forwards) **can be locked out of a legal lineup by choice**
+— the draft no longer protects you from an unfieldable shape. (Engine: `@app/draft`'s
+`isPositionLegal` / `isSquadComplete` became total-based, gating on a new `squadTotal(counts)` helper vs
+`SQUAD_SIZE`; `PositionFullError` is retained but defensive/unreachable in the snake flow.)
+
 ### Locking & substitution — lock-on-play (NO auto-subs)
 - **A player locks the instant he plays ≥1 minute.** Until he plays he is freely swappable
   (subject to formation legality). This is stricter than "lock at kickoff" — a benched starter
@@ -1237,6 +1247,29 @@ form-driven CRUD through `POST /api/pool/pick` then `router.refresh()`). The P40
 - **Nav entry deferred (parallel staging).** `/pool` shipped reachable by direct URL only; "pool" is not
   yet a `NavId` (adding it touches the shared `crossNav.ts` + `AppShell.tsx` glyph map). The layout
   passes a non-member `active` so nothing falsely highlights — a one-line cleanup once the nav entry lands.
+
+### P43 — `/pool` live updates (clock-reveal + leaderboard poll; merged to main)
+
+Makes `/pool` feel live with **NO `pool_pick` subscription** — both mechanisms are **on-read**, no
+schema/migration, no stored score table, no `postgres_changes`. (The deferred P42 nav entry was wired
+separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
+
+- **No `pool_pick` subscription, by design.** The anti-copying gate is a **clock-based query**
+  (`kickoffAt <= now` in `readVisiblePicks`) and **RLS has no clock**, so a raw `postgres_changes` frame
+  would bypass that gate and **leak pre-kickoff predictions**. And the only pick state that ever changes
+  — a pick *revealing* — coincides exactly with the pick *locking* (revealable ⇒ past-kickoff ⇒ locked),
+  so there is **nothing live to stream**. Subscription = leak surface, no payoff.
+- **Live feel via two on-read mechanisms.** (1) A **clock-reveal timer** scheduled to the soonest future
+  kickoff among still-hidden matches; on fire it `router.refresh()`es the gated loader (the server
+  re-applies the kickoff gate), so others' picks reveal the moment their match locks, then it re-derives
+  the next instant. (2) A **visibility-gated leaderboard poll** (60s, Page Visibility API) that refetches
+  the on-read loader while the Leaderboard tab is active *and* the document is visible (immediate on
+  tab-activate + on return-to-visible; paused on the Picks tab / when hidden). The client clock only
+  decides *when* to refetch; the server stays authoritative on *what* is revealed (drift shifts timing by
+  seconds, not the revealed set).
+- **Reveal-leak guard holds under the new refetch paths.** The client reads others' picks from nothing
+  but the gated loader result (`fixture.others`); no raw pick payload from any source. The **dormant P40
+  `supabase_realtime` publication entry is left in place** (out of scope to remove).
 
 ## Notifications — Web Push transport + preference model (Prompt 41a; 41b wires triggers)
 
