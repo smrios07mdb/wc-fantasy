@@ -1022,3 +1022,6 @@ is Prompt 26). Merged to `main` @ `2145700`. The decisions of record:
   concern); the **playoff FAAB reset + waiver carry-forward** belong to the group→playoff transition prompt
   (this engine only READS current budget/order). `faab_bid` **RLS is already present** (Theme F invariants
   migration — own-pending read/write + public settled read), so no policy was added.
+
+## DRAFT Nation Binding (Prompt 33) — the locked §D algorithm in code; `@app/faab` pure resolver + bid route + cron
+P34 — Draft nation binding. /draft country chips (P31) and flags (P33) now source from FifaTeam.name via player.team, not the player.country scalar (no ingestion path ever wrote it). Single-file change in apps/web/app/draft/loadDraftRoom.ts — PLAYER_SELECT team join + toPlayer mapper (country = p.team?.name ?? null). DraftPlayer.country field name kept so P31/P33 untouched. No migration; no engine/route/worker/Realtime edits.
