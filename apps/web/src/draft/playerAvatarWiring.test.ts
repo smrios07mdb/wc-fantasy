@@ -139,17 +139,19 @@ describe("lineup/components.tsx — PlayerAvatar wired into PitchToken and Bench
   });
 });
 
-describe("lineup.css — <button> overflow fix so .pa-flag badge is not clipped by WebKit", () => {
-  it(".sl-tok has overflow:visible (WebKit clips <button border-radius> without it)", () => {
-    // Tailwind Preflight sets -webkit-appearance:button on all <button>s; combined with
-    // border-radius this causes Safari to clip absolute children unless overridden.
+describe("lineup.css — <button> overflow fix so .pa-flag badge is not clipped by Safari/WebKit", () => {
+  it(".sl-tok has overflow:visible (Safari clips <button border-radius> children without it)", () => {
+    // Tailwind Preflight sets -webkit-appearance:button on all <button>s; in Safari/WebKit this
+    // enforces a native paint-boundary clip that hides absolute children protruding outside the
+    // border-radius. overflow:visible breaks the native clip. Chrome/Blink is unaffected (buttons
+    // already compute overflow:visible in Chrome's UA stylesheet).
     const tokBlock = lineupCss.slice(
       lineupCss.indexOf(".sl-tok {"),
       lineupCss.indexOf("}", lineupCss.indexOf(".sl-tok {")),
     );
     expect(tokBlock).toContain("overflow: visible");
   });
-  it(".sl-bench-row has overflow:visible (same WebKit button-clip fix)", () => {
+  it(".sl-bench-row has overflow:visible (same Safari/WebKit button-clip fix)", () => {
     const benchBlock = lineupCss.slice(
       lineupCss.indexOf(".sl-bench-row {"),
       lineupCss.indexOf("}", lineupCss.indexOf(".sl-bench-row {")),
