@@ -181,3 +181,169 @@ describe("dashboard — no regression on existing landing/shell/draft/lineup/vsf
     expect(page).toContain("@/lib/auth/manager");
   });
 });
+
+// ─── P38: tournament phase extension ────────────────────────────────────────────────────────
+
+const tournamentSelector = readSrc("selectTournamentPhase.ts");
+const loader38 = readApp("_dashboard/loadDashboard.ts");
+
+describe("dashboard — P38 DashboardPhase widened to include tournament phases", () => {
+  it("DashboardPhase now includes pre-kickoff, group, playoff, complete", () => {
+    expect(phaseSelector).toContain('"pre-kickoff"');
+    expect(phaseSelector).toContain('"group"');
+    expect(phaseSelector).toContain('"playoff"');
+    expect(phaseSelector).toContain('"complete"');
+  });
+
+  it("post-draft is still present as a loader-internal intermediate (not a render phase)", () => {
+    expect(phaseSelector).toContain('"post-draft"');
+  });
+});
+
+describe("dashboard — selectTournamentPhase is pure, exhaustive, with never guard", () => {
+  it("returns TournamentPhase from match summaries (pre-kickoff | group | playoff | complete)", () => {
+    expect(tournamentSelector).toContain('"pre-kickoff"');
+    expect(tournamentSelector).toContain('"group"');
+    expect(tournamentSelector).toContain('"playoff"');
+    expect(tournamentSelector).toContain('"complete"');
+  });
+
+  it("uses status + round fields only — no kickoffAt for phase detection", () => {
+    expect(tournamentSelector).toContain("status");
+    expect(tournamentSelector).toContain("round");
+    // Phase logic reads status/round; kickoffAt is NOT used in selectTournamentPhase.
+    expect(tournamentSelector).not.toContain("kickoffAt");
+  });
+
+  it("distinguishes knockout matches by round !== null (not stage or periodId)", () => {
+    expect(tournamentSelector).toContain("round !== null");
+  });
+
+  it("never returns complete for an in_progress Final (only completed)", () => {
+    expect(tournamentSelector).toContain('round === "Final"');
+    expect(tournamentSelector).toContain('status === "completed"');
+  });
+});
+
+describe("dashboard — loadDashboard P38 composition + vsField population", () => {
+  it("imports selectTournamentPhase for the post-draft refinement", () => {
+    expect(loader38).toContain("selectTournamentPhase");
+    expect(loader38).toContain('from "../../src/dashboard/selectTournamentPhase"');
+  });
+
+  it("imports loadVsField for the group phase module data (READ-ONLY)", () => {
+    expect(loader38).toContain("loadVsField");
+    expect(loader38).toContain('from "../vsfield/loadVsField"');
+  });
+
+  it("DashboardData now has vsField + earliestGroupKickoff fields", () => {
+    expect(loader38).toContain("vsField:");
+    expect(loader38).toContain("earliestGroupKickoff:");
+  });
+
+  it("only loads vsField when phase is 'group' (not for other tournament phases)", () => {
+    expect(loader38).toContain('phase === "group"');
+    expect(loader38).toContain("loadVsField(sessionManagerId)");
+  });
+
+  it("queries fifa_match for tournament phase + earliest kickoff — minimal select", () => {
+    expect(loader38).toContain("prisma.fifaMatch.findMany");
+    expect(loader38).toContain("status: true");
+    expect(loader38).toContain("round: true");
+    expect(loader38).toContain("kickoffAt: true");
+  });
+
+  it("STOP(P38) seams documented for playoff and complete interims", () => {
+    expect(loader38).toContain("STOP(P38)");
+  });
+});
+
+describe("dashboard — group phase modules are built (P38)", () => {
+  it("RecordModule renders season W-L record + rank (db-record CSS class)", () => {
+    expect(dashboard).toContain("RecordModule");
+    expect(dashboard).toContain("db-record");
+    expect(dashboard).toContain("allPlayAllW");
+    expect(dashboard).toContain("totalPoints");
+  });
+
+  it("StandingsModule renders season standings table (db-stand CSS class)", () => {
+    expect(dashboard).toContain("StandingsModule");
+    expect(dashboard).toContain("db-stand");
+    expect(dashboard).toContain("db-stand-row");
+  });
+
+  it("MatchdayModule renders current-period fixtures + my XI lock status (db-match-list)", () => {
+    expect(dashboard).toContain("MatchdayModule");
+    expect(dashboard).toContain("db-match-list");
+    expect(dashboard).toContain("db-md-lock");
+    expect(dashboard).toContain("lockedCount");
+  });
+
+  it("modulesFor 'group' returns record + standings + matchday", () => {
+    expect(dashboard).toContain('case "group"');
+    expect(dashboard).toContain('"record"');
+    expect(dashboard).toContain('"standings"');
+    expect(dashboard).toContain('"matchday"');
+  });
+
+  it("group phase uses the spotlight layout (db-spotlight: wide standings + rail)", () => {
+    expect(dashboard).toContain("db-spotlight");
+    expect(dashboard).toContain("db-spot-main");
+    expect(dashboard).toContain("db-spot-rail");
+  });
+
+  it("playoff and complete phases return empty module lists (minimal interim only)", () => {
+    expect(dashboard).toContain('case "playoff"');
+    expect(dashboard).toContain('case "complete"');
+    // STOP seam comments present
+    expect(dashboard).toContain("STOP(P38)");
+  });
+});
+
+describe("dashboard — PrimaryBanner extended for tournament phases (P38)", () => {
+  it("PHASE_COLOR covers all 6 DashboardPhase values", () => {
+    expect(banner).toContain('"pre-kickoff"');
+    expect(banner).toContain('"group"');
+    expect(banner).toContain('"playoff"');
+    expect(banner).toContain('"complete"');
+  });
+
+  it("PHASE_EYEBROW covers all 6 DashboardPhase values", () => {
+    // Eyebrow labels for new phases
+    expect(banner).toContain("Group stage");
+    expect(banner).toContain("Knockouts");
+    expect(banner).toContain("Tournament complete");
+  });
+
+  it("pre-kickoff banner renders the real kickoff datetime (earliestGroupKickoff prop)", () => {
+    expect(banner).toContain("earliestGroupKickoff");
+    expect(banner).toContain("formatKickoffDate");
+  });
+
+  it("group banner uses vsField season data for rank + record", () => {
+    expect(banner).toContain("vsField?.season");
+    expect(banner).toContain("allPlayAllW");
+  });
+
+  it("playoff + complete banners have STOP(P38) seams documented", () => {
+    expect(banner).toContain("STOP(P38)");
+  });
+
+  it("PrimaryBanner signature accepts vsField + earliestGroupKickoff props", () => {
+    expect(banner).toContain("vsField:");
+    expect(banner).toContain("earliestGroupKickoff:");
+  });
+});
+
+describe("dashboard — CSS is fully tokenised (P38 additions)", () => {
+  it("dashboard.css has no literal hex values after P38 additions", () => {
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}(?:[^0-9a-fA-F]|$)/m);
+  });
+
+  it("new group module CSS rules are present (matchday + record utilities)", () => {
+    expect(css).toContain("db-match-row");
+    expect(css).toContain("db-match-list");
+    expect(css).toContain("db-md-lock");
+    expect(css).toContain("db-empty-note");
+  });
+});
