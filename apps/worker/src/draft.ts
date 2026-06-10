@@ -56,6 +56,14 @@ export interface DraftTickerOptions {
   now?: () => Date;
   /** Per-tick observer (logging); receives every draft's result. */
   onTick?: (results: TickResult[]) => void;
+  /**
+   * Post-tick hook (Prompt 41b draft_turn seam): runs AFTER `tickActiveDrafts` each interval, with the
+   * SAME store the loop drives, so it observes the post-autopick pointer. Injected (default: none) so
+   * `draft.ts` stays free of @app/notify — `index.ts` wires it to `dispatchDraftTurns`. A throw is
+   * isolated to `onError`; it never aborts the loop or overlaps the next interval (it is awaited inside
+   * the re-entrancy guard).
+   */
+  afterTick?: (store: DraftStore, now: Date) => Promise<void>;
   /** Per-tick error handler; a tick failure never aborts the loop. */
   onError?: (err: unknown) => void;
   /** Stop + exit after this many ticks (CI/smoke bound, mirroring the ingestion scheduler). */
@@ -86,11 +94,20 @@ export function startDraftTicker(opts: DraftTickerOptions = {}): DraftTickerHand
   async function tick(): Promise<void> {
     if (running) return; // a prior tick is still in flight — skip this interval
     running = true;
+    const now = clock();
     try {
       // Per-draft failures are isolated inside tickActiveDrafts (routed to onError, loop continues);
       // this outer catch only guards the batch-level call (e.g. listActiveDraftIds itself throwing).
-      const results = await tickActiveDrafts(clock(), store, (err) => opts.onError?.(err));
+      const results = await tickActiveDrafts(now, store, (err) => opts.onError?.(err));
       opts.onTick?.(results);
+      // Post-tick notification seam (41b): isolated so a notify failure never starves the autopick loop.
+      if (opts.afterTick) {
+        try {
+          await opts.afterTick(store, now);
+        } catch (err) {
+          opts.onError?.(err);
+        }
+      }
     } catch (err) {
       opts.onError?.(err);
     } finally {

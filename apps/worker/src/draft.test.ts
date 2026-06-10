@@ -160,6 +160,61 @@ describe("startDraftTicker — the dedicated short-interval loop", () => {
     expect(ticks).toBe(3); // no ticks after stop
   });
 
+  it("runs the post-tick hook after each tick with the store (the 41b draft_turn seam)", async () => {
+    vi.useFakeTimers();
+    const store = activeStore({
+      currentPickNo: 1,
+      currentManagerId: "m1",
+      pickDeadlineAt: FUTURE, // no-op ticks; we only care that afterTick fires
+      queueManagerId: "m1",
+    });
+    const seen: DraftStore[] = [];
+    const handle = startDraftTicker({
+      store,
+      intervalMs: 1000,
+      now: () => NOW,
+      afterTick: async (s) => {
+        seen.push(s);
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toBe(store); // the SAME store the ticker drove is handed to the hook
+
+    handle.stop();
+  });
+
+  it("a throwing post-tick hook is isolated (routed to onError, loop continues)", async () => {
+    vi.useFakeTimers();
+    const store = activeStore({
+      currentPickNo: 1,
+      currentManagerId: "m1",
+      pickDeadlineAt: FUTURE,
+      queueManagerId: "m1",
+    });
+    let ticks = 0;
+    const errors: unknown[] = [];
+    const handle = startDraftTicker({
+      store,
+      intervalMs: 1000,
+      now: () => NOW,
+      onTick: () => {
+        ticks += 1;
+      },
+      afterTick: async () => {
+        throw new Error("notify boom");
+      },
+      onError: (e) => errors.push(e),
+    });
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(ticks).toBe(2); // the loop kept ticking despite the hook throwing
+    expect(errors).toHaveLength(2);
+
+    handle.stop();
+  });
+
   it("stops itself after maxTicks (the CI/smoke bound) and calls onStopped", async () => {
     vi.useFakeTimers();
     const store = activeStore({

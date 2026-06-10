@@ -1,6 +1,7 @@
 import { config } from "./config";
 import { log } from "./logger";
-import { feed, ingestStore } from "./wiring";
+import { feed, ingestStore, notifyStore, notifyTriggerStore } from "./wiring";
+import { dispatchPlayersNotStarting, dispatchMatchStarting } from "./notify/triggers";
 import { runRecomputeSweep } from "./recompute";
 import {
   decideMatchModes,
@@ -117,8 +118,27 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
         if (!ctx) continue;
         try {
           if (action.mode === "pre_match") {
-            await ingestLineups(feed, ingestStore, ctx);
+            const { officialStarterBdlIds } = await ingestLineups(feed, ingestStore, ctx);
             pulledLineups.add(action.bdlId);
+            // Player-not-starting (41b): the official XI just landed → alert owners of any unlocked
+            // fantasy starter who is NOT in it. Isolated so a notify failure never breaks the lineup
+            // lock that just succeeded; the ledger makes the next pre_match pull's re-fire a no-op.
+            try {
+              const r = await dispatchPlayersNotStarting(
+                notifyStore,
+                notifyTriggerStore,
+                action.bdlId,
+                officialStarterBdlIds,
+              );
+              if (r.attempts > 0) {
+                log.debug("notify.player_not_starting", { matchBdlId: action.bdlId, ...r });
+              }
+            } catch (err) {
+              log.error("notify.player_not_starting.error", {
+                matchBdlId: action.bdlId,
+                message: (err as Error).message,
+              });
+            }
           } else if (action.mode === "live") {
             await ingestLive(feed, ingestStore, ctx);
             lastLivePoll.set(action.bdlId, now.getTime());
@@ -136,6 +156,21 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
 
       const result = await runRecomputeSweep();
       log.debug("scheduler.swept", { ...result });
+
+      // Match-starting (41b, owners-only): alert managers who own ≥1 rostered player on either team of a
+      // fixture kicking off within NOTIFY_MATCH_LEAD_MIN. Isolated from the ingestion/recompute work;
+      // the lead window + the notification_sent ledger collapse the 60s re-fires to one alert per owner.
+      try {
+        const r = await dispatchMatchStarting(
+          notifyStore,
+          notifyTriggerStore,
+          now,
+          config.notifyMatchLeadMs,
+        );
+        if (r.attempts > 0) log.debug("notify.match_starting", { ...r });
+      } catch (err) {
+        log.error("notify.match_starting.error", { message: (err as Error).message });
+      }
 
       // NOTE: the draft timer is NOT ticked here. A draft's per-pick clock needs a far tighter cadence
       // than this ~60s ingestion tick, so it runs on its own dedicated loop — `startDraftTicker`

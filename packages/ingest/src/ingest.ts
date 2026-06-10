@@ -81,22 +81,34 @@ function isSubstitution(incidentType: string): boolean {
   return incidentType.toLowerCase().includes("substitut");
 }
 
-/** Pre-match: pull the confirmed XI and lock every official starter at kickoff. */
+/** What the pre-match pull derived, surfaced to the worker IO so it can drive the player-not-starting
+ *  notification (Prompt 41b) WITHOUT a second `match_lineups` feed call. */
+export interface LineupsResult {
+  /** Every BALLDONTLIE player id in the official starting XI (is_starter), across both teams' lineups. */
+  officialStarterBdlIds: number[];
+}
+
+/** Pre-match: pull the confirmed XI, lock every official starter at kickoff, and return the XI's BDL ids. */
 export async function ingestLineups(
   feed: FeedClient,
   store: IngestStore,
   ctx: MatchCtx,
-): Promise<void> {
+): Promise<LineupsResult> {
   const res = await feed.matchLineups({ matchId: ctx.bdlId });
+  const officialStarterBdlIds: number[] = [];
   for (const lineup of res.data) {
     const entries: LineupAppearance[] = lineup.entries.map((e) => ({
       playerBdlId: e.player_id,
       isStarter: e.is_starter,
     }));
+    for (const e of entries) {
+      if (e.isStarter) officialStarterBdlIds.push(e.playerBdlId);
+    }
     for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt)) {
       await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
     }
   }
+  return { officialStarterBdlIds };
 }
 
 /** Live: upsert events/stats/shots/team stats, mark players dirty, and lock entering subs at their minute. */
