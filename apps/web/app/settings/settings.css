@@ -1,0 +1,63 @@
+/* /settings — profile rename surface (Prompt 39). Scoped .se-* rules layer on ds.css tokens.
+   No gold: Save is the only accent element (BRAND.md §1). */
+
+.se-page {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-4);
+}
+
+.se-head {
+  margin-bottom: var(--sp-8);
+}
+
+.se-head h1 {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-2);
+}
+
+.se-head p {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.se-card {
+  padding: var(--sp-6);
+  margin-bottom: var(--sp-4);
+}
+
+.se-section-title {
+  font-size: var(--fs-body-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-5);
+}
+
+.se-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.se-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.se-save {
+  align-self: flex-start;
+}
+
+.se-toast {
+  align-self: flex-start;
+}
+
+.se-deferred {
+  padding: var(--sp-4) var(--sp-6);
+  margin-bottom: var(--sp-4);
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+}

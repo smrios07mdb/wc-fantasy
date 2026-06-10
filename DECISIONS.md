@@ -1084,3 +1084,44 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   bracket, no playoff-real data, no tournament-complete recap. `modulesFor("playoff")` and
   `modulesFor("complete")` both return `[]`; `PrimaryBanner` shows "Knockouts underway" /
   "Tournament complete" minimal content. Unblocked by a future Guillotine prompt..
+
+## Profile rename / Settings route (Prompt 39)
+
+- **`display_name` is the single user-editable manager identity.** There is no `team_name` or
+  `@handle` column — those appear only in design prototype mocks and are explicitly OUT of scope.
+  Adding them is a separate migration + rendering theme if the product ever needs them. `display_name`
+  (TEXT NOT NULL on `manager`) is now self-service via `POST /api/manager/display-name`.
+
+- **Self-only rename; no commissioner-renames-another path.** A manager may rename only themselves
+  (any phase, including mid-draft). The framework-agnostic `handleDisplayNameRename` mirrors the
+  `handleDraftPick` edge pattern: `resolveManager()` → assert `canActAsManager(scope:"self")` →
+  `validateDisplayName` → DB write. The target is always the session manager's own id, so the
+  `canActAsManager` call is always `true`; it is present for pattern fidelity (a future admin
+  path would extend this check rather than add a new gate). There is no commissioner shortcut here.
+
+- **Case-insensitive per-league uniqueness via a raw-SQL functional index.** A `@@unique` in the
+  Prisma schema would only enforce exact-value matches. Expression-based uniqueness (`lower(display_name)`)
+  requires a raw-SQL index: `CREATE UNIQUE INDEX "manager_league_id_lower_display_name_key" ON "manager"
+  ("league_id", lower("display_name"))`. Applied in migration `20260610120000_manager_display_name_unique`.
+  Prisma surfaces a violation as `PrismaClientKnownRequestError` code `P2002`; the route maps this to
+  **409 `{ error: "name_taken" }`**. The schema.prisma `Manager` model carries a `/// Prompt 39:` comment
+  pointing at the migration for discoverability (no `@@unique` added — Prisma doesn't support expression
+  indexes). **Operator gate:** if existing managers in the same league already share a lower-cased name,
+  the migration will fail with a unique-violation. Do NOT auto-rename — surface the colliding rows
+  (`SELECT league_id, lower(display_name), array_agg(id) FROM manager GROUP BY 1,2 HAVING count(*)>1`)
+  as an operator decision before applying.
+
+- **The Settings seam is now a real, minimal route (profile-only; other sections still deferred).**
+  The Prompt-20 App Shell's `TODO(confirm): avatar menu / Settings` seam is wired: `"settings"` added to
+  `NavId` + `NAV_ITEMS` (the same treatment every other shipped route gets), the gear glyph added to
+  `AppShell.tsx`'s `NavIcon` record. The `/settings` route is server-rendered, AppShell-mounted
+  (`active="settings"`), auth-gated via `getSessionManager()`. **Built:** one "Public profile" section
+  with the display-name rename form (a small client island, `SettingsClient`). **Explicitly NOT built
+  and left as `TODO(confirm)` seams:** Account, Notifications, Appearance, League, Danger — building
+  them now is premature without the screens being designed or the underlying features existing.
+
+- **Realtime propagation of renames is deliberately NOT done.** A rename is not time-sensitive
+  (unlike a draft pick). Renaming propagates to other clients on their next server render or navigation.
+  Adding `manager` to a `postgres_changes` publication is out of scope — it would require a new RLS
+  SELECT policy for the broadcast and is documented as the "RLS-publication trap" in DECISIONS.
+  This behavior is acceptable and is noted in the route's JSDoc.

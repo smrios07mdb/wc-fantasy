@@ -10,6 +10,7 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
       "vsfield",
       "waivers",
       "scoring",
+      "settings",
     ]);
   });
 
@@ -21,6 +22,8 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
     expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
     expect(byId.scoring).toMatchObject({ href: "/scoring", label: "Scoring" });
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
+    // Prompt 39: Settings seam is now a real route.
+    expect(byId.settings).toMatchObject({ href: "/settings", label: "Settings" });
   });
 });
 
@@ -31,6 +34,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
     expect(selectActiveNav("/waivers")).toBe("waivers");
     expect(selectActiveNav("/scoring")).toBe("scoring");
+    expect(selectActiveNav("/settings")).toBe("settings");
   });
 
   it("marks home active ONLY on the exact root path (never via prefix)", () => {

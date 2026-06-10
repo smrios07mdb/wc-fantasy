@@ -144,6 +144,9 @@ model Manager {
   leagueId            String   @map("league_id")
   /// → app_user (Supabase auth user). Nullable until a real user claims the manager slot.
   userId              String?  @map("user_id")
+  /// Prompt 39: user-editable identity. Case-insensitively unique per league via a raw-SQL
+  /// functional index (see migration 20260610120000_manager_display_name_unique). No @@unique here
+  /// because Prisma doesn't support expression indexes; uniqueness is enforced at the DB level.
   displayName         String   @map("display_name")
   isCommissioner      Boolean  @default(false) @map("is_commissioner")
   /// Snake-draft slot (1..N), set at draft setup.

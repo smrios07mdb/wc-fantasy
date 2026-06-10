@@ -7,7 +7,7 @@
  * Labels are reused VERBATIM from the Prompt-16 hub (`app/page.tsx` FEATURES) so the strip and the hub
  * name the same screens identically. "Home" links back to that hub.
  */
-export type NavId = "home" | "draft" | "lineup" | "vsfield" | "waivers" | "scoring";
+export type NavId = "home" | "draft" | "lineup" | "vsfield" | "waivers" | "scoring" | "settings";
 
 export interface NavItem {
   readonly id: NavId;
@@ -24,6 +24,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "waivers", href: "/waivers", label: "Waivers" },
   // Scoring rules reference (Prompt 28) — a static, always-available in-app reference page.
   { id: "scoring", href: "/scoring", label: "Scoring" },
+  // Settings profile page (Prompt 39) — profile-name rename + deferred sections.
+  { id: "settings", href: "/settings", label: "Settings" },
 ];
 
 /**

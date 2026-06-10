@@ -47,8 +47,9 @@ set of types.** For a small team that is the single biggest reliability win avai
   with the global dark `body` surface now in effect). Tailwind / `globals.css` / Preflight remain
   installed and **coexist** (not the styling system; teardown is post-sprint). The feature/landing
   routes still carry byte-identical per-route `ds.css` copies that double-load harmlessly. The
-  authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield`) are wrapped by the **App Shell**
-  top-bar nav (`app/shell/AppShell.tsx`, which absorbed the interim CrossNav); auth/landing routes are
+  authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield` + `/waivers` + `/scoring` +
+  `/settings`) are wrapped by the **App Shell** top-bar nav (`app/shell/AppShell.tsx`, which absorbed
+  the interim CrossNav); auth/landing routes are
   not — they carry their own brand chrome (`/sign-in` + `/auth/denied` ds-skinned off Tailwind onto the
   split-shell `_auth/auth.css` in **Prompt 21**; the marketing landing in Prompt 19). Two reactive
   surfaces matter: the **live draft room** and the **live "vs the field" screen**;
@@ -231,6 +232,11 @@ not by hopeful application code:
 - `manager` — id, league_id, user_id (-> Supabase auth), display_name, is_commissioner,
   draft_slot, **faab_budget** (reset to 100 at playoff transition), **waiver_order_position**
   (rolling; seeded once by reverse draft order, mutated by move-to-bottom, carried into playoffs).
+  - **`display_name` is now user-editable (Prompt 39):** a manager may rename themselves via
+    `POST /api/manager/display-name`. Names are **case-insensitively unique within a league**
+    enforced by a raw-SQL functional index `(league_id, lower(display_name))` (migration
+    `20260610120000_manager_display_name_unique`). No `team_name`/`handle` column exists.
+    `app_user.display_name` (nullable, vestigial) is NOT touched by the rename route.
   - **`waiver_order_position` enforcement (locked — scaffold thread):** the **DB owns uniqueness** via a
     plain `@@unique([league_id, waiver_order_position])` (non-deferrable — vanilla Prisma, no drift). The
     **FAAB batch owns contiguity** (1..N, no gaps — not expressible as a constraint) and runs
@@ -400,6 +406,17 @@ Minimal, for a private league of friends.
   (commissioner pre-provisions + links vs. seeded; whether `app_user.id` is the Supabase uid — managed
   via DB for now, **no** self-serve manager wizard) + email case-sensitivity. The polished auth UI +
   the draft-room UI + Supabase Realtime remain the deferred Design+Code deliverable.
+  - **Prompt 39 — `/settings` + `POST /api/manager/display-name` (built, minimal):** the App Shell's
+    Settings `TODO(confirm)` seam is now a real route. `/settings` (`app/settings/`) is server-rendered,
+    AppShell-mounted (`active="settings"`), auth-gated via `getSessionManager()`. It has one built
+    section ("Public profile" — display-name rename, a small `SettingsClient` client island) and five
+    explicit `TODO(confirm)` seams (Account / Notifications / Appearance / League / Danger). The rename
+    API (`POST /api/manager/display-name`) follows the `handleDraftPick` edge pattern exactly:
+    framework-agnostic `handleDisplayNameRename` (`apps/web/src/manager/`) → 401 no-session / 403
+    not-allowlisted or no-manager / 400 invalid name (empty / too_long) / 409 name_taken / 200 normalized
+    name. Writes ONLY `manager.display_name`; `app_user.display_name` is NOT touched. Renames propagate
+    to other clients on next server render / navigation (no Realtime broadcast — intentional; see DECISIONS
+    → "Profile rename / Settings route").
 
 ---
 
