@@ -8,7 +8,6 @@ import {
   DraftNotReadyError,
   NotYourTurnError,
   PlayerUnavailableError,
-  PositionFullError,
 } from "./errors";
 
 const L = "league-1";
@@ -142,17 +141,16 @@ describe("submitPick", () => {
     expect(store.pickRows("d")).toEqual([]);
   });
 
-  it("rejects a pick that would overfill a position bucket — NO write", async () => {
+  it("allows a pick into a formerly-capped position bucket — caps are lifted", async () => {
     const store = new MemoryDraftStore();
     seedActive(store, ["m1", "m2"], 1, T0);
-    // m1 already has 3 FWD (the cap) from prior ownership
+    // m1 already has 3 FWD (previously the cap) — 4th FWD is now legal under total-based rule
     for (const f of ["f1", "f2", "f3"]) store.seedOwnership(L, "m1", f, "FWD");
     store.seedPlayer("pl-fwd", "FWD");
 
-    await expect(submitPick(store, "d", "m1", "pl-fwd", T0)).rejects.toBeInstanceOf(
-      PositionFullError,
-    );
-    expect(store.pickRows("d")).toEqual([]);
+    const result = await submitPick(store, "d", "m1", "pl-fwd", T0);
+    expect(result.playerId).toBe("pl-fwd");
+    expect(store.pickRows("d")).toHaveLength(1);
   });
 
   it("throws on a non-active (pending) draft", async () => {
@@ -305,16 +303,16 @@ describe("tickDraft — autopick totality (queue → default_rank NULLS LAST →
     expect(res.pick?.playerId).toBe("p-rank2");
   });
 
-  it("respects the 2/5/5/3 roster legality — skips a position whose bucket is full", async () => {
+  it("takes the best-ranked player regardless of position when caps are lifted", async () => {
     const store = new MemoryDraftStore();
     seedActive(store, ["m1", "m2"], 1, T0);
-    for (const f of ["f1", "f2", "f3"]) store.seedOwnership(L, "m1", f, "FWD"); // m1's FWD bucket full
-    store.seedPlayer("p-fwd", "FWD", 1); // best rank, but illegal for m1
+    for (const f of ["f1", "f2", "f3"]) store.seedOwnership(L, "m1", f, "FWD"); // total=3, under 15
+    store.seedPlayer("p-fwd", "FWD", 1); // best rank, now legal (total < 15)
     store.seedPlayer("p-mid", "MID", 2);
 
     const res = await tickDraft(store, "d", later(1000));
 
-    expect(res.pick?.playerId).toBe("p-mid");
+    expect(res.pick?.playerId).toBe("p-fwd");
   });
 
   it("never stalls while ANY legal, undrafted player remains (totality guarantee)", async () => {

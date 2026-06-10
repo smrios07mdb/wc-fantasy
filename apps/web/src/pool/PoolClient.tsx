@@ -1,21 +1,37 @@
 "use client";
 /**
- * The interactive /pool pick'em surface (Prompt 42). Net-new screen (no design reference): two tabs —
- * "Picks" (default) + "Leaderboard". Boring + reliable, by design: NO Realtime, NO polling (the Realtime
- * subscription + live pick-reveal-at-kickoff are Prompt 43). Reads arrive as the `view` prop from the
+ * The interactive /pool pick'em surface (Prompt 42, made live in Prompt 43). Net-new screen (no design
+ * reference): two tabs — "Picks" (default) + "Leaderboard". Reads arrive as the `view` prop from the
  * server component (`loadPool`); every pick is a `POST /api/pool/pick` round-trip followed by
- * `router.refresh()` (re-runs the server component → fresh props — no optimistic-only state). The only
- * live thing is the `now` clock, seeded from `view.nowIso` and ticked client-side so a fixture's control
- * disables the instant its kickoff passes (the lock-on-play language reused from setlineup/vsfield).
+ * `router.refresh()` (re-runs the server component → fresh props — no optimistic-only state). The `now`
+ * clock, seeded from `view.nowIso` and ticked client-side, disables a fixture's control the instant its
+ * kickoff passes (the lock-on-play language reused from setlineup/vsfield).
+ *
+ * LIVE (Prompt 43), both on-read — still NO Realtime subscription, NO stored score table:
+ *   - Clock-reveal: `startRevealClock` schedules ONE timer to the soonest future kickoff among
+ *     still-hidden matches; on fire it `router.refresh()`es so others' picks reveal live the moment their
+ *     match locks. The server re-applies the kickoff gate, so the client clock only decides WHEN to refetch.
+ *   - Leaderboard poll: while the Leaderboard tab is active AND the document is visible,
+ *     `startLeaderboardPoll` refetches the on-read loader every 60s (+ immediately on activate and on
+ *     return-to-visible) so standings track results; paused on the Picks tab or when the doc is hidden.
+ * No `pool_pick` subscription by design (the P43 decision record): a raw frame would bypass the server's
+ * clock-gated anti-copying read and leak pre-kickoff predictions — and a revealable pick is already locked.
  *
  * Reveal is server-enforced: the loader returns others' picks ONLY for matches past kickoff (Prompt 40
  * §3); the UI just renders `fixture.others`. The route's 409s (pick-locked, knockout-DRAW) surface as
  * inline per-fixture errors.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PoolPrediction } from "@app/shared";
 import { isFixtureLocked } from "./poolView";
+import {
+  LEADERBOARD_POLL_MS,
+  flattenPickFixtures,
+  handleLeaderboardVisible,
+  startLeaderboardPoll,
+  startRevealClock,
+} from "./poolLive";
 import { FixtureCard, LeaderboardTable } from "./components";
 import type { PoolFixture, PoolView } from "./types";
 import "./pool.css";
@@ -51,6 +67,37 @@ export function PoolClient({ view }: { view: PoolView }) {
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  // ── Clock-reveal (Prompt 43) ──────────────────────────────────────────────────────────────
+  // Every fixture flat (group + bracket + unscheduled), read through a ref so a re-derive after a refetch
+  // sees fresh data without re-running the mount-once effect. The controller self-reschedules (one timer
+  // per reveal), so the effect must NOT re-run per render or we'd double-schedule.
+  const flatFixtures = useMemo(() => flattenPickFixtures(view.picks), [view.picks]);
+  const fixturesRef = useRef(flatFixtures);
+  fixturesRef.current = flatFixtures;
+  useEffect(() => {
+    const stop = startRevealClock({
+      getFixtures: () => fixturesRef.current,
+      now: () => Date.now(),
+      onReveal: () => router.refresh(), // the gated read — server re-applies the kickoff reveal gate
+    });
+    return stop;
+  }, [router]);
+
+  // ── Leaderboard visibility-poll (Prompt 43) ───────────────────────────────────────────────
+  // Active ONLY while the Leaderboard tab is shown: refetch the on-read loader every 60s + immediately on
+  // activate and on return-to-visible; paused (torn down) on the Picks tab or while the document is hidden.
+  useEffect(() => {
+    if (tab !== "leaderboard") return;
+    const deps = { isVisible: () => !document.hidden, refetch: () => router.refresh() };
+    const onVisible = () => handleLeaderboardVisible(deps);
+    document.addEventListener("visibilitychange", onVisible);
+    const stop = startLeaderboardPoll({ ...deps, intervalMs: LEADERBOARD_POLL_MS });
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      stop();
+    };
+  }, [tab, router]);
 
   // Deterministic kickoff formatter (explicit locale + UTC ⇒ identical SSR + client output, no mismatch).
   const fmtKickoff = useMemo(() => {
