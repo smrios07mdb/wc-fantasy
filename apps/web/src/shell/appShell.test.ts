@@ -47,6 +47,12 @@ describe("AppShell — the global nav chrome (server component, pure-presentatio
     }
   });
 
+  it("defines a glyph for every NavId — including the Prompt-42 pool entry", () => {
+    // The glyph map is `Record<NavId, ReactNode>` (exhaustive), so a missing key is a tsc error too;
+    // this guards the source-level contract that adding "pool" to the union added its glyph here.
+    expect(shell).toMatch(/pool:\s*\(/);
+  });
+
   it("labels the topbar banner so it's distinguishable from a screen's own <header>", () => {
     // /lineup renders its own `sl-topbar` <header> (also a `banner`); the shell's must be labelled.
     expect(shell).toMatch(/<header className="sh-topbar" aria-label=/);
@@ -76,6 +82,14 @@ describe("AppShell mounting — wraps the authenticated screens ONLY", () => {
       expect(src, "no CrossNav element survives").not.toContain("<CrossNav");
     });
   }
+
+  it("mounts the shell on the /pool layout with a real NavId — no `as NavId` cast", () => {
+    const poolLayout = read("pool/layout.tsx");
+    expect(poolLayout).toMatch(/<AppShell active=/);
+    // feat/pool-nav: now that "pool" is a real NavId, the Prompt-42 escape-hatch cast must be gone.
+    expect(poolLayout, "the `as NavId` cast must be dropped").not.toMatch(/as NavId/);
+    expect(poolLayout).toContain('active="pool"');
+  });
 
   it("wraps the signed-in hub state — and ONLY that landing state", () => {
     const page = read("page.tsx");

@@ -65,6 +65,14 @@ function NavIcon({ id }: { id: NavId }) {
         <path d="M8 11V8a4 4 0 0 1 8 0v3" />
       </>
     ),
+    // Pool = a pick'em ballot card with a check (the match pick'em pool, Prompt 42) — distinct from
+    // scoring's lined doc and vsfield's goal-circle.
+    pool: (
+      <>
+        <rect x="4" y="3.5" width="16" height="17" rx="2.5" />
+        <path d="M8.5 12.5 11 15l4.5-5.5" />
+      </>
+    ),
     // Scoring = a rulebook / lined document (the in-app scoring reference, Prompt 28).
     scoring: (
       <>

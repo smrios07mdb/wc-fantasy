@@ -9,6 +9,7 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
       "lineup",
       "vsfield",
       "waivers",
+      "pool",
       "scoring",
       "settings",
     ]);
@@ -20,6 +21,8 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
     expect(byId.lineup).toMatchObject({ href: "/lineup", label: "Set lineup" });
     expect(byId.vsfield).toMatchObject({ href: "/vsfield", label: "Vs the field" });
     expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
+    // Prompt 42 / feat/pool-nav: the pick'em pool seam is now a real nav entry.
+    expect(byId.pool).toMatchObject({ href: "/pool", label: "Pool" });
     expect(byId.scoring).toMatchObject({ href: "/scoring", label: "Scoring" });
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
     // Prompt 39: Settings seam is now a real route.
@@ -33,6 +36,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/lineup")).toBe("lineup");
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
     expect(selectActiveNav("/waivers")).toBe("waivers");
+    expect(selectActiveNav("/pool")).toBe("pool");
     expect(selectActiveNav("/scoring")).toBe("scoring");
     expect(selectActiveNav("/settings")).toBe("settings");
   });
