@@ -151,6 +151,9 @@ importers:
       '@app/ingest':
         specifier: workspace:*
         version: link:../../packages/ingest
+      '@app/notify':
+        specifier: workspace:*
+        version: link:../../packages/notify
       '@app/recompute':
         specifier: workspace:*
         version: link:../../packages/recompute

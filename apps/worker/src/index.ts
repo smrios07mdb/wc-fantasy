@@ -8,6 +8,8 @@ import { config } from "./config";
 import { log } from "./logger";
 import { startScheduler } from "./scheduler";
 import { startDraftTicker } from "./draft";
+import { notifyStore, draftStore } from "./wiring";
+import { dispatchDraftTurns } from "./notify/triggers";
 
 function main(): void {
   log.info("worker.boot", {
@@ -23,6 +25,7 @@ function main(): void {
   // ingestion tick. An expired `pick_deadline_at` autopicks within seconds; a completed draft drops
   // out of the loop. The decision stays inside the unchanged `@app/draft` controller.
   const draftTicker = startDraftTicker({
+    store: draftStore,
     intervalMs: config.draftTickMs,
     maxTicks: config.draftMaxTicks,
     onTick: (results) => {
@@ -31,6 +34,10 @@ function main(): void {
         log.debug("draft.ticked", { drafts: results.length, autopicks });
       }
     },
+    // draft_turn (41b): after each tick, notify the on-the-clock manager of every active draft. The
+    // SAME store the ticker drove is reused so the dispatch sees the post-autopick pointer; the
+    // ${draftId}:${pickNo} ledger key makes the 2s re-fire a no-op until the turn advances.
+    afterTick: (store) => dispatchDraftTurns(notifyStore, store).then(() => undefined),
     onError: (err) => log.error("draft.tick.error", { message: (err as Error).message }),
   });
 

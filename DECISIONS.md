@@ -1271,3 +1271,47 @@ write/read path. NO UI / nav / bracket / leaderboard screen / Realtime client �
 - **Platform reality (live-deploy-only).** iOS delivers Web Push **only to an installed (Add-to-Home-
   Screen) PWA**; Android delivers in-browser **or** installed. The real OS permission prompt + actual
   device delivery are not in-session verifiable — flagged as go-live inferences.
+
+### 41b — the three triggers wired (worker-side dispatch, sender now live)
+
+- **Three worker-side triggers, each a PURE selector + an IO dispatch through `dispatchToManager`.** The
+  selection logic (`apps/worker/src/notify/selectors.ts`) is grep-clean IO-free and unit-tested; the
+  dispatch (`triggers.ts`) is the only notify layer that touches DB/web-push. **No new route/UI/schema/
+  feed call**, and the pure cores (`@app/draft` controller, `@app/ingest` `lock.ts`) stay untouched.
+  Idempotency is **not** re-implemented per trigger — the `notification_sent(manager, kind, subject_id)`
+  UNIQUE ledger inside `dispatchToManager` collapses every re-fire to one send, so the pollers stay
+  stateless and re-emit the same set each tick.
+
+- **The three `subjectId` ledger keys** (the idempotency key):
+  - `draft_turn` → **`${draftId}:${pickNo}`** — one alert per turn. **Piggybacks the existing 2s draft
+    ticker** (a new injected `afterTick` hook on `startDraftTicker`, so `draft.ts` stays free of
+    `@app/notify`). Catches a turn advanced by **either** a human pick (web route) or an autopick (worker
+    tick) without touching the controller; the pickNo in the key makes the 2s re-fire a no-op until the
+    turn advances. **No on-deck** notification (one per turn). Drops out when the draft completes.
+  - `player_not_starting` → **`${matchId}:${playerId}`** — hooks the **pre-match `match_lineups` pull**
+    (the same event that derives locks). `ingestLineups` now **returns the official-XI starter BDL ids**
+    it already fetched (no second feed call); the worker compares them against the match's fantasy
+    **is_starter** lineup slots and alerts the owner of any starter **not in the XI and still unlocked**
+    (`locked_at` null). The high-value, time-sensitive one (swap window before the reserve's kickoff).
+  - `match_starting` → **`${matchId}`** — on each **60s ingestion-scheduler tick**, alert managers who
+    own ≥1 rostered player on **either** team of a fixture kicking off within the lead window.
+
+- **match_starting confirm-points (defaults baked in, flagged `TODO(confirm)`):** lead = **15 min**
+  (config knob **`NOTIFY_MATCH_LEAD_MIN`**); **owners-only**, "owns a player" = the **whole roster**
+  (not just starters). The lead window (`[now, now+lead]`, kickoff-in-past excluded) + the ledger
+  collapse the 60s re-fires to one alert per owner per fixture.
+
+- **Worker-local trigger-read port (`apps/worker/src/notify/store.ts`), not `@app/ingest`.** The two
+  reads 41b needs that the draft store doesn't cover (fantasy starters for a match's period; upcoming
+  matches widened to owners on either team) live in the **worker IO layer** so `@app/ingest`'s lock
+  derivation stays IO-free. Roster ownership is **global, not league-scoped** — leans on the schema's
+  one-league-per-tournament assumption (a multi-league deploy would add a league filter; noted in the
+  adapter). The draft-turn trigger needs **no** new read — it reuses `DraftStore.loadDraft` + the shared
+  store the ticker drives, so the dispatch sees the post-autopick pointer.
+
+- **Every trigger dispatch is isolated** (its own try/catch in the scheduler / `afterTick`) so a notify
+  failure never starves the autopick loop or the ingestion/recompute work.
+
+- **`@app/notify` added to the worker `package.json`** (the 41a note that the worker "already depends on
+  @app/notify" was not yet true — only the VAPID env was wired). Device delivery remains a **live-only**
+  inference (the test runner has no push service) — flagged to confirm on deploy.

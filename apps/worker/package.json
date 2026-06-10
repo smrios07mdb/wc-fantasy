@@ -19,6 +19,7 @@
     "@app/faab": "workspace:*",
     "@app/feed": "workspace:*",
     "@app/ingest": "workspace:*",
+    "@app/notify": "workspace:*",
     "@app/recompute": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",

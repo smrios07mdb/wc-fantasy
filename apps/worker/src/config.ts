@@ -36,4 +36,7 @@ export const config = {
   draftTickMs: intEnv("WORKER_DRAFT_TICK_MS", 2_000),
   /** When set, the draft ticker stops itself after this many ticks (smoke tests / CI exit path). */
   draftMaxTicks: process.env.WORKER_DRAFT_MAX_TICKS ? intEnv("WORKER_DRAFT_MAX_TICKS", 0) : null,
+  /** Lead time before kickoff to fire the match-starting notification (minutes; Prompt 41b). The 60s
+   *  ingestion tick + the notification_sent ledger collapse repeats to one alert per fixture. Default 15. */
+  notifyMatchLeadMs: intEnv("NOTIFY_MATCH_LEAD_MIN", 15) * 60_000,
 } as const;

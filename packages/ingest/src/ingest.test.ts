@@ -83,10 +83,17 @@ describe("ingestLineups (pre-match)", () => {
         }),
     });
     const store = new MemoryIngestStore();
-    await ingestLineups(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    const out = await ingestLineups(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+    });
     expect(store.lockedAt(50, 1)).toEqual(kickoff);
     expect(store.lockedAt(50, 2)).toEqual(kickoff);
     expect(store.lockedAt(50, 3)).toBeUndefined(); // bench (not in real XI) stays swappable
+    // The pull also RETURNS the official-XI starter BDL ids (no second feed call) so the worker IO can
+    // drive the player-not-starting notification (Prompt 41b); bench players (is_starter:false) excluded.
+    expect(out.officialStarterBdlIds).toEqual([1, 2]);
   });
 });
 
