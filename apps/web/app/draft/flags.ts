@@ -1,10 +1,12 @@
 /**
- * Nation flag chips as CSS gradients (no external image assets) — ported from
- * design/design_reference/draft/data.jsx (`NATIONS` + `flagStyle`). Players carry an ISO-3 `country`
- * code; an unknown/absent code falls back to a neutral surface. Display-only.
+ * Nation NAME lookup for the draft pool. Originally ported from design/design_reference/draft/data.jsx
+ * (`NATIONS` + a gradient `flagStyle`); since Prompt 33 the flag GLYPH is rendered by the emoji `<Flag>`
+ * surface (apps/web/app/draft/Flag.tsx) off `src/draft/flag.ts`, so the gradient renderer is retired and
+ * this file now only resolves the friendly country NAME shown beside each flag. Display-only.
  */
 export interface Nation {
   name: string;
+  /** Legacy gradient (retired — the emoji `<Flag>` is now the sole flag-render surface); kept for parity. */
   gradient: string;
 }
 
@@ -66,12 +68,6 @@ export const NATIONS: Record<string, Nation> = {
     gradient: "linear-gradient(90deg,#008751 0 33%,#fff 33% 66%,#008751 66%)",
   },
 };
-
-/** Inline style for a flag chip from an ISO-3 code (neutral fallback for unknown/absent codes). */
-export function flagStyle(code: string | null): { background: string; backgroundSize: string } {
-  const nation = code ? NATIONS[code] : undefined;
-  return { background: nation?.gradient ?? "var(--surface-3)", backgroundSize: "cover" };
-}
 
 /** Friendly nation name for a code, or the code itself (or "" if absent). */
 export function nationName(code: string | null): string {

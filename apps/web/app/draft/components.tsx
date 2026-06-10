@@ -23,19 +23,16 @@ import {
   POSITION_FILTERS,
 } from "../../src/draft/board";
 import { countdownView, type CountdownView } from "../../src/draft/countdown";
-import { flagStyle, nationName } from "./flags";
+import { nationName } from "./flags";
+import { Flag } from "./Flag";
+import { toIso2 } from "../../src/draft/flag";
 import { reorderQueue } from "../../src/draft/queueReorder";
 
 // ─────────────────────────────────────────── atoms ───────────────────────────────────────────
 
-export function Flag({ nat, lg }: { nat: string | null; lg?: boolean }) {
-  return (
-    <span
-      className={"flag" + (lg ? " flag-lg" : "")}
-      style={flagStyle(nat)}
-      title={nationName(nat)}
-    />
-  );
+/** A pool/queue country flag from its `country` value (code or name) — emoji via the sole `<Flag>` surface. */
+function CountryFlag({ country, lg }: { country: string | null; lg?: boolean }) {
+  return <Flag code={toIso2(country)} label={nationName(country)} lg={lg} />;
 }
 
 export function Pos({ p }: { p: Position }) {
@@ -203,7 +200,7 @@ export function Ticker({ state }: { state: DraftRoomState }) {
             <span className="mono t-micro text-tertiary">
               {round + 1}.{((p.pickNo - 1) % n) + 1}
             </span>
-            {p.player && <Flag nat={p.player.country} />}
+            {p.player && <CountryFlag country={p.player.country} />}
             {p.player && <Pos p={p.player.position} />}
             <b className="t-sm">{p.player?.lastName ?? p.player?.displayName ?? "—"}</b>
             <span className="t-caption text-tertiary">
@@ -272,7 +269,7 @@ function BoardRow({ row }: { row: ReturnType<typeof buildBoard>["rows"][number] 
               <>
                 <div className="cell-top">
                   <Pos p={pick.player.position} />
-                  <Flag nat={pick.player.country} />
+                  <CountryFlag country={pick.player.country} />
                   <span className="pk">{cell.pickNo}</span>
                 </div>
                 <b className="cell-name">
@@ -380,6 +377,7 @@ export function AvailableList({
               className={"chip" + (nation === code ? " is-active" : "")}
               onClick={() => setNation(code)}
             >
+              <Flag code={toIso2(code)} label={nationName(code)} />
               {nationName(code)}
             </span>
           ))}
@@ -400,7 +398,7 @@ export function AvailableList({
             <span className="mono t-micro text-tertiary" style={{ width: 18 }}>
               {i + 1}
             </span>
-            <Flag nat={p.country} />
+            <CountryFlag country={p.country} />
             <Pos p={p.position} />
             <div className="nm">
               <b>{p.displayName}</b>
@@ -509,7 +507,7 @@ export function QueuePanel({
             <span className="mono t-micro text-tertiary" style={{ width: 16 }}>
               {i + 1}
             </span>
-            <Flag nat={p.country} />
+            <CountryFlag country={p.country} />
             <Pos p={p.position} />
             <div className="nm" style={{ flex: 1 }}>
               <b className="t-sm">{p.lastName ?? p.displayName}</b>{" "}
@@ -606,7 +604,7 @@ export function RosterPanel({ state }: { state: DraftRoomState }) {
                 .filter((p) => p.player?.position === pp)
                 .map((p) => (
                   <div className="pcard" key={p.pickNo} style={{ marginBottom: 6 }}>
-                    <Flag nat={p.player?.country ?? null} />
+                    <CountryFlag country={p.player?.country ?? null} />
                     <Pos p={pp} />
                     <div className="stack" style={{ flex: 1 }}>
                       <b className="t-sm">{p.player?.displayName}</b>
@@ -747,7 +745,7 @@ export function Summary({ state }: { state: DraftRoomState }) {
                 .filter((p) => p.player?.position === pp)
                 .map((p) => (
                   <div className="pcard" key={p.pickNo} style={{ marginBottom: 6 }}>
-                    <Flag nat={p.player?.country ?? null} />
+                    <CountryFlag country={p.player?.country ?? null} />
                     <div className="stack" style={{ flex: 1, minWidth: 0 }}>
                       <b
                         className="t-caption"
