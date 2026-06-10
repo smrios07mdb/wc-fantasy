@@ -12,16 +12,15 @@
  *      Any `postponed` or `abandoned` fixture is an anomaly → the period is NOT frozen; the caller
  *      should log it for manual (commissioner) override.
  *   4. `now >= max(kickoffAt among the period's fixtures) + freezeHours`.
- *      `kickoffAt` is used as the proxy for the last FT whistle (the actual FT timestamp is not
- *      stored in the schema). Since `resultFreezeHours` defaults to 6, even a 90-min + ET match is
- *      well within the window.
+ *      `kickoffAt` is used as the proxy for the last FT whistle — `fifa_match` stores no
+ *      settled/completed-at timestamp (Chat-confirmed P45; `updatedAt` is unreliable as it touches
+ *      on any row mutation, not just status→completed). `resultFreezeHours` defaults to 6, so even
+ *      a 90-min + ET match is well within the window.
  *
- * // TODO(confirm): frozen_at is stamped as `now` (the instant the cron runs), NOT the computed
- * //   threshold `max(kickoffAt) + freezeHours`. This records WHEN the period was actually frozen,
- * //   which is the right audit-trail value. The threshold is only the gate.
- *
- * // TODO(confirm): "all fixtures final" = every fixture status is "completed". A single
- * //   `postponed` or `abandoned` fixture blocks the whole period (anomaly path).
+ * Chat-confirmed P45: `frozen_at` is stamped as `now` (the actual freeze instant), NOT the
+ * computed threshold — `now` is the right audit-trail value; the threshold is only the gate.
+ * Chat-confirmed P45: "all fixtures final" = every fixture `status === "completed"`; a single
+ * `postponed` or `abandoned` fixture blocks the whole period (anomaly path).
  */
 import type { MatchStatus } from "@app/shared";
 
