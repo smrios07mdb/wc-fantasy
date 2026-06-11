@@ -62,56 +62,64 @@ describe("comparePeriodLabels — the comparator used by selectors", () => {
   });
 });
 
-describe("selectCurrentPeriod — opensAt-NULL ordering bug + batchClearedAt advancement", () => {
+describe("selectCurrentPeriod — opensAt-NULL ordering bug + per-screen predicates", () => {
   const MD1_KO = new Date("2026-06-11T16:00:00.000Z");
   const MD2_KO = new Date("2026-06-15T16:00:00.000Z");
   const FINAL_KO = new Date("2026-07-19T19:00:00.000Z");
+  const MATCH_DURATION_MS = 120 * 60 * 1000;
 
   const md1 = {
     id: "md1",
     label: "Group MD1",
     status: "pending",
-    batchClearedAt: null,
+    batchClearedAt: null as Date | null,
     matches: [{ kickoffAt: MD1_KO }],
   };
   const md2 = {
     id: "md2",
     label: "Group MD2",
     status: "pending",
-    batchClearedAt: null,
+    batchClearedAt: null as Date | null,
     matches: [{ kickoffAt: MD2_KO }],
   };
   const final = {
     id: "final",
     label: "Final",
     status: "pending",
-    batchClearedAt: null,
+    batchClearedAt: null as Date | null,
     matches: [{ kickoffAt: FINAL_KO }],
+  };
+
+  // Waivers predicate: skip a period once its FAAB batch has cleared.
+  const waiversPredicate = (p: { batchClearedAt: Date | null }) => p.batchClearedAt === null;
+  // Vsfield predicate factory: a period is live if now < its last kickoff + MATCH_DURATION_MS.
+  const vsFieldPredicate = (now: Date) => (p: { matches: Array<{ kickoffAt: Date }> }) => {
+    const lastMs = p.matches.at(-1)?.kickoffAt.getTime() ?? 0;
+    return now.getTime() < lastMs + MATCH_DURATION_MS;
   };
 
   it("returns the earliest pending period, not the alphabetically first (the opensAt-NULL bug)", () => {
     // DB returns [Final, MD1] because all opensAt=NULL → alphabetical tiebreak puts 'F' before 'G'
-    const picked = selectCurrentPeriod([final, md1]);
+    const picked = selectCurrentPeriod([final, md1], waiversPredicate);
     expect(picked?.id).toBe("md1");
   });
 
-  it("advances past a cleared period: [MD1 cleared, MD2 pending] → picks MD2", () => {
+  it("waivers: advances past a cleared period [MD1 cleared, MD2 pending] → picks MD2", () => {
     const md1Cleared = { ...md1, batchClearedAt: new Date("2026-06-11T10:00:00.000Z") };
-    // Even with alphabetical input order, cleared MD1 is skipped and MD2 is returned
-    expect(selectCurrentPeriod([final, md1Cleared, md2])?.id).toBe("md2");
+    expect(selectCurrentPeriod([final, md1Cleared, md2], waiversPredicate)?.id).toBe("md2");
   });
 
   it("prefers an open period over the earliest pending", () => {
     const openMd2 = { ...md2, status: "open" };
-    expect(selectCurrentPeriod([final, openMd2, md1])?.id).toBe("md2");
+    expect(selectCurrentPeriod([final, openMd2, md1], waiversPredicate)?.id).toBe("md2");
   });
 
-  it("returns null when all pending periods have been cleared", () => {
+  it("returns null when the predicate matches nothing", () => {
     const allCleared = [
       { ...md1, batchClearedAt: new Date() },
       { ...final, batchClearedAt: new Date() },
     ];
-    expect(selectCurrentPeriod(allCleared)).toBeNull();
+    expect(selectCurrentPeriod(allCleared, waiversPredicate)).toBeNull();
   });
 
   it("a period with no fixtures sorts last so one with fixtures is preferred", () => {
@@ -122,6 +130,24 @@ describe("selectCurrentPeriod — opensAt-NULL ordering bug + batchClearedAt adv
       batchClearedAt: null,
       matches: [],
     };
-    expect(selectCurrentPeriod([noFixtures, md1])?.id).toBe("md1");
+    expect(selectCurrentPeriod([noFixtures, md1], waiversPredicate)?.id).toBe("md1");
+  });
+
+  it("vsfield: batch-cleared but matches still live → stays on cleared period (MD1)", () => {
+    const md1Cleared = { ...md1, batchClearedAt: new Date("2026-06-11T10:00:00.000Z") };
+    // 1h after MD1 kickoff — still within MATCH_DURATION_MS (2h)
+    const duringMd1 = new Date(MD1_KO.getTime() + 60 * 60 * 1000);
+    expect(selectCurrentPeriod([final, md1Cleared, md2], vsFieldPredicate(duringMd1))?.id).toBe(
+      "md1",
+    );
+  });
+
+  it("vsfield: after MD1 finishes → advances to MD2", () => {
+    const md1Cleared = { ...md1, batchClearedAt: new Date("2026-06-11T10:00:00.000Z") };
+    // 3h after MD1 kickoff — past MATCH_DURATION_MS (2h)
+    const afterMd1 = new Date(MD1_KO.getTime() + 3 * 60 * 60 * 1000);
+    expect(selectCurrentPeriod([final, md1Cleared, md2], vsFieldPredicate(afterMd1))?.id).toBe(
+      "md2",
+    );
   });
 });

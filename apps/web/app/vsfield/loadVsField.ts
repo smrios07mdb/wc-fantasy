@@ -12,6 +12,9 @@
  */
 import { prisma } from "@app/db";
 import { selectCurrentPeriod } from "@app/shared";
+
+/** Max wall-clock window to consider a period still live after its last scheduled kickoff. */
+const MATCH_DURATION_MS = 120 * 60 * 1000; // covers regulation + extra time
 import {
   buildVsField,
   type BuildVsFieldInput,
@@ -30,6 +33,7 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
   });
   if (!viewer) return null;
   const leagueId = viewer.leagueId;
+  const now = new Date();
 
   const [managerRows, periodRows, standingRows] = await Promise.all([
     // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
@@ -48,8 +52,7 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
         label: true,
         kind: true,
         status: true,
-        batchClearedAt: true,
-        matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
+        matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true } },
       },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
     }),
@@ -65,13 +68,18 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
     }),
   ]);
 
-  // Current period: the open wave (if any), else the earliest pending-and-uncleared period by first
-  // fixture kickoff. opensAt is never populated by the provisioning CLI (NULL for all periods), so
-  // the DB ORDER BY opensAt falls back to label-alphabetical and puts "Final" before "Group MD1".
-  // selectCurrentPeriod re-sorts by matches[0].kickoffAt in JS and uses batchClearedAt=null as the
-  // advancement latch (same as the worker's selectPeriodsToClear). All cleared → null (Season tab
-  // still renders from standing).
-  const currentPeriodRow = selectCurrentPeriod(periodRows);
+  // Current period: the open wave (if any), else the earliest period whose last match has not yet
+  // finished (now < lastKickoff + MATCH_DURATION_MS). opensAt is never populated by the provisioning
+  // CLI (NULL for all periods), so the DB ORDER BY opensAt falls back to label-alphabetical and would
+  // put "Final" before "Group MD1" — selectCurrentPeriod re-sorts by matches[0].kickoffAt in JS.
+  // The vsfield latch must be time-based (not batchClearedAt), because batchClearedAt is stamped
+  // ~6h BEFORE first kickoff; using it as the latch would drop the live wave while MD1 matches are
+  // still being played, binding the Realtime subscription and lineup/score reads to MD2 instead.
+  // TODO(confirm): overlapping group waves ("which wave is the field") — sequential periods only.
+  const currentPeriodRow = selectCurrentPeriod(periodRows, (p) => {
+    const lastKickoffMs = p.matches.at(-1)?.kickoffAt.getTime() ?? 0;
+    return now.getTime() < lastKickoffMs + MATCH_DURATION_MS;
+  });
   const currentPeriod = currentPeriodRow
     ? { id: currentPeriodRow.id, label: currentPeriodRow.label }
     : null;
@@ -177,7 +185,7 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
       seed: s.seed,
     })),
     perPeriodScores,
-    now: new Date(),
+    now,
   };
 
   return buildVsField(input);

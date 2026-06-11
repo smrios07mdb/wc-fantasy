@@ -271,7 +271,7 @@ describe("selectCurrentPeriod (period picker — opensAt never seeded, batchClea
 
   it("on a pre-kickoff opening day returns the EARLIEST pending period, not the alphabetically first", () => {
     // DB returns [Final, MD1] (alphabetical because opensAt is NULL for all periods at provision)
-    const picked = selectCurrentPeriod([FINAL, MD1]);
+    const picked = selectCurrentPeriod([FINAL, MD1], (p) => p.batchClearedAt === null);
     expect(picked?.id).toBe("md1");
     // Resolved batch instant = MD1 kickoff − 360 min = 10:00Z = 6:00 AM EDT (non-UTC league tz)
     const batchAt = effectiveBatchAt(
@@ -297,15 +297,20 @@ describe("selectCurrentPeriod (period picker — opensAt never seeded, batchClea
       batchClearedAt: null,
       matches: [{ kickoffAt: new Date("2026-06-15T16:00:00.000Z") }],
     };
-    expect(selectCurrentPeriod([FINAL, openMd2, MD1])?.id).toBe("md2");
+    expect(selectCurrentPeriod([FINAL, openMd2, MD1], (p) => p.batchClearedAt === null)?.id).toBe(
+      "md2",
+    );
   });
 
   it("returns null when all periods are closed", () => {
     expect(
-      selectCurrentPeriod([
-        { ...MD1, status: "closed" },
-        { ...FINAL, status: "closed" },
-      ]),
+      selectCurrentPeriod(
+        [
+          { ...MD1, status: "closed" },
+          { ...FINAL, status: "closed" },
+        ],
+        (p) => p.batchClearedAt === null,
+      ),
     ).toBeNull();
   });
 
@@ -317,6 +322,8 @@ describe("selectCurrentPeriod (period picker — opensAt never seeded, batchClea
       batchClearedAt: null,
       matches: [],
     };
-    expect(selectCurrentPeriod([noFixtures, MD1])?.id).toBe("md1");
+    expect(selectCurrentPeriod([noFixtures, MD1], (p) => p.batchClearedAt === null)?.id).toBe(
+      "md1",
+    );
   });
 });
