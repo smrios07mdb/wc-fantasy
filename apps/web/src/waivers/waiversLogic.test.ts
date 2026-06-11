@@ -132,10 +132,11 @@ describe("claimable free agents (composer left panel)", () => {
       player({ id: "fr-1", nation: "France" }),
       player({ id: "es-2", nation: "Spain" }),
     ];
-    expect(claimableFreeAgents(pool, [], NOW, { nation: "Spain" }).map((p) => p.id).sort()).toEqual([
-      "es-1",
-      "es-2",
-    ]);
+    expect(
+      claimableFreeAgents(pool, [], NOW, { nation: "Spain" })
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(["es-1", "es-2"]);
     expect(claimableFreeAgents(pool, [], NOW, { nation: "ALL" }).length).toBe(3);
     // the nation filter composes with position
     expect(

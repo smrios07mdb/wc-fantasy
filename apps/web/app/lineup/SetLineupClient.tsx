@@ -27,7 +27,7 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
 }
 
 export function SetLineupClient({ initialState }: { initialState: SetLineupState }) {
-  const { squad, sessionManagerId, periods } = initialState;
+  const { squad, sessionManagerId, periods, timezone } = initialState;
 
   const [activeId, setActiveId] = useState(initialState.activePeriodId);
   const [lineups, setLineups] = useState<Record<string, string[]>>(() =>
@@ -143,7 +143,13 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
       <div className="sl-body">
         <section className="sl-pitchcol">
-          <Pitch view={view} selected={selected} eligibleIds={eligibleIds} onSelect={onSelect} />
+          <Pitch
+            view={view}
+            selected={selected}
+            eligibleIds={eligibleIds}
+            timezone={timezone}
+            onSelect={onSelect}
+          />
           {/* Two-state legend: the authoritative lock is the binary `lineup_slot.locked_at` projection
               (movable vs locked) — the design's third "Locked · playing" row needs the live feed (the
               vs-the-field surface), so it's deferred. The locked label matches the LockTag chip ("Locked")
@@ -168,6 +174,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
             bench={view.bench}
             selected={selected}
             eligibleIds={eligibleIds}
+            timezone={timezone}
             onSelect={onSelect}
           />
         </aside>

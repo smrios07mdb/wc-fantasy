@@ -822,3 +822,28 @@ layer. A worker-local trigger-read port (`notify/store.ts`) holds the two reads 
 
 Each dispatch is isolated in its own try/catch so a notify failure never starves the autopick or
 ingestion/recompute loops. Actual device delivery stays a live-only inference (no push service in CI).
+
+## 14. Lineup + waivers polish (Prompt 51)
+
+Two display-only primitives moved into **`@app/shared`** (the single cross-cutting source; no engine
+touched):
+
+- **Canonical period order** — `periodOrderRank` / `comparePeriodLabels` / `sortByPeriodOrder`
+  (`periodOrder.ts`). Group matchdays rank by their MD number, then the knockout rounds by their
+  `KNOCKOUT_ROUNDS` bracket index (R32→R16→QF→SF→Final). This is the SINGLE source for ordering any
+  period selector (the set-lineup matchday tabs today). It replaces `loadLineup`'s `opens_at ASC,
+  label ASC`, which degraded to an alphabetical label sort (→ "Final, QF, R16, R32, SF") whenever
+  `opens_at` was null — correct now regardless of when fixtures sync.
+- **`formatInLeagueTz`** (`time.ts`) — lifted from `apps/web/src/waivers/waiversLogic.ts` so the
+  set-lineup screen reuses the EXACT league-tz wall-clock renderer the waivers "next batch" element
+  uses; the waivers copy is now an import (behaviour byte-identical).
+
+**Per-player kickoff (closes the Prompt-10 launch-gate seam).** Each squad player's fixture date+time
+= his lock/sub deadline, shown on the pitch token + bench row. Resolution is pure in
+`src/lineup/view.ts` (`kickoffByTeam` = earliest per team; `resolveKickoffByPlayer` = `player.teamId` →
+this period's `fifa_match` → kickoff ISO, or `null` → "TBD" for a TBD/unplaying team). `loadLineup`
+selects `player.teamId`, reads each period's `fifa_match` rows, fills `kickoffByPlayer` per period, and
+threads `league.timezone` into `SetLineupState` for client-side formatting. The waivers free-agent pool
+also gains the draft's collapsible country filter (shared `<NationFilter>` in `apps/web/components`) and
+country flags (a `NationFlag` over the sole `<Flag>`/`toIso2` surface; `nation` derived from the
+`fifa_team` join since `player.country` is unwritten).

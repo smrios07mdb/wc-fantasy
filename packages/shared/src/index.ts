@@ -5,4 +5,5 @@
 export * from "./enums";
 export * from "./constants";
 export * from "./periodOrder";
+export * from "./time";
 export * from "./types";

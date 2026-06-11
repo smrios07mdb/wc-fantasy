@@ -15,6 +15,7 @@
  *    (higher bids settle first; a won claim's FAAB is spent before the next is evaluated).
  */
 import type { AcquisitionWindow } from "@app/faab";
+import { formatInLeagueTz } from "@app/shared";
 import type { WvBatchWindow, WvBudget, WvClaim, WvPlayer } from "./types";
 
 /** True when the add target's acquisition cutoff has passed (his match kicked off at/under `now`). */
@@ -100,28 +101,8 @@ export function claimableFreeAgents(
  */
 export function freeAgentNations(freeAgents: readonly WvPlayer[]): string[] {
   return [
-    ...new Set(
-      freeAgents.map((p) => p.nation).filter((n): n is string => n !== null && n !== ""),
-    ),
+    ...new Set(freeAgents.map((p) => p.nation).filter((n): n is string => n !== null && n !== "")),
   ].sort((a, b) => a.localeCompare(b));
-}
-
-/**
- * Format an instant in the league's IANA tz so it reads as the local wall clock with a zone abbreviation
- * (e.g. "Thu, Jun 11, 1:00 PM EDT") — `timeZoneName: "short"` is what surfaces the ET/EDT the manager
- * thinks in. Deterministic given (instant, tz), so it formats identically on the server and after
- * hydration (no SSR mismatch).
- */
-function formatInLeagueTz(d: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-    timeZone: timezone,
-  }).format(d);
 }
 
 /**
