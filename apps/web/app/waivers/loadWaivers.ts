@@ -12,7 +12,7 @@ import { prisma } from "@app/db";
 import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import type { Position } from "@app/shared";
-import { buildBatchWindowView } from "@/src/waivers/waiversLogic";
+import { buildBatchWindowView, selectCurrentWaiverPeriod } from "@/src/waivers/waiversLogic";
 import type {
   WaiversView,
   WvBatch,
@@ -129,14 +129,13 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     }),
   ]);
 
-  // The current period for the waiver window: the OPEN wave, else the soonest PENDING (by opens_at) —
-  // the SAME selection `loadVsField` uses for the live board. Null (all closed / none pending) → the
-  // "next batch" element is hidden. The phase + the displayed time come straight from `@app/faab`, so
-  // the screen renders the identical instant the worker's per-period batch trigger reads.
-  const currentPeriodRow =
-    periodRows.find((p) => p.status === "open") ??
-    periodRows.find((p) => p.status === "pending") ??
-    null;
+  // The current period for the waiver window: the OPEN wave, else the soonest PENDING by first
+  // fixture kickoff. Null (all closed / none pending) → the "next batch" element is hidden.
+  // NOTE: opensAt is never populated by the provisioning CLI → DB-level ORDER BY opensAt falls
+  // back to label-alphabetical, which puts "Final" before "Group MD1". selectCurrentWaiverPeriod
+  // re-sorts by firstKickoffAt in JS. The phase + time come from @app/faab so the screen shows
+  // the identical instant the worker's per-period batch trigger fires.
+  const currentPeriodRow = selectCurrentWaiverPeriod(periodRows);
 
   let batchWindow: WvBatchWindow | null = null;
   if (currentPeriodRow) {

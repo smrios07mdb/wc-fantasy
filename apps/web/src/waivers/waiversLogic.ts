@@ -151,6 +151,31 @@ export function buildBatchWindowView(input: {
   }
 }
 
+/**
+ * Select the current scoring period for the waiver window: the OPEN period (if any), else the
+ * soonest PENDING by first fixture kickoff, else null.
+ *
+ * `opensAt` is never populated by the provisioning CLI (the upsert omits it), so the DB-level
+ * `ORDER BY opens_at ASC` is unreliable — all rows are NULL, causing Postgres to fall back to
+ * `label ASC`. Alphabetically "Final" (F) sorts before "Group MD1" (G), so a naive `find` on
+ * the DB-ordered array returns the Final instead of the current matchday.
+ *
+ * This helper re-sorts by `matches[0].kickoffAt` in JS — that value IS populated when the
+ * schedule-sync links fixtures to periods. Periods with no fixtures sort last (Infinity).
+ */
+export function selectCurrentWaiverPeriod<
+  T extends { status: string; matches: Array<{ kickoffAt: Date }> },
+>(periods: readonly T[]): T | null {
+  const sorted = [...periods].sort((a, b) => {
+    const aT = a.matches[0]?.kickoffAt.getTime() ?? Infinity;
+    const bT = b.matches[0]?.kickoffAt.getTime() ?? Infinity;
+    return aT - bT;
+  });
+  return (
+    sorted.find((p) => p.status === "open") ?? sorted.find((p) => p.status === "pending") ?? null
+  );
+}
+
 /** Droppable roster players: owned, NOT locked by play. Sorted by season points asc (weakest first). */
 export function droppableRoster(
   roster: readonly WvPlayer[],
