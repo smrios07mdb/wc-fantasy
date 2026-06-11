@@ -9,7 +9,7 @@
  * chip" gotcha cannot bite here (there are no background layers to collapse).
  */
 import type { Position } from "@app/shared";
-import type { WvPlayer } from "./types";
+import type { WvBatchWindow, WvPlayer } from "./types";
 import { isPlayerCutoffPassed } from "./waiversLogic";
 
 // ── icons (ported 1:1 from the design glyphs) ──────────────────────────────────
@@ -113,6 +113,35 @@ export function CutoffTag({ player, now }: { player: WvPlayer; now: Date }) {
   const urgent = ms <= 18 * 60000;
   return (
     <span className={"wv-cutoff" + (urgent ? " is-urgent" : "")}>{fmtCountdown(ms)} to cutoff</span>
+  );
+}
+
+// ── next-batch header ──────────────────────────────────────────────────────────
+/**
+ * The "next waiver batch" element: phase-aware copy + the existing countdown (sealed-bid only). The
+ * window is computed server-side from the current period's `effectiveBatchAt` / `acquisitionWindowState`
+ * (`@app/faab`) so it names the EXACT instant the worker fires; only the countdown ticks client-side off
+ * `now`. Reuses the design's `wv-batchbar` element + `fmtCountdown` — data wiring, not a re-skin.
+ */
+export function BatchBar({ w, now }: { w: WvBatchWindow; now: Date }) {
+  const countdown =
+    w.countdownToIso !== null
+      ? fmtCountdown(new Date(w.countdownToIso).getTime() - now.getTime())
+      : null;
+  return (
+    <div className="wv-batchbar" data-phase={w.phase}>
+      <div className="wv-batchbar-l">
+        <span className="t-label">{w.caption}</span>
+        <b className="wv-batchbar-when">{w.value}</b>
+        {w.sub !== null && <span className="t-micro text-tertiary">{w.sub}</span>}
+      </div>
+      {countdown !== null && (
+        <div className="wv-batchbar-r">
+          <span className="t-label">Processes in</span>
+          <b className="wv-batchbar-cd mono">{countdown}</b>
+        </div>
+      )}
+    </div>
   );
 }
 

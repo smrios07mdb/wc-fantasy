@@ -165,7 +165,12 @@ only the cadence and the acquisition cutoff moved.
   is kept as a **defensive guard** for that case (unreachable in normal flow, since deadline < kickoff).
 - **Deadline.** `period.waiver_batch_at` (commissioner-configurable per period); default
   `first_kickoff − FAAB_BATCH_LEAD_MIN` (**360 min = 6 h**, reproducing the old "06:00 before a ~noon
-  kickoff"; `// TODO(confirm): batch lead`).
+  kickoff"; `// TODO(confirm): batch lead`). The deadline math — `effectiveBatchAt(period, leadMs)` +
+  `PeriodCadenceView` + the `DEFAULT_FAAB_BATCH_LEAD_MIN` constant — lives in **`@app/faab`**
+  (`batchTime.ts`), **re-exported** from the worker selector for back-compat (Prompt 49). It moved out of
+  the worker for the **same reason `acquisitionWindowState` did**: `apps/web` cannot import `apps/worker`,
+  so the **web waivers "next batch" element** (`loadWaivers` → `buildBatchWindowView`) computes the
+  **identical instant** the worker fires against — one source of truth, no display-vs-fire drift.
 - **Acquisition cutoff → the period's first kickoff (league-wide).** Bid submission (`@app/faab`
   `validateBidSubmission`) now gates on the add target's **period** first kickoff (`acquisitionCutoffAt`),
   not the per-player kickoff. The batch keeps the per-player kickoff only for the defensive void-refund.

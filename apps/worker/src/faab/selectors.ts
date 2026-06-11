@@ -11,33 +11,13 @@
  * `batchClearedAt` latch is stamped, so the 60s worker tick can fire repeatedly and the batch runs once.
  */
 
-/** The slice of a period the cadence logic needs (the IO loader resolves these from `period` + fixtures). */
-export interface PeriodCadenceView {
-  id: string;
-  leagueId: string;
-  /** The idempotency latch: set when this period's FAAB batch has run. Null = not yet cleared. */
-  batchClearedAt: Date | null;
-  /** Commissioner override of the batch deadline (per period); null = use the computed default below. */
-  waiverBatchAt: Date | null;
-  /** The period's first kickoff = MIN(kickoff) among its fixtures; null if the period has no fixtures. */
-  firstKickoffAt: Date | null;
-}
-
-// The acquisition-window predicate moved to the shared FAAB package (Prompt 48) so the web $0-FA route
-// can reuse it (apps/web cannot import apps/worker). Re-exported here for back-compat with Prompt 47.
-export { acquisitionWindowState, type AcquisitionWindow } from "@app/faab";
-
-/**
- * The effective batch deadline for a period: the commissioner's `waiverBatchAt` if set, else the
- * computed default `firstKickoff − lead`. Null when the period has no fixtures yet (no kickoff to
- * anchor to) and no explicit override. The default always precedes the first kickoff for `lead > 0`,
- * honoring the amendment's "must sit before the period's first kickoff."
- */
-export function effectiveBatchAt(p: PeriodCadenceView, leadMs: number): Date | null {
-  if (p.waiverBatchAt !== null) return p.waiverBatchAt;
-  if (p.firstKickoffAt !== null) return new Date(p.firstKickoffAt.getTime() - leadMs);
-  return null;
-}
+// The acquisition-window predicate AND the effective-batch-deadline math both live in the shared FAAB
+// package so the web waivers screen can reuse them (apps/web cannot import apps/worker — Prompts 48/49).
+// Re-exported here so this module's surface (`PeriodCadenceView`, `effectiveBatchAt`) is unchanged.
+import { acquisitionWindowState, effectiveBatchAt } from "@app/faab";
+import type { AcquisitionWindow, PeriodCadenceView } from "@app/faab";
+export { acquisitionWindowState, effectiveBatchAt };
+export type { AcquisitionWindow, PeriodCadenceView };
 
 /**
  * The period IDs whose FAAB batch is due NOW: not yet cleared, has a resolvable deadline, and that

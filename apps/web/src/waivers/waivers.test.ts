@@ -55,8 +55,12 @@ describe("WaiversClient — interactive surface wiring", () => {
     expect(client).not.toContain("rivalBids");
   });
 
-  it("labels the next-batch cadence illustrative and imports the scoped CSS", () => {
-    expect(client).toContain("illustrative cadence");
+  it("renders the REAL per-period batch window (no leftover illustrative placeholder) + scoped CSS", () => {
+    // The static daily placeholder is gone; the screen renders the live window from the server.
+    expect(client).not.toContain("illustrative cadence");
+    expect(client).not.toContain("batchLocalTime");
+    expect(client).toContain("BatchBar");
+    expect(client).toContain("view.batchWindow");
     expect(client).toContain('"./waivers.css"');
   });
 });
@@ -95,5 +99,13 @@ describe("waivers route — gate + mount + self-scoped reads", () => {
     expect(loader).toMatch(/status:\s*["']complete["']/);
     expect(loader).toContain("take: 5");
     expect(loader).toContain("findLockedSlotPlayerIds");
+  });
+
+  it("derives the next-batch window from the SHARED @app/faab kernel (one source of truth w/ the worker)", () => {
+    // The displayed time MUST come from the same fns the worker fires against — not a web-local copy.
+    expect(loader).toContain("acquisitionWindowState");
+    expect(loader).toContain("effectiveBatchAt");
+    expect(loader).toContain("buildBatchWindowView");
+    expect(loader).toContain("DEFAULT_FAAB_BATCH_LEAD_MIN");
   });
 });

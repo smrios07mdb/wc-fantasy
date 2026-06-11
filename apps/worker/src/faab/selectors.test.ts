@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { effectiveBatchAt, selectPeriodsToClear, type PeriodCadenceView } from "./selectors";
+import { selectPeriodsToClear, type PeriodCadenceView } from "./selectors";
 
 /**
  * Pure per-period FAAB cadence (DECISIONS.md → Theme D "per-matchday acquisition window" amendment).
  * One blind-bid batch per scoring period, clearing before the period's first kickoff; idempotent via
- * the `batchClearedAt` latch. These pin the trigger selection, the commissioner override, and the
- * three acquisition-window phases — all with literal dates (the fns carry no clock).
+ * the `batchClearedAt` latch. These pin the worker's trigger selection — the deadline math itself
+ * (`effectiveBatchAt`) moved to @app/faab and is unit-tested in `packages/faab/src/batchTime.test.ts`;
+ * here we prove the trigger consumes it correctly (worker behavior preserved post-extraction).
  */
 
 const LEAD = 6 * 60 * 60_000; // 6h default (FAAB_BATCH_LEAD_MIN=360); see worker config.
@@ -20,22 +21,6 @@ function period(over: Partial<PeriodCadenceView> = {}): PeriodCadenceView {
     ...over,
   };
 }
-
-describe("effectiveBatchAt", () => {
-  it("defaults to first kickoff − lead when no commissioner override", () => {
-    // 12:00 − 6h = 06:00.
-    expect(effectiveBatchAt(period(), LEAD)).toEqual(new Date("2026-06-11T06:00:00Z"));
-  });
-
-  it("uses the commissioner override verbatim when set (configurable per period)", () => {
-    const at = new Date("2026-06-11T09:30:00Z");
-    expect(effectiveBatchAt(period({ waiverBatchAt: at }), LEAD)).toEqual(at);
-  });
-
-  it("is null when the period has no fixtures and no override (no anchor)", () => {
-    expect(effectiveBatchAt(period({ firstKickoffAt: null }), LEAD)).toBeNull();
-  });
-});
 
 describe("selectPeriodsToClear — the per-period trigger", () => {
   it("fires once the effective deadline has passed", () => {

@@ -7,6 +7,7 @@
  * Dates cross the server→client boundary as ISO strings (a server component may pass `Date`s, but
  * stringifying keeps the props trivially serialisable + testable without `Date` fixtures).
  */
+import type { AcquisitionWindow } from "@app/faab";
 import type { Position } from "@app/shared";
 
 /** A player as the waivers screen needs him — identity + the cutoff clock (his next fixture kickoff). */
@@ -60,6 +61,25 @@ export interface WvBatch {
   readonly results: readonly WvResult[];
 }
 
+/**
+ * The "next batch" element's content for the current period's acquisition window — the live state the
+ * worker fires against, projected into display strings. The PHASE is derived server-side via the shared
+ * `acquisitionWindowState`/`effectiveBatchAt` (`@app/faab`), so the screen shows the EXACT batch instant
+ * the worker uses. All fields are strings (already league-tz formatted) so the only live piece is the
+ * client's countdown to `countdownToIso`.
+ */
+export interface WvBatchWindow {
+  readonly phase: AcquisitionWindow;
+  /** The small caption (`t-label`), e.g. "Waivers process at" / "Free agency open — locks at". */
+  readonly caption: string;
+  /** The bold value (`wv-batchbar-when`): the league-tz batch/lock time, or the period label when locked. */
+  readonly value: string;
+  /** Micro context (`t-micro`) — the period label, or null when it is already the value (locked). */
+  readonly sub: string | null;
+  /** ISO of the batch deadline — present ONLY in the sealed-bid phase, for the live "Processes in" countdown. */
+  readonly countdownToIso: string | null;
+}
+
 /** One seat in the rolling waiver order. */
 export interface WvWaiverSeat {
   readonly managerId: string;
@@ -91,8 +111,12 @@ export interface WaiversView {
   readonly claims: readonly WvClaim[];
   readonly batches: readonly WvBatch[];
   readonly waiverOrder: readonly WvWaiverSeat[];
-  /** League-local HH:mm the batch runs + the IANA tz, for the "next batch" display. */
-  readonly batchLocalTime: string;
+  /**
+   * The current period's acquisition-window state for the "next batch" element. Null when no period is
+   * live (nothing open and nothing pending — e.g. the season is over). The IANA tz is baked into the
+   * formatted strings; `timezone` below stays for the batch-results formatter.
+   */
+  readonly batchWindow: WvBatchWindow | null;
   readonly timezone: string;
   /** True only when the league is in a playoff phase — gates the FAAB-reset banner. */
   readonly isPlayoffPhase: boolean;

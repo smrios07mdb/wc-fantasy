@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WaiversView, WvClaim } from "./types";
 import { computeBudget, isClaimVoid, sortClaims } from "./waiversLogic";
-import { ClaimRow, FaabBar, Refund, ResultsBatch, WaiverOrderRail } from "./components";
+import { BatchBar, ClaimRow, FaabBar, Refund, ResultsBatch, WaiverOrderRail } from "./components";
 import { BidComposer, type BidPayload } from "./BidComposer";
 import "./waivers.css";
 
@@ -174,15 +174,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
       {tab === "claims" ? (
         <div className="wv-claims-page">
           <div className="wv-claims-main">
-            <div className="wv-batchbar">
-              <div className="wv-batchbar-l">
-                <span className="t-label">Next waiver batch</span>
-                <b className="wv-batchbar-when">{view.batchLocalTime}</b>
-                <span className="t-micro text-tertiary">
-                  {view.timezone} · illustrative cadence
-                </span>
-              </div>
-            </div>
+            {view.batchWindow && <BatchBar w={view.batchWindow} now={now} />}
 
             {voidCount > 0 && (
               <div className="wv-voidnote">

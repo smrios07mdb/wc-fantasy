@@ -1,6 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_FAAB_BATCH_LEAD_MIN } from "@app/faab";
 
 // Load the repo-root `.env` (apps/worker/src -> ../../../.env). A missing file is fine: in
 // production the host (Render) injects real env vars. UTC everywhere (ARCHITECTURE.md §8).
@@ -44,5 +45,5 @@ export const config = {
    *  retired daily model cleared 06:00 league-local before a ~12:00 WC first kickoff ≈ 6h, so 360 min
    *  reproduces that pre-kickoff instant and stays comfortably ahead of the period's earliest match.
    *  TODO(confirm): batch lead — the precise lead is a commissioner knob (per-period override wins). */
-  faabBatchLeadMs: intEnv("FAAB_BATCH_LEAD_MIN", 360) * 60_000,
+  faabBatchLeadMs: intEnv("FAAB_BATCH_LEAD_MIN", DEFAULT_FAAB_BATCH_LEAD_MIN) * 60_000,
 } as const;

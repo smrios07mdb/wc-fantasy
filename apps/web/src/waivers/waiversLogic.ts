@@ -14,7 +14,8 @@
  *  • claim order — pending claims render amount-DESC, matching the engine's own-bid resolution order
  *    (higher bids settle first; a won claim's FAAB is spent before the next is evaluated).
  */
-import type { WvBudget, WvClaim, WvPlayer } from "./types";
+import type { AcquisitionWindow } from "@app/faab";
+import type { WvBatchWindow, WvBudget, WvClaim, WvPlayer } from "./types";
 
 /** True when the add target's acquisition cutoff has passed (his match kicked off at/under `now`). */
 export function isPlayerCutoffPassed(player: WvPlayer, now: Date): boolean {
@@ -88,6 +89,70 @@ export function claimableFreeAgents(
     .sort(
       (a, b) => (b.seasonPoints ?? -1) - (a.seasonPoints ?? -1) || a.name.localeCompare(b.name),
     );
+}
+
+/**
+ * Format an instant in the league's IANA tz so it reads as the local wall clock with a zone abbreviation
+ * (e.g. "Thu, Jun 11, 1:00 PM EDT") — `timeZoneName: "short"` is what surfaces the ET/EDT the manager
+ * thinks in. Deterministic given (instant, tz), so it formats identically on the server and after
+ * hydration (no SSR mismatch).
+ */
+function formatInLeagueTz(d: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+    timeZone: timezone,
+  }).format(d);
+}
+
+/**
+ * Project the current period's acquisition phase into the "next batch" element's display strings. PURE:
+ * the phase + the two instants are computed upstream via the shared `@app/faab` `acquisitionWindowState`
+ * / `effectiveBatchAt`, so this only maps state → copy (DECISIONS.md → Theme D). The three phases mirror
+ * the prompt's renderings; only the sealed-bid phase carries a live countdown (`countdownToIso`).
+ */
+export function buildBatchWindowView(input: {
+  phase: AcquisitionWindow;
+  periodLabel: string;
+  /** `effectiveBatchAt` for the period (override ?? firstKickoff − lead); null = no anchorable time. */
+  batchAt: Date | null;
+  /** The period's first kickoff = the hard lock boundary; null = no fixtures. */
+  firstKickoffAt: Date | null;
+  timezone: string;
+}): WvBatchWindow {
+  const { phase, periodLabel, batchAt, firstKickoffAt, timezone } = input;
+  const fmt = (d: Date | null) => (d ? formatInLeagueTz(d, timezone) : "TBD");
+
+  switch (phase) {
+    case "sealed-bid":
+      return {
+        phase,
+        caption: "Waivers process at",
+        value: fmt(batchAt),
+        sub: periodLabel,
+        countdownToIso: batchAt ? batchAt.toISOString() : null,
+      };
+    case "free-agency":
+      return {
+        phase,
+        caption: "Free agency open — locks at",
+        value: fmt(firstKickoffAt),
+        sub: periodLabel,
+        countdownToIso: null,
+      };
+    case "locked":
+      return {
+        phase,
+        caption: "Waivers locked for",
+        value: periodLabel,
+        sub: null,
+        countdownToIso: null,
+      };
+  }
 }
 
 /** Droppable roster players: owned, NOT locked by play. Sorted by season points asc (weakest first). */

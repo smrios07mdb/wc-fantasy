@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { WvClaim, WvPlayer } from "./types";
 import {
+  buildBatchWindowView,
   claimableFreeAgents,
   composerMaxBid,
   computeBudget,
@@ -133,5 +134,84 @@ describe("droppable roster (composer drop picker)", () => {
       player({ id: "locked", seasonPoints: 1 }),
     ];
     expect(droppableRoster(roster, ["locked"]).map((p) => p.id)).toEqual(["weak", "strong"]);
+  });
+});
+
+describe("batch-window view (the 'next batch' element — phase→label/time in league tz)", () => {
+  // America/New_York is UTC−4 in June (EDT) — a deliberately non-UTC league tz so the formatted wall
+  // clock differs from the stored UTC instant, proving the Intl conversion really happens.
+  const TZ = "America/New_York";
+  const BATCH_AT = new Date("2026-06-11T17:00:00.000Z"); // = 1:00 PM EDT
+  const KICKOFF = new Date("2026-06-11T18:00:00.000Z"); // = 2:00 PM EDT
+
+  it("sealed-bid: 'Waivers process at {batchTime}' + a live countdown to the batch", () => {
+    const w = buildBatchWindowView({
+      phase: "sealed-bid",
+      periodLabel: "MD1",
+      batchAt: BATCH_AT,
+      firstKickoffAt: KICKOFF,
+      timezone: TZ,
+    });
+    expect(w.phase).toBe("sealed-bid");
+    expect(w.caption).toBe("Waivers process at");
+    expect(w.value).toContain("1:00 PM"); // 17:00Z rendered in EDT, NOT the UTC 5:00 PM
+    expect(w.value).toContain("EDT"); // reads ET/EDT, not the raw IANA tz
+    expect(w.sub).toBe("MD1");
+    expect(w.countdownToIso).toBe("2026-06-11T17:00:00.000Z"); // drives the live "Processes in" clock
+  });
+
+  it("free-agency: 'Free agency open — locks at {firstKickoff}', no countdown", () => {
+    const w = buildBatchWindowView({
+      phase: "free-agency",
+      periodLabel: "MD1",
+      batchAt: BATCH_AT,
+      firstKickoffAt: KICKOFF,
+      timezone: TZ,
+    });
+    expect(w.phase).toBe("free-agency");
+    expect(w.caption).toBe("Free agency open — locks at");
+    expect(w.value).toContain("2:00 PM"); // the first kickoff (18:00Z) in EDT
+    expect(w.value).toContain("EDT");
+    expect(w.sub).toBe("MD1");
+    expect(w.countdownToIso).toBeNull();
+  });
+
+  it("locked: 'Waivers locked for {period.label}', no time, no countdown", () => {
+    const w = buildBatchWindowView({
+      phase: "locked",
+      periodLabel: "MD1",
+      batchAt: BATCH_AT,
+      firstKickoffAt: KICKOFF,
+      timezone: TZ,
+    });
+    expect(w.phase).toBe("locked");
+    expect(w.caption).toBe("Waivers locked for");
+    expect(w.value).toBe("MD1");
+    expect(w.sub).toBeNull();
+    expect(w.countdownToIso).toBeNull();
+  });
+
+  it("formats in the GIVEN tz — UTC league sees the raw instant, not the EDT wall clock", () => {
+    const w = buildBatchWindowView({
+      phase: "sealed-bid",
+      periodLabel: "MD1",
+      batchAt: BATCH_AT,
+      firstKickoffAt: KICKOFF,
+      timezone: "UTC",
+    });
+    expect(w.value).toContain("5:00 PM"); // same instant, UTC wall clock
+    expect(w.value).toContain("UTC");
+  });
+
+  it("sealed-bid with no anchorable batch time (no fixtures, no override) degrades gracefully", () => {
+    const w = buildBatchWindowView({
+      phase: "sealed-bid",
+      periodLabel: "MD1",
+      batchAt: null,
+      firstKickoffAt: null,
+      timezone: TZ,
+    });
+    expect(w.value).toBe("TBD");
+    expect(w.countdownToIso).toBeNull(); // nothing to count down to
   });
 });
