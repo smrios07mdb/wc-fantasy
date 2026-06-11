@@ -183,8 +183,24 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
       return { leagueId, managers, bids, ownedByLeague };
     },
 
-    async commitBatch({ leagueId, runAt, outcome }: CommitBatchInput): Promise<string> {
+    async commitBatch({
+      leagueId,
+      runAt,
+      outcome,
+      claimPeriodId,
+    }: CommitBatchInput): Promise<string | null> {
       return prisma.$transaction(async (tx) => {
+        // ENTRY GATE: atomically claim the period. The conditional `batch_cleared_at IS NULL` + the
+        // rowcount check is the once-only guard — if another worker/tick already cleared this period,
+        // 0 rows match and we abort BEFORE any irreversible mutation (the whole tx rolls back to a
+        // no-op). The claim and the apply share this single transaction, so a crash can't leave the
+        // period applied-but-unclaimed or claimed-but-unapplied.
+        const claimed = await tx.period.updateMany({
+          where: { id: claimPeriodId, batchClearedAt: null },
+          data: { batchClearedAt: runAt },
+        });
+        if (claimed.count === 0) return null;
+
         const batch = await tx.faabBatch.create({
           data: { leagueId, runAt, status: "processing" },
           select: { id: true },

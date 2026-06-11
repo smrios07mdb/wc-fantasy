@@ -39,7 +39,10 @@ export async function dispatchFaabBatches(
     const period = byId.get(periodId);
     if (!period) continue;
     try {
-      const summary = await runFaabBatch(faabBatchStore, period.leagueId, now);
+      // runFaabBatch claims this period (conditional, IS NULL) atomically with the apply — the once-only
+      // entry gate. stampBatchCleared still latches the EMPTY-batch case (no pending bids → no apply →
+      // commitBatch isn't reached), and is a harmless no-op once the apply already claimed the period.
+      const summary = await runFaabBatch(faabBatchStore, period.leagueId, now, periodId);
       await cadenceStore.stampBatchCleared(periodId, now);
       cleared.push({ periodId, leagueId: period.leagueId, batchId: summary.batchId });
     } catch (err) {

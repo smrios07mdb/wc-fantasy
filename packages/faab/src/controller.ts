@@ -38,6 +38,7 @@ export async function runFaabBatch(
   store: FaabBatchStore,
   leagueId: string,
   now: Date,
+  claimPeriodId: string,
 ): Promise<RunBatchSummary> {
   const ctx = await store.loadBatchContext(leagueId);
   if (!ctx || ctx.bids.length === 0) return EMPTY(leagueId);
@@ -49,7 +50,10 @@ export async function runFaabBatch(
     ownedByLeague: ctx.ownedByLeague,
   });
 
-  const batchId = await store.commitBatch({ leagueId, runAt: now, outcome });
+  // commitBatch claims the period (conditional, IS NULL) as the FIRST step of the apply transaction;
+  // a null return means another worker/tick already cleared it → this run applied nothing (no-op).
+  const batchId = await store.commitBatch({ leagueId, runAt: now, outcome, claimPeriodId });
+  if (batchId === null) return EMPTY(leagueId);
 
   let won = 0;
   let lost = 0;

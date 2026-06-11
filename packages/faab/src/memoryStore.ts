@@ -48,6 +48,9 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
   private readonly managers: Map<string, MemManager>;
   private readonly bids: MemBid[] = [];
   readonly batches: { id: string; runAt: Date }[] = [];
+  /** Periods this store has already cleared — the in-memory mirror of `period.batch_cleared_at IS NULL`
+   *  conditional claim (the once-only entry gate). */
+  private readonly clearedPeriods = new Set<string>();
 
   constructor(seed: MemorySeed) {
     this.leagueId = seed.leagueId;
@@ -89,7 +92,12 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
     };
   }
 
-  async commitBatch({ runAt, outcome }: CommitBatchInput): Promise<string> {
+  async commitBatch({ runAt, outcome, claimPeriodId }: CommitBatchInput): Promise<string | null> {
+    // ENTRY GATE (mirrors the Prisma conditional `batch_cleared_at IS NULL` claim): the FIRST run for a
+    // period wins; a second concurrent/overlapping run finds it already claimed → abort, NOTHING applied.
+    if (this.clearedPeriods.has(claimPeriodId)) return null;
+    this.clearedPeriods.add(claimPeriodId);
+
     const batchId = `batch-${this.batches.length + 1}`;
     this.batches.push({ id: batchId, runAt });
 

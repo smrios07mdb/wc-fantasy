@@ -34,14 +34,21 @@ export interface CommitBatchInput {
   leagueId: string;
   runAt: Date;
   outcome: BatchOutcome;
+  /** The due period this batch clears. The apply atomically CLAIMS it (`UPDATE period SET
+   *  batch_cleared_at = runAt WHERE id = claimPeriodId AND batch_cleared_at IS NULL`) as the FIRST step
+   *  of the transaction; if 0 rows (another worker/tick already cleared it) the whole apply aborts. This
+   *  is the once-only entry gate for the irreversible mutation (budget debit + add/drop + renumber). */
+  claimPeriodId: string;
 }
 
 export interface FaabBatchStore {
   /** Load the league's pending-bid snapshot, or null if the league does not exist. */
   loadBatchContext(leagueId: string): Promise<BatchContext | null>;
-  /** Apply the resolved outcome in ONE transaction and return the created batch id. Settles ONLY the
-   *  bids that are still `pending` (the guard that keeps a re-run from double-applying). */
-  commitBatch(input: CommitBatchInput): Promise<string>;
+  /** Apply the resolved outcome + the period claim in ONE transaction. Returns the created batch id, or
+   *  `null` when the conditional period claim found 0 rows (another worker/tick already cleared this
+   *  period → nothing applied). Within the apply, each bid is also settled with a guarded `updateMany
+   *  WHERE status = 'pending'` (defense-in-depth so a re-run never double-applies). */
+  commitBatch(input: CommitBatchInput): Promise<string | null>;
 }
 
 // ── the bid route's port ─────────────────────────────────────────────────────────
