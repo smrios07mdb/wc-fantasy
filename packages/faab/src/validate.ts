@@ -16,6 +16,7 @@
  */
 import { POSITIONS, SQUAD_COMPOSITION, SQUAD_SIZE, type Position } from "@app/shared";
 import type { PositionCounts } from "./resolve";
+import type { AcquisitionWindow } from "./window";
 import {
   addKickedOff,
   addOwned,
@@ -24,9 +25,13 @@ import {
   dropLocked,
   dropNotOwned,
   dropRequired,
+  faNotEligible,
+  faWindowClosed,
   overBudget,
   rosterIllegal,
   type FaabBidError,
+  type FaGrantError,
+  type DropRosterError,
 } from "./errors";
 
 /** The bid a manager is placing (or editing). Positions are resolved by the IO layer from the player. */
@@ -78,25 +83,91 @@ export function validateBidSubmission(
     return addKickedOff(sub.playerAddId);
   }
 
-  // (4) drop rules.
-  if (sub.playerDropId !== null) {
-    if (sub.playerDropId === sub.playerAddId) return dropEqualsAdd(sub.playerAddId);
-    if (!ctx.ownedByManager.has(sub.playerDropId)) return dropNotOwned(sub.playerDropId);
+  // (4)+(5) drop rules + roster legality — shared with the $0 FA grant.
+  return checkDropAndRoster(sub, ctx);
+}
+
+/** The add/drop a $0 free-agency grant applies (no amount — the cost is $0). */
+export interface FaGrantSubmission {
+  managerId: string;
+  playerAddId: string;
+  addPosition: Position;
+  playerDropId: string | null;
+  dropPosition: Position | null;
+}
+
+/** Everything the FA-grant validator needs (DECISIONS §D amendment, Prompt 48). No budget/amount: the
+ *  cost is $0. Timing is the WINDOW (free-agency phase) + the snapshot ELIGIBILITY, both IO-resolved. */
+export interface FaGrantValidationContext {
+  /** The add target's period acquisition window at `now` — the grant is accepted ONLY in free-agency. */
+  windowState: AcquisitionWindow;
+  /** Is the target an OPEN free agent: unowned at this period's batch-clear AND currently unowned?
+   *  Snapshot rule (NOT live-unowned) — a player dropped during the window is NOT eligible. */
+  faEligible: boolean;
+  counts: PositionCounts;
+  squadSize: number;
+  ownedByManager: ReadonlySet<string>;
+  dropLocked: boolean;
+}
+
+/**
+ * PURE validation for an instant $0 free-agency grant (DECISIONS §D amendment). Order:
+ *  1. window: the add target's period must be in its free-agency phase (post-batch, pre-first-kickoff).
+ *  2. eligibility: the target must be an open FA per the batch-clear snapshot (not live-unowned).
+ *  3+4. the SAME drop + roster rules as a bid (shared `checkDropAndRoster`): drop ≠ add, drop owned,
+ *       drop not locked-by-play, drop required when full, and the 2/5/5/3 + 15-man caps.
+ * No amount/budget check ($0 is always affordable) and no waiver-order concern (instant FA is bids-free).
+ */
+export function validateFaGrant(
+  sub: FaGrantSubmission,
+  ctx: FaGrantValidationContext,
+): FaGrantError | null {
+  // (1) window: accept ONLY in the free-agency phase.
+  if (ctx.windowState !== "free-agency") return faWindowClosed(ctx.windowState);
+
+  // (2) eligibility: open FA per the batch-clear snapshot (not live-unowned).
+  if (!ctx.faEligible) return faNotEligible(sub.playerAddId);
+
+  // (3)+(4) drop rules + roster legality — shared with the bid path.
+  return checkDropAndRoster(sub, ctx);
+}
+
+/** The drop + roster-legality rules shared by a bid and a $0 FA grant (DECISIONS §D): a drop is
+ *  required once the squad is full, the drop must be owned + not the add + not locked-by-play, and the
+ *  resulting roster must stay within the 2/5/5/3 caps and the 15-man cap. Pure. */
+function checkDropAndRoster(
+  add: {
+    playerAddId: string;
+    addPosition: Position;
+    playerDropId: string | null;
+    dropPosition: Position | null;
+  },
+  ctx: {
+    counts: PositionCounts;
+    squadSize: number;
+    ownedByManager: ReadonlySet<string>;
+    dropLocked: boolean;
+  },
+): DropRosterError | null {
+  // drop rules.
+  if (add.playerDropId !== null) {
+    if (add.playerDropId === add.playerAddId) return dropEqualsAdd(add.playerAddId);
+    if (!ctx.ownedByManager.has(add.playerDropId)) return dropNotOwned(add.playerDropId);
     // A drop that has played this matchday (locked-on-play) can't be dropped until the matchday ends.
-    if (ctx.dropLocked) return dropLocked(sub.playerDropId);
+    if (ctx.dropLocked) return dropLocked(add.playerDropId);
   } else if (ctx.squadSize >= SQUAD_SIZE) {
     return dropRequired();
   }
 
-  // (5) roster legality: the drop frees a slot of its position, the add fills one of its position.
+  // roster legality: the drop frees a slot of its position, the add fills one of its position.
   const after: Record<Position, number> = { ...ctx.counts };
-  if (sub.playerDropId !== null && sub.dropPosition !== null) after[sub.dropPosition] -= 1;
-  after[sub.addPosition] += 1;
-  if (after[sub.addPosition] > SQUAD_COMPOSITION[sub.addPosition]) {
-    return rosterIllegal(sub.addPosition);
+  if (add.playerDropId !== null && add.dropPosition !== null) after[add.dropPosition] -= 1;
+  after[add.addPosition] += 1;
+  if (after[add.addPosition] > SQUAD_COMPOSITION[add.addPosition]) {
+    return rosterIllegal(add.addPosition);
   }
   const total = POSITIONS.reduce((sum, p) => sum + after[p], 0);
-  if (total > SQUAD_SIZE) return rosterIllegal(sub.addPosition);
+  if (total > SQUAD_SIZE) return rosterIllegal(add.addPosition);
 
   return null;
 }

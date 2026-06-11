@@ -10,6 +10,7 @@
  * {@link ./resolve}.
  */
 import type { Position } from "@app/shared";
+import type { AcquisitionWindow } from "./window";
 
 export type FaabBidErrorCode =
   | "amount-negative"
@@ -97,6 +98,37 @@ export type FaabBidError =
   | DropLockedError
   | RosterIllegalError;
 
+// ── $0 free-agency grant errors (Prompt 48) ───────────────────────────────────
+// The instant $0 FA pickup (DECISIONS §D amendment) shares the drop/roster errors above but adds two
+// FA-specific rejections: the window is not in its free-agency phase, and the target is not an open FA.
+
+/** The add target's acquisition window is not in the free-agency phase (still sealed-bid, or locked). */
+export interface FaWindowClosedError {
+  code: "fa-window-closed";
+  message: string;
+  /** Which non-free-agency phase blocked the grant (sealed-bid → bid instead; locked → window over). */
+  phase: Exclude<AcquisitionWindow, "free-agency">;
+}
+
+/** The target is not an open free agent: it was owned at this period's batch-clear, or is owned now —
+ *  the snapshot rule (NOT live-unowned), so a player dropped during the window is not grabbable. */
+export interface FaNotEligibleError {
+  code: "fa-not-eligible";
+  message: string;
+  playerAddId: string;
+}
+
+/** The drop + roster-legality errors shared by a bid and a $0 FA grant (the `checkDropAndRoster` set). */
+export type DropRosterError =
+  | DropRequiredError
+  | DropNotOwnedError
+  | DropEqualsAddError
+  | DropLockedError
+  | RosterIllegalError;
+
+/** The grant rejection family — the shared drop/roster errors plus the two FA-specific ones. */
+export type FaGrantError = FaWindowClosedError | FaNotEligibleError | DropRosterError;
+
 // ── constructors (centralise the messages) ────────────────────────────────────
 
 export function amountNegative(amount: number): AmountNegativeError {
@@ -168,5 +200,24 @@ export function rosterIllegal(position: Position): RosterIllegalError {
     code: "roster-illegal",
     message: `this add/drop would break your ${position} positional limit`,
     position,
+  };
+}
+
+export function faWindowClosed(phase: FaWindowClosedError["phase"]): FaWindowClosedError {
+  return {
+    code: "fa-window-closed",
+    message:
+      phase === "sealed-bid"
+        ? "free agency has not opened for this period yet — place a sealed bid instead"
+        : "the acquisition window is closed for this period — the first match has kicked off",
+    phase,
+  };
+}
+
+export function faNotEligible(playerAddId: string): FaNotEligibleError {
+  return {
+    code: "fa-not-eligible",
+    message: `player ${playerAddId} is not an open free agent this period (claimed, or released into the next period's batch pool)`,
+    playerAddId,
   };
 }

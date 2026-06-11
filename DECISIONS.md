@@ -330,9 +330,15 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
 - **Implemented (Prompt 47, `feat/faab-per-matchday`):** per-period trigger in the worker tick
   (`apps/worker/src/faab/`; `period.waiver_batch_at` default `first_kickoff − 6h` + a `batch_cleared_at`
   idempotency latch); acquisition cutoff → the period's first kickoff in `validateBidSubmission`; daily
-  cron retired. `resolveFaabBatch` is byte-unchanged. The **$0 first-come FA grant surface remains a
-  `// TODO(confirm)`** — no such route exists yet (a $0 bid is a sealed bid cleared by the batch), so
-  only the hard cutoff is enforced today. See ARCHITECTURE §3 + PROJECT.md (Prompt 47).
+  cron retired. `resolveFaabBatch` is byte-unchanged. See ARCHITECTURE §3 + PROJECT.md (Prompt 47).
+- **Implemented (Prompt 48, `feat/faab-fa-grant`, stacked on 47):** the instant **$0 free-agency
+  grant** is now built — `POST /api/faab/free-agent`, accepted only in the free-agency phase
+  (`acquisitionWindowState`), $0 (budget unchanged, no waiver order). **FA eligibility = the batch-clear
+  snapshot, NOT live-unowned** (a player dropped during the window is held to the next batch); chosen
+  mechanism = the history predicate `NOT EXISTS roster_player WHERE player=X AND (dropped_at IS NULL OR
+  dropped_at >= batch_cleared_at)` (no snapshot table). First-come = the `roster_player_active_ownership_uq`
+  partial unique (exactly one winner; loser → clean `fa-conflict`). The Prompt-47 "$0 FA surface is a
+  TODO(confirm)" is now CLOSED. See ARCHITECTURE §3 + PROJECT.md (Prompt 48).
 
 #### Mesh with the per-player acquisition deadline (locked: can't add a player once his match kicks off)
 - The pre-dawn batch precedes the day's kickoffs (WC earliest ≈ noon local), so it can legally

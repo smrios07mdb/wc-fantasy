@@ -5,14 +5,18 @@
  * implementations are the thin Prisma adapters ({@link ./prismaStore}), reachable only via
  * `@app/faab/prisma`, keeping the package's `.` surface IO-free.
  *
- * There are TWO ports because there are two callers with very different needs:
- *  - {@link FaabBatchStore} — the daily cron: read the whole league snapshot, then APPLY the resolved
- *    outcome in ONE transaction (the no-double-spend / valid-drop / contiguity guard).
+ * There are THREE ports because there are three callers with very different needs:
+ *  - {@link FaabBatchStore} — the per-period batch: read the whole league snapshot, then APPLY the
+ *    resolved outcome in ONE transaction (the no-double-spend / valid-drop / contiguity guard).
  *  - {@link FaabBidStore} — the bid route: read just this manager's slice for submission validation,
  *    then persist / amend / cancel a single `pending` bid (all strictly self-scoped).
+ *  - {@link FaGrantStore} — the $0 free-agency route (Prompt 48): read the target's window + snapshot
+ *    eligibility + this manager's slice, then APPLY an instant add/drop in ONE transaction (the
+ *    first-come ownership claim).
  */
 import type { Position } from "@app/shared";
 import type { BatchOutcome, BidInput, ManagerState } from "./resolve";
+import type { PeriodWindowView } from "./window";
 
 // ── the cron's port ────────────────────────────────────────────────────────────
 
@@ -101,4 +105,45 @@ export interface FaabBidStore {
   ): Promise<PersistedBid | null>;
   /** Cancel (delete) a still-`pending` bid (guarded). Returns true if a row was removed. */
   cancelBid(bidId: string): Promise<boolean>;
+}
+
+// ── the $0 free-agency route's port (Prompt 48) ────────────────────────────────────
+
+/** The manager slice the FA grant validates against (no budget — the cost is $0). */
+export interface FaGrantContext {
+  leagueId: string;
+  counts: Readonly<Record<Position, number>>;
+  squadSize: number;
+  ownedByManager: ReadonlySet<string>;
+}
+
+/** The add target's facts for a $0 FA grant: position, its period's acquisition window, and whether it
+ *  is an open free agent per the BATCH-CLEAR SNAPSHOT (unowned at this period's batch-clear AND
+ *  currently unowned — NOT live-unowned, so a player dropped during the window is not eligible). */
+export interface FaTargetFacts {
+  position: Position;
+  window: PeriodWindowView;
+  faEligible: boolean;
+}
+
+export interface FaGrantStore {
+  /** The manager's roster slice, or null if the manager does not exist. */
+  loadManagerFaContext(managerId: string): Promise<FaGrantContext | null>;
+  /** The add target's position + period window + FA-eligibility snapshot, or null if unknown. */
+  getFaTargetFacts(leagueId: string, playerId: string): Promise<FaTargetFacts | null>;
+  /** The drop target's position, or null if unknown. */
+  getDropFacts(playerId: string): Promise<{ position: Position } | null>;
+  /** Is the manager's drop target LOCKED by play (lineup_slot.locked_at in an active matchday)? */
+  isDropLocked(managerId: string, playerDropId: string): Promise<boolean>;
+  /** Apply the instant grant in ONE transaction: re-check eligibility, drop the named player, claim the
+   *  add — gated on the active-ownership unique (the first-come guard). $0 (budget unchanged, waiver
+   *  order untouched). Returns "granted", or "conflict" when another manager won the player first / it
+   *  is no longer an open FA (a clean rejection, fully rolled back). */
+  claimFreeAgent(input: {
+    leagueId: string;
+    managerId: string;
+    playerAddId: string;
+    playerDropId: string | null;
+    runAt: Date;
+  }): Promise<"granted" | "conflict">;
 }

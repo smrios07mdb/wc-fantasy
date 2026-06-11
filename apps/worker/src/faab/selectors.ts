@@ -23,8 +23,9 @@ export interface PeriodCadenceView {
   firstKickoffAt: Date | null;
 }
 
-/** The phase of a period's acquisition window (DECISIONS §D amendment, point 2). */
-export type AcquisitionWindow = "sealed-bid" | "free-agency" | "locked";
+// The acquisition-window predicate moved to the shared FAAB package (Prompt 48) so the web $0-FA route
+// can reuse it (apps/web cannot import apps/worker). Re-exported here for back-compat with Prompt 47.
+export { acquisitionWindowState, type AcquisitionWindow } from "@app/faab";
 
 /**
  * The effective batch deadline for a period: the commissioner's `waiverBatchAt` if set, else the
@@ -59,24 +60,4 @@ export function selectPeriodsToClear(
     if (deadline.getTime() <= now.getTime()) due.push(p.id);
   }
   return due;
-}
-
-/**
- * The acquisition window state for a period at `now` (DECISIONS §D amendment, point 2):
- *  - "sealed-bid"  — before the batch clears: sealed bids accepted (clear at this period's batch);
- *  - "free-agency" — after the batch cleared, before first kickoff: $0 first-come (see the route TODO);
- *  - "locked"      — at/after the period's first kickoff: waivers + FA both closed, roster frozen.
- *
- * The bid submission's hard cutoff (validate.ts `acquisitionCutoffAt`) is exactly the "locked"
- * boundary — `now >= firstKickoffAt`. This richer predicate is the building block the $0 first-come FA
- * surface will gate on once it exists (it does not today — see `handleBid` TODO(confirm)).
- */
-export function acquisitionWindowState(
-  p: PeriodCadenceView,
-  now: Date,
-  _leadMs: number,
-): AcquisitionWindow {
-  if (p.firstKickoffAt !== null && now.getTime() >= p.firstKickoffAt.getTime()) return "locked";
-  if (p.batchClearedAt !== null) return "free-agency";
-  return "sealed-bid";
 }

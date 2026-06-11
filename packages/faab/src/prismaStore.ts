@@ -26,6 +26,9 @@ import type {
   CommitBatchInput,
   FaabBatchStore,
   FaabBidStore,
+  FaGrantContext,
+  FaGrantStore,
+  FaTargetFacts,
   ManagerBidContext,
   PersistedBid,
   PlayerFacts,
@@ -388,6 +391,165 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
     async cancelBid(bidId): Promise<boolean> {
       const deleted = await prisma.faabBid.deleteMany({ where: { id: bidId, status: "pending" } });
       return deleted.count > 0;
+    },
+  };
+}
+
+// ── the $0 free-agency route's adapter (Prompt 48) ─────────────────────────────────
+
+/** Raised inside the claim transaction for a non-exception conflict (eligibility lost / drop gone) so
+ *  the whole transaction rolls back; caught outside and reported as "conflict". */
+class FaConflict extends Error {}
+
+/** A Prisma unique-violation (P2002) — here, the active-ownership unique: someone else owns the add. */
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
+}
+
+/** The add target's PERIOD window: the period his next still-acquirable fixture falls in → that
+ *  period's `batch_cleared_at` (the FA snapshot instant T) + its first kickoff (MIN over the period).
+ *  Resolved the same way the bid store derives the per-player / period kickoff (no second clock). */
+async function resolveAddPeriodWindow(
+  db: Pick<Db, "fifaMatch" | "period">,
+  teamId: string | null,
+): Promise<{ batchClearedAt: Date | null; firstKickoffAt: Date | null } | null> {
+  if (teamId === null) return null;
+  const m = await db.fifaMatch.findFirst({
+    where: {
+      status: { in: ["scheduled", "in_progress"] },
+      OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+    },
+    orderBy: { kickoffAt: "asc" },
+    select: { periodId: true, kickoffAt: true },
+  });
+  if (!m) return null;
+  if (m.periodId === null) return { batchClearedAt: null, firstKickoffAt: m.kickoffAt };
+  const [period, first] = await Promise.all([
+    db.period.findUnique({ where: { id: m.periodId }, select: { batchClearedAt: true } }),
+    db.fifaMatch.findFirst({
+      where: { periodId: m.periodId },
+      orderBy: { kickoffAt: "asc" },
+      select: { kickoffAt: true },
+    }),
+  ]);
+  return {
+    batchClearedAt: period?.batchClearedAt ?? null,
+    firstKickoffAt: first?.kickoffAt ?? m.kickoffAt,
+  };
+}
+
+export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
+  return {
+    async loadManagerFaContext(managerId): Promise<FaGrantContext | null> {
+      const manager = await prisma.manager.findUnique({
+        where: { id: managerId },
+        select: { leagueId: true },
+      });
+      if (!manager) return null;
+      const mine = await prisma.rosterPlayer.findMany({
+        where: { managerId, droppedAt: null },
+        select: { playerId: true, player: { select: { position: true } } },
+      });
+      const counts = ZERO_COUNTS();
+      const ownedByManager = new Set<string>();
+      for (const r of mine) {
+        counts[r.player.position] += 1;
+        ownedByManager.add(r.playerId);
+      }
+      return { leagueId: manager.leagueId, counts, squadSize: mine.length, ownedByManager };
+    },
+
+    async getFaTargetFacts(leagueId, playerId): Promise<FaTargetFacts | null> {
+      const p = await prisma.player.findUnique({
+        where: { id: playerId },
+        select: { position: true, teamId: true },
+      });
+      if (!p) return null;
+      const window = (await resolveAddPeriodWindow(prisma, p.teamId)) ?? {
+        batchClearedAt: null,
+        firstKickoffAt: null,
+      };
+      // FA-eligible = open at this period's batch-clear AND still unowned (the batch-clear SNAPSHOT, not
+      // live-unowned). Single immutable predicate: NO ownership row touching or after T = batch_cleared_at
+      // — which holds batch winners/droppees, mid-window FA drops, and claimed-then-dropped, while letting
+      // genuinely-unclaimed players (and prior-period releases) through. False until the batch has cleared.
+      const T = window.batchClearedAt;
+      const faEligible =
+        T !== null &&
+        (await prisma.rosterPlayer.count({
+          where: { leagueId, playerId, OR: [{ droppedAt: null }, { droppedAt: { gte: T } }] },
+        })) === 0;
+      return { position: p.position, window, faEligible };
+    },
+
+    async getDropFacts(playerId): Promise<{ position: Position } | null> {
+      const p = await prisma.player.findUnique({
+        where: { id: playerId },
+        select: { position: true },
+      });
+      return p ? { position: p.position } : null;
+    },
+
+    async isDropLocked(managerId, playerDropId): Promise<boolean> {
+      const locked = await findLockedSlotPlayerIds(prisma, {
+        managerId,
+        playerIds: [playerDropId],
+      });
+      return locked.has(playerDropId);
+    },
+
+    async claimFreeAgent({
+      leagueId,
+      managerId,
+      playerAddId,
+      playerDropId,
+      runAt,
+    }): Promise<"granted" | "conflict"> {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Resolve the add target's period batch-clear instant T (the snapshot) inside the tx.
+          const player = await tx.player.findUnique({
+            where: { id: playerAddId },
+            select: { teamId: true },
+          });
+          const window = player ? await resolveAddPeriodWindow(tx, player.teamId) : null;
+          const T = window?.batchClearedAt ?? null;
+          if (T === null) throw new FaConflict(); // window not open (defensive — the handler gated it)
+
+          // Re-check FA eligibility under the SAME snapshot predicate (catches the claimed-then-dropped
+          // race the active-ownership unique alone would miss).
+          const stillOpen = await tx.rosterPlayer.count({
+            where: {
+              leagueId,
+              playerId: playerAddId,
+              OR: [{ droppedAt: null }, { droppedAt: { gte: T } }],
+            },
+          });
+          if (stillOpen !== 0) throw new FaConflict();
+
+          if (playerDropId !== null) {
+            const dropped = await tx.rosterPlayer.updateMany({
+              where: { leagueId, managerId, playerId: playerDropId, droppedAt: null },
+              data: { droppedAt: runAt },
+            });
+            if (dropped.count !== 1) throw new FaConflict(); // the drop is no longer actively owned
+            // Release the dropped player's UNLOCKED lineup slots (the @app/lineup boundary; same as the
+            // batch) so a dropped starter stops scoring.
+            await releaseDroppedPlayerSlots(tx, { leagueId, managerId, playerId: playerDropId });
+          }
+
+          // Claim the add — gated on the `roster_player_active_ownership_uq` partial unique (the
+          // first-come guard). A concurrent winner makes this INSERT raise P2002 → conflict.
+          // $0: NO manager.faab_budget change, NO waiver-order mutation (instant FA is bids-free).
+          await tx.rosterPlayer.create({
+            data: { leagueId, managerId, playerId: playerAddId, acquiredAt: runAt },
+          });
+        });
+        return "granted";
+      } catch (e) {
+        if (e instanceof FaConflict || isUniqueViolation(e)) return "conflict";
+        throw e;
+      }
     },
   };
 }

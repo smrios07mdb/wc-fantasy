@@ -17,7 +17,8 @@ import {
   type FaabBidStore,
   type BidSubmission,
 } from "@app/faab";
-import { canActAsManager, type SessionManagerOutcome } from "@app/auth";
+import type { SessionManagerOutcome } from "@app/auth";
+import { faabGate } from "./gate";
 
 export interface FaabBidDeps {
   resolveManager: () => Promise<SessionManagerOutcome>;
@@ -56,29 +57,11 @@ function bidErrorResult(error: FaabBidError): FaabHandlerResult {
   return { status: 409, body: { error: error.code, message: error.message } };
 }
 
-/** The shared identity gate — resolve the session, reject 401/403 BEFORE any store access. */
-type GateResult = { ok: true; managerId: string } | { ok: false; result: FaabHandlerResult };
-
-async function gate(deps: FaabBidDeps, targetManagerId: string): Promise<GateResult> {
-  const outcome = await deps.resolveManager();
-  if (outcome.kind === "no-session") return fail(401, "no_session");
-  if (outcome.kind === "not-allowlisted") return fail(403, "not_allowlisted");
-  if (outcome.kind === "no-manager") return fail(403, "no_manager");
-  if (
-    !canActAsManager({
-      sessionManagerId: outcome.manager.id,
-      targetManagerId,
-      isCommissioner: outcome.isCommissioner,
-      scope: "self",
-    })
-  ) {
-    return fail(403, "not_your_manager");
-  }
-  return { ok: true, managerId: outcome.manager.id };
-}
-
-function fail(status: number, error: string): { ok: false; result: FaabHandlerResult } {
-  return { ok: false, result: { status, body: { error } } };
+/** Run the shared FAAB gate and adapt its result to this handler's `{ status, body }` shape. */
+type GateOk = { ok: true; managerId: string } | { ok: false; result: FaabHandlerResult };
+async function gate(deps: FaabBidDeps, targetManagerId: string): Promise<GateOk> {
+  const g = await faabGate(deps.resolveManager, targetManagerId);
+  return g.ok ? g : { ok: false, result: { status: g.status, body: { error: g.error } } };
 }
 
 export async function handleSubmitBid(

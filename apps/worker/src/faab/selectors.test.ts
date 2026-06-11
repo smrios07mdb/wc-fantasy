@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  effectiveBatchAt,
-  selectPeriodsToClear,
-  acquisitionWindowState,
-  type PeriodCadenceView,
-} from "./selectors";
+import { effectiveBatchAt, selectPeriodsToClear, type PeriodCadenceView } from "./selectors";
 
 /**
  * Pure per-period FAAB cadence (DECISIONS.md → Theme D "per-matchday acquisition window" amendment).
@@ -85,41 +80,4 @@ describe("selectPeriodsToClear — the per-period trigger", () => {
     const now = new Date("2026-06-11T06:00:00Z"); // MD1 due (06:00), MD2 not (its deadline is Jun 16 06:00)
     expect(selectPeriodsToClear([md1, md2], now, LEAD)).toEqual(["MD1"]);
   });
-});
-
-describe("acquisitionWindowState — the three phases (FA window)", () => {
-  const FIRST_KICK = new Date("2026-06-11T12:00:00Z");
-
-  it("is sealed-bid before the batch clears", () => {
-    const now = new Date("2026-06-11T03:00:00Z");
-    expect(acquisitionWindowState(period(), now, LEAD)).toBe("sealed-bid");
-  });
-
-  it("opens free-agency after the batch clears, before first kickoff", () => {
-    const now = new Date("2026-06-11T07:00:00Z");
-    const cleared = period({ batchClearedAt: new Date("2026-06-11T06:00:00Z") });
-    expect(acquisitionWindowState(cleared, now, LEAD)).toBe("free-agency");
-  });
-
-  it("is LOCKED at the period's first kickoff (hard league-wide lock — FA closed)", () => {
-    const cleared = period({ batchClearedAt: new Date("2026-06-11T06:00:00Z") });
-    expect(acquisitionWindowState(cleared, FIRST_KICK, LEAD)).toBe("locked");
-    expect(acquisitionWindowState(cleared, new Date("2026-06-11T18:00:00Z"), LEAD)).toBe("locked");
-  });
-
-  it(
-    "a mid-window drop is held to the NEXT period's batch: the just-played period is locked while the " +
-      "next period still only accepts sealed bids (clearing at its own batch)",
-    () => {
-      const now = new Date("2026-06-11T13:00:00Z"); // P1 underway
-      const p1 = period({
-        id: "P1",
-        firstKickoffAt: FIRST_KICK,
-        batchClearedAt: new Date("2026-06-11T06:00:00Z"),
-      });
-      const p2 = period({ id: "P2", firstKickoffAt: new Date("2026-06-16T12:00:00Z") });
-      expect(acquisitionWindowState(p1, now, LEAD)).toBe("locked"); // can't re-grab a P1 player mid-period
-      expect(acquisitionWindowState(p2, now, LEAD)).toBe("sealed-bid"); // a drop re-enters via P2's batch
-    },
-  );
 });

@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { validateBidSubmission } from "./validate";
-import type { BidSubmission, BidValidationContext } from "./validate";
+import { validateBidSubmission, validateFaGrant } from "./validate";
+import type {
+  BidSubmission,
+  BidValidationContext,
+  FaGrantSubmission,
+  FaGrantValidationContext,
+} from "./validate";
 import type { PositionCounts } from "./resolve";
 
 /**
@@ -144,5 +149,96 @@ describe("validateBidSubmission", () => {
     expect(
       validateBidSubmission(sub({ addPosition: "DEF", dropPosition: "DEF" }), ctx()),
     ).toBeNull();
+  });
+});
+
+/**
+ * $0 free-agency grant validation (DECISIONS.md → Theme D amendment, Prompt 48). Unlike a bid, there is
+ * no amount/budget/cutoff check: the cost is $0, and the timing is the WINDOW gate (free-agency phase
+ * only) + the snapshot ELIGIBILITY (open-at-batch-clear, not live-unowned). Drop + roster rules are the
+ * SAME as a bid (shared `checkDropAndRoster`).
+ */
+function faCtx(over: Partial<FaGrantValidationContext> = {}): FaGrantValidationContext {
+  return {
+    windowState: "free-agency",
+    faEligible: true,
+    counts: FULL,
+    squadSize: 15,
+    ownedByManager: new Set(["DROP"]),
+    dropLocked: false,
+    ...over,
+  };
+}
+
+function faSub(over: Partial<FaGrantSubmission> = {}): FaGrantSubmission {
+  return {
+    managerId: "A",
+    playerAddId: "X",
+    addPosition: "MID",
+    playerDropId: "DROP",
+    dropPosition: "MID",
+    ...over,
+  };
+}
+
+describe("validateFaGrant", () => {
+  it("accepts a legal grant in the free-agency phase (returns null)", () => {
+    expect(validateFaGrant(faSub(), faCtx())).toBeNull();
+  });
+
+  it("rejects when the window is still sealed-bid (bid, don't grab)", () => {
+    expect(validateFaGrant(faSub(), faCtx({ windowState: "sealed-bid" }))?.code).toBe(
+      "fa-window-closed",
+    );
+  });
+
+  it("rejects once the window is locked (first kickoff passed)", () => {
+    const e = validateFaGrant(faSub(), faCtx({ windowState: "locked" }));
+    expect(e?.code).toBe("fa-window-closed");
+  });
+
+  it("rejects a target that is not an open free agent (batch-clear snapshot rule)", () => {
+    expect(validateFaGrant(faSub(), faCtx({ faEligible: false }))?.code).toBe("fa-not-eligible");
+  });
+
+  it("requires a drop once the roster is full", () => {
+    const e = validateFaGrant(
+      faSub({ playerDropId: null, dropPosition: null }),
+      faCtx({ squadSize: 15 }),
+    );
+    expect(e?.code).toBe("drop-required");
+  });
+
+  it("allows a null drop when the roster has an open slot (reinforcement)", () => {
+    expect(
+      validateFaGrant(
+        faSub({ playerDropId: null, dropPosition: null }),
+        faCtx({ squadSize: 8, counts: { GK: 1, DEF: 3, MID: 2, FWD: 2 } }),
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects a drop the manager does not own", () => {
+    expect(
+      validateFaGrant(faSub({ playerDropId: "NOTMINE", dropPosition: "MID" }), faCtx())?.code,
+    ).toBe("drop-not-owned");
+  });
+
+  it("rejects a drop locked by play (already played this matchday)", () => {
+    expect(validateFaGrant(faSub(), faCtx({ dropLocked: true }))?.code).toBe("drop-locked");
+  });
+
+  it("rejects a drop equal to the add", () => {
+    const e = validateFaGrant(
+      faSub({ playerAddId: "SAME", playerDropId: "SAME" }),
+      faCtx({ ownedByManager: new Set(["SAME"]) }),
+    );
+    expect(e?.code).toBe("drop-equals-add");
+  });
+
+  it("rejects an add/drop that breaks a positional cap (GK-for-MID on a full squad)", () => {
+    expect(validateFaGrant(faSub({ addPosition: "GK", dropPosition: "MID" }), faCtx())?.code).toBe(
+      "roster-illegal",
+    );
   });
 });

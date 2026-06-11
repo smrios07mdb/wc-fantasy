@@ -10,5 +10,6 @@ export * from "./resolve";
 export * from "./validate";
 export * from "./errors";
 export * from "./store";
+export * from "./window";
 export * from "./controller";
-export { MemoryFaabBatchStore, MemoryFaabBidStore } from "./memoryStore";
+export { MemoryFaabBatchStore, MemoryFaabBidStore, MemoryFaGrantStore } from "./memoryStore";

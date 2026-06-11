@@ -15,6 +15,9 @@ import type {
   CommitBatchInput,
   FaabBatchStore,
   FaabBidStore,
+  FaGrantContext,
+  FaGrantStore,
+  FaTargetFacts,
   ManagerBidContext,
   PersistedBid,
   PlayerFacts,
@@ -276,5 +279,111 @@ export class MemoryFaabBidStore implements FaabBidStore {
       amount: r.amount,
       note: r.note,
     };
+  }
+}
+
+// ── the $0 free-agency route's double (Prompt 48) ──────────────────────────────────
+
+interface MemFaManager {
+  managerId: string;
+  leagueId: string;
+  faabBudget: number;
+  counts: Record<Position, number>;
+  squadSize: number;
+  owned: Set<string>;
+}
+
+export interface MemoryFaGrantSeed {
+  managers: MemFaManager[];
+  /** playerId → its FA facts (position, the add target's period window, FA-eligibility snapshot). */
+  players: Record<string, FaTargetFacts>;
+  /** players LOCKED by play (lineup_slot.locked_at in an active matchday) — undroppable until it ends. */
+  lockedDrops?: string[];
+  /** players actively owned by SOMEONE league-wide at start (the active-ownership claim guard). */
+  leagueOwned?: string[];
+}
+
+/**
+ * In-memory {@link FaGrantStore} double for the FA-grant handler tests. Models the manager slice, the
+ * per-player FA facts, and a mutable league-ownership set so `claimFreeAgent` can enforce the first-come
+ * rule: the SECOND grab of the same player sees it owned and returns "conflict" (mirrors the production
+ * `roster_player_active_ownership_uq` partial unique). No database.
+ */
+export class MemoryFaGrantStore implements FaGrantStore {
+  private readonly managers: Map<string, MemFaManager>;
+  private readonly players: Record<string, FaTargetFacts>;
+  private readonly lockedDrops: Set<string>;
+  private readonly leagueOwned: Set<string>;
+  readonly grants: { managerId: string; playerAddId: string; playerDropId: string | null }[] = [];
+
+  constructor(seed: MemoryFaGrantSeed) {
+    this.managers = new Map(seed.managers.map((m) => [m.managerId, m]));
+    this.players = seed.players;
+    this.lockedDrops = new Set(seed.lockedDrops ?? []);
+    this.leagueOwned = new Set(seed.leagueOwned ?? []);
+  }
+
+  async loadManagerFaContext(managerId: string): Promise<FaGrantContext | null> {
+    const m = this.managers.get(managerId);
+    if (!m) return null;
+    return {
+      leagueId: m.leagueId,
+      counts: { ...m.counts },
+      squadSize: m.squadSize,
+      ownedByManager: new Set(m.owned),
+    };
+  }
+
+  async getFaTargetFacts(_leagueId: string, playerId: string): Promise<FaTargetFacts | null> {
+    const p = this.players[playerId];
+    return p ? { ...p, window: { ...p.window } } : null;
+  }
+
+  async getDropFacts(playerId: string): Promise<{ position: Position } | null> {
+    const p = this.players[playerId];
+    return p ? { position: p.position } : null;
+  }
+
+  async isDropLocked(_managerId: string, playerDropId: string): Promise<boolean> {
+    return this.lockedDrops.has(playerDropId);
+  }
+
+  async claimFreeAgent(input: {
+    leagueId: string;
+    managerId: string;
+    playerAddId: string;
+    playerDropId: string | null;
+    runAt: Date;
+  }): Promise<"granted" | "conflict"> {
+    // First-come guard: the add target must still be unowned league-wide (the active-ownership unique).
+    if (this.leagueOwned.has(input.playerAddId)) return "conflict";
+    const m = this.managers.get(input.managerId);
+    if (!m) return "conflict";
+
+    if (input.playerDropId !== null) {
+      if (!m.owned.has(input.playerDropId)) return "conflict"; // the drop must still be owned
+      m.owned.delete(input.playerDropId);
+      this.leagueOwned.delete(input.playerDropId);
+      const dropPos = this.players[input.playerDropId]?.position;
+      if (dropPos) m.counts[dropPos] -= 1;
+    }
+    m.owned.add(input.playerAddId);
+    this.leagueOwned.add(input.playerAddId);
+    m.counts[this.players[input.playerAddId]!.position] += 1;
+    this.grants.push({
+      managerId: input.managerId,
+      playerAddId: input.playerAddId,
+      playerDropId: input.playerDropId,
+    });
+    return "granted";
+  }
+
+  // ── read helpers for assertions ───────────────────────────────────────────────
+  ownedBy(managerId: string): string[] {
+    return [...(this.managers.get(managerId)?.owned ?? [])];
+  }
+  /** The manager's budget — proves a $0 FA grant never debits it (claimFreeAgent never touches it). */
+  budgetOf(managerId: string): number | undefined {
+    return this.managers.get(managerId)?.faabBudget;
   }
 }

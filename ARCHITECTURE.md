@@ -171,11 +171,28 @@ only the cadence and the acquisition cutoff moved.
   not the per-player kickoff. The batch keeps the per-player kickoff only for the defensive void-refund.
   Theme-B sub-IN eligibility is unchanged (per-incoming-player kickoff, in the lineup path).
 - **Acquisition window** = sealed-bid (before the batch) → $0 free-agency (after clear, before kickoff)
-  → hard league-wide lock (at first kickoff). The pure `acquisitionWindowState` predicate models the
-  three phases. **`// TODO(confirm)`: the $0 first-come FA grant surface does NOT exist yet** (a $0 bid is
-  a sealed bid cleared by the batch — Prompt 25); the predicate is the ready building block to gate it.
+  → hard league-wide lock (at first kickoff). The pure `acquisitionWindowState` predicate (`@app/faab`)
+  models the three phases — shared by the worker cadence and the web FA route.
+- **$0 free-agency grant (Prompt 48).** Between batch-clear and the period's first kickoff, any manager
+  grabs an unclaimed player for **$0, applied immediately** (no bidding, no waiver order). Gated route
+  **`POST /api/faab/free-agent`** on the bid-route template: `requireManager` → `assertCanActAsManager
+  ({scope:"self"})` → **401/403 before any write** (the shared `faabGate`), then the **free-agency
+  window** gate, **snapshot eligibility**, the **same drop + roster rules** as a bid (the shared
+  `validateFaGrant` / `checkDropAndRoster`), then an **atomic first-come claim** (`claimFreeAgent`):
+  drop the named player + INSERT the add, gated on the `roster_player_active_ownership_uq` partial
+  unique so **exactly one** of two concurrent grabs wins and the loser gets a clean `fa-conflict` (the
+  tx rolls back). **$0 — budget unchanged, waiver order untouched.**
+- **FA eligibility = the BATCH-CLEAR SNAPSHOT, not live-unowned.** A player is grabbable iff he was
+  unowned at this period's batch-clear AND is still unowned — so a player **dropped during the window is
+  NOT grabbable this window** (he enters the next period's batch pool; this is the anti-snipe property).
+  Mechanism (chosen — **no snapshot table**): the single immutable predicate `NOT EXISTS roster_player
+  WHERE player=X AND (dropped_at IS NULL OR dropped_at >= period.batch_cleared_at)`, which correctly
+  holds batch winners/droppees, mid-window FA drops, and the claimed-then-dropped race. (Equivalent to an
+  `fa_open`-per-period marker, but derived from `roster_player` history + the existing `batch_cleared_at`
+  — no extra write, no snapshot-idempotency problem.) The 1-cycle waiver hold is removed (never was code).
 - **Schema.** `period.waiver_batch_at` + `period.batch_cleared_at` (migration
-  `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS).
+  `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS). The FA grant needs
+  **no new schema** (history-derived eligibility + the existing active-ownership unique).
 - **Playoff rounds** light up via the SAME generic period path once their period rows exist (Theme C);
   no playoff-specific scheduling is hard-forked here.
 
