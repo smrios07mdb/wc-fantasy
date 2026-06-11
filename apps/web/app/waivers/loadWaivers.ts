@@ -10,6 +10,7 @@
  */
 import { prisma } from "@app/db";
 import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
+import { listFaIneligiblePlayerIds } from "@app/faab/prisma";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { selectCurrentPeriod, type Position } from "@app/shared";
 import { buildBatchWindowView } from "@/src/waivers/waiversLogic";
@@ -190,9 +191,18 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     playerIds: roster.map((p) => p.id),
   });
 
+  // The free-agent pool. In the free-agency phase the FA panel offers INSTANT $0 pickups, so the pool
+  // must be the snapshot-eligible set the grant accepts (owned-now OR dropped-this-window excluded),
+  // resolved via the SAME predicate the route re-checks (`listFaIneligiblePlayerIds`) — no re-derived
+  // eligibility logic. In every other phase the sealed-bid composer wants the live-unowned complement.
   const ownedIds = new Set(ownedRows.map((r) => r.playerId));
+  const faSnapshotAt =
+    batchWindow?.phase === "free-agency" ? (currentPeriodRow?.batchClearedAt ?? null) : null;
+  const excludeIds = faSnapshotAt
+    ? await listFaIneligiblePlayerIds(prisma, leagueId, faSnapshotAt)
+    : ownedIds;
   const freeAgentRows = await prisma.player.findMany({
-    where: { id: { notIn: ownedIds.size ? [...ownedIds] : ["__none__"] } },
+    where: { id: { notIn: excludeIds.size ? [...excludeIds] : ["__none__"] } },
     select: PLAYER_SELECT,
     orderBy: { displayName: "asc" },
   });

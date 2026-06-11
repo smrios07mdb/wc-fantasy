@@ -198,6 +198,16 @@ only the cadence and the acquisition cutoff moved.
 - **Schema.** `period.waiver_batch_at` + `period.batch_cleared_at` (migration
   `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS). The FA grant needs
   **no new schema** (history-derived eligibility + the existing active-ownership unique).
+- **Waivers-tab FA surface — the route's UI consumer.** `/waivers` renders an in-page free-agent list
+  (`FreeAgentPanel`) that consumes **`POST /api/faab/free-agent`** for instant $0 add/drop pickups. The
+  SAME `acquisitionWindowState` phase the `BatchBar` shows drives the acquisition surface: sealed-bid →
+  the sealed claim form; free-agency → the FA list (instant Add, reusing the composer's `droppableRoster`
+  drop picker); locked → Add disabled. The offered pool is the **snapshot-eligible** set the loader
+  resolves via `listFaIneligiblePlayerIds` (`@app/faab/prisma`) — the SAME `snapshotOwnershipWhere`
+  predicate `getFaTargetFacts` re-checks at grant time, so the list and the route can't drift (a stale
+  list only falls through to the `fa-conflict` 409, surfaced inline). **Prompt 48 shipped + tested the
+  route but never surfaced it**, so the window's only UI action was a sealed bid that wouldn't clear
+  until the next batch — this wiring closes that gap.
 - **Playoff rounds** light up via the SAME generic period path once their period rows exist (Theme C);
   no playoff-specific scheduling is hard-forked here.
 

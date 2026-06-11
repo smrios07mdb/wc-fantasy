@@ -13,9 +13,11 @@ const read = (rel: string) => readFileSync(resolve(here, rel), "utf8");
 
 const client = read("WaiversClient.tsx");
 const composer = read("BidComposer.tsx");
+const faPanel = read("FreeAgentPanel.tsx");
 const page = read("../../app/waivers/page.tsx");
 const layout = read("../../app/waivers/layout.tsx");
 const loader = read("../../app/waivers/loadWaivers.ts");
+const faStore = read("../../../../packages/faab/src/prismaStore.ts");
 
 describe("WaiversClient — interactive surface wiring", () => {
   it("is a Client Component (needs state + fetch)", () => {
@@ -107,5 +109,39 @@ describe("waivers route — gate + mount + self-scoped reads", () => {
     expect(loader).toContain("effectiveBatchAt");
     expect(loader).toContain("buildBatchWindowView");
     expect(loader).toContain("DEFAULT_FAAB_BATCH_LEAD_MIN");
+  });
+});
+
+describe("instant $0 free-agency — Waivers-tab surface (Prompt 48 route, finally wired)", () => {
+  it("the loader offers the SNAPSHOT-eligible pool in the free-agency phase via the shared predicate", () => {
+    // The FA list must be the pool the grant accepts (owned-now OR dropped-this-window excluded), NOT the
+    // sealed composer's live-unowned complement — and it must REUSE the route's predicate, not re-derive.
+    expect(loader).toContain("listFaIneligiblePlayerIds");
+    expect(loader).toMatch(/phase === "free-agency"/);
+    expect(loader).toContain("batchClearedAt"); // T = the current period's batch-clear snapshot instant
+  });
+
+  it("the FA eligibility predicate is defined ONCE (per-player re-check + batch list share it)", () => {
+    // Single source of truth: both getFaTargetFacts (one player) and listFaIneligiblePlayerIds (the pool)
+    // go through snapshotOwnershipWhere, so the offered list and the accepted grant cannot drift.
+    expect(faStore).toContain("function snapshotOwnershipWhere");
+    expect(faStore.match(/snapshotOwnershipWhere\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(faStore).toContain("export async function listFaIneligiblePlayerIds");
+  });
+
+  it("the client round-trips the instant grant through /api/faab/free-agent + refreshes", () => {
+    expect(client).toContain('"/api/faab/free-agent"');
+    expect(client).toContain("FreeAgentPanel");
+    expect(client).toContain("handleGrant");
+    // phase-switched: FA surface only in free-agency/locked; the sealed form is otherwise unchanged.
+    expect(client).toMatch(/faMode/);
+    expect(client).toMatch(/phase === "free-agency"/);
+  });
+
+  it("the FA panel REUSES the sealed composer's drop/roster + pool logic (no duplicated rules)", () => {
+    expect(faPanel).toContain("droppableRoster");
+    expect(faPanel).toContain("claimableFreeAgents");
+    expect(faPanel).toContain("SQUAD_SIZE"); // drop required only once the squad is full
+    expect(faPanel).toContain("Add free agent");
   });
 });

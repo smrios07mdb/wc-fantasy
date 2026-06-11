@@ -454,6 +454,39 @@ async function resolveAddPeriodWindow(
   };
 }
 
+/** The roster-ownership WHERE that makes a player INELIGIBLE for a $0 FA grant at the batch-clear
+ *  snapshot instant T: an ownership row that is active (dropped_at IS NULL) OR was dropped at/after T.
+ *  The SINGLE definition of the FA snapshot predicate (DECISIONS §D) — shared by the per-player
+ *  {@link FaGrantStore.getFaTargetFacts} re-check (one player) and the batch
+ *  {@link listFaIneligiblePlayerIds} (the waivers loader's offered pool), so the list the UI shows and
+ *  the grant the route accepts can never drift. */
+function snapshotOwnershipWhere(leagueId: string, snapshotAt: Date, playerId?: string) {
+  return {
+    leagueId,
+    ...(playerId ? { playerId } : {}),
+    OR: [{ droppedAt: null }, { droppedAt: { gte: snapshotAt } }],
+  };
+}
+
+/** The player ids that are NOT snapshot-eligible free agents at `snapshotAt` (= the current period's
+ *  batch_cleared_at): every player with an ownership row matching the FA snapshot predicate (owned now,
+ *  OR dropped during this window). The waivers loader subtracts this from the player pool to offer
+ *  EXACTLY the free agents the $0 grant will accept — reusing the same predicate
+ *  {@link FaGrantStore.getFaTargetFacts} re-checks, so the offered list and the accepted grant cannot
+ *  drift (a stale list only ever falls through to the route's `fa-conflict` 409). */
+export async function listFaIneligiblePlayerIds(
+  db: Db,
+  leagueId: string,
+  snapshotAt: Date,
+): Promise<Set<string>> {
+  const rows = await db.rosterPlayer.findMany({
+    where: snapshotOwnershipWhere(leagueId, snapshotAt),
+    distinct: ["playerId"],
+    select: { playerId: true },
+  });
+  return new Set(rows.map((r) => r.playerId));
+}
+
 export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
   return {
     async loadManagerFaContext(managerId): Promise<FaGrantContext | null> {
@@ -486,14 +519,16 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
         firstKickoffAt: null,
       };
       // FA-eligible = open at this period's batch-clear AND still unowned (the batch-clear SNAPSHOT, not
-      // live-unowned). Single immutable predicate: NO ownership row touching or after T = batch_cleared_at
-      // — which holds batch winners/droppees, mid-window FA drops, and claimed-then-dropped, while letting
-      // genuinely-unclaimed players (and prior-period releases) through. False until the batch has cleared.
+      // live-unowned). The single immutable predicate lives in `snapshotOwnershipWhere` (also used by the
+      // batch `listFaIneligiblePlayerIds` the waivers loader offers, so the list + this re-check can't
+      // drift): NO ownership row touching or after T = batch_cleared_at — which holds batch winners/
+      // droppees, mid-window FA drops, and claimed-then-dropped, while letting genuinely-unclaimed players
+      // (and prior-period releases) through. False until the batch has cleared.
       const T = window.batchClearedAt;
       const faEligible =
         T !== null &&
         (await prisma.rosterPlayer.count({
-          where: { leagueId, playerId, OR: [{ droppedAt: null }, { droppedAt: { gte: T } }] },
+          where: snapshotOwnershipWhere(leagueId, T, playerId),
         })) === 0;
       return { position: p.position, window, faEligible };
     },

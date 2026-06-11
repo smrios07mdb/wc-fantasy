@@ -499,6 +499,23 @@
   color: var(--text-secondary);
 }
 
+/* instant $0 free-agency panel (in-page, free-agency/locked phase) — reuses the composer's two-column
+   picker/drop geometry (.wv-comp-*) inside a card, no modal scrim. */
+.wv-fa {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.wv-fa-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
 /* composer modal */
 .wv-scrim {
   position: fixed;

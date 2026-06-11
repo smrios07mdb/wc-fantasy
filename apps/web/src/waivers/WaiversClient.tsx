@@ -15,6 +15,7 @@ import type { WaiversView, WvClaim } from "./types";
 import { computeBudget, isClaimVoid, sortClaims } from "./waiversLogic";
 import { BatchBar, ClaimRow, FaabBar, Refund, ResultsBatch, WaiverOrderRail } from "./components";
 import { BidComposer, type BidPayload } from "./BidComposer";
+import { FreeAgentPanel, type FaGrantPayload } from "./FreeAgentPanel";
 import "./waivers.css";
 
 const FAAB_ALLOTMENT = 100; // the $100 budget — the FAAB bar's track denominator (design/CLAUDE.md §2).
@@ -31,6 +32,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   "drop-locked": "That drop is locked by play — he can’t be dropped this matchday.",
   "roster-illegal": "That add/drop would break your positional limits.",
   "amount-negative": "A bid can’t be negative.",
+  // instant $0 free-agency grant (Prompt 48) — surfaced by the FA panel
+  "fa-conflict": "Someone just grabbed that player — pick another free agent.",
+  "fa-window-closed": "Free agency isn’t open for this player right now.",
+  "fa-not-eligible": "That player isn’t an open free agent this period.",
   bid_not_pending: "This claim was already processed.",
   bid_not_found: "That claim no longer exists.",
   not_your_manager: "You can only manage your own claims.",
@@ -47,7 +52,14 @@ export function WaiversClient({ view }: { view: WaiversView }) {
   const [submitting, setSubmitting] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  const [faError, setFaError] = useState<string | null>(null);
   const [busyBidId, setBusyBidId] = useState<string | null>(null);
+
+  // The current period's acquisition phase drives the tab's acquisition surface (the SAME state the
+  // BatchBar shows): sealed-bid → the sealed claim form (below); free-agency → instant $0 FA pickups;
+  // locked → the FA list browses but adds are disabled. No window (season over) keeps the sealed form.
+  const phase = view.batchWindow?.phase ?? null;
+  const faMode = phase === "free-agency" || phase === "locked";
 
   // Live clock — seeded from the server time (no hydration mismatch), then ticked every 30s so a
   // claim's void+refund state appears the moment its add target kicks off.
@@ -139,6 +151,30 @@ export function WaiversClient({ view }: { view: WaiversView }) {
     else setListError(friendly(data));
   }
 
+  // Instant $0 free-agency pickup — the same fetch→router.refresh shape as a bid, but against the
+  // dedicated FA route, which applies the add/drop immediately (first-come). The fa-conflict (409) loss
+  // is surfaced inline (mapped via `friendly`), and the screen is NOT refreshed on failure.
+  async function handleGrant(payload: FaGrantPayload) {
+    setSubmitting(true);
+    setFaError(null);
+    const res = await fetch("/api/faab/free-agent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        managerId: view.managerId,
+        playerAddId: payload.addId,
+        playerDropId: payload.dropId,
+      }),
+    });
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      message?: string;
+    } | null;
+    setSubmitting(false);
+    if (res.ok) router.refresh();
+    else setFaError(friendly(data));
+  }
+
   return (
     <div className="wv-app">
       <div className="wv-tabs" role="tablist" aria-label="Waivers">
@@ -186,17 +222,33 @@ export function WaiversClient({ view }: { view: WaiversView }) {
               </div>
             )}
 
+            {faMode && (
+              <FreeAgentPanel
+                enabled={phase === "free-agency"}
+                freeAgents={view.freeAgents}
+                claims={view.claims}
+                roster={view.roster}
+                lockedPlayerIds={view.lockedPlayerIds}
+                now={now}
+                submitting={submitting}
+                errorMessage={faError}
+                onGrant={handleGrant}
+              />
+            )}
+
             <div className="wv-claims-head">
               <span className="t-label">Pending claims · {view.claims.length}</span>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setComposerError(null);
-                  setComposer({ open: true, editClaim: null });
-                }}
-              >
-                + New claim
-              </button>
+              {!faMode && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setComposerError(null);
+                    setComposer({ open: true, editClaim: null });
+                  }}
+                >
+                  + New claim
+                </button>
+              )}
             </div>
 
             {listError && <div className="wv-comp-error">{listError}</div>}
@@ -205,14 +257,18 @@ export function WaiversClient({ view }: { view: WaiversView }) {
               <div className="wv-empty">
                 <b>No pending claims.</b>
                 <span className="t-sm text-tertiary">
-                  Place a sealed FAAB bid on a free agent — it processes at the next batch.
+                  {faMode
+                    ? "Free agency is open — add an unclaimed player instantly above."
+                    : "Place a sealed FAAB bid on a free agent — it processes at the next batch."}
                 </span>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setComposer({ open: true, editClaim: null })}
-                >
-                  + New claim
-                </button>
+                {!faMode && (
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setComposer({ open: true, editClaim: null })}
+                  >
+                    + New claim
+                  </button>
+                )}
               </div>
             ) : (
               <div className="wv-claims-list">

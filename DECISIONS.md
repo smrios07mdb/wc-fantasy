@@ -1555,3 +1555,41 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
 
 - **SCORING.md untouched.** This is a display-only addition; scoring algorithm, resolver, engine, purity
   matrix, and Realtime contract are byte-for-byte identical.
+
+## Prompt — Wire the $0 free-agency grant into the Waivers tab (the route was never surfaced)
+
+**The incident.** Prompt 48 shipped `POST /api/faab/free-agent` (the instant $0 free-agency pickup:
+`handleFaGrant` / `faabGate` / `validateFaGrant` / `claimFreeAgent`) **with passing route + engine
+tests** — and it was marked complete. But **no UI ever called it.** The Waivers tab rendered only the
+sealed-bid claim form, so during a period's free-agency window (post-batch, pre-first-kickoff) a manager's
+only action was a sealed bid that **wouldn't clear until the next batch** — i.e. the headline feature of
+the window was unreachable. Verified live on prod (MD1 in free-agency, 1077 snapshot-eligible players, the
+BatchBar already saying "Free agency open").
+
+**The lesson (the load-bearing one).** **Route-level tests ≠ a working user path.** A green test on
+`handleFaGrant` proves the handler is correct; it says nothing about whether any button reaches it. This is
+the same class of gap P54 hit with the FormationPicker (a source-contract smoke can't prove a control
+renders). The fix here is matched by an **end-to-end RTL/jsdom test that mounts the real `WaiversClient`
+and drives the Add control** — asserting it actually POSTs `/api/faab/free-agent` and refreshes — plus the
+`fa-conflict` (409) path. That test is the thing P48 lacked.
+
+**What was wired (UI only — engine/route/schema untouched).**
+- **`FreeAgentPanel`** (new) renders the free-agent list + instant Add/drop in the free-agency phase,
+  reusing the sealed composer's `droppableRoster` drop picker + `claimableFreeAgents` pool + the
+  `KitChip`/`NationFlag`/`Pos` atoms (no duplicated drop/roster logic). `WaiversClient.handleGrant`
+  round-trips `POST /api/faab/free-agent` → `router.refresh()`, mirroring the bid path; the FA error codes
+  (`fa-conflict` / `fa-window-closed` / `fa-not-eligible`) join the friendly-message table.
+- **Phase switch, driven by the SAME `acquisitionWindowState` the BatchBar uses:** sealed-bid → the
+  existing sealed claim form (unchanged); free-agency → the FA list (Add enabled); locked → Add disabled.
+- **Snapshot-eligible pool, predicate reused not re-derived.** The loader's `freeAgents` was the naive
+  live-unowned complement — WRONG for FA (it includes players dropped *this* window, which the grant
+  rejects). In the free-agency phase the loader now offers the snapshot pool via a new
+  `listFaIneligiblePlayerIds` (`@app/faab/prisma`), and the FA snapshot predicate is factored into ONE
+  `snapshotOwnershipWhere` shared by it and the per-player `getFaTargetFacts` re-check — so the offered
+  list and the accepted grant **cannot drift** (a stale list only falls through to the route's
+  `fa-conflict` 409, surfaced inline). No new eligibility logic, no schema change (history-derived).
+- **HARD STOPS held:** `resolveFaabBatch` / `resolve.ts` / the purity matrix / scoring are byte-unchanged;
+  the route + `validateFaGrant` + `claimFreeAgent` are untouched (consumed, not modified).
+- **Test infra:** added a `@/` alias to `vitest.config.ts` so jsdom component tests can mount real
+  app-router components (`WaiversClient` → `@/components/NationFilter`) — reusable, same spirit as P54's
+  jsdom addition.
