@@ -269,6 +269,14 @@ unentered subs. Robust; reintroduces the benched-starter-0 case; the operator fl
 fixes up via overrides. Surfaced as a per-match config flag + an alert when the live poller
 hasn't succeeded inside a match window.
 
+**Commissioner lock-on-play carve-out (the override write path).** A deliberate commissioner repair of a
+played-player freeze (`commish:lineup --allow-locked-slot`) is exempted from the `enforce_lineup_lock()`
+trigger (§4) by a **transaction-local GUC** `app.commish_override`: the override's `saveLineup` issues
+`SET LOCAL app.commish_override = 'on'` in its own write transaction, which the trigger reads via
+`current_setting('app.commish_override', true)` and exempts. Unset — every normal write, and the
+lock-on-play job (which also runs as service_role) — leaves the latch enforcing. No role exemption, no
+global flag; scoped to the one transaction (migration `20260611120000_lock_on_play_commish_override`).
+
 ---
 
 ## 4. Persistence — data model
@@ -282,7 +290,8 @@ not by hopeful application code:
 - **Sealed bids stay secret** -> **row-level security**: a manager can read only their own
   *pending* bids; everyone can read outcomes after the batch.
 - **Hindsight-proof swaps** -> a lineup slot is editable only while `locked_at IS NULL`, enforced
-  in the swap transaction.
+  in the swap transaction (`enforce_lineup_lock()`), with a transaction-local `app.commish_override`
+  GUC carve-out for the commissioner override (§3; migration `20260611120000`).
 
 ### Table sketch (Code will refine; not exhaustive DDL)
 
