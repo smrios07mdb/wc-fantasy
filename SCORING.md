@@ -171,3 +171,11 @@ player engine above — do not mix the two:
   knockout weight (e.g. R32→Final 1/2/3/5/8) is a future knob keyed on the canonical `period.label`.
 - Separate **leaderboard** (`{ played, correct, points }`, sorted `points desc → managerId asc`) —
   distinct from the all-play-all `standing`. **No §1–§8 value changed.**
+
+## ℹ️ P54 — set-lineup formation picker (NO scoring change)
+
+Prompt 54 adds a formation picker + roster-fillability filter to the set-lineup screen (manager selects
+from the fillable ∩ lock-legal shapes; default = persisted shape else first fillable). **No change to
+scoring.** Formation only determines *which* owned players start (`is_starter`); the engine already keys
+on `is_starter` and scores each starter's stat line identically regardless of shape. Points per event,
+the rating ladder, position weighting, and the recompute pipeline are all **untouched** — §1–§8 stand.

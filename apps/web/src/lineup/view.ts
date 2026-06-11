@@ -7,8 +7,8 @@
  * what the route will allow. The UI freeze is presentation; the server is the real latch.
  */
 import { validateLineup, type SquadPlayer, type LineupValidation } from "@app/lineup";
-import type { Position } from "@app/shared";
-import type { LineupPlayer, OpponentInfo, PeriodLineup } from "./types";
+import { POSITIONS, type Position } from "@app/shared";
+import type { LineupPlayer, OpponentInfo, PeriodLineup, PeriodLock } from "./types";
 
 export interface PitchSlot {
   player: LineupPlayer;
@@ -201,18 +201,150 @@ export function swapStarters(starterIds: readonly string[], outId: string, inId:
   return starterIds.map((id) => (id === outId ? inId : id));
 }
 
-/** The seeded default formation for a manager who hasn't set this period yet (a legal 4-4-2). */
-const DEFAULT_FORMATION: Record<Position, number> = { GK: 1, DEF: 4, MID: 4, FWD: 2 };
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Formation selection + roster-fillability filter (Prompt 44 cap-lift consequence; closes the carried
+// FormationPicker/reshape TODO). The live model has no stored `formation` — it's emergent from the
+// starter set — so these pure helpers map the discrete shape vocabulary onto `starterIds`. The
+// validator (@app/lineup) stays the sole legality gate; nothing here writes or re-derives the bounds.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** A legal default XI for a 2/5/5/3 squad (1 GK + 4 DEF + 4 MID + 2 FWD), taking squad order. */
-export function defaultStarterIds(squad: readonly LineupPlayer[]): string[] {
-  const remaining: Record<Position, number> = { ...DEFAULT_FORMATION };
-  const out: string[] = [];
-  for (const p of squad) {
-    if (remaining[p.position] > 0) {
-      out.push(p.id);
-      remaining[p.position] -= 1;
-    }
+export type FormationCounts = Record<Position, number>;
+
+/**
+ * The curated group-stage formation vocabulary (DECISIONS.md → Theme B "standard set"; the design's
+ * `modeConf().forms`). GK is always 1; the key is the outfield "DEF-MID-FWD" shape. Declaration order
+ * is canonical — it drives the first-fillable default fall-through and the picker's left-to-right order.
+ * The validator accepts any in-bounds XI; this is the discrete set the picker OFFERS, not a new bound.
+ */
+export const GROUP_FORMATIONS = {
+  "3-4-3": { GK: 1, DEF: 3, MID: 4, FWD: 3 },
+  "3-5-2": { GK: 1, DEF: 3, MID: 5, FWD: 2 },
+  "4-3-3": { GK: 1, DEF: 4, MID: 3, FWD: 3 },
+  "4-4-2": { GK: 1, DEF: 4, MID: 4, FWD: 2 },
+  "4-5-1": { GK: 1, DEF: 4, MID: 5, FWD: 1 },
+  "5-3-2": { GK: 1, DEF: 5, MID: 3, FWD: 2 },
+  "5-4-1": { GK: 1, DEF: 5, MID: 4, FWD: 1 },
+} as const satisfies Record<string, FormationCounts>;
+
+export type FormationKey = keyof typeof GROUP_FORMATIONS;
+
+/** The canonical group default (the design's `modeConf().def`) — used whenever the squad can field it. */
+export const DEFAULT_FORMATION_KEY: FormationKey = "4-3-3";
+
+/** Tally a squad by playing position — the roster supply each formation is checked against. */
+export function rosterCounts(squad: readonly LineupPlayer[]): Record<Position, number> {
+  const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const p of squad) counts[p.position] += 1;
+  return counts;
+}
+
+/**
+ * Can the squad SUPPLY this formation? True iff it owns >= the formation's count in every position
+ * (GK >= 1 plus the three outfield lanes). This is the gap `validateLineup` does NOT cover: the
+ * validator checks a *proposed XI* against the bounds, but never that the roster has the bodies to
+ * build one — so a 3-DEF squad silently fell one short of a 4-DEF default and capped at 10 starters.
+ */
+export function formationFillable(
+  counts: Record<Position, number>,
+  formation: FormationCounts,
+): boolean {
+  return POSITIONS.every((pos) => counts[pos] >= formation[pos]);
+}
+
+/**
+ * Is the formation reachable WITHOUT benching a locked (played) starter? The live mirror of the
+ * design's `formationLegal`: a position whose count drops below the number of frozen starters there
+ * would force a played man off the pitch — illegal. Derived purely from the lock latch (a played
+ * starter is, by the latch, an `isStarter` lock), so it needs no current starter list.
+ */
+export function formationLockLegal(
+  formation: FormationCounts,
+  locks: readonly PeriodLock[],
+  squad: readonly LineupPlayer[],
+): boolean {
+  const posOf = new Map(squad.map((p) => [p.id, p.position]));
+  const lockedCounts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const lock of locks) {
+    if (!lock.isStarter) continue;
+    const pos = posOf.get(lock.playerId);
+    if (pos) lockedCounts[pos] += 1;
   }
-  return out;
+  return POSITIONS.every((pos) => formation[pos] >= lockedCounts[pos]);
+}
+
+/** The shapes the picker surfaces = fillable ∩ lock-legal, in canonical order. */
+export function offeredFormations(
+  squad: readonly LineupPlayer[],
+  locks: readonly PeriodLock[],
+): FormationKey[] {
+  const counts = rosterCounts(squad);
+  return (Object.keys(GROUP_FORMATIONS) as FormationKey[]).filter(
+    (key) =>
+      formationFillable(counts, GROUP_FORMATIONS[key]) &&
+      formationLockLegal(GROUP_FORMATIONS[key], locks, squad),
+  );
+}
+
+/** The current outfield shape ("DEF-MID-FWD") of a starter set — matches `buildPitch`'s formationLabel. */
+export function formationKeyOf(
+  squad: readonly LineupPlayer[],
+  starterIds: readonly string[],
+): string {
+  const posOf = new Map(squad.map((p) => [p.id, p.position]));
+  const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const id of starterIds) {
+    const pos = posOf.get(id);
+    if (pos) counts[pos] += 1;
+  }
+  return `${counts.DEF}-${counts.MID}-${counts.FWD}`;
+}
+
+/** First fillable formation, canonical 4-3-3 preferred, else the first fillable in canonical order. */
+export function defaultFormationKey(counts: Record<Position, number>): FormationKey {
+  if (formationFillable(counts, GROUP_FORMATIONS[DEFAULT_FORMATION_KEY]))
+    return DEFAULT_FORMATION_KEY;
+  return (
+    (Object.keys(GROUP_FORMATIONS) as FormationKey[]).find((key) =>
+      formationFillable(counts, GROUP_FORMATIONS[key]),
+    ) ?? DEFAULT_FORMATION_KEY
+  );
+}
+
+/**
+ * Re-shape a starter set to a target formation, returning the new starter ids. Locked starters are
+ * kept first (a played man can't be benched), then the remaining current starters, then MOVABLE
+ * reserves are promoted to fill the shape — locked bench players are never promoted (no hindsight
+ * upside, per lock-on-play). For a fillable ∩ lock-legal target this always yields a complete XI.
+ */
+export function reshapeToFormation(
+  squad: readonly LineupPlayer[],
+  starterIds: readonly string[],
+  locks: readonly PeriodLock[],
+  formation: FormationCounts,
+): string[] {
+  const starterSet = new Set(starterIds);
+  const lockedSet = new Set(locks.map((l) => l.playerId));
+  const byPos: Record<Position, LineupPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+  for (const p of squad) byPos[p.position].push(p);
+
+  const next: string[] = [];
+  for (const pos of POSITIONS) {
+    const pool = byPos[pos];
+    const lockedStarters = pool.filter((p) => starterSet.has(p.id) && lockedSet.has(p.id));
+    const movableStarters = pool.filter((p) => starterSet.has(p.id) && !lockedSet.has(p.id));
+    const movableBench = pool.filter((p) => !starterSet.has(p.id) && !lockedSet.has(p.id));
+    const ordered = [...lockedStarters, ...movableStarters, ...movableBench];
+    for (const p of ordered.slice(0, formation[pos])) next.push(p.id);
+  }
+  return next;
+}
+
+/**
+ * The seeded starting XI for a manager who hasn't set this period yet: the first FILLABLE formation
+ * (canonical 4-3-3 preferred), built in squad order. A 3-DEF squad opens on 3-4-3 — savable
+ * immediately — instead of a blind 4-DEF default it can't fill (which capped it at 10 starters).
+ */
+export function defaultStarterIds(squad: readonly LineupPlayer[]): string[] {
+  const key = defaultFormationKey(rosterCounts(squad));
+  return reshapeToFormation(squad, [], [], GROUP_FORMATIONS[key]);
 }

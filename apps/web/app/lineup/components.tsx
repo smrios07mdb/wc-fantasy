@@ -9,6 +9,7 @@
  *   Bench/Row    ← the position-grouped bench rail                   · setlineup/components.jsx <Bench/>
  *   PeriodTabs   ← current + upcoming window tabs                    · setlineup/components.jsx period tabs
  *   LockHero     ← movable/locked summary + save status             · setlineup/components.jsx <LockHero/>
+ *   FormationPicker ← segmented shape selector (offered set)        · setlineup/components.jsx <FormationPicker/>
  *   SaveBar      ← save action + live legality reason               · (the explicit-save replacement for
  *                                                                       the prototype's autosave chip)
  *
@@ -16,12 +17,12 @@
  * the flag-kit jerseys belong to the "vs the field" surface (a later prompt) and are intentionally absent
  * here: this is the first lineup surface and live points are out of scope.
  *
- * DELIBERATE SIMPLIFICATION: the design reference's first-class `FormationPicker` (segmented shapes +
- * `reshape()`) is replaced here by direct start↔bench swaps — including CROSS-position outfield swaps
- * (GK kept on its own side) — so the manager reshapes the formation (4-4-2 → 3-4-3 / 4-3-3 / 5-3-2 / …)
- * by swapping, with `validateLineup` surfacing any illegal shape as live "save disabled + why". A
- * dedicated segmented FormationPicker (TODO(prompt-NN)) is a faithful follow-up; the legality core already
- * supports it unchanged.
+ * FORMATION CONTROL: the design reference's first-class `FormationPicker` (segmented shapes + `reshape()`)
+ * is now implemented — it surfaces only the shapes the squad can actually field (fillable ∩ lock-legal,
+ * derived by `offeredFormations`), and a pick `reshape`s the starter set through the SAME `validateLineup`
+ * gate. This closes the Prompt-44 cap-lift consequence: a non-4-3-3-shaped squad (e.g. 3 DEF) can now pick
+ * a fieldable shape instead of being stuck on a default it can't fill. Direct start↔bench swaps remain for
+ * fine-tuning WITHIN a shape (GK kept on its own side); the validator stays the sole legality gate.
  */
 import type { Position } from "@app/shared";
 import { formatInLeagueTz } from "@app/shared";
@@ -322,6 +323,44 @@ export function LockHero({ formationLabel, movable, locked, dirty, justSaved }: 
         ) : (
           <span className="pill">Up to date</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+export interface FormationPickerProps {
+  /** The shapes to offer (fillable ∩ lock-legal), canonical order — produced by `offeredFormations`. */
+  offered: readonly string[];
+  /** The current outfield shape (`formationKeyOf`); highlighted when it's one of the offered shapes. */
+  active: string;
+  /** Window closed (or no shape to switch to) → the control is inert. */
+  disabled?: boolean;
+  onPick: (formation: string) => void;
+}
+
+/**
+ * Segmented formation selector. Surfaces ONLY shapes the manager can field right now (roster supply +
+ * lock-respect already filtered upstream), so every option is one tap to a complete, savable XI. Picking
+ * a shape reshapes the starter set; the bench swaps then fine-tune it.
+ */
+export function FormationPicker({ offered, active, disabled, onPick }: FormationPickerProps) {
+  return (
+    <div className="sl-formation" role="group" aria-label="Formation">
+      <span className="t-label text-tertiary sl-formation-label">Formation</span>
+      <div className="tabs sl-formation-tabs" role="tablist">
+        {offered.map((formation) => (
+          <button
+            key={formation}
+            type="button"
+            role="tab"
+            aria-selected={formation === active}
+            className={`tab mono ${formation === active ? "is-active" : ""}`}
+            disabled={disabled}
+            onClick={() => onPick(formation)}
+          >
+            {formation}
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -82,6 +82,24 @@ over-drafted squad (e.g. zero keepers, or ten forwards) **can be locked out of a
 `isPositionLegal` / `isSquadComplete` became total-based, gating on a new `squadTotal(counts)` helper vs
 `SQUAD_SIZE`; `PositionFullError` is retained but defensive/unreachable in the snake flow.)
 
+### ⚠️ AMENDMENT (Prompt 54 — formation is manager-selectable; the cap-lift consequence resolved)
+The Prompt-44 cap-lift means a squad can now be **non-4-3-3-shaped** (e.g. 3 DEF / 7 MID / 4 FWD), so a
+single hardcoded default formation can be **unfieldable** — it stranded MR. ZETTA at 10 starters ("got
+10"). Resolution, **within the locked formation set + Theme-B bounds (no change to either)**:
+- **Formation is manager-selectable** on the set-lineup screen, from the **OFFERED set = fillable ∩
+  lock-legal**. *Fillable* = the squad owns ≥ the shape's count in every position (GK ≥ 1 + the three
+  outfield lanes) — the roster-supply check `validateLineup` never made (it validates a *proposed XI*,
+  not whether the roster can build one). *Lock-legal* = the shape doesn't force a played starter off the
+  pitch (the live mirror of the design's `formationLegal`). Only offered shapes are surfaced, so every
+  pick lands on a complete, immediately-savable XI.
+- **Initial formation = persisted shape, else first fillable.** A saved lineup loads its OWN shape (never
+  overridden). With none saved, the default is the **first fillable** formation — canonical **4-3-3** when
+  the squad can field it (the design `modeConf` default; a 4-DEF squad is unchanged), else the first
+  fillable in canonical order (a 3-DEF squad opens on **3-4-3**).
+- **The standard formation set and the bounds (min 3 DEF / 2 MID / 1 FWD, exactly 1 GK) are UNCHANGED**
+  — only their *surfacing/selection* is added. No commissioner override, no DB writes, no new write path:
+  a pick `reshape`s the starter set through the **same `validateLineup` gate + `POST /api/lineup`**.
+
 ### Locking & substitution — lock-on-play (NO auto-subs)
 - **A player locks the instant he plays ≥1 minute.** Until he plays he is freely swappable
   (subject to formation legality). This is stricter than "lock at kickoff" — a benched starter

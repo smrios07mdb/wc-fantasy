@@ -900,3 +900,36 @@ so `matches.at(-1)` gives the last scheduled kickoff; `batchClearedAt` removed f
 `resolveFaabBatch` / `resolve.ts` / purity matrix are byte-unchanged (period selection is a loader
 concern, not a resolver concern). `// TODO(confirm)` in `loadVsField` marks the
 overlapping-group-waves scope-out (sequential periods only; two concurrent matchdays = future work).
+
+## 15. Set-lineup formation selection + roster-fillability filter (Prompt 54)
+
+The set-lineup module gains a **formation picker** and a **roster-fillability filter** — the
+consequence of the Prompt-44 draft cap-lift (squads can now be non-4-3-3-shaped), which stranded a
+3-DEF squad on a hardcoded 4-DEF default at 10 starters. **Same validate/save path; no new write path,
+no RLS/Realtime change.**
+
+**All new logic is pure**, in `apps/web/src/lineup/view.ts` (consumed by the client, unit-tested in
+`formation.test.ts`) — the live model stores no `formation` field (it's emergent from `starterIds`):
+- `GROUP_FORMATIONS` — the DECISIONS Theme-B standard 7 (the design `modeConf().forms`), in canonical
+  order. Not a new bound — the discrete shapes the picker OFFERS.
+- `formationFillable(counts, formation)` — GK ≥ 1 and roster supply ≥ the shape's count per outfield
+  lane. **The gap `validateLineup` never covered**: the validator checks a *proposed XI* against the
+  bounds, never that the roster owns the bodies to build one.
+- `formationLockLegal(formation, locks, squad)` — the live port of the design's `formationLegal`: a
+  shape whose position count is below the locked-starter count there is rejected (can't bench a played
+  man). Derived from the lock latch alone.
+- `offeredFormations(squad, locks)` = fillable ∩ lock-legal, canonical order → the picker's options.
+- `reshapeToFormation(squad, starterIds, locks, formation)` — keeps locked starters first, then current
+  starters, then promotes only MOVABLE reserves (a locked bench player is never promoted). For a
+  fillable ∩ lock-legal target it always yields a complete XI.
+- `defaultFormationKey` / `defaultStarterIds` — the seed XI is now the **first fillable** formation
+  (canonical 4-3-3 when fillable, else the first fillable in canonical order), built by
+  `reshapeToFormation(squad, [], [], …)`. A 3-DEF squad opens on 3-4-3, savable immediately. A
+  **persisted** lineup is still loaded as-is by `loadLineup` (`savedStarters.length > 0` arm) — its
+  shape is never overridden.
+
+**UI:** `<FormationPicker>` (segmented `.tabs`, offered shapes only) in `app/lineup/components.tsx`,
+wired in `SetLineupClient` → a pick `reshape`s the starter set → the **existing** cross-position swap +
+`evaluateProposal` (`@app/lineup` `validateLineup`) + `submitLineup` (`POST /api/lineup`) flow takes
+over. The `@app/lineup` validator, the route, and the controller/store are **byte-untouched** — the
+server stays the sole legality latch; the picker only ensures the manager starts from a fieldable shape.

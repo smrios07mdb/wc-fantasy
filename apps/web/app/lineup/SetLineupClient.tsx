@@ -14,11 +14,15 @@ import {
   buildPitch,
   canSwap,
   evaluateProposal,
+  formationKeyOf,
+  GROUP_FORMATIONS,
   isMovable,
+  offeredFormations,
+  reshapeToFormation,
   swapStarters,
 } from "../../src/lineup/view";
 import type { SetLineupState } from "../../src/lineup/types";
-import { Bench, LockHero, PeriodTabs, Pitch, SaveBar } from "./components";
+import { Bench, FormationPicker, LockHero, PeriodTabs, Pitch, SaveBar } from "./components";
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
@@ -69,6 +73,25 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     for (const p of squad) if (canSwap(period, squad, starterIds, selected, p.id)) set.add(p.id);
     return set;
   }, [selected, squad, period, starterIds]);
+
+  // The shapes this manager can actually field right now = roster-fillable ∩ lock-legal. Only these are
+  // offered, so every pick lands on a complete, immediately-savable XI (the fix for an unfieldable default).
+  const offered = useMemo(() => offeredFormations(squad, period.locks), [squad, period.locks]);
+  const activeFormation = useMemo(() => formationKeyOf(squad, starterIds), [squad, starterIds]);
+
+  // Pick a formation → reshape the starter set to it (locked starters kept, movable reserves promoted),
+  // then the existing swap + validate + save flow takes over. No new write path.
+  const onPickFormation = useCallback(
+    (formation: string) => {
+      const counts = GROUP_FORMATIONS[formation as keyof typeof GROUP_FORMATIONS];
+      if (!counts) return;
+      const next = reshapeToFormation(squad, starterIds, period.locks, counts);
+      setLineups((all) => ({ ...all, [activeId]: next }));
+      setSelected(null);
+      setJustSaved(false);
+    },
+    [squad, period.locks, starterIds, activeId],
+  );
 
   const onSelect = useCallback(
     (playerId: string) => {
@@ -143,6 +166,12 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
       <div className="sl-body">
         <section className="sl-pitchcol">
+          <FormationPicker
+            offered={offered}
+            active={activeFormation}
+            disabled={!editable}
+            onPick={onPickFormation}
+          />
           <Pitch
             view={view}
             selected={selected}

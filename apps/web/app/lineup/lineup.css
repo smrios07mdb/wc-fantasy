@@ -82,6 +82,20 @@
   margin-left: auto;
 }
 
+/* ── formation picker (segmented; offered = fillable ∩ lock-legal shapes) ─ */
+.sl-formation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sl-formation-label {
+  flex: 0 0 auto;
+}
+.sl-formation-tabs {
+  flex-wrap: wrap;
+}
+
 /* ── body: pitch + rail ────────────────────────────────────────────────── */
 .sl-body {
   display: grid;

@@ -106,7 +106,9 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       label: p.label,
       status: p.status,
       closesAt: p.closesAt ? p.closesAt.toISOString() : null,
-      // A period the manager hasn't set yet starts from a legal default 4-4-2 he can adjust.
+      // A period the manager hasn't set yet starts from the first FILLABLE formation (canonical 4-3-3
+      // when his squad can field it, else a shape it can — e.g. a 3-DEF squad opens on 3-4-3, savable
+      // immediately). A saved lineup is loaded as-is — its shape is never overridden.
       starterIds: savedStarters.length > 0 ? savedStarters : defaultStarterIds(squad),
       locks: slots
         .filter((s) => s.lockedAt !== null)

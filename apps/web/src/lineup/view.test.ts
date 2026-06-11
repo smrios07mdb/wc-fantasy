@@ -199,10 +199,15 @@ describe("swap helpers — start↔bench swaps drive formation changes + live le
   });
 });
 
-describe("defaultStarterIds — a legal 4-4-2 when no lineup is saved yet", () => {
-  it("picks 1 GK + 4 DEF + 4 MID + 2 FWD and is a legal XI", () => {
+describe("defaultStarterIds — the canonical 4-3-3 when no lineup is saved yet (4+ DEF squad)", () => {
+  it("picks 1 GK + 4 DEF + 3 MID + 3 FWD and is a legal XI", () => {
     const xi = defaultStarterIds(SQUAD);
     expect(xi).toHaveLength(11);
+    // The canonical group default is 4-3-3 (design modeConf def), surfaced now that the default is
+    // formation-aware — a squad that can field it gets it, unfillable shapes fall through.
+    const counts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+    for (const id of xi) counts[SQUAD.find((p) => p.id === id)!.position] += 1;
+    expect(counts).toEqual({ GK: 1, DEF: 4, MID: 3, FWD: 3 });
     const res = evaluateProposal(SQUAD, period({ starterIds: xi }), xi, NOW);
     expect(res.ok).toBe(true);
   });
