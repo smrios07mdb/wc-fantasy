@@ -1593,3 +1593,44 @@ and drives the Add control** — asserting it actually POSTs `/api/faab/free-age
 - **Test infra:** added a `@/` alias to `vitest.config.ts` so jsdom component tests can mount real
   app-router components (`WaiversClient` → `@/components/NationFilter`) — reusable, same spirit as P54's
   jsdom addition.
+
+## Prompt — Commissioner-override CLI (`commish:roster` / `commish:lineup`)
+
+A Render-Shell tool for the commissioner to repair "our-fault" moves the app's (previously missing)
+free-agency UI blocked — the same incident the FA-grant Waivers UI above addressed, from the operator
+side. Two sub-commands under `apps/worker/src/commish/` (`pnpm --filter @app/worker commish:roster|lineup`),
+**dry-run by default, `--apply` to execute.**
+
+**The line: what it BYPASSES vs what it ALWAYS enforces.** This is the whole design.
+
+- **Bypasses (deliberately, commissioner-only):**
+  - `commish:roster` — the FA/waiver acquisition **window** (it calls `claimFreeAgent` directly, never the
+    `validateFaGrant` window/snapshot gate; the validator is reused with `windowState:"free-agency"` +
+    `faEligible:true` + `dropLocked:false` so ONLY those gates are neutralized) and the **drop-lock**.
+  - `commish:lineup` — the lineup **edit-window lock** (via `relaxPeriodLock`: `validateLineup` runs with
+    `status:"open"` + `closesAt:null`, so its phase-1 window check is a no-op).
+- **ALWAYS enforces (never bypassed — reused from the engines, not re-derived):**
+  - roster: the **roster cap** (`validateFaGrant`/`checkDropAndRoster` 2/5/5/3 + 15), **valid-drop**
+    (drop owned, ≠ add, required-when-full), the **active-ownership unique** + **slot-release** + the
+    atomic drop/insert (all inside `claimFreeAgent`'s one transaction). $0 — no budget / waiver-order change.
+  - lineup: **formation/position legality**, **ownership**, the **11-distinct XI**, and the **lock-on-play
+    latch** (the per-play freeze stays — `validateLineup` step 4 + `saveLineup`'s write-time re-check + the
+    DB trigger `enforce_lineup_lock()`, which is NOT bypassable from app code anyway).
+  - both: the **commissioner gate** (`is_commissioner` flag OR the `smrios07@gmail.com` fallback, mirroring
+    `canActAsManager({scope:"admin"})`), a **required `--reason`**, **idempotency** (skip if the end state
+    already holds), and a **structured audit line** per applied action (`commish-override {json}` on stdout).
+
+**The post-kickoff integrity caveat (the one genuinely dangerous bypass).** A roster move on a player whose
+match has already kicked off is an integrity hazard: his points are (becoming) known, so a retroactive
+add/drop can rewrite history. The per-player **kickoff guard is ON by default and BLOCKS** such a move; it
+is honored only with an explicit per-move `--allow-post-kickoff`, and when used it **logs LOUDLY** (player,
+match, kickoff time, "points already known") before applying. The dry-run plan always surfaces the
+add-match kickoff + whether it has already played.
+
+**STOP SEAMS held.** No engine/route/schema change and **no migration** — the audit is structured stdout,
+not a new table. `claimFreeAgent` + the `@app/lineup` validate/service are reused verbatim (their
+validation is never re-derived). The pure core (resolver / gate / kickoff-guard / idempotency / audit) and
+the injected-deps orchestrators are unit-tested (resolver name→id + ambiguity, gate refusal, kickoff
+default-block vs `--allow-post-kickoff`, roster cap kept under window-bypass, formation legality kept under
+lock-bypass, dry-run applies nothing); the IO `cli.ts` is `tsc`-covered like the provisioning CLI. New dep:
+`@app/lineup` added to `apps/worker`.
