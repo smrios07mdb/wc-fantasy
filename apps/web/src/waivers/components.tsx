@@ -9,6 +9,8 @@
  * chip" gotcha cannot bite here (there are no background layers to collapse).
  */
 import type { Position } from "@app/shared";
+import { Flag } from "../../app/draft/Flag";
+import { toIso2 } from "../draft/flag";
 import type { WvBatchWindow, WvPlayer } from "./types";
 import { isPlayerCutoffPassed } from "./waiversLogic";
 
@@ -93,6 +95,16 @@ export function KitChip({ player, sm }: { player: WvPlayer; sm?: boolean }) {
       {code}
     </span>
   );
+}
+
+/**
+ * A waivers player's country flag — reuses the sole `<Flag>` render surface + `toIso2` resolver
+ * (Prompts 33/35/36): emoji for ISO nations, the hand-authored England/Scotland SVGs for home nations.
+ * Nation values are country NAMES (from the fifa_team join); unknown/empty degrades to a glyph-less,
+ * alignment-preserving placeholder. Same `.flag-emoji` sizing the draft/lineup surfaces use.
+ */
+export function NationFlag({ nation, lg }: { nation: string | null; lg?: boolean }) {
+  return <Flag code={toIso2(nation)} label={nation ?? undefined} lg={lg} />;
 }
 
 function fmtCountdown(ms: number): string {
@@ -249,6 +261,7 @@ export function ClaimRow({
         <div className="wv-claim-line">
           <span className="wv-claim-tag wv-tag-add">ADD</span>
           <KitChip player={claim.add} sm />
+          <NationFlag nation={claim.add.nation} />
           <b className="wv-name">{claim.add.shortName}</b>
           <Pos p={claim.add.position} />
           <CutoffTag player={claim.add} now={now} />
@@ -257,6 +270,7 @@ export function ClaimRow({
           <div className="wv-claim-line is-drop">
             <span className="wv-claim-tag wv-tag-drop">DROP</span>
             <KitChip player={claim.drop} sm />
+            <NationFlag nation={claim.drop.nation} />
             <b className="wv-name wv-name-drop">{claim.drop.shortName}</b>
             <Pos p={claim.drop.position} />
           </div>
@@ -323,6 +337,7 @@ function ResultRow({
     <div className={"wv-res" + (result.isMine ? " is-mine" : "")}>
       <div className="wv-res-add">
         <KitChip player={result.add} sm />
+        <NationFlag nation={result.add.nation} />
         <div className="wv-res-id">
           <b className="wv-name">{result.add.shortName}</b>
           <span className="t-micro text-tertiary">
