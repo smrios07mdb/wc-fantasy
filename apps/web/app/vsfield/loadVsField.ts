@@ -11,6 +11,7 @@
  * `buildVsField` suite cover the shapes it produces. It is shared by the SSR page AND `GET /api/vsfield`.
  */
 import { prisma } from "@app/db";
+import { selectCurrentPeriod } from "@app/shared";
 import {
   buildVsField,
   type BuildVsFieldInput,
@@ -42,7 +43,14 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
     }),
     prisma.period.findMany({
       where: { leagueId },
-      select: { id: true, label: true, kind: true, status: true, opensAt: true },
+      select: {
+        id: true,
+        label: true,
+        kind: true,
+        status: true,
+        batchClearedAt: true,
+        matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
+      },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
     }),
     prisma.standing.findMany({
@@ -57,18 +65,13 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
     }),
   ]);
 
-  // TODO(confirm): current-period selection for the live board under the staggered group calendar —
-  // the OPEN period, else the soonest PENDING (by opens_at). Revisit when 2+ group waves overlap
-  // (which wave is "the field"?). `period.status` is set to `open` when the wave's first match nears
-  // kickoff and `closed` when its last match finishes (the close job, ARCHITECTURE §4).
-  // Between waves (nothing open, next wave pending) we point at the soonest PENDING — NOT
-  // `periodRows[0]` (which, ordered by opens_at, is the FIRST/finished matchday and would show stale
-  // FT scores + bind Realtime to the wrong period). All `closed` and nothing pending → null (no live
-  // board; the Season tab still renders from `standing`).
-  const currentPeriodRow =
-    periodRows.find((p) => p.status === "open") ??
-    periodRows.find((p) => p.status === "pending") ??
-    null;
+  // Current period: the open wave (if any), else the earliest pending-and-uncleared period by first
+  // fixture kickoff. opensAt is never populated by the provisioning CLI (NULL for all periods), so
+  // the DB ORDER BY opensAt falls back to label-alphabetical and puts "Final" before "Group MD1".
+  // selectCurrentPeriod re-sorts by matches[0].kickoffAt in JS and uses batchClearedAt=null as the
+  // advancement latch (same as the worker's selectPeriodsToClear). All cleared → null (Season tab
+  // still renders from standing).
+  const currentPeriodRow = selectCurrentPeriod(periodRows);
   const currentPeriod = currentPeriodRow
     ? { id: currentPeriodRow.id, label: currentPeriodRow.label }
     : null;

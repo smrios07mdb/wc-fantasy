@@ -48,3 +48,35 @@ export function comparePeriodLabels(a: string, b: string): number {
 export function sortByPeriodOrder<T>(items: readonly T[], labelOf: (item: T) => string): T[] {
   return [...items].sort((a, b) => comparePeriodLabels(labelOf(a), labelOf(b)));
 }
+
+/**
+ * Select the current scoring period: the first OPEN period (if any), else the earliest PENDING
+ * period (by first fixture kickoff) whose batch has not yet been cleared.
+ *
+ * `opensAt` is never populated by the provisioning CLI, so `ORDER BY opens_at ASC` degrades to
+ * `label ASC` (alphabetical), which puts "Final" (F) before "Group MD1" (G). This helper avoids
+ * that by sorting in JS on `matches[0].kickoffAt` — populated by the schedule sync. Periods with
+ * no fixtures sort last (Infinity).
+ *
+ * `batchClearedAt === null` drives advancement: once MD1's batch runs and `batchClearedAt` is
+ * stamped, this helper skips MD1 and returns MD2 — mirroring the worker's `selectPeriodsToClear`
+ * latch. `status === "open"` is retained as a fast-path for when status transitions are wired.
+ */
+export function selectCurrentPeriod<
+  T extends {
+    status: string;
+    batchClearedAt: Date | null;
+    matches: Array<{ kickoffAt: Date }>;
+  },
+>(periods: readonly T[]): T | null {
+  const sorted = [...periods].sort((a, b) => {
+    const aT = a.matches[0]?.kickoffAt.getTime() ?? Infinity;
+    const bT = b.matches[0]?.kickoffAt.getTime() ?? Infinity;
+    return aT - bT;
+  });
+  return (
+    sorted.find((p) => p.status === "open") ??
+    sorted.find((p) => p.status === "pending" && p.batchClearedAt === null) ??
+    null
+  );
+}

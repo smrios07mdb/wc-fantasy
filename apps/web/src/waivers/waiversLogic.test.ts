@@ -9,11 +9,10 @@ import {
   freeAgentNations,
   isClaimVoid,
   isPlayerCutoffPassed,
-  selectCurrentWaiverPeriod,
   sortClaims,
 } from "./waiversLogic";
 import { DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
-import { formatInLeagueTz } from "@app/shared";
+import { formatInLeagueTz, selectCurrentPeriod } from "@app/shared";
 
 const NOW = new Date("2026-06-08T12:00:00.000Z");
 const FUTURE = "2026-06-08T15:00:00.000Z"; // +3h
@@ -250,7 +249,7 @@ describe("batch-window view (the 'next batch' element — phase→label/time in 
   });
 });
 
-describe("selectCurrentWaiverPeriod (period picker — opensAt never seeded at provision time)", () => {
+describe("selectCurrentPeriod (period picker — opensAt never seeded, batchClearedAt advancement)", () => {
   // WC opening day: Group MD1 first kickoff. Non-UTC league tz proves the Intl conversion happens.
   const MD1_KO = new Date("2026-06-11T16:00:00.000Z"); // Group MD1 first kickoff
   const FINAL_KO = new Date("2026-07-19T19:00:00.000Z"); // WC Final kickoff
@@ -259,18 +258,20 @@ describe("selectCurrentWaiverPeriod (period picker — opensAt never seeded at p
     id: "final",
     label: "Final",
     status: "pending",
+    batchClearedAt: null,
     matches: [{ kickoffAt: FINAL_KO }],
   };
   const MD1 = {
     id: "md1",
     label: "Group MD1",
     status: "pending",
+    batchClearedAt: null,
     matches: [{ kickoffAt: MD1_KO }],
   };
 
   it("on a pre-kickoff opening day returns the EARLIEST pending period, not the alphabetically first", () => {
     // DB returns [Final, MD1] (alphabetical because opensAt is NULL for all periods at provision)
-    const picked = selectCurrentWaiverPeriod([FINAL, MD1]);
+    const picked = selectCurrentPeriod([FINAL, MD1]);
     expect(picked?.id).toBe("md1");
     // Resolved batch instant = MD1 kickoff − 360 min = 10:00Z = 6:00 AM EDT (non-UTC league tz)
     const batchAt = effectiveBatchAt(
@@ -293,14 +294,15 @@ describe("selectCurrentWaiverPeriod (period picker — opensAt never seeded at p
       id: "md2",
       label: "Group MD2",
       status: "open",
+      batchClearedAt: null,
       matches: [{ kickoffAt: new Date("2026-06-15T16:00:00.000Z") }],
     };
-    expect(selectCurrentWaiverPeriod([FINAL, openMd2, MD1])?.id).toBe("md2");
+    expect(selectCurrentPeriod([FINAL, openMd2, MD1])?.id).toBe("md2");
   });
 
   it("returns null when all periods are closed", () => {
     expect(
-      selectCurrentWaiverPeriod([
+      selectCurrentPeriod([
         { ...MD1, status: "closed" },
         { ...FINAL, status: "closed" },
       ]),
@@ -308,7 +310,13 @@ describe("selectCurrentWaiverPeriod (period picker — opensAt never seeded at p
   });
 
   it("a period with no fixtures sorts last so a period-with-fixtures is preferred", () => {
-    const noFixtures = { id: "tbd", label: "Quarterfinals", status: "pending", matches: [] };
-    expect(selectCurrentWaiverPeriod([noFixtures, MD1])?.id).toBe("md1");
+    const noFixtures = {
+      id: "tbd",
+      label: "Quarterfinals",
+      status: "pending",
+      batchClearedAt: null,
+      matches: [],
+    };
+    expect(selectCurrentPeriod([noFixtures, MD1])?.id).toBe("md1");
   });
 });

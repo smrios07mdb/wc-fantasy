@@ -11,8 +11,8 @@
 import { prisma } from "@app/db";
 import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
-import type { Position } from "@app/shared";
-import { buildBatchWindowView, selectCurrentWaiverPeriod } from "@/src/waivers/waiversLogic";
+import { selectCurrentPeriod, type Position } from "@app/shared";
+import { buildBatchWindowView } from "@/src/waivers/waiversLogic";
 import type {
   WaiversView,
   WvBatch,
@@ -135,7 +135,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   // back to label-alphabetical, which puts "Final" before "Group MD1". selectCurrentWaiverPeriod
   // re-sorts by firstKickoffAt in JS. The phase + time come from @app/faab so the screen shows
   // the identical instant the worker's per-period batch trigger fires.
-  const currentPeriodRow = selectCurrentWaiverPeriod(periodRows);
+  const currentPeriodRow = selectCurrentPeriod(periodRows);
 
   let batchWindow: WvBatchWindow | null = null;
   if (currentPeriodRow) {
