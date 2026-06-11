@@ -7,6 +7,7 @@
  * edge has no unit test (it needs a live DB); `tsc` + the pure-logic suites cover the shapes it produces.
  */
 import { prisma } from "@app/db";
+import { sortByPeriodOrder } from "@app/shared";
 import { defaultStarterIds } from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup, SetLineupState } from "../../src/lineup/types";
 
@@ -61,7 +62,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       })
     : [];
 
-  const periods: PeriodLineup[] = periodRows.map((p) => {
+  const unorderedPeriods: PeriodLineup[] = periodRows.map((p) => {
     const slots = slotRows.filter((s) => s.periodId === p.id);
     const savedStarters = slots.filter((s) => s.isStarter).map((s) => s.playerId);
     return {
@@ -81,6 +82,10 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     };
   });
 
+  // Order the selector by canonical tournament progression (MD1…MD3, R32, R16, QF, SF, Final) — the
+  // single source in @app/shared. NOT alphabetical (which mis-sorts Final/QF/R16/R32/SF) and NOT by
+  // opens_at (null until fixtures sync → silently falls back to the alphabetical bug).
+  const periods = sortByPeriodOrder(unorderedPeriods, (p) => p.label);
   const active = periods.find((p) => p.status === "open") ?? periods[0];
   return {
     sessionManagerId,
