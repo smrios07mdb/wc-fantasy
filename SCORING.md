@@ -11,6 +11,8 @@ One unified model. Sofascore-inspired, position-balanced, high-scoring. No miles
 3. **Fractional points allowed.** "For every N" buckets **round down** (e.g., 5 tackles ÷ 3 = 1 pt).
 4. **Clean sheet requires 60+ minutes** played.
 5. The **rating line applies only to players who received a match rating** (i.e., who played).
+6. **A subbed-out played starter forfeits the period** via `is_starter=false` (see DECISIONS Theme B
+   amendment). No point values change.
 
 ## ⚠️ Data dependency
 Values below assume a **Sofascore-grade feed**, including the proprietary **Sofascore player match

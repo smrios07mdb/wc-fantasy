@@ -103,6 +103,30 @@ over-drafted squad (e.g. zero keepers, or ten forwards) **can be locked out of a
 - **Edge cases:** abandoned / postponed matches and warmup scratches → manual override
   (Cowork failsafe).
 
+#### Amendment — in-matchday substitutions (supersedes the bidirectional freeze; group + playoff)
+- **Lock-on-play's sub-IN half is preserved:** a player may be moved into the XI only while his
+  match has not kicked off. A played player can never be promoted in (no hindsight upside; a played
+  bench player stays locked on the bench).
+- **Lock-on-play's sub-OUT half is overturned:** a manager may remove a player who has already
+  played, but only as a substitution that swaps in an eligible (unplayed) bench player. Removing a
+  played player forfeits every point he banked for that period — only the incoming sub scores that
+  lineup slot. The risk is symmetric (the sub can score less); that gamble is the strategy.
+- **A substitution = one current XI player out, one bench player in.** Incoming must be unplayed
+  (his match not kicked off). Resulting XI must satisfy that mode's formation bounds: group exactly
+  1 GK + min 3 DEF / 2 MID / 1 FWD; playoff exactly 1 GK + min 2 DEF / 2 MID / 1 FWD.
+- **Cap = bench size: 4 (group) / 2 (playoff).** Each bench player may be subbed in at most once per
+  period; a sub already moved into the XI cannot be moved back out for another. The counter is bench
+  players, not actions.
+- **Forfeit is realized through `is_starter`:** on a completed sub, the outgoing slot flips
+  `is_starter=false` (scores 0 for the period regardless of points banked) and the incoming sub
+  flips `is_starter=true`. `recomputeManagerPeriod` already keys on `is_starter` — no new scoring
+  concept.
+- **Knock-on (flag for the Theme-B implementation thread):** the `lineup_slot` lock latch becomes
+  directional — it must still block promote-IN of a played player and must not regress the
+  Prompt-01 "no unlock-then-edit" hardening, while now permitting demote-OUT of a played player as
+  part of a validated sub. Auto-subs remain absent; period-close-scores-0 backstop and
+  abandoned/postponed manual override unchanged.
+
 ### "Set multiple lineups" — defined
 Pre-set lineups for **multiple upcoming match windows/periods in advance**; within a period,
 edit any not-yet-locked player. NOT multiple competing entries (that's best-ball / multi-entry —
@@ -280,6 +304,29 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   free-grabbable until they pass one pre-dawn batch unclaimed. This 1-cycle hold (≤24h) is what
   stops a hot just-dropped player being sniped for $0 — **contested players always route through a
   blind bid**, free agency only ever dispenses genuinely uncontested depth.
+
+##### Amendment — per-matchday acquisition window (supersedes the daily two-tier cycle)
+- **One blind-bid waiver batch before each scoring period** — each group matchday (3) and each
+  knockout round. The daily cron is retired. `resolveFaabBatch` (the §D algorithm) is unchanged;
+  only cadence/scheduling changes.
+- The batch runs **before the period's first kickoff,** so it can legally award anyone playing in
+  that period.
+- **Post-batch, unclaimed players → $0 free agents,** first-come, until the period's first kickoff.
+- **Hard league-wide lock at the period's first kickoff** — waivers and FA both close; roster is
+  frozen until the next period's batch. The only in-period roster moves are the bench subs (Theme B
+  amendment).
+- **Acquisition deadline is now the period's first kickoff (league-wide),** superseding the
+  per-player-kickoff acquisition deadline. Note the scope: this retires per-player-kickoff for
+  acquisition only — sub-IN eligibility (Theme B) remains gated on the incoming player's own match
+  kickoff. Void-refund-on-kickoff becomes unreachable in normal flow (the batch precedes all
+  kickoffs); keep it as a defensive guard, don't rely on it.
+- **Retired: the 1-cycle waiver hold / "drops route to waivers first"** — there is no mid-period
+  churn left for it to guard. New releases simply enter the next period's batch pool.
+- **Unchanged:** $100 group budget spent across the 3 batches; $100 reset for the entire playoff
+  run; rolling waiver-order tiebreak + playoff carry-forward (no re-seed).
+- **Knock-on (flag for the Theme-D implementation thread):** the worker scheduler (Prompt 05a)
+  changes from daily FAAB cron → per-period batch trigger; FA-eligibility ("cleared ≥1 batch
+  unclaimed") collapses to "unclaimed after the period's single batch."
 
 #### Mesh with the per-player acquisition deadline (locked: can't add a player once his match kicks off)
 - The pre-dawn batch precedes the day's kickoffs (WC earliest ≈ noon local), so it can legally
