@@ -11,8 +11,14 @@
 import { useState } from "react";
 import type { Position } from "@app/shared";
 import type { WvClaim, WvPlayer } from "./types";
-import { claimableFreeAgents, composerMaxBid, droppableRoster } from "./waiversLogic";
+import {
+  claimableFreeAgents,
+  composerMaxBid,
+  droppableRoster,
+  freeAgentNations,
+} from "./waiversLogic";
 import { CutoffTag, KitChip, Pos, Refund, Sealed } from "./components";
+import { NationFilter } from "@/components/NationFilter";
 
 const POS_FILTERS: ReadonlyArray<"ALL" | Position> = ["ALL", "GK", "DEF", "MID", "FWD"];
 
@@ -52,11 +58,13 @@ export function BidComposer({
   const [dropId, setDropId] = useState<string | null>(editClaim?.drop?.id ?? null);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<"ALL" | Position>("ALL");
+  const [nation, setNation] = useState<string | "ALL">("ALL");
 
   const editingBidId = editClaim?.bidId ?? null;
+  const nations = editClaim ? [] : freeAgentNations(freeAgents);
   const fas = editClaim
     ? []
-    : claimableFreeAgents(freeAgents, claims, now, { query, position, editingBidId });
+    : claimableFreeAgents(freeAgents, claims, now, { query, position, nation, editingBidId });
   const drops = droppableRoster(roster, lockedPlayerIds);
   const maxBid = composerMaxBid(faabBudget, claims, editingBidId);
   const valid = !!selected && !!dropId && amount >= 0 && amount <= maxBid;
@@ -120,6 +128,7 @@ export function BidComposer({
                     </button>
                   ))}
                 </div>
+                <NationFilter nations={nations} value={nation} onChange={setNation} />
                 <div className="wv-comp-list">
                   {fas.length === 0 && (
                     <div className="wv-comp-empty t-sm text-tertiary">

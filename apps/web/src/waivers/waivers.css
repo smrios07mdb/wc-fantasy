@@ -904,3 +904,60 @@
     justify-content: flex-start;
   }
 }
+
+/* ── collapsible country filter (shared <NationFilter>, Part 2) ──────────────────
+   Ported from the draft pool's .dr-nation-* look onto neutral nf-* classes; the chips
+   reuse the global .chip / .chip.is-active tokens (ds.css). */
+.nf-filter {
+  margin: 4px 0 8px;
+}
+.nf-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+.nf-toggle {
+  font-size: var(--fs-caption, 0.75rem);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: none;
+}
+.nf-toggle:hover {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+.nf-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+.nf-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.nf-clear:hover {
+  background: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  color: var(--text-primary);
+}

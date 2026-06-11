@@ -72,10 +72,12 @@ export function claimableFreeAgents(
   opts: {
     query?: string;
     position?: "ALL" | WvPlayer["position"];
+    /** Selected nation from the collapsible country filter; "ALL" (or omitted) is a no-op. */
+    nation?: string | "ALL";
     editingBidId?: string | null;
   } = {},
 ): WvPlayer[] {
-  const { query = "", position = "ALL", editingBidId = null } = opts;
+  const { query = "", position = "ALL", nation = "ALL", editingBidId = null } = opts;
   const takenAddIds = new Set(claims.filter((c) => c.bidId !== editingBidId).map((c) => c.add.id));
   const q = query.trim().toLowerCase();
   return freeAgents
@@ -83,12 +85,25 @@ export function claimableFreeAgents(
       if (takenAddIds.has(p.id)) return false;
       if (isPlayerCutoffPassed(p, now)) return false;
       if (position !== "ALL" && p.position !== position) return false;
+      if (nation !== "ALL" && p.nation !== nation) return false;
       if (q && !p.name.toLowerCase().includes(q)) return false;
       return true;
     })
     .sort(
       (a, b) => (b.seasonPoints ?? -1) - (a.seasonPoints ?? -1) || a.name.localeCompare(b.name),
     );
+}
+
+/**
+ * The distinct nations present in a pool, sorted — the source for the collapsible country-filter chips
+ * (mirrors how the draft pool derives its `nations` list). Skips players with no nation. Display-only.
+ */
+export function freeAgentNations(freeAgents: readonly WvPlayer[]): string[] {
+  return [
+    ...new Set(
+      freeAgents.map((p) => p.nation).filter((n): n is string => n !== null && n !== ""),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
 }
 
 /**
