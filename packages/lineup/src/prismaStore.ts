@@ -66,7 +66,12 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
     },
 
     async saveLineup(commit: LineupCommit): Promise<SaveOutcome> {
+      const override = commit.allowLockedSlot === true;
       return prisma.$transaction(async (tx) => {
+        // Commissioner carve-out: a TRANSACTION-LOCAL GUC the lock-on-play trigger reads + exempts. Set
+        // ONLY for an --allow-locked-slot override; the normal path never sets it, so the DB latch holds.
+        if (override) await tx.$executeRawUnsafe("SET LOCAL app.commish_override = 'on'");
+
         const current = await tx.lineupSlot.findMany({
           where: { managerId: commit.managerId, periodId: commit.periodId },
           select: { playerId: true, isStarter: true, lockedAt: true },
@@ -74,11 +79,14 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         const cur = new Map(current.map((r) => [r.playerId, r]));
 
         // (1) Latch re-check (server-authoritative): refuse the WHOLE commit if a locked slot would
-        //     change its is_starter. Checked before any write — no partial save.
-        for (const d of commit.desired) {
-          const c = cur.get(d.playerId);
-          if (c && c.lockedAt !== null && c.isStarter !== d.isStarter) {
-            return { ok: false, conflict: { playerId: d.playerId, isStarter: c.isStarter } };
+        //     change its is_starter. Checked before any write — no partial save. Skipped under the
+        //     commissioner override (the deliberate move of a played player).
+        if (!override) {
+          for (const d of commit.desired) {
+            const c = cur.get(d.playerId);
+            if (c && c.lockedAt !== null && c.isStarter !== d.isStarter) {
+              return { ok: false, conflict: { playerId: d.playerId, isStarter: c.isStarter } };
+            }
           }
         }
 
@@ -92,8 +100,10 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         // BENIGN NOW: through the group stage the squad is fixed at 15 (dropped_at always NULL), so no
         // orphan can be produced — there is no add/drop write path yet.
 
-        // (2) Apply: insert missing slots (born unlocked) and overwrite changed UNLOCKED slots. Locked
-        //     rows are left untouched; the `lockedAt: null` guard keeps the DB trigger from ever firing.
+        // (2) Apply: insert missing slots (born unlocked) and overwrite changed slots. On the normal path
+        //     a locked row is left frozen (the `lockedAt: null` guard means a row that locked mid-write
+        //     matches zero rows); under the override a locked row is updated too — the GUC set above lets
+        //     the DB trigger pass. locked_at itself is never written, so the latch instant is preserved.
         for (const d of commit.desired) {
           const c = cur.get(d.playerId);
           if (!c) {
@@ -106,13 +116,13 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
                 isStarter: d.isStarter,
               },
             });
-          } else if (c.lockedAt === null && c.isStarter !== d.isStarter) {
+          } else if (c.isStarter !== d.isStarter && (override || c.lockedAt === null)) {
             await tx.lineupSlot.updateMany({
               where: {
                 managerId: commit.managerId,
                 periodId: commit.periodId,
                 playerId: d.playerId,
-                lockedAt: null,
+                ...(override ? {} : { lockedAt: null }),
               },
               data: { isStarter: d.isStarter },
             });

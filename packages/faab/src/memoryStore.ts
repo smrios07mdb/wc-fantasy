@@ -22,6 +22,7 @@ import type {
   PersistedBid,
   PlayerFacts,
 } from "./store";
+import type { PeriodWindowView } from "./window";
 
 type Status = "pending" | "won" | "lost" | "voided_refunded";
 
@@ -305,6 +306,10 @@ export interface MemoryFaGrantSeed {
   managers: MemFaManager[];
   /** playerId → its FA facts (position, the add target's period window, FA-eligibility snapshot). */
   players: Record<string, FaTargetFacts>;
+  /** periodId → that period's window, for the commissioner `--period` pin: `claimFreeAgent` resolves the
+   *  snapshot from the NAMED period's batch_cleared_at instead of the add's next-fixture-inferred one
+   *  (mirrors prismaStore.resolveAddPeriodWindow's pinned branch). */
+  periods?: Record<string, PeriodWindowView>;
   /** players LOCKED by play (lineup_slot.locked_at in an active matchday) — undroppable until it ends. */
   lockedDrops?: string[];
   /** players actively owned by SOMEONE league-wide at start (the active-ownership claim guard). */
@@ -320,6 +325,7 @@ export interface MemoryFaGrantSeed {
 export class MemoryFaGrantStore implements FaGrantStore {
   private readonly managers: Map<string, MemFaManager>;
   private readonly players: Record<string, FaTargetFacts>;
+  private readonly periods: Record<string, PeriodWindowView>;
   private readonly lockedDrops: Set<string>;
   private readonly leagueOwned: Set<string>;
   readonly grants: { managerId: string; playerAddId: string; playerDropId: string | null }[] = [];
@@ -327,6 +333,7 @@ export class MemoryFaGrantStore implements FaGrantStore {
   constructor(seed: MemoryFaGrantSeed) {
     this.managers = new Map(seed.managers.map((m) => [m.managerId, m]));
     this.players = seed.players;
+    this.periods = seed.periods ?? {};
     this.lockedDrops = new Set(seed.lockedDrops ?? []);
     this.leagueOwned = new Set(seed.leagueOwned ?? []);
   }
@@ -362,7 +369,17 @@ export class MemoryFaGrantStore implements FaGrantStore {
     playerAddId: string;
     playerDropId: string | null;
     runAt: Date;
+    periodId?: string | null;
   }): Promise<"granted" | "conflict"> {
+    // Resolve the add's snapshot window the way prismaStore.claimFreeAgent does: a pinned period (commish
+    // --period) overrides the add's inferred next-fixture window. A null batch_cleared_at = the period is
+    // still sealed ("window not open") → conflict, mirroring the prismaStore `if (T === null)` guard.
+    const window =
+      input.periodId != null
+        ? this.periods[input.periodId]
+        : this.players[input.playerAddId]?.window;
+    if (!window || window.batchClearedAt === null) return "conflict";
+
     // First-come guard: the add target must still be unowned league-wide (the active-ownership unique).
     if (this.leagueOwned.has(input.playerAddId)) return "conflict";
     const m = this.managers.get(input.managerId);

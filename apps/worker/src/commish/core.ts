@@ -145,9 +145,13 @@ export interface AuditRecord {
   action: string;
   add?: string | null;
   drop?: string | null;
+  /** The commissioner `--period` pin recorded for the integrity trail (roster), or null when unpinned. */
+  period?: string | null;
   starters?: readonly string[];
   reason: string;
   kickoffBypassed: boolean;
+  /** The commissioner `--allow-locked-slot` carve-out recorded for the integrity trail (lineup). */
+  lockOverride?: boolean;
   timestamp: string;
 }
 

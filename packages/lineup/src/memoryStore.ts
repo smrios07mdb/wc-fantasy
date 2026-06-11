@@ -106,15 +106,21 @@ export class MemoryLineupStore implements LineupStore {
   }
 
   saveLineup(commit: LineupCommit): Promise<SaveOutcome> {
+    // Commissioner carve-out (mirrors the prismaStore GUC + the DB trigger exemption): --allow-locked-slot
+    // both SKIPS the write-time latch re-check (below) AND lets a locked row be overwritten (step 2).
+    const override = commit.allowLockedSlot === true;
     // (1) Write-time latch (mirrors enforce_lineup_lock): refuse the WHOLE commit if it would change a
-    //     locked slot's is_starter. Check everything BEFORE writing anything (no partial write).
-    for (const d of commit.desired) {
-      const cur = this.slotFor(commit.managerId, commit.periodId, d.playerId);
-      if (cur && cur.locked && cur.isStarter !== d.isStarter) {
-        return Promise.resolve({
-          ok: false,
-          conflict: { playerId: cur.playerId, isStarter: cur.isStarter },
-        });
+    //     locked slot's is_starter. Check everything BEFORE writing anything (no partial write). Skipped
+    //     under the commissioner override.
+    if (!override) {
+      for (const d of commit.desired) {
+        const cur = this.slotFor(commit.managerId, commit.periodId, d.playerId);
+        if (cur && cur.locked && cur.isStarter !== d.isStarter) {
+          return Promise.resolve({
+            ok: false,
+            conflict: { playerId: cur.playerId, isStarter: cur.isStarter },
+          });
+        }
       }
     }
 
@@ -122,8 +128,10 @@ export class MemoryLineupStore implements LineupStore {
     // drop path exists, remove current rows whose playerId is absent from `desired` AND not locked, so a
     // dropped player leaves no stale orphan slot. Benign now (squad fixed at 15; no drop write path).
 
-    // (2) Apply: upsert each desired slot. Locked rows are immutable — and already validated equal — so
-    //     they are left untouched; unlocked rows are overwritten; missing rows are inserted (unlocked).
+    // (2) Apply: upsert each desired slot. On the normal path a locked row is immutable (left untouched);
+    //     under the commissioner override it is overwritten too (its `locked` flag stays — locked_at
+    //     itself is never changed, mirroring the prismaStore which only writes is_starter). Missing rows
+    //     are inserted unlocked; unlocked rows are overwritten.
     for (const d of commit.desired) {
       const cur = this.slotFor(commit.managerId, commit.periodId, d.playerId);
       if (!cur) {
@@ -135,7 +143,7 @@ export class MemoryLineupStore implements LineupStore {
           isStarter: d.isStarter,
           locked: false,
         });
-      } else if (!cur.locked) {
+      } else if (override || !cur.locked) {
         cur.isStarter = d.isStarter;
         cur.role = d.role;
       }

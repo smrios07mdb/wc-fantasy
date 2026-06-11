@@ -22,8 +22,13 @@ export interface RosterDeps {
     FaGrantStore,
     "loadManagerFaContext" | "getFaTargetFacts" | "getDropFacts" | "claimFreeAgent"
   >;
-  /** The add target's relevant fixture (per-player kickoff guard + audit); null if none upcoming. */
-  getAddMatch: (playerId: string) => Promise<{ label: string; kickoffAt: Date } | null>;
+  /** The add target's relevant fixture (per-player kickoff guard + audit); null if none upcoming. A
+   *  `pinnedPeriodId` (commissioner `--period`) scopes it to the add's fixture IN that period, not his
+   *  next upcoming one (which for an already-played player points at a not-yet-kicked-off later MD). */
+  getAddMatch: (
+    playerId: string,
+    pinnedPeriodId: string | null,
+  ) => Promise<{ label: string; kickoffAt: Date } | null>;
   log: (line: string) => void;
 }
 
@@ -38,6 +43,12 @@ export interface RosterInput {
   reason: string;
   apply: boolean;
   allowPostKickoff: boolean;
+  /** Commissioner period pin (`--period`): the FA snapshot + the kickoff guard key off THIS period, not
+   *  the add's next-fixture-inferred one (which for an already-played player resolves to a still-sealed
+   *  later matchday → a wrong fa-conflict + a false "not yet kicked off"). null ⇒ next-fixture (default). */
+  pinnedPeriodId: string | null;
+  /** The pinned period's human label, recorded in the dry-run plan + the audit trail (null = unpinned). */
+  pinnedPeriodLabel: string | null;
   /** Injected ISO timestamp for the audit line (no wall clock in the pure path). */
   timestamp: string;
 }
@@ -47,6 +58,7 @@ export interface RosterPlan {
   managerId: string;
   add: string;
   drop: string | null;
+  pinnedPeriod: string | null;
   addMatch: { label: string; kickoffAt: string } | null;
   alreadyPlayed: boolean;
   kickoffBypassed: boolean;
@@ -87,7 +99,7 @@ export async function runRosterOverride(
     dropPosition = dropFacts.position;
   }
 
-  const addMatch = await deps.getAddMatch(input.addId);
+  const addMatch = await deps.getAddMatch(input.addId, input.pinnedPeriodId);
   const guard = kickoffGuard({
     addMatchKickoffAt: addMatch?.kickoffAt ?? null,
     now: deps.now,
@@ -98,6 +110,7 @@ export async function runRosterOverride(
     managerId: input.managerId,
     add: input.addName,
     drop: input.dropName,
+    pinnedPeriod: input.pinnedPeriodLabel,
     addMatch: addMatch
       ? { label: addMatch.label, kickoffAt: addMatch.kickoffAt.toISOString() }
       : null,
@@ -161,6 +174,7 @@ export async function runRosterOverride(
     playerAddId: input.addId,
     playerDropId: input.dropId,
     runAt: deps.now,
+    periodId: input.pinnedPeriodId,
   });
   if (outcome === "conflict") {
     return {
@@ -179,6 +193,7 @@ export async function runRosterOverride(
     action: input.dropId ? "add/drop" : "add",
     add: input.addName,
     drop: input.dropName,
+    period: input.pinnedPeriodLabel,
     reason: input.reason,
     kickoffBypassed: plan.kickoffBypassed,
     timestamp: input.timestamp,

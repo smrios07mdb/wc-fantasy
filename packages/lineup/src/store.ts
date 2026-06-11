@@ -44,6 +44,10 @@ export interface LineupCommit {
   managerId: string;
   periodId: string;
   desired: DesiredSlot[];
+  /** Commissioner `--allow-locked-slot` carve-out: write even a slot locked by play. The store SKIPS its
+   *  write-time latch re-check, and the Prisma adapter sets a per-transaction GUC the DB trigger
+   *  `enforce_lineup_lock()` reads and exempts. The normal path leaves this false/undefined → latch holds. */
+  allowLockedSlot?: boolean;
 }
 
 /** A save either lands, or is refused because a locked slot would have to change (write-time latch). */

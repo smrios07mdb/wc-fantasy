@@ -4,12 +4,12 @@
  *
  *   pnpm --filter @app/worker commish:roster \
  *     --as smrios07@gmail.com --team "Los Dragones" --add "Mbappé" --drop "Saka" \
- *     --reason "FA UI was down; honoring his pre-kickoff swap" [--allow-post-kickoff] [--apply]
+ *     --reason "FA UI was down; honoring his pre-kickoff swap" [--period "MD1"] [--allow-post-kickoff] [--apply]
  *
  *   pnpm --filter @app/worker commish:lineup \
  *     --as smrios07@gmail.com --team "Los Dragones" --period "MD1" \
  *     --starters "Donnarumma,Hakimi,Saliba,Hernandez,Rice,Bellingham,Pedri,Olmo,Mbappé,Kane,Yamal" \
- *     --reason "lineup lock hit before they could save" [--apply]
+ *     --reason "lineup lock hit before they could save" [--allow-locked-slot] [--apply]
  *
  * IO ONLY: it resolves names→ids, builds the real Prisma stores, and delegates EVERY decision to the
  * pure/injected-deps orchestrators ({@link ./roster}, {@link ./lineup}) — which keep the engine invariants
@@ -132,10 +132,28 @@ function makeGetAddMatch(now: Date) {
     homeTeam: { select: { name: true } },
     awayTeam: { select: { name: true } },
   } as const;
-  return async (playerId: string): Promise<{ label: string; kickoffAt: Date } | null> => {
+  const label = (m: {
+    homeTeam: { name: string } | null;
+    awayTeam: { name: string } | null;
+  }): string => `${m.homeTeam?.name ?? "?"} v ${m.awayTeam?.name ?? "?"}`;
+  return async (
+    playerId: string,
+    pinnedPeriodId: string | null,
+  ): Promise<{ label: string; kickoffAt: Date } | null> => {
     const p = await prisma.player.findUnique({ where: { id: playerId }, select: { teamId: true } });
     if (!p?.teamId) return null;
     const where = { OR: [{ homeTeamId: p.teamId }, { awayTeamId: p.teamId }] };
+    // With --period, the kickoff guard keys off the add's fixture IN THAT period (an already-played
+    // player's MD match — already kicked off), NOT his next upcoming one (a later MD that would falsely
+    // read "not yet kicked off").
+    if (pinnedPeriodId !== null) {
+      const pm = await prisma.fifaMatch.findFirst({
+        where: { ...where, periodId: pinnedPeriodId },
+        orderBy: { kickoffAt: "asc" },
+        select: sel,
+      });
+      return pm ? { label: label(pm), kickoffAt: pm.kickoffAt } : null;
+    }
     // The "relevant" fixture = the next upcoming one; if none remain, the most recent played one.
     const next = await prisma.fifaMatch.findFirst({
       where: { ...where, kickoffAt: { gte: now } },
@@ -146,10 +164,7 @@ function makeGetAddMatch(now: Date) {
       next ??
       (await prisma.fifaMatch.findFirst({ where, orderBy: { kickoffAt: "desc" }, select: sel }));
     if (!m) return null;
-    return {
-      label: `${m.homeTeam?.name ?? "?"} v ${m.awayTeam?.name ?? "?"}`,
-      kickoffAt: m.kickoffAt,
-    };
+    return { label: label(m), kickoffAt: m.kickoffAt };
   };
 }
 
@@ -163,6 +178,7 @@ async function rosterCmd(argv: string[]): Promise<void> {
   const reason = reqFlag(flags, "reason");
   const apply = bools.has("apply");
   const allowPostKickoff = bools.has("allow-post-kickoff");
+  const periodLabel = flags["period"]?.trim() ?? null;
   const now = new Date();
 
   const actor = await resolveActor(asEmail);
@@ -173,6 +189,21 @@ async function rosterCmd(argv: string[]): Promise<void> {
   const players = await loadPlayers();
   const add = pick(resolvePlayer(players, addQ), "add player", addQ);
   const drop = dropQ ? pick(resolvePlayer(players, dropQ), "drop player", dropQ) : null;
+
+  // Optional --period pin: scope the FA snapshot + kickoff guard to THIS period (resolve label→id like
+  // lineupCmd, but optional). Repairs an already-played add whose next-fixture-inferred period is a
+  // still-sealed later MD. null ⇒ the existing next-fixture behavior.
+  let pinnedPeriodId: string | null = null;
+  let pinnedPeriodLabel: string | null = null;
+  if (periodLabel) {
+    const period = await prisma.period.findFirst({
+      where: { leagueId, label: { equals: periodLabel, mode: "insensitive" } },
+      select: { id: true, label: true },
+    });
+    if (!period) die(`no period labelled "${periodLabel}"`);
+    pinnedPeriodId = period.id;
+    pinnedPeriodLabel = period.label;
+  }
 
   const res = await runRosterOverride(
     {
@@ -192,6 +223,8 @@ async function rosterCmd(argv: string[]): Promise<void> {
       reason,
       apply,
       allowPostKickoff,
+      pinnedPeriodId,
+      pinnedPeriodLabel,
       timestamp: now.toISOString(),
     },
   );
@@ -205,6 +238,10 @@ function reportRoster(res: RosterResult, apply: boolean): void {
     console.log(`  team:   ${p.team} (${p.managerId})`);
     console.log(`  add:    ${p.add}`);
     console.log(`  drop:   ${p.drop ?? "(none — open slot)"}`);
+    if (p.pinnedPeriod)
+      console.log(
+        `  period: ${p.pinnedPeriod} (pinned — snapshot + kickoff guard key off this period)`,
+      );
     console.log(
       `  match:  ${p.addMatch ? `${p.addMatch.label} @ ${p.addMatch.kickoffAt}` : "(no fixture)"}` +
         ` — ${p.alreadyPlayed ? "ALREADY KICKED OFF" : "not yet kicked off"}`,
@@ -232,8 +269,9 @@ async function lineupCmd(argv: string[]): Promise<void> {
   const teamLabel = reqFlag(flags, "team");
   const periodLabel = reqFlag(flags, "period");
   const startersRaw = reqFlag(flags, "starters");
-  const reason = reqFlag(flags, "reason");
+  const reason = reqFlag(flags, "reason"); // --reason is required for ALL overrides, incl. --allow-locked-slot
   const apply = bools.has("apply");
+  const allowLockedSlot = bools.has("allow-locked-slot");
   const now = new Date();
 
   const actor = await resolveActor(asEmail);
@@ -266,6 +304,7 @@ async function lineupCmd(argv: string[]): Promise<void> {
       starterNames: starters.map((p) => p.displayName),
       reason,
       apply,
+      allowLockedSlot,
       timestamp: now.toISOString(),
     },
   );

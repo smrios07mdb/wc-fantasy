@@ -13,6 +13,15 @@ const FA_WINDOW: PeriodWindowView = {
   batchClearedAt: new Date("2026-06-11T06:00:00Z"),
   firstKickoffAt: new Date("2026-06-12T16:00:00Z"),
 };
+// MD1 already batch-cleared (an OPEN snapshot); MD2 still SEALED (batch_cleared_at null = "window not open").
+const MD1_CLEARED: PeriodWindowView = {
+  batchClearedAt: new Date("2026-06-11T06:00:00Z"),
+  firstKickoffAt: new Date("2026-06-11T16:00:00Z"),
+};
+const MD2_SEALED: PeriodWindowView = {
+  batchClearedAt: null,
+  firstKickoffAt: new Date("2026-06-15T16:00:00Z"),
+};
 
 // ── roster ──────────────────────────────────────────────────────────────────────
 
@@ -37,6 +46,30 @@ function rosterStore(owned: string[] = ["DROP"], leagueOwned: string[] = []) {
   });
 }
 
+/** A manager whose ADD target already played MD1: his inferred next fixture is MD2 (still SEALED). The
+ *  pinned MD1 period IS batch-cleared, so `--period MD1` resolves an open snapshot the unpinned (next-
+ *  fixture → MD2) path misses — the live MD1-repair bug, modelled in the double the way the Prisma store
+ *  resolves it (the named period's `batch_cleared_at`, not the add's next-fixture-inferred one). */
+function playedMd1Store() {
+  return new MemoryFaGrantStore({
+    managers: [
+      {
+        managerId: "m1",
+        leagueId: "L",
+        faabBudget: 100,
+        counts: { ...FULL },
+        squadSize: 15,
+        owned: new Set(["DROP"]),
+      },
+    ],
+    players: {
+      ADD: { position: "MID", window: MD2_SEALED, faEligible: false },
+      DROP: { position: "MID", window: MD1_CLEARED, faEligible: false },
+    },
+    periods: { md1: MD1_CLEARED },
+  });
+}
+
 function rosterDeps(
   store: MemoryFaGrantStore,
   over: Partial<RosterDeps> = {},
@@ -47,7 +80,10 @@ function rosterDeps(
     deps: {
       now: NOW,
       store,
-      getAddMatch: async () => ({ label: "FRA v ESP", kickoffAt: FA_WINDOW.firstKickoffAt! }),
+      getAddMatch: async (_id: string, _pinnedPeriodId: string | null) => ({
+        label: "FRA v ESP",
+        kickoffAt: FA_WINDOW.firstKickoffAt!,
+      }),
       log: (l) => logs.push(l),
       ...over,
     },
@@ -66,6 +102,8 @@ function rosterInput(over: Partial<RosterInput> = {}): RosterInput {
     reason: "missing FA UI blocked the move",
     apply: false,
     allowPostKickoff: false,
+    pinnedPeriodId: null,
+    pinnedPeriodLabel: null,
     timestamp: TS,
     ...over,
   };
@@ -155,6 +193,56 @@ describe("commish:roster override", () => {
     expect(res.status).toBe("skipped");
     expect(store.grants).toHaveLength(0);
   });
+
+  it("period-pin grant: unpinned resolves the sealed next period (conflict); --period resolves the cleared one (grants)", async () => {
+    // unpinned → the add's inferred next fixture is MD2 (still sealed → batch_cleared_at null) → conflict.
+    const sealed = playedMd1Store();
+    const { deps: d1 } = rosterDeps(sealed);
+    const unpinned = await runRosterOverride(
+      d1,
+      rosterInput({ apply: true, pinnedPeriodId: null }),
+    );
+    expect(unpinned.status).toBe("conflict");
+    expect(sealed.ownedBy("m1")).not.toContain("ADD");
+
+    // --period MD1 → keys off MD1's (cleared) snapshot, not the MD2 next-fixture inference → grants.
+    const pinned = playedMd1Store();
+    const { deps: d2 } = rosterDeps(pinned);
+    const res = await runRosterOverride(d2, rosterInput({ apply: true, pinnedPeriodId: "md1" }));
+    expect(res.status).toBe("applied");
+    expect(pinned.ownedBy("m1")).toContain("ADD");
+  });
+
+  it("period-pin kickoff guard: --period reads that period's (already-played) fixture and blocks; unpinned reads the next (future) one", async () => {
+    const getAddMatch = async (_id: string, pinnedPeriodId: string | null) =>
+      pinnedPeriodId === "md1"
+        ? { label: "FRA v ESP (MD1)", kickoffAt: new Date("2026-06-11T19:00:00Z") } // already kicked off
+        : { label: "FRA v ITA (MD2)", kickoffAt: new Date("2026-06-12T16:00:00Z") }; // upcoming
+
+    const s1 = rosterStore();
+    const { deps: d1 } = rosterDeps(s1, { getAddMatch });
+    const unpinned = await runRosterOverride(
+      d1,
+      rosterInput({ apply: true, pinnedPeriodId: null }),
+    );
+    expect(unpinned.status).toBe("applied");
+
+    const s2 = rosterStore();
+    const { deps: d2 } = rosterDeps(s2, { getAddMatch });
+    const pinned = await runRosterOverride(d2, rosterInput({ apply: true, pinnedPeriodId: "md1" }));
+    expect(pinned.status).toBe("blocked");
+  });
+
+  it("records the pinned period in the audit trail (the snapshot used is non-default)", async () => {
+    const store = playedMd1Store();
+    const { deps } = rosterDeps(store);
+    const res = await runRosterOverride(
+      deps,
+      rosterInput({ apply: true, pinnedPeriodId: "md1", pinnedPeriodLabel: "MD1" }),
+    );
+    expect(res.status).toBe("applied");
+    if (res.status === "applied") expect(res.audit).toContain('"period":"MD1"');
+  });
 });
 
 // ── lineup ──────────────────────────────────────────────────────────────────────
@@ -189,6 +277,10 @@ function lineupStore() {
 
 const LEGAL_XI = ["gk1", "d1", "d2", "d3", "m1p", "m2p", "m3p", "m4p", "f1", "f2", "f3"]; // 1-3-4-3
 const ILLEGAL_XI = ["gk1", "gk2", "d1", "d2", "d3", "m1p", "m2p", "m3p", "m4p", "f1", "f2"]; // 2 GK
+// d1→d4 swap, still a legal 1-3-4-3 — used to MOVE a player who is locked by play (benches d1).
+const SWAP_XI = ["gk1", "d4", "d2", "d3", "m1p", "m2p", "m3p", "m4p", "f1", "f2", "f3"];
+// 2 GK AND benches d1 — an illegal formation that ALSO moves the locked slot (isolates the flag path).
+const ILLEGAL_SWAP_XI = ["gk1", "gk2", "d2", "d3", "d4", "m1p", "m2p", "m3p", "m4p", "f1", "f2"];
 
 function lineupDeps(store: MemoryLineupStore): { deps: LineupDeps; logs: string[] } {
   const logs: string[] = [];
@@ -206,6 +298,7 @@ function lineupInput(over: Partial<LineupInput> = {}): LineupInput {
     starterNames: LEGAL_XI,
     reason: "fix a lineup we locked them out of",
     apply: false,
+    allowLockedSlot: false,
     timestamp: TS,
     ...over,
   };
@@ -251,5 +344,53 @@ describe("commish:lineup override", () => {
     await runLineupOverride(deps, lineupInput({ apply: true })); // first apply sets the XI
     const again = await runLineupOverride(deps, lineupInput({ apply: true }));
     expect(again.status).toBe("skipped");
+  });
+
+  it("WITHOUT --allow-locked-slot: a slot locked by play stays frozen (regression — refused)", async () => {
+    const store = lineupStore();
+    store.seedSlot("m1", "md1", "d1", "DEF", { isStarter: true, locked: true }); // d1 played → frozen
+    const { deps } = lineupDeps(store);
+    const res = await runLineupOverride(deps, lineupInput({ starterIds: SWAP_XI, apply: true }));
+    expect(res.status).toBe("refused");
+    if (res.status === "refused") expect(res.reason).toMatch(/locked/);
+    expect(store.starterIdsOf("m1", "md1")).toEqual(["d1"]); // unchanged
+  });
+
+  it("--allow-locked-slot: the commissioner CAN move a slot locked by play (applied)", async () => {
+    const store = lineupStore();
+    store.seedSlot("m1", "md1", "d1", "DEF", { isStarter: true, locked: true });
+    const { deps } = lineupDeps(store);
+    const res = await runLineupOverride(
+      deps,
+      lineupInput({ starterIds: SWAP_XI, apply: true, allowLockedSlot: true }),
+    );
+    expect(res.status).toBe("applied");
+    expect(store.starterIdsOf("m1", "md1").sort()).toEqual([...SWAP_XI].sort());
+    expect(store.starterIdsOf("m1", "md1")).not.toContain("d1"); // the locked starter was benched
+  });
+
+  it("--allow-locked-slot STILL enforces formation legality (2 GK while moving a locked slot → refused)", async () => {
+    const store = lineupStore();
+    store.seedSlot("m1", "md1", "d1", "DEF", { isStarter: true, locked: true });
+    const { deps } = lineupDeps(store);
+    const res = await runLineupOverride(
+      deps,
+      lineupInput({ starterIds: ILLEGAL_SWAP_XI, apply: true, allowLockedSlot: true }),
+    );
+    expect(res.status).toBe("refused");
+    if (res.status === "refused") expect(res.reason).toMatch(/illegal-formation/);
+    expect(store.starterIdsOf("m1", "md1")).toEqual(["d1"]); // nothing written
+  });
+
+  it("records the lock override in the audit trail", async () => {
+    const store = lineupStore();
+    store.seedSlot("m1", "md1", "d1", "DEF", { isStarter: true, locked: true });
+    const { deps } = lineupDeps(store);
+    const res = await runLineupOverride(
+      deps,
+      lineupInput({ starterIds: SWAP_XI, apply: true, allowLockedSlot: true }),
+    );
+    expect(res.status).toBe("applied");
+    if (res.status === "applied") expect(res.audit).toContain('"lockOverride":true');
   });
 });

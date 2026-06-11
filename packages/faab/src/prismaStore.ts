@@ -422,13 +422,41 @@ function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
 
+/** A specific period's FA window: its `batch_cleared_at` (the snapshot instant T) + its first kickoff
+ *  (MIN over the period's fixtures). The shared tail of BOTH the next-fixture inference below and the
+ *  commissioner `--period` pin. */
+async function resolvePeriodWindow(
+  db: Pick<Db, "fifaMatch" | "period">,
+  periodId: string,
+): Promise<{ batchClearedAt: Date | null; firstKickoffAt: Date | null }> {
+  const [period, first] = await Promise.all([
+    db.period.findUnique({ where: { id: periodId }, select: { batchClearedAt: true } }),
+    db.fifaMatch.findFirst({
+      where: { periodId },
+      orderBy: { kickoffAt: "asc" },
+      select: { kickoffAt: true },
+    }),
+  ]);
+  return {
+    batchClearedAt: period?.batchClearedAt ?? null,
+    firstKickoffAt: first?.kickoffAt ?? null,
+  };
+}
+
 /** The add target's PERIOD window: the period his next still-acquirable fixture falls in → that
  *  period's `batch_cleared_at` (the FA snapshot instant T) + its first kickoff (MIN over the period).
- *  Resolved the same way the bid store derives the per-player / period kickoff (no second clock). */
+ *  Resolved the same way the bid store derives the per-player / period kickoff (no second clock).
+ *
+ *  A `pinnedPeriodId` (the commissioner `--period`) resolves THAT period directly and bypasses the
+ *  next-fixture inference — whose `status IN (scheduled, in_progress)` filter EXCLUDES an already-played
+ *  player's only relevant (completed) fixture and lands on a still-sealed later MD (`batch_cleared_at`
+ *  null → a wrong fa-conflict). The pin is what unblocks the MD1 "our-fault" repairs. */
 async function resolveAddPeriodWindow(
   db: Pick<Db, "fifaMatch" | "period">,
   teamId: string | null,
+  pinnedPeriodId?: string | null,
 ): Promise<{ batchClearedAt: Date | null; firstKickoffAt: Date | null } | null> {
+  if (pinnedPeriodId != null) return resolvePeriodWindow(db, pinnedPeriodId);
   if (teamId === null) return null;
   const m = await db.fifaMatch.findFirst({
     where: {
@@ -440,18 +468,8 @@ async function resolveAddPeriodWindow(
   });
   if (!m) return null;
   if (m.periodId === null) return { batchClearedAt: null, firstKickoffAt: m.kickoffAt };
-  const [period, first] = await Promise.all([
-    db.period.findUnique({ where: { id: m.periodId }, select: { batchClearedAt: true } }),
-    db.fifaMatch.findFirst({
-      where: { periodId: m.periodId },
-      orderBy: { kickoffAt: "asc" },
-      select: { kickoffAt: true },
-    }),
-  ]);
-  return {
-    batchClearedAt: period?.batchClearedAt ?? null,
-    firstKickoffAt: first?.kickoffAt ?? m.kickoffAt,
-  };
+  const w = await resolvePeriodWindow(db, m.periodId);
+  return { batchClearedAt: w.batchClearedAt, firstKickoffAt: w.firstKickoffAt ?? m.kickoffAt };
 }
 
 /** The roster-ownership WHERE that makes a player INELIGIBLE for a $0 FA grant at the batch-clear
@@ -555,15 +573,19 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
       playerAddId,
       playerDropId,
       runAt,
+      periodId,
     }): Promise<"granted" | "conflict"> {
       try {
         await prisma.$transaction(async (tx) => {
-          // Resolve the add target's period batch-clear instant T (the snapshot) inside the tx.
+          // Resolve the add target's period batch-clear instant T (the snapshot) inside the tx. A pinned
+          // `periodId` (commish --period) resolves THAT period's batch_cleared_at directly; otherwise the
+          // add's next-still-acquirable fixture infers it (which for an already-played add points at a
+          // still-sealed later MD → the wrong fa-conflict the pin repairs).
           const player = await tx.player.findUnique({
             where: { id: playerAddId },
             select: { teamId: true },
           });
-          const window = player ? await resolveAddPeriodWindow(tx, player.teamId) : null;
+          const window = await resolveAddPeriodWindow(tx, player?.teamId ?? null, periodId);
           const T = window?.batchClearedAt ?? null;
           if (T === null) throw new FaConflict(); // window not open (defensive — the handler gated it)
 

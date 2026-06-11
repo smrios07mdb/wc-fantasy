@@ -1,14 +1,19 @@
 /**
  * Commissioner lineup override (`commish:lineup`) — set a team's starting XI after the lineup edit window
- * has closed. It BYPASSES ONLY the edit-window lock (via {@link relaxPeriodLock}); it reuses the REAL
- * `@app/lineup` validation/service for everything else, so formation/position legality, ownership, the
- * 11-distinct XI, and the lock-on-play latch are ALL kept:
- *   • `validateLineup(... relaxPeriodLock(period) ...)` skips ONLY the phase-1 window check;
- *   • `store.saveLineup(...)` writes the full slot set and re-checks the per-play latch (a played player
- *     stays frozen — the DB trigger `enforce_lineup_lock()` is the ultimate backstop and is NOT bypassed).
+ * has closed. It BYPASSES the edit-window lock (via {@link relaxPeriodLock}) and, ONLY with the explicit
+ * `--allow-locked-slot` flag, the lock-on-play latch; it reuses the REAL `@app/lineup` validation/service
+ * for everything else, so formation/position legality, ownership, and the 11-distinct XI are ALWAYS kept:
+ *   • `validateLineup(... relaxPeriodLock(period) ...)` skips ONLY the phase-1 window check; the injected
+ *     `lockState` is emptied ONLY under `--allow-locked-slot`, so its phase-4 lock-on-play check is the one
+ *     thing that flag relaxes (the ownership / 11-XI / formation phases are untouched);
+ *   • `store.saveLineup(...)` writes the full slot set and re-checks the per-play latch — a played player
+ *     stays frozen on the normal path (the DB trigger `enforce_lineup_lock()` is the ultimate backstop);
+ *     under `--allow-locked-slot` the store skips that re-check and the trigger is exempted by a
+ *     transaction-local `app.commish_override` GUC (set ONLY for that override, inside the write tx).
  *
  * In front stay the override guards: commissioner gate, required reason, idempotent skip, dry-run default,
- * and a structured audit line. Injected deps → testable against `MemoryLineupStore`.
+ * and a structured audit line (`lockOverride` records the latch carve-out). Injected deps → testable
+ * against `MemoryLineupStore`.
  */
 import { validateLineup, type DesiredSlot, type LineupStore } from "@app/lineup";
 import { formatAudit, isCommissionerActor, lineupEndStateHolds, relaxPeriodLock } from "./core";
@@ -30,6 +35,10 @@ export interface LineupInput {
   starterNames: readonly string[];
   reason: string;
   apply: boolean;
+  /** Commissioner `--allow-locked-slot` carve-out (requires `--reason`; commissioner-gated): relax the
+   *  lock-on-play latch so a played player can be moved. Formation/position/ownership/XI stay enforced.
+   *  false ⇒ the latch holds (the default). */
+  allowLockedSlot: boolean;
   timestamp: string;
 }
 
@@ -69,10 +78,14 @@ export async function runLineupOverride(
     };
   }
 
-  // Authoritative lock state from the store (server truth, not the caller) — keeps lock-on-play enforced.
-  const lockState = ctx.slots
-    .filter((s) => s.locked)
-    .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter }));
+  // Authoritative lock state from the store (server truth, not the caller) — keeps lock-on-play enforced,
+  // UNLESS the commissioner passed --allow-locked-slot, which relaxes ONLY the played-player freeze: an
+  // empty lock state makes validateLineup's phase-4 a no-op while formation/ownership/XI stay enforced.
+  const lockState = input.allowLockedSlot
+    ? []
+    : ctx.slots
+        .filter((s) => s.locked)
+        .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter }));
 
   // KEEP formation/position/ownership/XI/lock-on-play; bypass ONLY the edit-window lock.
   const verdict = validateLineup(
@@ -113,6 +126,7 @@ export async function runLineupOverride(
     managerId: input.managerId,
     periodId: input.periodId,
     desired,
+    allowLockedSlot: input.allowLockedSlot,
   });
   if (!outcome.ok) {
     return {
@@ -131,6 +145,7 @@ export async function runLineupOverride(
     starters: input.starterNames,
     reason: input.reason,
     kickoffBypassed: false,
+    lockOverride: input.allowLockedSlot,
     timestamp: input.timestamp,
   });
   deps.log(audit);

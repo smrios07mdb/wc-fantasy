@@ -145,12 +145,16 @@ export interface FaGrantStore {
   /** Apply the instant grant in ONE transaction: re-check eligibility, drop the named player, claim the
    *  add — gated on the active-ownership unique (the first-come guard). $0 (budget unchanged, waiver
    *  order untouched). Returns "granted", or "conflict" when another manager won the player first / it
-   *  is no longer an open FA (a clean rejection, fully rolled back). */
+   *  is no longer an open FA (a clean rejection, fully rolled back). An optional `periodId` (the
+   *  commissioner `--period` pin) resolves the snapshot instant T from THAT period's batch_cleared_at
+   *  instead of the add's next-fixture-inferred period — which, for an already-played player, points at a
+   *  still-sealed next matchday (T null) and wrongly conflicts. Omitted (live route) ⇒ next-fixture. */
   claimFreeAgent(input: {
     leagueId: string;
     managerId: string;
     playerAddId: string;
     playerDropId: string | null;
     runAt: Date;
+    periodId?: string | null;
   }): Promise<"granted" | "conflict">;
 }
