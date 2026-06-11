@@ -31,6 +31,47 @@ export function isMovable(period: PeriodLineup, playerId: string): boolean {
   return !period.locks.some((l) => l.playerId === playerId);
 }
 
+/** One of a period's fixtures, reduced to what the per-player kickoff resolution needs. */
+export interface PeriodMatch {
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  /** ISO kickoff instant. */
+  kickoffAt: string;
+}
+
+/**
+ * Earliest kickoff per team within a period's fixtures. A team can appear at most once in a knockout
+ * round and once per group matchday, but if the data ever links a team to two fixtures in one period we
+ * take the EARLIER kickoff — that is the binding lock/sub deadline. Null team ids (TBD knockout sides)
+ * are skipped.
+ */
+export function kickoffByTeam(matches: readonly PeriodMatch[]): Map<string, string> {
+  const byTeam = new Map<string, string>();
+  for (const m of matches) {
+    for (const teamId of [m.homeTeamId, m.awayTeamId]) {
+      if (!teamId) continue;
+      const existing = byTeam.get(teamId);
+      if (existing === undefined || m.kickoffAt < existing) byTeam.set(teamId, m.kickoffAt);
+    }
+  }
+  return byTeam;
+}
+
+/**
+ * Resolve each squad player's fixture kickoff for the period being viewed: player.teamId → the period
+ * fixture his team plays in → that match's kickoff (ISO). A player whose team isn't playing this period
+ * (knockout TBD) or has no linked team resolves to `null` — the UI renders "TBD"/"—", never a crash.
+ */
+export function resolveKickoffByPlayer(
+  squad: readonly { id: string; teamId: string | null }[],
+  matches: readonly PeriodMatch[],
+): Record<string, string | null> {
+  const byTeam = kickoffByTeam(matches);
+  const out: Record<string, string | null> = {};
+  for (const p of squad) out[p.id] = (p.teamId && byTeam.get(p.teamId)) || null;
+  return out;
+}
+
 export function positionOf(squad: readonly LineupPlayer[], playerId: string): Position | undefined {
   return squad.find((p) => p.id === playerId)?.position;
 }

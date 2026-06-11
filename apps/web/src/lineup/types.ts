@@ -45,4 +45,6 @@ export interface SetLineupState {
   /** The current period + upcoming windows that can be pre-set. */
   periods: PeriodLineup[];
   activePeriodId: string;
+  /** League IANA timezone — formats each player's kickoff/lock deadline as the local wall clock. */
+  timezone: string;
 }

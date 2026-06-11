@@ -24,6 +24,7 @@
  * supports it unchanged.
  */
 import type { Position } from "@app/shared";
+import { formatInLeagueTz } from "@app/shared";
 import type { PitchSlot, PitchView } from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup } from "../../src/lineup/types";
 import { PlayerAvatar } from "../../components/PlayerAvatar";
@@ -34,6 +35,24 @@ const LANE_ORDER: Position[] = ["FWD", "MID", "DEF", "GK"];
 export function shortName(p: LineupPlayer): string {
   if (p.firstName && p.lastName) return `${p.firstName[0]}. ${p.lastName}`;
   return p.lastName ?? p.displayName;
+}
+
+/** A player's fixture kickoff = his lock/sub deadline, in the league wall clock; "TBD" when unresolved. */
+export function KickoffTag({
+  kickoffAt,
+  timezone,
+  className,
+}: {
+  kickoffAt: string | null;
+  timezone: string;
+  className: string;
+}) {
+  const text = kickoffAt ? formatInLeagueTz(new Date(kickoffAt), timezone) : "TBD";
+  return (
+    <span className={className} title={kickoffAt ? `Kicks off · locks at ${text}` : "Fixture TBD"}>
+      {text}
+    </span>
+  );
 }
 
 export function Pos({ position }: { position: Position }) {
@@ -75,10 +94,12 @@ export interface TokenProps {
   slot: PitchSlot;
   selected: boolean;
   eligible: boolean;
+  /** League IANA tz — formats the per-player kickoff/lock deadline. */
+  timezone: string;
   onSelect: (playerId: string) => void;
 }
 
-export function PitchToken({ slot, selected, eligible, onSelect }: TokenProps) {
+export function PitchToken({ slot, selected, eligible, timezone, onSelect }: TokenProps) {
   const { player, movable } = slot;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
   return (
@@ -104,7 +125,7 @@ export function PitchToken({ slot, selected, eligible, onSelect }: TokenProps) {
         {!movable && <IcoLock />}
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
-      {slot.kickoffAt && <span className="sl-tok-ko mono">{slot.kickoffAt.slice(11, 16)}</span>}
+      <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-tok-ko" />
     </button>
   );
 }
@@ -113,10 +134,11 @@ export interface PitchProps {
   view: PitchView;
   selected: string | null;
   eligibleIds: ReadonlySet<string>;
+  timezone: string;
   onSelect: (playerId: string) => void;
 }
 
-export function Pitch({ view, selected, eligibleIds, onSelect }: PitchProps) {
+export function Pitch({ view, selected, eligibleIds, timezone, onSelect }: PitchProps) {
   return (
     <div className="sl-pitch">
       <div className="sl-pitch-lines" aria-hidden="true">
@@ -136,6 +158,7 @@ export function Pitch({ view, selected, eligibleIds, onSelect }: PitchProps) {
                 slot={slot}
                 selected={selected === slot.player.id}
                 eligible={eligibleIds.has(slot.player.id)}
+                timezone={timezone}
                 onSelect={onSelect}
               />
             ))}
@@ -146,7 +169,7 @@ export function Pitch({ view, selected, eligibleIds, onSelect }: PitchProps) {
   );
 }
 
-export function BenchRow({ slot, selected, eligible, onSelect }: TokenProps) {
+export function BenchRow({ slot, selected, eligible, timezone, onSelect }: TokenProps) {
   const { player, movable } = slot;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
   return (
@@ -167,6 +190,7 @@ export function BenchRow({ slot, selected, eligible, onSelect }: TokenProps) {
         size="sm"
       />
       <span className="sl-bench-name">{shortName(player)}</span>
+      <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-bench-ko" />
       <LockTag movable={movable} mini />
     </button>
   );
@@ -176,10 +200,11 @@ export interface BenchProps {
   bench: PitchSlot[];
   selected: string | null;
   eligibleIds: ReadonlySet<string>;
+  timezone: string;
   onSelect: (playerId: string) => void;
 }
 
-export function Bench({ bench, selected, eligibleIds, onSelect }: BenchProps) {
+export function Bench({ bench, selected, eligibleIds, timezone, onSelect }: BenchProps) {
   return (
     <div className="sl-bench card">
       <div className="sl-bench-head between">
@@ -193,6 +218,7 @@ export function Bench({ bench, selected, eligibleIds, onSelect }: BenchProps) {
             slot={slot}
             selected={selected === slot.player.id}
             eligible={eligibleIds.has(slot.player.id)}
+            timezone={timezone}
             onSelect={onSelect}
           />
         ))}

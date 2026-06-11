@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Position } from "@app/shared";
+import { formatInLeagueTz } from "@app/shared";
 import {
   buildPitch,
   evaluateProposal,
@@ -7,6 +8,8 @@ import {
   canSwap,
   swapStarters,
   defaultStarterIds,
+  kickoffByTeam,
+  resolveKickoffByPlayer,
 } from "./view";
 import type { LineupPlayer, PeriodLineup } from "./types";
 
@@ -73,6 +76,56 @@ describe("buildPitch — renders XI + bench from authoritative state", () => {
     const d2 = view.lanes.DEF.find((s) => s.player.id === "d2");
     expect(d1?.movable).toBe(false);
     expect(d2?.movable).toBe(true);
+  });
+});
+
+describe("kickoffByTeam — per-team kickoff within a period's fixtures", () => {
+  it("maps each team to its match kickoff, EARLIEST when a team plays more than once", () => {
+    const map = kickoffByTeam([
+      { homeTeamId: "ESP", awayTeamId: "FRA", kickoffAt: "2026-06-14T18:00:00.000Z" },
+      { homeTeamId: "BRA", awayTeamId: "ESP", kickoffAt: "2026-06-13T15:00:00.000Z" },
+    ]);
+    expect(map.get("FRA")).toBe("2026-06-14T18:00:00.000Z");
+    expect(map.get("BRA")).toBe("2026-06-13T15:00:00.000Z");
+    // Spain plays twice — the earlier kickoff wins (the relevant lock deadline)
+    expect(map.get("ESP")).toBe("2026-06-13T15:00:00.000Z");
+  });
+
+  it("ignores null team ids (e.g. a knockout fixture with TBD sides)", () => {
+    const map = kickoffByTeam([
+      { homeTeamId: null, awayTeamId: null, kickoffAt: "2026-07-01T18:00:00.000Z" },
+    ]);
+    expect(map.size).toBe(0);
+  });
+});
+
+describe("resolveKickoffByPlayer — each squad player's fixture kickoff this period", () => {
+  const matches = [{ homeTeamId: "ESP", awayTeamId: "FRA", kickoffAt: "2026-06-14T18:00:00.000Z" }];
+
+  it("resolves a player to his team's kickoff; a TBD/unlinked team resolves to null", () => {
+    const out = resolveKickoffByPlayer(
+      [
+        { id: "p-es", teamId: "ESP" },
+        { id: "p-fr", teamId: "FRA" },
+        { id: "p-de", teamId: "GER" }, // not playing this period
+        { id: "p-x", teamId: null }, // no team linked
+      ],
+      matches,
+    );
+    expect(out["p-es"]).toBe("2026-06-14T18:00:00.000Z");
+    expect(out["p-fr"]).toBe("2026-06-14T18:00:00.000Z");
+    expect(out["p-de"]).toBeNull(); // resolve-miss → "TBD"/"—", never a crash
+    expect(out["p-x"]).toBeNull();
+  });
+
+  it("the resolved kickoff formats as the league-local wall clock in a non-UTC tz", () => {
+    const out = resolveKickoffByPlayer([{ id: "p-es", teamId: "ESP" }], matches);
+    // 18:00Z on Jun 14 → 2:00 PM EDT in America/New_York (UTC−4), with the zone abbreviation
+    const shown = formatInLeagueTz(new Date(out["p-es"]!), "America/New_York");
+    expect(shown).toContain("2:00 PM");
+    expect(shown).toContain("EDT");
+    expect(shown).toContain("Jun");
+    expect(shown).toContain("14");
   });
 });
 

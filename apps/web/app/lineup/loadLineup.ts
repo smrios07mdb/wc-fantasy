@@ -7,14 +7,15 @@
  * edge has no unit test (it needs a live DB); `tsc` + the pure-logic suites cover the shapes it produces.
  */
 import { prisma } from "@app/db";
-import { defaultStarterIds } from "../../src/lineup/view";
+import { sortByPeriodOrder } from "@app/shared";
+import { defaultStarterIds, resolveKickoffByPlayer } from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup, SetLineupState } from "../../src/lineup/types";
 
 /** Load the set-lineup snapshot for `sessionManagerId`, or null if the manager has no squad / windows. */
 export async function loadLineup(sessionManagerId: string): Promise<SetLineupState | null> {
   const manager = await prisma.manager.findUnique({
     where: { id: sessionManagerId },
-    select: { id: true, leagueId: true, displayName: true },
+    select: { id: true, leagueId: true, displayName: true, league: { select: { timezone: true } } },
   });
   if (!manager) return null;
 
@@ -29,6 +30,8 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
             firstName: true,
             lastName: true,
             position: true,
+            // teamId drives the per-player kickoff resolution (team → this period's fixture).
+            teamId: true,
             // player.country DB column is never written by ingestion; country comes from the
             // fifa_team join, matching how loadDraftRoom.toPlayer derives it.
             team: { select: { name: true } },
@@ -52,18 +55,38 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     position: r.player.position,
     country: r.player.team?.name ?? null,
   }));
+  // The team link each squad player resolves his fixture through (kept out of the LineupPlayer the client
+  // renders — it's only needed here to map player → this period's kickoff).
+  const squadTeams = rosterRows.map((r) => ({ id: r.player.id, teamId: r.player.teamId }));
 
   const periodIds = periodRows.map((p) => p.id);
-  const slotRows = periodIds.length
-    ? await prisma.lineupSlot.findMany({
-        where: { managerId: sessionManagerId, periodId: { in: periodIds } },
-        select: { periodId: true, playerId: true, isStarter: true, lockedAt: true },
-      })
-    : [];
+  const [slotRows, matchRows] = await Promise.all([
+    periodIds.length
+      ? prisma.lineupSlot.findMany({
+          where: { managerId: sessionManagerId, periodId: { in: periodIds } },
+          select: { periodId: true, playerId: true, isStarter: true, lockedAt: true },
+        })
+      : Promise.resolve([]),
+    // Each period's fixtures — drives the per-player kickoff (= his lock/sub deadline). Resolved per
+    // period below; a player whose team isn't playing this period (knockout TBD) gets null → "TBD".
+    periodIds.length
+      ? prisma.fifaMatch.findMany({
+          where: { periodId: { in: periodIds } },
+          select: { periodId: true, homeTeamId: true, awayTeamId: true, kickoffAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
 
-  const periods: PeriodLineup[] = periodRows.map((p) => {
+  const unorderedPeriods: PeriodLineup[] = periodRows.map((p) => {
     const slots = slotRows.filter((s) => s.periodId === p.id);
     const savedStarters = slots.filter((s) => s.isStarter).map((s) => s.playerId);
+    const periodMatches = matchRows
+      .filter((m) => m.periodId === p.id)
+      .map((m) => ({
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        kickoffAt: m.kickoffAt.toISOString(),
+      }));
     return {
       periodId: p.id,
       label: p.label,
@@ -74,13 +97,16 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       locks: slots
         .filter((s) => s.lockedAt !== null)
         .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter })),
-      // TODO(prompt-NN): wire per-player kickoff from fifa_match(period_id, kickoff_at) via player.teamId
-      // so the token shows "kicks off HH:MM"; the lock indicator (movable/locked) already comes from
-      // lineup_slot.locked_at above. Left empty (graceful) until the live "vs the field" surface lands.
-      kickoffByPlayer: {},
+      // Per-player kickoff = his team's fixture kickoff in THIS period (ISO), or null when his team isn't
+      // playing yet (knockout TBD). The client formats it in the league tz as the lock/sub deadline.
+      kickoffByPlayer: resolveKickoffByPlayer(squadTeams, periodMatches),
     };
   });
 
+  // Order the selector by canonical tournament progression (MD1…MD3, R32, R16, QF, SF, Final) — the
+  // single source in @app/shared. NOT alphabetical (which mis-sorts Final/QF/R16/R32/SF) and NOT by
+  // opens_at (null until fixtures sync → silently falls back to the alphabetical bug).
+  const periods = sortByPeriodOrder(unorderedPeriods, (p) => p.label);
   const active = periods.find((p) => p.status === "open") ?? periods[0];
   return {
     sessionManagerId,
@@ -88,5 +114,6 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     squad,
     periods,
     activePeriodId: active ? active.periodId : "",
+    timezone: manager.league?.timezone ?? "UTC",
   };
 }

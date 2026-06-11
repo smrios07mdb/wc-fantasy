@@ -74,7 +74,8 @@ describe("lineup re-skin — pitch fidelity ported (presentation only)", () => {
 
 describe("lineup re-skin — the formation view + bench + locked-frozen affordance stay wired", () => {
   it("renders the formation pitch (XI lanes) + the bench", () => {
-    expect(client).toContain("<Pitch view={view}");
+    expect(client).toContain("<Pitch");
+    expect(client).toContain("view={view}");
     expect(client).toContain("<Bench");
     expect(components).toContain("LANE_ORDER");
     expect(components).toContain("view.lanes[pos]");
@@ -111,6 +112,32 @@ describe("lineup re-skin — preserves the behaviours it restyles (no mechanism 
     expect(page).toContain("getSessionManager()");
     expect(page).toContain('redirect("/sign-in")');
     expect(page).toContain('redirect("/auth/denied")');
+  });
+});
+
+describe("per-player match date + time (Part 4) — kickoff = the lock/sub deadline", () => {
+  it("formats the kickoff in the league tz via the SHARED formatInLeagueTz (no duplicate formatter)", () => {
+    expect(components).toContain('from "@app/shared"');
+    expect(components).toContain("formatInLeagueTz(new Date(kickoffAt), timezone)");
+    // resolve-miss degrades to "TBD", never a crash
+    expect(components).toContain('"TBD"');
+  });
+
+  it("renders the kickoff on BOTH the pitch token and the bench row (all 15)", () => {
+    expect(components).toContain(
+      '<KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-tok-ko"',
+    );
+    expect(components).toContain(
+      '<KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-bench-ko"',
+    );
+    expect(css).toMatch(/\.sl-bench-ko\s*\{/);
+  });
+
+  it("threads the league timezone from state → Pitch/Bench (server provides it; client renders)", () => {
+    expect(client).toContain("timezone");
+    expect(client).toContain("timezone={timezone}");
+    // the loader resolves each player's kickoff via the pure helper, off player.teamId
+    expect(view).toContain("export function resolveKickoffByPlayer(");
   });
 });
 

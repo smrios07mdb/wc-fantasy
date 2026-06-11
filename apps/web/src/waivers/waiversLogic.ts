@@ -15,6 +15,7 @@
  *    (higher bids settle first; a won claim's FAAB is spent before the next is evaluated).
  */
 import type { AcquisitionWindow } from "@app/faab";
+import { formatInLeagueTz } from "@app/shared";
 import type { WvBatchWindow, WvBudget, WvClaim, WvPlayer } from "./types";
 
 /** True when the add target's acquisition cutoff has passed (his match kicked off at/under `now`). */
@@ -72,10 +73,12 @@ export function claimableFreeAgents(
   opts: {
     query?: string;
     position?: "ALL" | WvPlayer["position"];
+    /** Selected nation from the collapsible country filter; "ALL" (or omitted) is a no-op. */
+    nation?: string | "ALL";
     editingBidId?: string | null;
   } = {},
 ): WvPlayer[] {
-  const { query = "", position = "ALL", editingBidId = null } = opts;
+  const { query = "", position = "ALL", nation = "ALL", editingBidId = null } = opts;
   const takenAddIds = new Set(claims.filter((c) => c.bidId !== editingBidId).map((c) => c.add.id));
   const q = query.trim().toLowerCase();
   return freeAgents
@@ -83,6 +86,7 @@ export function claimableFreeAgents(
       if (takenAddIds.has(p.id)) return false;
       if (isPlayerCutoffPassed(p, now)) return false;
       if (position !== "ALL" && p.position !== position) return false;
+      if (nation !== "ALL" && p.nation !== nation) return false;
       if (q && !p.name.toLowerCase().includes(q)) return false;
       return true;
     })
@@ -92,21 +96,13 @@ export function claimableFreeAgents(
 }
 
 /**
- * Format an instant in the league's IANA tz so it reads as the local wall clock with a zone abbreviation
- * (e.g. "Thu, Jun 11, 1:00 PM EDT") — `timeZoneName: "short"` is what surfaces the ET/EDT the manager
- * thinks in. Deterministic given (instant, tz), so it formats identically on the server and after
- * hydration (no SSR mismatch).
+ * The distinct nations present in a pool, sorted — the source for the collapsible country-filter chips
+ * (mirrors how the draft pool derives its `nations` list). Skips players with no nation. Display-only.
  */
-function formatInLeagueTz(d: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-    timeZone: timezone,
-  }).format(d);
+export function freeAgentNations(freeAgents: readonly WvPlayer[]): string[] {
+  return [
+    ...new Set(freeAgents.map((p) => p.nation).filter((n): n is string => n !== null && n !== "")),
+  ].sort((a, b) => a.localeCompare(b));
 }
 
 /**

@@ -175,7 +175,10 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       name: p.displayName,
       shortName: shortNameOf(p),
       position: p.position,
-      nation: p.country,
+      // Country for the flag/chip. `player.country` is never written by ingestion (the column shape is
+      // unverified — see loadLineup / loadDraftRoom), so country comes from the fifa_team join, matching
+      // how the draft + lineup loaders derive it. Falls back to the column if a team isn't linked.
+      nation: p.team?.name ?? p.country,
       teamName: p.team?.name ?? null,
       kickoffAt: ko ? ko.toISOString() : null,
       seasonPoints: seasonByPlayer.get(p.id) ?? null,

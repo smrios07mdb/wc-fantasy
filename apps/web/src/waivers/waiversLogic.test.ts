@@ -6,6 +6,7 @@ import {
   composerMaxBid,
   computeBudget,
   droppableRoster,
+  freeAgentNations,
   isClaimVoid,
   isPlayerCutoffPassed,
   sortClaims,
@@ -123,6 +124,36 @@ describe("claimable free agents (composer left panel)", () => {
       "open-2",
     ]);
     expect(claimableFreeAgents(fas, [], NOW).map((p) => p.id)).toEqual(["open-2", "open-1"]);
+  });
+
+  it("filters by nation (the collapsible country filter), ALL is a no-op", () => {
+    const pool = [
+      player({ id: "es-1", nation: "Spain" }),
+      player({ id: "fr-1", nation: "France" }),
+      player({ id: "es-2", nation: "Spain" }),
+    ];
+    expect(
+      claimableFreeAgents(pool, [], NOW, { nation: "Spain" })
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(["es-1", "es-2"]);
+    expect(claimableFreeAgents(pool, [], NOW, { nation: "ALL" }).length).toBe(3);
+    // the nation filter composes with position
+    expect(
+      claimableFreeAgents(pool, [], NOW, { nation: "France", position: "GK" }).map((p) => p.id),
+    ).toEqual([]);
+  });
+});
+
+describe("freeAgentNations (the country-filter chip list)", () => {
+  it("returns the distinct nations present in the pool, sorted, skipping nulls", () => {
+    const pool = [
+      player({ id: "a", nation: "Spain" }),
+      player({ id: "b", nation: "France" }),
+      player({ id: "c", nation: "Spain" }),
+      player({ id: "d", nation: null }),
+    ];
+    expect(freeAgentNations(pool)).toEqual(["France", "Spain"]);
   });
 });
 
