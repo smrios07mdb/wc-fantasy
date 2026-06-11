@@ -1489,5 +1489,51 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   non-null, so a player with no fixture at all shows only one "TBD" line (from `<KickoffTag>`) rather
   than two.
 
+## Prompt 54 — Period-select fix: opensAt-NULL sort + per-screen isCurrent latch (waivers + vsfield)
+
+- **Root cause: `period.opensAt` is never populated by the provisioning CLI.** The period queries in
+  both `loadWaivers` and `loadVsField` used `ORDER BY opens_at ASC, label ASC`. With `opens_at` null
+  for every row the DB falls back to `label ASC` (alphabetical), which puts "Final" (F) before "Group
+  MD1" (G). Both screens resolved to the Final period on opening day — waivers showed the Final batch
+  time; vsfield bound its Realtime subscription and lineup/score reads to the Final period.
+
+- **Fix: `selectCurrentPeriod<T>(periods, isCurrent)` in `@app/shared/periodOrder.ts`.** Sorts in JS
+  by `matches[0].kickoffAt` (populated by schedule sync; correct regardless of when `opensAt` lands)
+  rather than relying on the DB sort order. The `status === "open"` fast-path is retained for
+  future-safety. The `isCurrent` predicate is injected because the correct latch differs by screen.
+
+- **`period.status` never transitions.** No code writes `"open"` or `"closed"` to `period.status` —
+  the column defaults `"pending"` at provision and stays there. `periodClose.ts` stamps only
+  `frozenAt`; the FAAB cadence stamps only `batchClearedAt`. The open/closed arms of
+  `selectCurrentPeriod` are therefore dead paths today but retained as future-safe hooks.
+
+- **Waivers latch: `p => p.batchClearedAt === null`.** The batch has not yet run for this period —
+  it is still the active waiver window. This matches the worker's `selectPeriodsToClear` gate (fires
+  when `effectiveBatchAt = firstKickoff − DEFAULT_FAAB_BATCH_LEAD_MIN ≤ now`). The cleared period
+  stays relevant until the next period's batch fires.
+
+- **Vsfield latch: `p => now < matches.at(-1).kickoffAt + MATCH_DURATION_MS`.** At least one match
+  in this period is still live. Using `batchClearedAt` for vsfield is **wrong**: it is stamped ~6h
+  BEFORE first kickoff. During MD1 `batchClearedAt` is non-null — yet MD1 matches are actively being
+  played. Using it as the latch would advance vsfield to MD2 mid-match, binding the Realtime
+  subscription, lineup slot query, match status query, and `score_manager_period` reads to the wrong
+  period. `MATCH_DURATION_MS = 120 * 60 * 1000` covers regulation + extra time.
+
+- **`loadVsField` period query extended.** The prior query fetched only `take: 1` (first kickoff per
+  period) and did not select `batchClearedAt`. The updated query fetches all matches (no `take`) so
+  `matches.at(-1)` gives the last scheduled kickoff; `batchClearedAt` removed from the select.
+  `loadWaivers` query unchanged (already had `batchClearedAt: true` + `take: 1`).
+
+- **`selectCurrentWaiverPeriod` removed from `waiversLogic.ts`.** Hoisted to `@app/shared` as the
+  generic `selectCurrentPeriod`; `waiversLogic.ts` is now a pure display-logic module with no
+  period-selection code.
+
+- **`resolveFaabBatch` / `resolve.ts` / purity matrix byte-unchanged.** Period selection is a
+  display/loader concern; the batch resolver operates on explicit period + bid inputs.
+
+- **`// TODO(confirm)` for overlapping group waves.** The sequential-period assumption holds for the
+  WC group stage. Overlapping waves (two matchdays running concurrently) are scoped out; the comment
+  marks the seam.
+
 - **SCORING.md untouched.** This is a display-only addition; scoring algorithm, resolver, engine, purity
   matrix, and Realtime contract are byte-for-byte identical.

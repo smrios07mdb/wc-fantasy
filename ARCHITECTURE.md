@@ -860,6 +860,43 @@ so kickoff and opponent always reference the same match row and can never diverg
 homeTeamId` → opponent is the away side, `isHome = true` ("vs"); `=== awayTeamId` → home side, `isHome
 = false` ("@"). Null when the player has no fixture this period or either side is TBD (knockout bracket
 not yet determined) — the UI renders "TBD" with no flag. The `OpponentInfo` type lives in
-`src/lineup/types.ts`; `<OpponentTag>` in `app/lineup/components.tsx` renders "vs/@ + Flag + name" via
+`src/lineup/types.ts`; `<OpponentTag>` in `app/lineup/components.tsx` renders "vs/@ + Flag + name` via
 the sole `<Flag>`/`toIso2` surface (no new flag IP). Display-only; engine, resolver, and purity matrix
 byte-untouched.
+
+---
+
+## 15. Period-select fix — `selectCurrentPeriod` + per-screen isCurrent latch (Prompt 54)
+
+**Root cause.** `period.opensAt` is never populated by the provisioning CLI. The period queries in
+`loadWaivers` and `loadVsField` used `ORDER BY opens_at ASC, label ASC`; with `opensAt = NULL` for
+every row, the DB fell back to label-alphabetical — "Final" (F) before "Group MD1" (G). Both screens
+resolved to the Final period on WC opening day.
+
+**Shared selector: `selectCurrentPeriod<T>(periods, isCurrent)`.** Lives in
+`packages/shared/src/periodOrder.ts` (same module as P51's `sortByPeriodOrder`). Re-sorts the input
+array in JS by `matches[0].kickoffAt` (populated by schedule sync, not by provisioning), then applies
+a per-screen `isCurrent` predicate. `status === "open"` is a fast-path retained for future-safety;
+the pending arm uses the injected `isCurrent`. `period.status` never actually transitions — it stays
+`"pending"` from provision to freeze (no code writes `"open"`) — so the open arm is currently dead.
+
+**Per-screen predicates (the split is required).**
+
+- **Waivers:** `p => p.batchClearedAt === null` — the batch has not yet cleared for this period.
+  `batchClearedAt` is stamped when `effectiveBatchAt = firstKickoff − DEFAULT_FAAB_BATCH_LEAD_MIN
+  (360 min) ≤ now`. This is the correct waivers latch: the period is the active window until its
+  batch fires.
+- **Vsfield:** `p => now < matches.at(-1)?.kickoffAt + MATCH_DURATION_MS` — at least one match in
+  this period is still live. `MATCH_DURATION_MS = 120 * 60 * 1000` (covers regulation + extra time).
+  Using `batchClearedAt` for vsfield is **wrong**: the stamp lands ~6h *before* first kickoff, so
+  during live MD1 matches `batchClearedAt` is already non-null → vsfield would advance to MD2,
+  binding the Realtime subscription and lineup/score reads to the wrong period. The time-based latch
+  keeps vsfield on MD1 through its last whistle.
+
+**Query changes.** `loadVsField`'s period query now fetches all matches per period (removed `take: 1`)
+so `matches.at(-1)` gives the last scheduled kickoff; `batchClearedAt` removed from the select.
+`loadWaivers` unchanged (already had `batchClearedAt: true` + `take: 1`).
+
+`resolveFaabBatch` / `resolve.ts` / purity matrix are byte-unchanged (period selection is a loader
+concern, not a resolver concern). `// TODO(confirm)` in `loadVsField` marks the
+overlapping-group-waves scope-out (sequential periods only; two concurrent matchdays = future work).
