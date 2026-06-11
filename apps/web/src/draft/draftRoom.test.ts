@@ -44,9 +44,10 @@ describe("draft re-skin — the body brand lockup is de-duplicated (the shell ow
 });
 
 describe("draft re-skin — the view-state → region branch is preserved (presentation only)", () => {
-  it("renders lobby for pending, summary for complete, the live board for active/paused", () => {
+  it("renders lobby for pending, full board for complete, the live board for active/paused", () => {
     expect(client).toContain('state.status === "pending" && <Lobby');
-    expect(client).toContain('state.status === "complete" && <Summary');
+    // complete state now shows the full read-only board (Prompt 52), not only the personal summary
+    expect(client).toContain("complete && (");
     expect(client).toContain('state.status === "active" || state.status === "paused"');
   });
 
@@ -57,6 +58,39 @@ describe("draft re-skin — the view-state → region branch is preserved (prese
     expect(client).toContain("<AvailableList");
     expect(client).toContain("<RosterPanel");
     expect(client).toContain("<QueuePanel");
+  });
+});
+
+describe("draft complete-state — full read-only board (Prompt 52)", () => {
+  it("renders the full Board in complete state (all managers' picks, not filtered to session manager)", () => {
+    // complete block renders <Board state={state}> — state.picks carries ALL managers' picks
+    // (buildBoard uses state.picks without filtering; rosterFor is NOT used for the board)
+    expect(client).toContain("complete && (");
+    expect(client).toContain("<Board state={state} onlineIds={onlineIds}");
+  });
+
+  it("squad recap (RosterPanel) is reachable in the complete-state rail", () => {
+    expect(client).toContain("<RosterPanel state={state}");
+  });
+
+  it("complete mobile tabs are board + squad only — available and queue are moot post-draft", () => {
+    expect(client).toContain('completeTabs = ["board", "squad"]');
+    expect(client).toContain('"board" ? "Board" : "Your squad"');
+  });
+
+  it("no make-pick affordance in complete — AvailableList and QueuePanel are live-only", () => {
+    // AvailableList + QueuePanel (with onDraft) only appear inside the {live && …} block
+    // The complete block renders Board + RosterPanel only — no Draft button exposed post-draft
+    expect(client).toContain("{live && (");
+    expect(client).not.toContain("complete && <AvailableList");
+  });
+
+  it("no on-the-clock highlight in complete — buildBoard isCurrent guards on status=active", () => {
+    // board.ts: isCurrent: state.currentPickNo === pickNo && state.status === "active"
+    // This is already tested in board.test.ts; here we verify the guard is present in source
+    const boardSrc = readFileSync(resolve(here, "board.ts"), "utf8");
+    expect(boardSrc).toContain('state.status === "active"');
+    expect(boardSrc).toMatch(/isCurrent:[\s\S]{0,60}state\.status === "active"/);
   });
 });
 

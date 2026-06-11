@@ -36,7 +36,6 @@ import {
   PresenceRow,
   QueuePanel,
   RosterPanel,
-  Summary,
   Ticker,
   Toasts,
   type Toast,
@@ -348,7 +347,9 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
           : "DRAFT";
 
   const live = state.status === "active" || state.status === "paused";
+  const complete = state.status === "complete";
   const mobileTabs = ["board", "available", "queue", "roster"] as const;
+  const completeTabs = ["board", "squad"] as const;
   const railTabs = ["available", "queue", "roster"] as const;
 
   return (
@@ -390,7 +391,37 @@ export function DraftRoomClient({ initialState }: { initialState: DraftRoomState
       {state.status === "active" && <Ticker state={state} />}
 
       {state.status === "pending" && <Lobby state={state} onlineIds={onlineIds} />}
-      {state.status === "complete" && <Summary state={state} />}
+
+      {complete && (
+        <>
+          <div className="dr-mtabs">
+            {completeTabs.map((t) => (
+              <button
+                key={t}
+                className={"tab" + ((t === "board") === showBoardMobile ? " is-active" : "")}
+                onClick={() => setShowBoardMobile(t === "board")}
+              >
+                {t === "board" ? "Board" : "Your squad"}
+              </button>
+            ))}
+          </div>
+          <div className="dr-body">
+            <div className="dr-boardwrap">
+              <Board state={state} onlineIds={onlineIds} />
+            </div>
+            <div className="dr-rail">
+              <div className="dr-railhead">
+                <div className="t-label" style={{ padding: "2px 0" }}>
+                  Your squad
+                </div>
+              </div>
+              <div className="dr-railscroll">
+                <RosterPanel state={state} />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {live && (
         <>
