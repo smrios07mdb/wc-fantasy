@@ -430,6 +430,11 @@ authoritative in Postgres and **broadcast on change**.
   **shape-unconstrained up to 15**; the XI/formation bounds (DECISIONS Theme B) are unchanged, so an
   over-drafted squad can be locked out of a legal lineup **by choice**. `PositionFullError` is **retained
   but defensive/unreachable** in the snake flow (squad-full now coincides with draft completion at 15×N).
+- **Complete-state view (Prompt 52):** when `status === "complete"`, `DraftRoomClient` renders the same
+  authoritative `<Board>` (full snake grid, all managers' picks) + `<RosterPanel>` squad recap in the
+  existing `dr-body/dr-boardwrap/dr-rail` layout. No data-shape change — the loader already hydrates all
+  picks and managers for every status. `buildBoard.isCurrent` gates on `status === "active"`, so the board
+  is read-only by construction.
 
 ### Live "vs the field" screen
 - Subscribe to the relevant `score_manager_period` / `standing` rows; when the recompute sweeper

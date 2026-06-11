@@ -1444,3 +1444,22 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   stubbed. `<PlayerAvatar>` renders deterministic initials + position-color disc + country flag badge with
   no network fetch, no new dependency, no schema column. Real photos are a deferred post-launch option;
   there is no clean image source today.
+
+## Draft complete-state shows the full read-only board (P52)
+
+- **After the draft, the full snake board is shown — not just the session manager's own squad.**
+  `DraftRoomClient` now renders the existing `<Board>` + `<RosterPanel>` layout (board as the primary
+  surface, squad in the rail) in the `complete` state. The design reference's squad-recap-only overlay is
+  extended by deliberate product choice (managers want to review who everyone drafted).
+
+- **Presentation-only — no loader or data-shape change.** `loadDraftRoom` already hydrates `state.picks`
+  (all picks, all managers) and `state.managers` (all, slot-ordered) for every status. `buildBoard` is a
+  pure function of those two fields; nothing new was fetched.
+
+- **Read-only is free by construction.** `buildBoard` gates `isCurrent` on `state.status === "active"`,
+  so no on-the-clock highlight ever renders in complete. The make-pick affordance (`<AvailableList>` /
+  `<QueuePanel>`) lives exclusively in the `{live && …}` block and is never shown in complete.
+
+- **Mobile uses the existing `show-board` CSS toggle.** The same `showBoardMobile` state and
+  `.dr.show-board` CSS rule that drive the live board/rail toggle on mobile drive the complete
+  "Board / Your squad" tab pair — no new CSS was added.
