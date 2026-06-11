@@ -10,6 +10,7 @@ import {
   defaultStarterIds,
   kickoffByTeam,
   resolveKickoffByPlayer,
+  resolveOpponentByPlayer,
 } from "./view";
 import type { LineupPlayer, PeriodLineup } from "./types";
 
@@ -55,6 +56,7 @@ function period(over: Partial<PeriodLineup> = {}): PeriodLineup {
     starterIds: XI,
     locks: [],
     kickoffByPlayer: {},
+    opponentByPlayer: {},
     ...over,
   };
 }
@@ -203,5 +205,45 @@ describe("defaultStarterIds — a legal 4-4-2 when no lineup is saved yet", () =
     expect(xi).toHaveLength(11);
     const res = evaluateProposal(SQUAD, period({ starterIds: xi }), xi, NOW);
     expect(res.ok).toBe(true);
+  });
+});
+
+describe("resolveOpponentByPlayer — P53 opponent fixture per squad player", () => {
+  const matches = [
+    {
+      homeTeamId: "ESP",
+      awayTeamId: "FRA",
+      kickoffAt: "2026-06-14T18:00:00.000Z",
+      homeTeamName: "Spain",
+      awayTeamName: "France",
+    },
+  ];
+
+  it("home player → away team as opponent with isHome true", () => {
+    const out = resolveOpponentByPlayer([{ id: "p-es", teamId: "ESP" }], matches);
+    expect(out["p-es"]).toEqual({ opponentName: "France", opponentNation: "France", isHome: true });
+  });
+
+  it("away player → home team as opponent with isHome false", () => {
+    const out = resolveOpponentByPlayer([{ id: "p-fr", teamId: "FRA" }], matches);
+    expect(out["p-fr"]).toEqual({ opponentName: "Spain", opponentNation: "Spain", isHome: false });
+  });
+
+  it("player whose team has no fixture this period → null (resolve-miss)", () => {
+    const out = resolveOpponentByPlayer(
+      [
+        { id: "p-de", teamId: "GER" }, // not playing this period
+        { id: "p-x", teamId: null }, // no team linked
+      ],
+      matches,
+    );
+    expect(out["p-de"]).toBeNull();
+    expect(out["p-x"]).toBeNull();
+  });
+
+  it("TBD knockout fixture (null teamId side) → null for both players", () => {
+    const tbd = [{ homeTeamId: null, awayTeamId: null, kickoffAt: "2026-07-01T18:00:00.000Z" }];
+    const out = resolveOpponentByPlayer([{ id: "p-x", teamId: "ESP" }], tbd);
+    expect(out["p-x"]).toBeNull();
   });
 });

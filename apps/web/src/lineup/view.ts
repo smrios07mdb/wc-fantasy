@@ -8,13 +8,16 @@
  */
 import { validateLineup, type SquadPlayer, type LineupValidation } from "@app/lineup";
 import type { Position } from "@app/shared";
-import type { LineupPlayer, PeriodLineup } from "./types";
+import type { LineupPlayer, OpponentInfo, PeriodLineup } from "./types";
 
 export interface PitchSlot {
   player: LineupPlayer;
   /** False when the player is locked by play — the UI must NOT let him be dragged/swapped. */
   movable: boolean;
   kickoffAt: string | null;
+  /** Opponent fixture for this player's period: team name + nation (for flag) + home/away. Null when
+   *  the player's team has no fixture this period or the opponent side is TBD (knockout not decided). */
+  opponent: OpponentInfo | null;
 }
 
 export interface PitchView {
@@ -31,12 +34,16 @@ export function isMovable(period: PeriodLineup, playerId: string): boolean {
   return !period.locks.some((l) => l.playerId === playerId);
 }
 
-/** One of a period's fixtures, reduced to what the per-player kickoff resolution needs. */
+/** One of a period's fixtures, reduced to what the per-player kickoff + opponent resolution needs. */
 export interface PeriodMatch {
   homeTeamId: string | null;
   awayTeamId: string | null;
   /** ISO kickoff instant. */
   kickoffAt: string;
+  /** Home team display name (fifa_team.name) — for the opponent label when the player is away. */
+  homeTeamName?: string | null;
+  /** Away team display name (fifa_team.name) — for the opponent label when the player is home. */
+  awayTeamName?: string | null;
 }
 
 /**
@@ -72,6 +79,47 @@ export function resolveKickoffByPlayer(
   return out;
 }
 
+/**
+ * Resolve each squad player's opponent for the period being viewed: player.teamId → the period fixture
+ * his team plays in → the OTHER side of that match. Uses the same earliest-kickoff tie-break as
+ * `kickoffByTeam` so kickoff and opponent always reference the same match row and can never diverge.
+ * Null when: the player has no teamId, his team has no fixture this period, or either side of his
+ * fixture is TBD (knockout bracket not yet determined). The UI renders null as "TBD" (no flag).
+ */
+export function resolveOpponentByPlayer(
+  squad: readonly { id: string; teamId: string | null }[],
+  matches: readonly PeriodMatch[],
+): Record<string, OpponentInfo | null> {
+  const byTeam = new Map<string, { kickoffAt: string; info: OpponentInfo }>();
+  for (const m of matches) {
+    // If either side is TBD (null teamId), the opponent is unresolvable for both sides.
+    if (!m.homeTeamId || !m.awayTeamId) continue;
+    const homeEntry = {
+      kickoffAt: m.kickoffAt,
+      info: {
+        opponentName: m.awayTeamName ?? m.awayTeamId,
+        opponentNation: m.awayTeamName ?? null,
+        isHome: true,
+      } satisfies OpponentInfo,
+    };
+    const awayEntry = {
+      kickoffAt: m.kickoffAt,
+      info: {
+        opponentName: m.homeTeamName ?? m.homeTeamId,
+        opponentNation: m.homeTeamName ?? null,
+        isHome: false,
+      } satisfies OpponentInfo,
+    };
+    const existingHome = byTeam.get(m.homeTeamId);
+    if (!existingHome || m.kickoffAt < existingHome.kickoffAt) byTeam.set(m.homeTeamId, homeEntry);
+    const existingAway = byTeam.get(m.awayTeamId);
+    if (!existingAway || m.kickoffAt < existingAway.kickoffAt) byTeam.set(m.awayTeamId, awayEntry);
+  }
+  const out: Record<string, OpponentInfo | null> = {};
+  for (const p of squad) out[p.id] = (p.teamId && byTeam.get(p.teamId)?.info) || null;
+  return out;
+}
+
 export function positionOf(squad: readonly LineupPlayer[], playerId: string): Position | undefined {
   return squad.find((p) => p.id === playerId)?.position;
 }
@@ -88,6 +136,7 @@ export function buildPitch(squad: readonly LineupPlayer[], period: PeriodLineup)
       player: p,
       movable: isMovable(period, p.id),
       kickoffAt: period.kickoffByPlayer[p.id] ?? null,
+      opponent: period.opponentByPlayer[p.id] ?? null,
     };
     if (starters.has(p.id)) {
       lanes[p.position].push(slot);

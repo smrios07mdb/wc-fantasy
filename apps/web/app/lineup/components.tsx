@@ -26,8 +26,10 @@
 import type { Position } from "@app/shared";
 import { formatInLeagueTz } from "@app/shared";
 import type { PitchSlot, PitchView } from "../../src/lineup/view";
-import type { LineupPlayer, PeriodLineup } from "../../src/lineup/types";
+import type { LineupPlayer, OpponentInfo, PeriodLineup } from "../../src/lineup/types";
 import { PlayerAvatar } from "../../components/PlayerAvatar";
+import { Flag } from "../draft/Flag";
+import { toIso2 } from "../../src/draft/flag";
 
 const LANE_ORDER: Position[] = ["FWD", "MID", "DEF", "GK"];
 
@@ -51,6 +53,31 @@ export function KickoffTag({
   return (
     <span className={className} title={kickoffAt ? `Kicks off · locks at ${text}` : "Fixture TBD"}>
       {text}
+    </span>
+  );
+}
+
+/** Opponent label: "vs 🇫🇷 France" (home) / "@ 🇫🇷 France" (away), or "TBD" when unresolved. */
+export function OpponentTag({
+  opponent,
+  className,
+}: {
+  opponent: OpponentInfo | null;
+  className: string;
+}) {
+  if (!opponent) {
+    return (
+      <span className={className} aria-label="Opponent TBD">
+        TBD
+      </span>
+    );
+  }
+  const prefix = opponent.isHome ? "vs" : "@";
+  return (
+    <span className={className} title={`${prefix} ${opponent.opponentName}`}>
+      {prefix}{" "}
+      <Flag code={toIso2(opponent.opponentNation)} label={opponent.opponentNation ?? undefined} />
+      {opponent.opponentName}
     </span>
   );
 }
@@ -126,6 +153,9 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect }: Tok
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
       <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-tok-ko" />
+      {slot.kickoffAt && (
+        <OpponentTag opponent={slot.opponent} className="sl-tok-opp t-micro text-tertiary" />
+      )}
     </button>
   );
 }
@@ -191,6 +221,9 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect }: Token
       />
       <span className="sl-bench-name">{shortName(player)}</span>
       <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-bench-ko" />
+      {slot.kickoffAt && (
+        <OpponentTag opponent={slot.opponent} className="sl-bench-opp t-micro text-tertiary" />
+      )}
       <LockTag movable={movable} mini />
     </button>
   );

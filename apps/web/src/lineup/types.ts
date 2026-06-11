@@ -7,6 +7,16 @@
  */
 import type { Position, PeriodStatus } from "@app/shared";
 
+/** The opponent side of a squad player's fixture in a period — for the per-player fixture indicator. */
+export interface OpponentInfo {
+  /** The opponent team's display name (from fifa_team.name). */
+  opponentName: string;
+  /** Same as opponentName — passed to toIso2 for the flag emoji (fifa_team.name is the flag resolver input). */
+  opponentNation: string | null;
+  /** True when the player's team is the home side. Drives "vs" (home) vs "@" (away) prefix. */
+  isHome: boolean;
+}
+
 export interface LineupPlayer {
   id: string;
   displayName: string;
@@ -34,6 +44,9 @@ export interface PeriodLineup {
   locks: PeriodLock[];
   /** ISO kickoff of each player's match in this period, for the per-player indicator (optional). */
   kickoffByPlayer: Record<string, string | null>;
+  /** Opponent for each player's match in this period; null when the player's team has no fixture or the
+   *  opponent side is TBD (knockout round not yet determined). The UI renders null as "TBD". */
+  opponentByPlayer: Record<string, OpponentInfo | null>;
 }
 
 export interface SetLineupState {

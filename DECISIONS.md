@@ -1463,3 +1463,31 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
 - **Mobile uses the existing `show-board` CSS toggle.** The same `showBoardMobile` state and
   `.dr.show-board` CSS rule that drive the live board/rail toggle on mobile drive the complete
   "Board / Your squad" tab pair — no new CSS was added.
+
+## Prompt 53 — Per-player opponent label on the lineup screen
+
+- **One match row, two outputs.** `loadLineup` already reads each period's `fifa_match` rows for kickoff
+  resolution. To avoid a second query, the same `findMany` is extended with `homeTeam/awayTeam name`
+  selects. Both `kickoffByPlayer` and `opponentByPlayer` are computed in JS over the same in-memory
+  `periodMatches` array — the DB hit stays single.
+
+- **Earliest-kickoff tie-break mirrors `kickoffByTeam`.** `resolveOpponentByPlayer` uses the identical
+  earliest-kickoff selection logic as `kickoffByTeam` so that in the (theoretical) edge case of a team
+  playing twice in one period, both functions point to the same match row. Kickoff and opponent can never
+  diverge.
+
+- **vs/@ venue prefix.** `player.teamId === homeTeamId` → `isHome = true` → prefix "vs" (we are hosting);
+  `=== awayTeamId` → `isHome = false` → prefix "@" (we are away). Standard football display convention.
+
+- **Opponent flag reuses the sole `<Flag>`/`toIso2` surface.** `opponentNation` is set to
+  `fifa_team.name` — the same value `player.country` is populated from on the roster side — so `toIso2`
+  resolves it identically. No new flag-resolution code, no new background-image kit chips.
+
+- **Null → "TBD" (no flag), matching the kickoff treatment.** A null `OpponentInfo` (no fixture, or
+  either side TBD in a knockout bracket) renders as the text "TBD" with no flag, visually consistent
+  with the kickoff's own "TBD" fallback. The `<OpponentTag>` is only mounted when `kickoffAt` is
+  non-null, so a player with no fixture at all shows only one "TBD" line (from `<KickoffTag>`) rather
+  than two.
+
+- **SCORING.md untouched.** This is a display-only addition; scoring algorithm, resolver, engine, purity
+  matrix, and Realtime contract are byte-for-byte identical.

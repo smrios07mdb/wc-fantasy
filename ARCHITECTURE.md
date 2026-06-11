@@ -852,3 +852,14 @@ threads `league.timezone` into `SetLineupState` for client-side formatting. The 
 also gains the draft's collapsible country filter (shared `<NationFilter>` in `apps/web/components`) and
 country flags (a `NationFlag` over the sole `<Flag>`/`toIso2` surface; `nation` derived from the
 `fifa_team` join since `player.country` is unwritten).
+
+**Per-player opponent (Prompt 53).** The opponent is resolved from the SAME `fifa_match` row as the
+kickoff — the `fifaMatch` query in `loadLineup` is extended once to also select `homeTeam.name` and
+`awayTeam.name`; `resolveOpponentByPlayer` mirrors `resolveKickoffByPlayer`'s earliest-kickoff tie-break
+so kickoff and opponent always reference the same match row and can never diverge. `player.teamId ===
+homeTeamId` → opponent is the away side, `isHome = true` ("vs"); `=== awayTeamId` → home side, `isHome
+= false` ("@"). Null when the player has no fixture this period or either side is TBD (knockout bracket
+not yet determined) — the UI renders "TBD" with no flag. The `OpponentInfo` type lives in
+`src/lineup/types.ts`; `<OpponentTag>` in `app/lineup/components.tsx` renders "vs/@ + Flag + name" via
+the sole `<Flag>`/`toIso2` surface (no new flag IP). Display-only; engine, resolver, and purity matrix
+byte-untouched.

@@ -8,7 +8,11 @@
  */
 import { prisma } from "@app/db";
 import { sortByPeriodOrder } from "@app/shared";
-import { defaultStarterIds, resolveKickoffByPlayer } from "../../src/lineup/view";
+import {
+  defaultStarterIds,
+  resolveKickoffByPlayer,
+  resolveOpponentByPlayer,
+} from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup, SetLineupState } from "../../src/lineup/types";
 
 /** Load the set-lineup snapshot for `sessionManagerId`, or null if the manager has no squad / windows. */
@@ -56,7 +60,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     country: r.player.team?.name ?? null,
   }));
   // The team link each squad player resolves his fixture through (kept out of the LineupPlayer the client
-  // renders — it's only needed here to map player → this period's kickoff).
+  // renders — it's only needed here to map player → this period's kickoff + opponent).
   const squadTeams = rosterRows.map((r) => ({ id: r.player.id, teamId: r.player.teamId }));
 
   const periodIds = periodRows.map((p) => p.id);
@@ -67,12 +71,20 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
           select: { periodId: true, playerId: true, isStarter: true, lockedAt: true },
         })
       : Promise.resolve([]),
-    // Each period's fixtures — drives the per-player kickoff (= his lock/sub deadline). Resolved per
-    // period below; a player whose team isn't playing this period (knockout TBD) gets null → "TBD".
+    // Each period's fixtures — drives both the per-player kickoff (= lock/sub deadline) and the
+    // per-player opponent label. homeTeam/awayTeam names are the flag-resolver inputs (same source
+    // as player.country on the roster side — fifa_team.name). One read, two outputs.
     periodIds.length
       ? prisma.fifaMatch.findMany({
           where: { periodId: { in: periodIds } },
-          select: { periodId: true, homeTeamId: true, awayTeamId: true, kickoffAt: true },
+          select: {
+            periodId: true,
+            homeTeamId: true,
+            awayTeamId: true,
+            kickoffAt: true,
+            homeTeam: { select: { name: true } },
+            awayTeam: { select: { name: true } },
+          },
         })
       : Promise.resolve([]),
   ]);
@@ -86,6 +98,8 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
         homeTeamId: m.homeTeamId,
         awayTeamId: m.awayTeamId,
         kickoffAt: m.kickoffAt.toISOString(),
+        homeTeamName: m.homeTeam?.name ?? null,
+        awayTeamName: m.awayTeam?.name ?? null,
       }));
     return {
       periodId: p.id,
@@ -97,9 +111,12 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       locks: slots
         .filter((s) => s.lockedAt !== null)
         .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter })),
-      // Per-player kickoff = his team's fixture kickoff in THIS period (ISO), or null when his team isn't
-      // playing yet (knockout TBD). The client formats it in the league tz as the lock/sub deadline.
+      // Per-player kickoff = his team's fixture kickoff in THIS period (ISO), or null when his team
+      // isn't playing yet (knockout TBD). The client formats it in the league tz as the lock/sub deadline.
       kickoffByPlayer: resolveKickoffByPlayer(squadTeams, periodMatches),
+      // Per-player opponent = the OTHER side of the same match row. Null for TBD/unplaying teams.
+      // Resolved from the same periodMatches array — kickoff and opponent always reference the same row.
+      opponentByPlayer: resolveOpponentByPlayer(squadTeams, periodMatches),
     };
   });
 
