@@ -933,3 +933,16 @@ wired in `SetLineupClient` → a pick `reshape`s the starter set → the **exist
 `evaluateProposal` (`@app/lineup` `validateLineup`) + `submitLineup` (`POST /api/lineup`) flow takes
 over. The `@app/lineup` validator, the route, and the controller/store are **byte-untouched** — the
 server stays the sole legality latch; the picker only ensures the manager starts from a fieldable shape.
+
+**Render condition (Prompt 54-fix).** The picker is rendered **directly under the FORMATION panel**
+(the `LockHero`), not inside the pitch column — that's where a manager looks to change shape. It is
+ALWAYS in the returned JSX; its body is conditional on the offered set: `offered.length > 1` → an
+interactive `role="tablist"` of `role="tab"` shape buttons (current shape = `aria-selected`);
+`offered.length <= 1` → a **static, non-interactive indicator** (no dead single-tab control). The
+control's rendering + interactivity is proven by a real **RTL + jsdom** mount of `SetLineupClient`
+(`app/lineup/FormationPicker.test.tsx`), replacing the original source-contract smokes — the P54 lesson
+that a "the JSX mentions it" smoke cannot prove a control actually renders and taps. This added the
+repo's first DOM test infra: `jsdom` (root devDep, where Vitest resolves the environment),
+`@testing-library/react` + `@testing-library/dom` (apps/web devDeps, sharing its React 19 instance),
+`oxc: { jsx: "automatic" }` + `.tsx` include globs in `vitest.config.ts`, and a per-file
+`// @vitest-environment jsdom` docblock so only component tests pay the jsdom cost (the rest stay Node).

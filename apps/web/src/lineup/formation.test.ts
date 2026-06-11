@@ -1,7 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import type { Position } from "@app/shared";
 import {
   GROUP_FORMATIONS,
@@ -194,32 +191,6 @@ describe("reshapeToFormation — keeps locks, fills shortages, stays immediately
   });
 });
 
-// Source-contract smoke for the UI wiring (the repo has no DOM/JSX test transform — mirrors
-// setLineup.test.ts). Confirms the FormationPicker control exists and the client reshapes through it.
-const here = dirname(fileURLToPath(import.meta.url));
-const appDir = resolve(here, "../../app");
-const readApp = (rel: string) => readFileSync(resolve(appDir, rel), "utf8");
-
-describe("FormationPicker wiring — the carried reshape TODO is closed", () => {
-  const client = readApp("lineup/SetLineupClient.tsx");
-  const components = readApp("lineup/components.tsx");
-  const css = readApp("lineup/lineup.css");
-
-  it("exposes a FormationPicker control rendered on the screen", () => {
-    expect(components).toContain("export function FormationPicker(");
-    expect(client).toContain("<FormationPicker");
-  });
-
-  it("changes formation by reshaping the starters (not a new write path) and re-running legality", () => {
-    expect(client).toContain("reshapeToFormation(");
-    expect(client).toContain("offeredFormations(");
-    // the ONE save path is unchanged — still the gated submitLineup
-    expect(client).toContain("submitLineup(");
-  });
-
-  it("the picker CSS stays token-only (no literal hex, no gold) per the body invariant", () => {
-    expect(css).toContain("sl-formation");
-    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}/);
-    expect(css).not.toContain("gold");
-  });
-});
+// The FormationPicker's RENDERING + interaction is proven by a real RTL mount in
+// app/lineup/FormationPicker.test.tsx (a source-contract smoke can't prove a control actually renders —
+// the P54 lesson). The lineup.css no-hex / no-gold body invariant stays covered by setLineup.test.ts.

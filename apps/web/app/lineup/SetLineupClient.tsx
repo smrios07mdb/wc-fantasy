@@ -164,14 +164,17 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
         justSaved={justSaved && !dirty}
       />
 
+      {/* The formation picker sits directly under the FORMATION panel (the LockHero) — where a manager
+          looks to change shape. It offers only fieldable ∩ lock-legal shapes; a pick reshapes the XI. */}
+      <FormationPicker
+        offered={offered}
+        active={activeFormation}
+        disabled={!editable}
+        onPick={onPickFormation}
+      />
+
       <div className="sl-body">
         <section className="sl-pitchcol">
-          <FormationPicker
-            offered={offered}
-            active={activeFormation}
-            disabled={!editable}
-            onPick={onPickFormation}
-          />
           <Pitch
             view={view}
             selected={selected}
@@ -197,7 +200,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
           <p className="sl-hint t-sm">
             {selected
               ? "Tap a highlighted teammate to swap start/bench — this can change your formation."
-              : "Tap a movable player, then a teammate to swap start ↔ bench (the formation updates; Save locks if it’s illegal). Locked players are frozen."}
+              : "Pick a formation above to reshape your XI, then tap a movable player and a teammate to swap start ↔ bench. Save locks if the shape is illegal; locked players are frozen."}
           </p>
           <Bench
             bench={view.bench}

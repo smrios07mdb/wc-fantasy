@@ -340,14 +340,34 @@ export interface FormationPickerProps {
 
 /**
  * Segmented formation selector. Surfaces ONLY shapes the manager can field right now (roster supply +
- * lock-respect already filtered upstream), so every option is one tap to a complete, savable XI. Picking
- * a shape reshapes the starter set; the bench swaps then fine-tune it.
+ * lock-respect already filtered upstream by `offeredFormations`), so every option is one tap to a
+ * complete, savable XI. Picking a shape reshapes the starter set; the bench swaps then fine-tune it.
+ *
+ * When the squad fields exactly ONE shape (or none), there's nothing to choose, so we render a static
+ * indicator instead of a single dead tab — the control is never a no-op button.
  */
 export function FormationPicker({ offered, active, disabled, onPick }: FormationPickerProps) {
+  if (offered.length <= 1) {
+    const only = offered[0];
+    return (
+      <div className="sl-formation" role="group" aria-label="Formation">
+        <span className="t-label text-tertiary sl-formation-label">Formation</span>
+        <span
+          className="sl-formation-static pill mono"
+          aria-label={only ? `Only fieldable formation ${only}` : "No fieldable formation"}
+        >
+          {only ?? "—"}
+          <span className="sl-formation-note t-micro text-tertiary">
+            {only ? "only fieldable shape" : "no legal shape"}
+          </span>
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="sl-formation" role="group" aria-label="Formation">
       <span className="t-label text-tertiary sl-formation-label">Formation</span>
-      <div className="tabs sl-formation-tabs" role="tablist">
+      <div className="tabs sl-formation-tabs" role="tablist" aria-label="Formation options">
         {offered.map((formation) => (
           <button
             key={formation}

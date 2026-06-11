@@ -95,6 +95,15 @@
 .sl-formation-tabs {
   flex-wrap: wrap;
 }
+/* Single fieldable shape → a static (non-interactive) indicator, not a dead tab. */
+.sl-formation-static {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sl-formation-note {
+  font-weight: var(--fw-medium);
+}
 
 /* ── body: pitch + rail ────────────────────────────────────────────────── */
 .sl-body {
