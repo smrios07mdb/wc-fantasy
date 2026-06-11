@@ -163,11 +163,12 @@ const SECRET_KEYS = [
 ];
 
 describe("render.yaml — Blueprint structure & topology", () => {
-  it("parses structurally (guards the parser): ≥1 env group + the 5 services", () => {
+  it("parses structurally (guards the parser): ≥1 env group + the 4 services", () => {
+    // The daily `wc-fantasy-faab-batch` cron was RETIRED (Theme-D per-matchday amendment): FAAB now
+    // runs as a per-period trigger inside the worker tick, not a separate cron.
     expect(bp.groups.length).toBeGreaterThanOrEqual(1);
     expect(bp.services.map((s) => s.name).sort()).toEqual(
       [
-        "wc-fantasy-faab-batch",
         "wc-fantasy-period-close",
         "wc-fantasy-scraper",
         "wc-fantasy-web",
@@ -176,12 +177,13 @@ describe("render.yaml — Blueprint structure & topology", () => {
     );
   });
 
-  it("defines the Theme E topology: web + resident worker + scraper worker + 2 crons", () => {
+  it("defines the Theme E topology: web + resident worker + scraper worker + 1 cron", () => {
     expect(svc("wc-fantasy-web").type).toBe("web");
     expect(svc("wc-fantasy-worker").type).toBe("worker");
     expect(svc("wc-fantasy-scraper").type).toBe("worker"); // resident, not cron
-    expect(svc("wc-fantasy-faab-batch").type).toBe("cron");
     expect(svc("wc-fantasy-period-close").type).toBe("cron");
+    // FAAB batch is no longer a cron — see the retired-cron note in render.yaml.
+    expect(bp.services.find((s) => s.name === "wc-fantasy-faab-batch")).toBeUndefined();
   });
 
   it("every service builds from one repo on `main` with a start command", () => {
@@ -251,7 +253,7 @@ describe("render.yaml — env reconciliation (required keys on the right service
   });
 
   it("each cron carries the DB (via the shared group) + a schedule", () => {
-    for (const name of ["wc-fantasy-faab-batch", "wc-fantasy-period-close"]) {
+    for (const name of ["wc-fantasy-period-close"]) {
       expect(effectiveKeys(svc(name))).toContain("DATABASE_URL");
       expect(svc(name).scalars.schedule).toMatch(/\d+\s+/);
     }

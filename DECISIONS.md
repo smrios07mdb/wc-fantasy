@@ -327,6 +327,12 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
 - **Knock-on (flag for the Theme-D implementation thread):** the worker scheduler (Prompt 05a)
   changes from daily FAAB cron → per-period batch trigger; FA-eligibility ("cleared ≥1 batch
   unclaimed") collapses to "unclaimed after the period's single batch."
+- **Implemented (Prompt 47, `feat/faab-per-matchday`):** per-period trigger in the worker tick
+  (`apps/worker/src/faab/`; `period.waiver_batch_at` default `first_kickoff − 6h` + a `batch_cleared_at`
+  idempotency latch); acquisition cutoff → the period's first kickoff in `validateBidSubmission`; daily
+  cron retired. `resolveFaabBatch` is byte-unchanged. The **$0 first-come FA grant surface remains a
+  `// TODO(confirm)`** — no such route exists yet (a $0 bid is a sealed bid cleared by the batch), so
+  only the hard cutoff is enforced today. See ARCHITECTURE §3 + PROJECT.md (Prompt 47).
 
 #### Mesh with the per-player acquisition deadline (locked: can't add a player once his match kicks off)
 - The pre-dawn batch precedes the day's kickoffs (WC earliest ≈ noon local), so it can legally

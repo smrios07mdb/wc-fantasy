@@ -4,10 +4,13 @@
  * legal. No Prisma / Supabase / clock: `now`, the add target's kickoff, and the manager snapshot are
  * all injected, so the rule set is unit-testable with literals and reusable by the form and the route.
  *
- * The rules, in order (DECISIONS §D "$0 bids / out-of-budget" + "Mesh with the acquisition deadline"):
+ * The rules, in order (DECISIONS §D "$0 bids / out-of-budget" + the Theme-D "per-matchday acquisition
+ * window" amendment):
  *  1. amount ≥ 0 ($0 is legal; negative is not).
  *  2. amount ≤ faabBudget − (sum of the manager's OTHER pending bids) — no over-commit across claims.
- *  3. the add target is unowned league-wide AND its match has not kicked off at `now`.
+ *  3. the add target is unowned league-wide AND its PERIOD's first kickoff has not passed at `now`. The
+ *     cutoff is the league-wide period first kickoff (NOT the player's own kickoff) — the amendment
+ *     supersedes the per-player-kickoff deadline. The IO layer resolves `acquisitionCutoffAt`.
  *  4. the drop ≠ the add; the drop is owned by this manager; a drop is REQUIRED once the squad is full.
  *  5. the add/drop keeps the roster within the 2/5/5/3 caps (and the 15-man cap).
  */
@@ -50,8 +53,9 @@ export interface BidValidationContext {
   ownedByManager: ReadonlySet<string>;
   /** Players actively owned by ANY manager in the league (validates the add availability). */
   ownedByLeague: ReadonlySet<string>;
-  /** Kickoff of the add target's relevant fixture, or null if none upcoming. */
-  addTargetKickoffAt: Date | null;
+  /** The acquisition cutoff: the add target's PERIOD first kickoff (league-wide), or null if none
+   *  upcoming. Superseded the per-player kickoff (Theme-D amendment). Resolved by the IO layer. */
+  acquisitionCutoffAt: Date | null;
   /** Is the named drop LOCKED by play (lineup_slot.locked_at in a still-active matchday)? A locked drop
    *  has played this matchday and can't be dropped yet. False when there is no drop. */
   dropLocked: boolean;
@@ -68,9 +72,9 @@ export function validateBidSubmission(
   const available = ctx.faabBudget - ctx.pendingTotal;
   if (sub.amount > available) return overBudget(sub.amount, available);
 
-  // (3) add availability + the acquisition deadline.
+  // (3) add availability + the acquisition cutoff (the period's first kickoff, league-wide).
   if (ctx.ownedByLeague.has(sub.playerAddId)) return addOwned(sub.playerAddId);
-  if (ctx.addTargetKickoffAt !== null && ctx.addTargetKickoffAt.getTime() <= ctx.now.getTime()) {
+  if (ctx.acquisitionCutoffAt !== null && ctx.acquisitionCutoffAt.getTime() <= ctx.now.getTime()) {
     return addKickedOff(sub.playerAddId);
   }
 

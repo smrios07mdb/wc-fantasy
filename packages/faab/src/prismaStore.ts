@@ -57,6 +57,33 @@ async function relevantKickoff(prisma: Db, teamId: string | null): Promise<Date 
   return m?.kickoffAt ?? null;
 }
 
+/** The acquisition cutoff for ADDING a player (Theme-D "per-matchday acquisition window" amendment):
+ *  the LEAGUE-WIDE first kickoff of the PERIOD his next still-acquirable fixture falls in — superseding
+ *  the per-player kickoff. Resolution: his relevant fixture (the same MIN(kickoff) among NOT-completed
+ *  fixtures `relevantKickoff` finds) → that fixture's `period_id` → MIN(kickoff) among the period's
+ *  fixtures. A fixture with no period link yet falls back to its own kickoff (defensive — pre-seed).
+ *  Only `getPlayerFacts` (the submission path) uses this; the BATCH keeps the per-player kickoff for the
+ *  resolver's defensive void-refund branch. */
+async function periodFirstKickoff(prisma: Db, teamId: string | null): Promise<Date | null> {
+  if (teamId === null) return null;
+  const m = await prisma.fifaMatch.findFirst({
+    where: {
+      status: { in: ["scheduled", "in_progress"] },
+      OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
+    },
+    orderBy: { kickoffAt: "asc" },
+    select: { kickoffAt: true, periodId: true },
+  });
+  if (!m) return null;
+  if (m.periodId === null) return m.kickoffAt; // no period seeded yet → fall back to the fixture kickoff
+  const first = await prisma.fifaMatch.findFirst({
+    where: { periodId: m.periodId },
+    orderBy: { kickoffAt: "asc" },
+    select: { kickoffAt: true },
+  });
+  return first?.kickoffAt ?? m.kickoffAt;
+}
+
 export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
   return {
     async loadBatchContext(leagueId): Promise<BatchContext | null> {
@@ -298,7 +325,10 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
         select: { position: true, teamId: true },
       });
       if (!p) return null;
-      return { position: p.position, kickoffAt: await relevantKickoff(prisma, p.teamId) };
+      return {
+        position: p.position,
+        periodFirstKickoffAt: await periodFirstKickoff(prisma, p.teamId),
+      };
     },
 
     async createBid(bid): Promise<PersistedBid> {

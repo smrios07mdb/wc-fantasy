@@ -148,23 +148,14 @@ services:
       - key: SCRAPER_POLITE_GAP_MS # polite gap between match-page fetches
         value: "4000"
 
-  # ── Cron: daily FAAB batch (plumbing live now; the clearing logic is a later prompt) ─────────────
-  - type: cron
-    name: wc-fantasy-faab-batch
-    runtime: node
-    plan: starter
-    region: virginia
-    branch: main
-    # 06:00 America/New_York. The WC window (Jun–Jul) is EDT (UTC-4), so 06:00 EDT = 10:00 UTC.
-    # (Render cron is fixed UTC; outside DST, 06:00 EST = 11:00 UTC. The batch reads
-    # league.faab_batch_local_time for the precise local cutoff — this cron is only the trigger cadence.)
-    schedule: "0 10 * * *"
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: pnpm --filter @app/worker job:faab
-    envVars:
-      - fromGroup: wc-fantasy-shared
-      - key: DATABASE_URL # pooled (:6543) — runtime
-        sync: false
+  # ── RETIRED: daily FAAB batch cron (was `wc-fantasy-faab-batch`) ─────────────────────────────────
+  # The FAAB cadence is now ONE blind-bid batch per scoring period, cleared before that period's first
+  # kickoff (DECISIONS.md → Theme D "per-matchday acquisition window" amendment). The trigger runs INSIDE
+  # the Background Worker tick (apps/worker/src/faab/dispatch.ts), not on a separate daily cron, so this
+  # cron service is removed. ⚠️ OPERATOR (Sergio, owns Render): removing the block here does NOT auto-
+  # delete the already-deployed `wc-fantasy-faab-batch` cron service — delete/suspend it manually in the
+  # Render dashboard so it stops invoking the now-removed `job:faab` script. The hourly period-close cron
+  # below is UNCHANGED.
 
   # ── Cron: period-close check (plumbing live now; the freeze/close logic is a later prompt) ───────
   - type: cron

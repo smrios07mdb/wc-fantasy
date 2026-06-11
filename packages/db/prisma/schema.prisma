@@ -477,6 +477,13 @@ model Period {
   /// INVARIANT 5: set ~result_freeze_hours after the wave's last FT. After this, restatement is
   /// commissioner-only — the recompute sweeper gates on this column (logic is a later prompt).
   frozenAt  DateTime?    @map("frozen_at") @db.Timestamptz(6)
+  /// Theme-D "per-matchday acquisition window" amendment: the per-period blind-bid FAAB batch deadline
+  /// (UTC). NULL = use the computed default `first_kickoff − FAAB_BATCH_LEAD_MIN`. Commissioner-
+  /// configurable per period; must sit before the period's first kickoff. Replaced the daily cron.
+  waiverBatchAt  DateTime? @map("waiver_batch_at") @db.Timestamptz(6)
+  /// Idempotency latch for the per-period FAAB batch: stamped (= now) when this period's batch has run.
+  /// The worker tick selects periods with this NULL whose deadline has passed → re-ticks are no-ops.
+  batchClearedAt DateTime? @map("batch_cleared_at") @db.Timestamptz(6)
   status    PeriodStatus @default(pending)
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)

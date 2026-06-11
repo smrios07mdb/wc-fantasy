@@ -32,9 +32,10 @@ function freshStore(opts: { lockedDrops?: string[] } = {}) {
       },
     ],
     players: {
-      X: { position: "MID", kickoffAt: new Date("2026-06-10T15:00:00Z") },
-      DROP: { position: "MID", kickoffAt: null },
-      KICKED: { position: "MID", kickoffAt: new Date("2026-06-10T05:00:00Z") },
+      // periodFirstKickoffAt = the add target's PERIOD first kickoff (the league-wide cutoff).
+      X: { position: "MID", periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z") },
+      DROP: { position: "MID", periodFirstKickoffAt: null },
+      KICKED: { position: "MID", periodFirstKickoffAt: new Date("2026-06-10T05:00:00Z") },
     },
     leagueOwned: ["DROP"],
     lockedDrops: opts.lockedDrops,
@@ -113,7 +114,7 @@ describe("handleSubmitBid — validation + persistence", () => {
     expect(store.rows).toHaveLength(0);
   });
 
-  it("rejects an add whose match already kicked off (409)", async () => {
+  it("rejects an add whose PERIOD first kickoff already passed (409 — acquisition window closed)", async () => {
     const store = freshStore();
     const res = await handleSubmitBid(
       { resolveManager: async () => okOutcome, store, now: new Date("2026-06-10T16:00:00Z") },

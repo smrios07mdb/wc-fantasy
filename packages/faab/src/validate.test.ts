@@ -5,8 +5,11 @@ import type { PositionCounts } from "./resolve";
 
 /**
  * Submission-time validation (DECISIONS.md §D, "rejected at submission"): a bid is checked the moment
- * it is placed — over-commit, ownership, the per-player kickoff cutoff, and roster legality — so an
- * illegal claim never reaches the batch. Pure: `now` + kickoff + the manager snapshot are passed in.
+ * it is placed — over-commit, ownership, the acquisition cutoff, and roster legality — so an illegal
+ * claim never reaches the batch. Pure: `now` + the cutoff + the manager snapshot are passed in.
+ *
+ * Per the Theme-D "per-matchday acquisition window" amendment, the cutoff is the add target's PERIOD
+ * first kickoff (league-wide), NOT the player's own kickoff — resolved by the IO layer.
  */
 
 const FULL: PositionCounts = { GK: 2, DEF: 5, MID: 5, FWD: 3 };
@@ -20,7 +23,7 @@ function ctx(over: Partial<BidValidationContext> = {}): BidValidationContext {
     squadSize: 15,
     ownedByManager: new Set(["DROP"]),
     ownedByLeague: new Set(["DROP"]),
-    addTargetKickoffAt: new Date("2026-06-10T15:00:00Z"), // upcoming
+    acquisitionCutoffAt: new Date("2026-06-10T15:00:00Z"), // the period's first kickoff (upcoming)
     dropLocked: false,
     ...over,
   };
@@ -72,13 +75,23 @@ describe("validateBidSubmission", () => {
     expect(e?.code).toBe("add-owned");
   });
 
-  it("rejects an add target whose match has already kicked off (cutoff closed)", () => {
+  it("rejects an add whose PERIOD first kickoff has already passed (acquisition window closed)", () => {
     const now = new Date("2026-06-10T16:00:00Z");
     const e = validateBidSubmission(
       sub(),
-      ctx({ now, addTargetKickoffAt: new Date("2026-06-10T15:00:00Z") }),
+      ctx({ now, acquisitionCutoffAt: new Date("2026-06-10T15:00:00Z") }),
     );
     expect(e?.code).toBe("add-kicked-off");
+  });
+
+  it("accepts when the period's first kickoff is still in the future (window open)", () => {
+    const now = new Date("2026-06-10T06:00:00Z");
+    expect(
+      validateBidSubmission(
+        sub(),
+        ctx({ now, acquisitionCutoffAt: new Date("2026-06-10T15:00:00Z") }),
+      ),
+    ).toBeNull();
   });
 
   it("requires a drop once the roster is full", () => {

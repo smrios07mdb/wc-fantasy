@@ -1,7 +1,15 @@
 import { config } from "./config";
 import { log } from "./logger";
-import { feed, ingestStore, notifyStore, notifyTriggerStore } from "./wiring";
+import {
+  feed,
+  ingestStore,
+  notifyStore,
+  notifyTriggerStore,
+  faabBatchStore,
+  faabCadenceStore,
+} from "./wiring";
 import { dispatchPlayersNotStarting, dispatchMatchStarting } from "./notify/triggers";
+import { dispatchFaabBatches } from "./faab/dispatch";
 import { runRecomputeSweep } from "./recompute";
 import {
   decideMatchModes,
@@ -156,6 +164,30 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
 
       const result = await runRecomputeSweep();
       log.debug("scheduler.swept", { ...result });
+
+      // Per-period FAAB batch (Theme D "per-matchday acquisition window" amendment): clear every period
+      // whose blind-bid deadline has passed and that has not yet cleared — once each, via the unchanged
+      // `runFaabBatch`, latched by `period.batch_cleared_at`. This REPLACES the retired daily FAAB cron;
+      // the 60s tick + the latch collapse repeats to one batch per period. Isolated so a FAAB failure
+      // never starves ingestion/recompute (the per-action convention).
+      try {
+        const faab = await dispatchFaabBatches(
+          faabCadenceStore,
+          faabBatchStore,
+          now,
+          config.faabBatchLeadMs,
+        );
+        if (faab.due > 0 || faab.errors.length > 0) {
+          log.info("faab.batch.tick", {
+            due: faab.due,
+            cleared: faab.cleared.length,
+            errors: faab.errors.length,
+          });
+        }
+        for (const e of faab.errors) log.error("faab.batch.period.error", { ...e });
+      } catch (err) {
+        log.error("faab.batch.error", { message: (err as Error).message });
+      }
 
       // Match-starting (41b, owners-only): alert managers who own ≥1 rostered player on either team of a
       // fixture kicking off within NOTIFY_MATCH_LEAD_MIN. Isolated from the ingestion/recompute work;

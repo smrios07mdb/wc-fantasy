@@ -105,6 +105,13 @@ export async function handleSubmitBid(
     dropLocked = await deps.store.isDropLocked(g.managerId, body.playerDropId);
   }
 
+  // TODO(confirm): the $0 free-agency surface. The Theme-D amendment describes "$0 first-come free
+  // agency after the batch clears, until first kickoff." There is NO dedicated FA-claim route today
+  // (Prompt 25 flagged this) — a $0 bid here is a SEALED bid that clears at the period's batch, not an
+  // immediate first-come grant. So this branch enforces only the HARD cutoff (the period's first
+  // kickoff, via `acquisitionCutoffAt` below); the sealed-vs-free-agency phase split + the first-come
+  // grant are a deferred surface. The pure `acquisitionWindowState` (apps/worker/src/faab/selectors.ts)
+  // is the ready building block to gate it once that surface exists.
   const pendingTotal = await deps.store.sumOtherPendingBids(g.managerId, null);
   const submission: BidSubmission = {
     managerId: g.managerId,
@@ -122,7 +129,7 @@ export async function handleSubmitBid(
     squadSize: ctx.squadSize,
     ownedByManager: ctx.ownedByManager,
     ownedByLeague: ctx.ownedByLeague,
-    addTargetKickoffAt: addFacts.kickoffAt,
+    acquisitionCutoffAt: addFacts.periodFirstKickoffAt,
     dropLocked,
   });
   if (error) return bidErrorResult(error);
@@ -189,7 +196,7 @@ export async function handleEditBid(
       squadSize: ctx.squadSize,
       ownedByManager: ctx.ownedByManager,
       ownedByLeague: ctx.ownedByLeague,
-      addTargetKickoffAt: addFacts.kickoffAt,
+      acquisitionCutoffAt: addFacts.periodFirstKickoffAt,
       dropLocked,
     },
   );

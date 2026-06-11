@@ -79,8 +79,8 @@ Two managed vendors. Single region near the league. No multi-region, no Kubernet
                  |    - LIVE poll loop (~60s while any match in_progress)          |
                  |    - post-match settle poll (until stats + rating land)         |
                  |    - recompute sweeper (dirty (match,player) -> scores -> table)|
+                 |    - FAAB batch trigger (per period, before its 1st kickoff)    |
                  |                                                                 |
-                 |  Cron Job: daily FAAB batch (~06:00 league-local, pre-kickoff)  |
                  |  Cron Job: period-close check (when a wave's last match ends)   |
                  |                                                                 |
                  |  Worker (ISOLATED): Sofascore rating scraper [PRIMARY]          |
@@ -145,9 +145,39 @@ table each tick):
 | **Pre-match** | at each kickoff | `match_lineups` | confirmed starting XIs -> **lock all starters** (set `locked_at`). |
 | **Live** | while any match `in_progress` | `match_events` (~60s), plus `player_match_stats` / `match_shots` / `team_match_stats` | **lock each substitute at his entry minute**; cards (w/ minute); goals; own goals; live-updating event points. |
 | **Settle** | after FT until values stabilize | `player_match_stats`, `match_shots`, **rating source** | stats can lag *hours*; the **rating lands near/after FT** -> keep recomputing as values arrive. |
+| **FAAB batch** | per period, at its deadline | (DB only) | clear the league's blind bids ONCE per scoring period, before that period's first kickoff (Theme-D amendment, below). Selects periods whose deadline has passed and that have not cleared, runs the unchanged `@app/faab` `resolveFaabBatch`, latches `period.batch_cleared_at`. Replaced the retired daily cron. |
 
 Live latency is a few minutes on the feed itself, so polling faster than ~60s is wasted — a sub
 who enters becomes lockable within a couple of minutes, which is fine.
+
+#### FAAB cadence: per-period batch + acquisition window (Theme-D amendment — deferred ARCHITECTURE update, now landed)
+
+**Supersedes the retired daily 06:00 FAAB cron.** One blind-bid batch per scoring period (each group
+matchday, each knockout round), cleared **before that period's first kickoff** (= MIN fixture kickoff
+in the period). The clearing algorithm (`resolveFaabBatch`, the locked §D 8 steps) is **unchanged** —
+only the cadence and the acquisition cutoff moved.
+
+- **Trigger (worker tick, not a cron).** `apps/worker/src/faab/`: a pure selector (`selectPeriodsToClear`
+  — periods whose `effectiveBatchAt ≤ now` and `batch_cleared_at IS NULL`) drives `dispatchFaabBatches`,
+  which runs `runFaabBatch` once per due period and stamps `period.batch_cleared_at`. **Idempotent via
+  the latch** (not a flag): the 60s tick may fire repeatedly; the batch runs once per period. A batch may
+  legitimately run *after* first kickoff (worker downtime) — the resolver's per-player void-refund branch
+  is kept as a **defensive guard** for that case (unreachable in normal flow, since deadline < kickoff).
+- **Deadline.** `period.waiver_batch_at` (commissioner-configurable per period); default
+  `first_kickoff − FAAB_BATCH_LEAD_MIN` (**360 min = 6 h**, reproducing the old "06:00 before a ~noon
+  kickoff"; `// TODO(confirm): batch lead`).
+- **Acquisition cutoff → the period's first kickoff (league-wide).** Bid submission (`@app/faab`
+  `validateBidSubmission`) now gates on the add target's **period** first kickoff (`acquisitionCutoffAt`),
+  not the per-player kickoff. The batch keeps the per-player kickoff only for the defensive void-refund.
+  Theme-B sub-IN eligibility is unchanged (per-incoming-player kickoff, in the lineup path).
+- **Acquisition window** = sealed-bid (before the batch) → $0 free-agency (after clear, before kickoff)
+  → hard league-wide lock (at first kickoff). The pure `acquisitionWindowState` predicate models the
+  three phases. **`// TODO(confirm)`: the $0 first-come FA grant surface does NOT exist yet** (a $0 bid is
+  a sealed bid cleared by the batch — Prompt 25); the predicate is the ready building block to gate it.
+- **Schema.** `period.waiver_batch_at` + `period.batch_cleared_at` (migration
+  `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS).
+- **Playoff rounds** light up via the SAME generic period path once their period rows exist (Theme C);
+  no playoff-specific scheduling is hard-forked here.
 
 ### Idempotency & recompute (the load-bearing principle)
 **Raw inputs are stored immutably-by-upsert; scores are a pure function of stored inputs, so any
@@ -308,7 +338,10 @@ not by hopeful application code:
   status (`pending`/`won`/`lost`/`voided_refunded`), note. **RLS-protected.**
 - `faab_batch` — league_id, run_at, status. Processing writes bid outcomes + ownership changes
   atomically, highest-bid-first player-by-player, applying the move-to-bottom tiebreak only when
-  used, voiding+refunding bids on already-kicked-off players.
+  used, voiding+refunding bids on already-kicked-off players. **Now fired once per scoring period**
+  (the worker-tick trigger), not on the retired daily cron — see §3 "FAAB cadence."
+- `period.waiver_batch_at` / `period.batch_cleared_at` — the per-period batch deadline (commissioner-
+  configurable; default `first_kickoff − lead`) + the idempotency latch (Theme-D amendment).
 
 **Raw feed layer (recompute inputs; upsert-keyed)**
 - `stat_player_match` — PK `(match_id, player_id)`; all `FIFAPlayerMatchStats` fields +
@@ -521,12 +554,14 @@ a required component.** BALLDONTLIE's `rating` serves as the **automatic fallbac
 
 ## 8. Cross-cutting (boring-but-essential)
 
-- **Time:** everything stored in **UTC** (the feed gives UTC). "League-local" exists only for the
-  FAAB batch clock and display. One source of truth kills the classic timezone bug.
+- **Time:** everything stored in **UTC** (the feed gives UTC). "League-local" exists only for display
+  (the FAAB batch is now anchored to the period's first kickoff, not a league-local wall-clock — §3).
+  One source of truth kills the classic timezone bug.
 - **Migrations:** Prisma Migrate (or Drizzle) — versioned, reviewed, boring.
-- **Jobs:** host cron + an in-process scheduler in the worker; the worker tightens cadence in live
-  windows by reading `fifa_match`. **No queue** (overkill at this scale); add one only if ever
-  needed.
+- **Jobs:** host cron (period-close) + an in-process scheduler in the worker; the worker tightens
+  cadence in live windows by reading `fifa_match`, and now also fires the **per-period FAAB batch**
+  from the same tick (the daily FAAB cron was retired — §3). **No queue** (overkill at this scale);
+  add one only if ever needed.
 - **Observability:** structured logs; Sentry (free tier) for errors; an **uptime/alert if the
   live poller hasn't succeeded inside a match window** -> the operator can flip a match to
   kickoff-lock. That single alert is the most valuable piece of monitoring here.

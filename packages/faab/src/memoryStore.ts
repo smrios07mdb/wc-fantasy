@@ -162,7 +162,7 @@ interface MemBidManager {
 
 export interface MemoryBidSeed {
   managers: MemBidManager[];
-  /** playerId → its position + add-target kickoff. */
+  /** playerId → its position + the add target's PERIOD first kickoff (the acquisition cutoff). */
   players: Record<string, PlayerFacts>;
   /** players actively owned by ANY manager in the league. */
   leagueOwned?: string[];

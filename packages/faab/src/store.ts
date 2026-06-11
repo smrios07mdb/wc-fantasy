@@ -55,8 +55,9 @@ export interface ManagerBidContext {
 /** Per-player facts the route needs about the add/drop targets. */
 export interface PlayerFacts {
   position: Position;
-  /** The add target's relevant-fixture kickoff (null if none upcoming). */
-  kickoffAt: Date | null;
+  /** The acquisition cutoff for adding this player: his relevant fixture's PERIOD first kickoff
+   *  (league-wide), or null if none upcoming. Superseded the per-player kickoff (Theme-D amendment). */
+  periodFirstKickoffAt: Date | null;
 }
 
 /** A bid as persisted/echoed by the route. */
