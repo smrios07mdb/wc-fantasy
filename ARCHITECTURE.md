@@ -314,9 +314,15 @@ not by hopeful application code:
   (check budget + roster cap + valid drop, then write).
 - **Sealed bids stay secret** -> **row-level security**: a manager can read only their own
   *pending* bids; everyone can read outcomes after the batch.
-- **Hindsight-proof swaps** -> a lineup slot is editable only while `locked_at IS NULL`, enforced
-  in the swap transaction (`enforce_lineup_lock()`), with a transaction-local `app.commish_override`
-  GUC carve-out for the commissioner override (§3; migration `20260611120000`).
+- **Hindsight-proof swaps -> a DIRECTIONAL lock latch** (the forfeit model, §16; supersedes the old
+  bidirectional "editable only while `locked_at IS NULL`" freeze). `enforce_lineup_lock()` enforces, in
+  the swap transaction: a played player can never be moved **INTO** the XI (the hindsight block — gated
+  on `locked_at`, retained), but a played starter **can** be moved **OUT** as a one-way FORFEIT — the
+  trigger permits exactly `is_starter` true->false WITH `voided_at` NULL->set, and back-stops the
+  one-way door (no un-void, no start-of-voided). `voided_at` is an editability latch only — never a
+  scoring input. The transaction-local `app.commish_override` GUC carve-out (commissioner override; §3,
+  migration `20260611120000`) is unchanged. `locked_at` is retired from movability but still stamped +
+  read for the IN-direction backstop; retiring its stamping is a post-tournament follow-up.
 
 ### Table sketch (Code will refine; not exhaustive DDL)
 
@@ -381,8 +387,10 @@ not by hopeful application code:
 - `roster_player` — manager_id, player_id, acquired_at, dropped_at. **Ownership**; unique
   `(league_id, player_id)` where `dropped_at IS NULL`.
 - `lineup_slot` — manager_id, **period_id**, player_id, role (`GK`/`DEF`/`MID`/`FWD`),
-  is_starter, **`locked_at` (nullable timestamp)**. Per-period arrangement -> "set multiple
-  lineups in advance" = rows for future periods. **Swap allowed only when `locked_at IS NULL`.**
+  is_starter, **`locked_at` (nullable timestamp)**, **`voided_at` (nullable timestamp; C1 forfeit
+  latch)**. Per-period arrangement -> "set multiple lineups in advance" = rows for future periods.
+  Movability is now `frozen_at IS NULL AND voided_at IS NULL` (C1 §16); `locked_at` is retired from
+  movability but still stamped + read by the IN-direction hindsight backstop.
   Lock-on-play sets it (starter -> kickoff; sub -> entry minute).
 
 **Periods (Theme C scoring windows)**
@@ -994,3 +1002,48 @@ repo's first DOM test infra: `jsdom` (root devDep, where Vitest resolves the env
 `@testing-library/react` + `@testing-library/dom` (apps/web devDeps, sharing its React 19 instance),
 `oxc: { jsx: "automatic" }` + `.tsx` include globs in `vitest.config.ts`, and a per-file
 `// @vitest-environment jsdom` docblock so only component tests pay the jsdom cost (the rest stay Node).
+
+## 16. Lineup forfeit engine (C1)
+
+Implements the DECISIONS Theme-B **forfeit model** (the demote-OUT half of the in-matchday-sub
+amendment): a played player is no longer hard-locked — benching a played starter is a **final, one-way
+FORFEIT**. C1 lands data + server engine + read contract only; the destructive-confirm UI is C2.
+
+**Data.** `lineup_slot.voided_at` (nullable timestamptz) — the one-way forfeit latch (migration
+`20260612120000_lineup_forfeit_voided_at`). The same migration CREATE-OR-REPLACEs `enforce_lineup_lock()`
+to **co-enforce** the model at the DB level: a locked row's `is_starter` stays frozen EXCEPT the single
+forfeit transition (is_starter true→false WITH voided_at NULL→set, locked_at/player/role unchanged), and
+`voided_at` is one-way (no un-void, no start-of-voided, born un-voided). The commissioner GUC carve-out is
+unchanged. Verified on a throwaway Postgres seeded with a **uuid-returning `auth.uid()` shim** (bare PG
+masks the `sub::uuid` cast the earlier RLS migrations' self-tests rely on).
+
+**"Has played" = `score_player_match` row existence** for (player, his match in the period) — the single
+authoritative signal (NOT `locked_at`), `pointsAtStake` = that row's `points`. Timing nuance: the row
+lands at the first recompute tick, slightly after kickoff.
+
+**Engine (`@app/lineup`).** `validateLineup` now takes per-slot play state (`SlotState`:
+`{isStarter, hasPlayed, voided}`) + a `forfeitConfirmed` id set, and enforces three directional rules:
+voided→start (`voided-player-started`), played bench→start (`played-player-started`, the hindsight block),
+played starter→bench (`forfeit-requires-confirm` unless confirmed). The controller computes the forfeit
+set (confirmed played starters being benched) and the store stamps `voided_at` + benches them in one
+transaction, then enqueues a manager-period `recompute_dirty` (deduped, mirroring
+`@app/recompute.enqueueManagerPeriodDirty`) so standings restate. The memory double mirrors the extended
+trigger (forfeit permitted, non-forfeit locked flip refused). The rollup (`scoreManagerPeriod`) is
+UNCHANGED — starters-only already excludes a voided/benched player and counts the incoming starter.
+
+**Read contract (for C2).** `loadLineup.ts` adds `PeriodLineup.slotMeta` per squad player:
+`{hasPlayed, pointsAtStake, voided, movable}` where `movable = frozen_at IS NULL AND voided_at IS NULL`.
+C1 renders NONE of it.
+
+**No live destructive path pre-C2 (deliberate).** Point 3 ("replace the `isLockedNow` movability check at
+the read sites") is realized as an **augment, not a replace**, at the live client: `loadLineup.ts` keeps
+`locks` (driven by `isLockedNow`) exactly as-is, because the client (`apps/web/src/lineup/view.ts`) derives
+all drag legality from `locks` — physically swapping it to the `movable` predicate would make a played,
+unvoided starter draggable in the unchanged client, surfacing the forbidden destructive bench affordance.
+`loadVsField.ts` is left UNCHANGED (its `locked` is a display/"played" flag, not a movability gate; applying
+the formula would blank the live lock indicator). The server is authoritative regardless: with no confirm,
+the engine rejects every bench-of-a-played-starter. C2 flips the client to `slotMeta` and wires the confirm.
+
+**`locked_at` verdict.** Retired from movability, NOT deleted: the lock-on-play job still stamps it and the
+trigger still reads it (the IN-direction backstop). Retiring the stamping + the latch's locked_at arm is a
+proposed C2/follow-up, left intact in C1 so the live lock machinery isn't disturbed mid-tournament.

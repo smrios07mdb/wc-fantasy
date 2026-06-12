@@ -88,6 +88,26 @@ untouched** (`recomputeManagerPeriod`/`job:recompute` only re-sum). Live remedia
 `pnpm --filter @app/worker job:recompute -- --period "MD1"` — restate-alone won't clear bogus rows.
 +9 regression tests; full suite **1747** green. See DECISIONS (participant invariant) + ARCHITECTURE §3/§7.
 
+**Lineup forfeit engine (C1, 2026-06-12):** replaces the cancelled keeper-lock prompt. New rule (DECISIONS
+Theme-B forfeit amendment): a played player is **NOT hard-locked** — his slot stays movable; benching a
+played starter is a **FINAL, one-way FORFEIT** (`lineup_slot.voided_at` stamp + `is_starter=false`),
+forfeiting his period points and barring his return to the XI. **C1 = data + server engine + read contract
+only; the destructive-confirm UI is C2.** Built on `feat/lineup-forfeit-engine` (isolated worktree, merge
+HELD — Sergio + Chat own merge). Pieces: (1) migration `20260612120000_lineup_forfeit_voided_at` adds the
+column AND extends `enforce_lineup_lock()` to permit EXACTLY the forfeit transition + back-stop the one-way
+door (no un-void / no start-of-voided), self-tested + **verified on throwaway Postgres with a uuid-returning
+`auth.uid()` shim**; (2) `@app/lineup` engine — `validateLineup` now keys off per-slot play state
+(`hasPlayed` = a `score_player_match` row exists, `voided`) + a forfeit-confirm id set; the store stamps
+`voided_at` and enqueues a manager-period recompute in-tx; (3) read contract `PeriodLineup.slotMeta`
+(`hasPlayed/pointsAtStake/voided/movable`) for C2, rendered by nothing in C1. **Two reconciliations
+(reported, not silently chosen):** the read-site change is an **augment, not a replace** (keep `locks` so the
+unchanged client exposes no destructive bench affordance; `loadVsField` untouched), and `locked_at` is
+**retired from movability but kept** (worker stamping + the IN-direction hindsight backstop intact; full
+retirement proposed for C2). **No live destructive path pre-C2:** the route passes no confirm → benching a
+played starter is rejected (`forfeit-requires-confirm`), behaviour byte-identical to today. Rollup
+unchanged (starters-only). +N tests, all gates green. See DECISIONS (forfeit amendment) + SCORING (principle
+6) + ARCHITECTURE §16.
+
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
 dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection ✅ ·

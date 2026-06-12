@@ -125,13 +125,15 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   who plays 0 minutes stays swappable.
 - **No auto-subs.** Manual swaps of not-yet-played players replace the old "sub fires if starter
   played 0 min" rule (supersedes brief req #3's *mechanism* — same intent, simpler).
-- **Why it's sound (no hindsight):** the only players you can ever move are players who have
-  scored nothing (haven't played). You can never watch a player bank points and *then* slot him
-  in — the moment he plays he is frozen in whatever role he was in. Every swap is forward-looking.
-- **Consequence:** a bench player who *has* played is locked **on the bench** — he cannot be
-  promoted after scoring. Coverage of a blanking starter depends on having an *unplayed*,
-  position-legal reserve at that moment, not on best bench score. Rewards live management /
-  late-sub streaming.
+- **Why it's sound (no hindsight) — DIRECTIONAL (revised by the forfeit amendment below):** you can
+  never watch a player bank points and *then* slot him **in** — a played player is permanently frozen
+  OUT of the XI (the IN direction). The old symmetric "the only players you can move are players who
+  scored nothing / every swap is forward-looking" freeze is **superseded**: a played starter *can* now
+  be moved **out**, but only as a one-way FORFEIT (forfeit amendment below) — never to claim hindsight.
+- **Consequence:** a bench player who *has* played stays locked **on the bench** — he cannot be
+  promoted after scoring (the retained IN-direction backstop). Coverage of a blanking starter depends
+  on having an *unplayed*, position-legal reserve at that moment, not on best bench score. Rewards live
+  management / late-sub streaming.
 - **Acquisition deadline (waivers / free agents):** you cannot pick up a player once **his match
   kicks off**. Intentionally a touch stricter than the own-player rule — avoids adjudicating live
   appearance status for free agents and prevents grabbing an in-progress performer.
@@ -163,29 +165,54 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   nulls `locked_at` for MD1 slots whose player's fixture (via `player.team_id` → `fifa_match`
   home/away) is still `kickoff_at > NOW()`, leaving already-kicked-off (Mexico–SA) locks intact.
 
-#### Amendment — in-matchday substitutions (supersedes the bidirectional freeze; group + playoff)
-- **Lock-on-play's sub-IN half is preserved:** a player may be moved into the XI only while his
-  match has not kicked off. A played player can never be promoted in (no hindsight upside; a played
-  bench player stays locked on the bench).
-- **Lock-on-play's sub-OUT half is overturned:** a manager may remove a player who has already
-  played, but only as a substitution that swaps in an eligible (unplayed) bench player. Removing a
-  played player forfeits every point he banked for that period — only the incoming sub scores that
-  lineup slot. The risk is symmetric (the sub can score less); that gamble is the strategy.
-- **A substitution = one current XI player out, one bench player in.** Incoming must be unplayed
-  (his match not kicked off). Resulting XI must satisfy that mode's formation bounds: group exactly
-  1 GK + min 3 DEF / 2 MID / 1 FWD; playoff exactly 1 GK + min 2 DEF / 2 MID / 1 FWD.
-- **Cap = bench size: 4 (group) / 2 (playoff).** Each bench player may be subbed in at most once per
-  period; a sub already moved into the XI cannot be moved back out for another. The counter is bench
-  players, not actions.
-- **Forfeit is realized through `is_starter`:** on a completed sub, the outgoing slot flips
-  `is_starter=false` (scores 0 for the period regardless of points banked) and the incoming sub
-  flips `is_starter=true`. `recomputeManagerPeriod` already keys on `is_starter` — no new scoring
-  concept.
-- **Knock-on (flag for the Theme-B implementation thread):** the `lineup_slot` lock latch becomes
-  directional — it must still block promote-IN of a played player and must not regress the
-  Prompt-01 "no unlock-then-edit" hardening, while now permitting demote-OUT of a played player as
-  part of a validated sub. Auto-subs remain absent; period-close-scores-0 backstop and
-  abandoned/postponed manual override unchanged.
+#### Amendment — in-matchday substitutions — STRUCK (superseded by the forfeit model below)
+> The earlier paired-substitution model (one-out/one-in, bench-size cap of 4 group / 2 playoff, each
+> bench player subbed at most once) is **superseded** and no longer in force. Decision A replaces it:
+> benching a played starter is a **standalone one-way forfeit**, with **no paired-sub requirement and
+> no per-bench sub cap** — the only constraint on the rest of the XI is formation legality. The pieces
+> it shared that ARE retained are restated canonically in the forfeit amendment below (block promote-IN
+> of a played player; forfeit realized through `is_starter`; no auto-subs; period-close-scores-0
+> backstop; abandoned/postponed manual override).
+
+#### Amendment — the FORFEIT model (decision A + one-way door) — the canonical demote-OUT mechanism (replaces the cancelled keeper-lock)
+- **A played player is NOT hard-locked — his slot stays movable (OUT direction).** This overturns the
+  old symmetric lock-on-play freeze. Movability is `period.frozen_at IS NULL AND voided_at IS NULL`;
+  "has played" no longer blocks movement. (`locked_at` is retired from movability — see below.)
+- **Benching a played starter is a FORFEIT: FINAL and one-way (decision A + one-way door).** Recorded
+  by `lineup_slot.voided_at = now()` (+ `is_starter=false`). His earned points are forfeited for the
+  period AND he can never return to the starting XI this period. The only constraint on the rest of the
+  XI is formation legality — **no paired-sub requirement and no per-bench sub cap** (that model is
+  struck, above).
+- **`voided_at` is a one-way EDITABILITY latch — NEVER a scoring input.** Scoring reads only
+  `is_starter` (`scoreManagerPeriod` sums starters); `voided_at` is consumed solely by the lineup
+  read/movability and the mutation guard. A forfeited player's points drop out because his slot is
+  benched (`is_starter=false`), not because anything in scoring reads `voided_at`.
+- **"Has played" = a `score_player_match` row exists** for (player, his match in the period) — the
+  single authoritative signal (post-Issue-3 participant gate), NOT `locked_at`. `pointsAtStake` = that
+  row's `points`. **Timing nuance:** the row lands at the first recompute tick, slightly after kickoff
+  — surfaced, not worked around.
+- **Directional latch — IN direction RETAINED:** a played player can never be promoted INTO the XI
+  (`played-player-started`); a voided slot can never start again (`voided-player-started`). `locked_at`
+  is **retired from movability but NOT deleted** — the lock-on-play job still stamps it and the DB latch
+  still reads it as the IN-direction hindsight backstop. **Retiring the worker stamping + the latch's
+  `locked_at` arm is deferred to a post-tournament follow-up** (the live lock machinery is left intact
+  deliberately); the read sites no longer gate movability on `isLockedNow(locked_at)`.
+- **Dormant pre-C2 (no live destructive path):** the engine voids a played starter ONLY when the caller
+  confirms the player by id (`SetLineupInput.forfeitConfirmedPlayerIds`). The C1 route passes **none**,
+  so benching a played starter is rejected (`forfeit-requires-confirm`) and the current UI affordance is
+  byte-unchanged. The destructive-confirm UI is **C2**.
+- **C2 read contract + the `slotMeta.movable` caveat:** `loadLineup` exposes per-slot
+  `{hasPlayed, pointsAtStake, voided, movable}` (C1 renders none of it). `movable` follows the pinned
+  `frozen_at IS NULL AND voided_at IS NULL` formula, so a **played, un-voided BENCH player reads
+  `movable: true` even though promoting him is blocked** (the IN-direction latch). C2 must pair
+  `movable` with `hasPlayed`/`isStarter`; the server mutation is the real gate.
+- **DB co-enforcement:** `enforce_lineup_lock()` (migration `20260612120000_lineup_forfeit_voided_at`)
+  permits EXACTLY the forfeit transition on a locked row (is_starter true→false WITH voided_at NULL→set)
+  and back-stops the one-way door (no un-void, no start-of-voided, born un-voided). Verified on a
+  throwaway Postgres with a uuid-returning `auth.uid()` shim.
+- **Standings:** a forfeit save enqueues a manager-period recompute (`recompute_dirty`) in the same
+  transaction so standings restate. The rollup (`scoreManagerPeriod`) is UNCHANGED — it already sums
+  starters only, so a voided (benched) player is excluded and the incoming starter counts.
 
 ### "Set multiple lineups" — defined
 Pre-set lineups for **multiple upcoming match windows/periods in advance**; within a period,

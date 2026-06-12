@@ -11,8 +11,12 @@ One unified model. Sofascore-inspired, position-balanced, high-scoring. No miles
 3. **Fractional points allowed.** "For every N" buckets **round down** (e.g., 5 tackles ÷ 3 = 1 pt).
 4. **Clean sheet requires 60+ minutes** played.
 5. The **rating line applies only to players who received a match rating** (i.e., who played).
-6. **A subbed-out played starter forfeits the period** via `is_starter=false` (see DECISIONS Theme B
-   amendment). No point values change.
+6. **A benched played starter forfeits the period** (C1 forfeit model; see DECISIONS Theme B forfeit
+   amendment). The forfeit is realized through `is_starter=false` + a `lineup_slot.voided_at` stamp
+   (one-way), and a manager-period recompute is enqueued so standings restate. **No point values or
+   rollup logic change:** `scoreManagerPeriod` already sums STARTER slots only, so a forfeited (now
+   benched) player's banked points are excluded and the player who replaced him counts. The forfeit is
+   a lineup state, never a scoring rule.
 
 ## ⚠️ Data dependency
 Values below assume a **Sofascore-grade feed**, including the proprietary **Sofascore player match
