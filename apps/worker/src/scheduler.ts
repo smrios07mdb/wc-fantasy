@@ -117,6 +117,9 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
             bdlId: r.bdlId,
             kickoffAt: new Date(r.kickoffMs),
             kickoffLockFallback: r.kickoffLockFallback,
+            // This tick's clock — gates the lock write so a not-yet-kicked-off match never stamps
+            // `locked_at` (lock.ts invariant; the 2026-06-11 MD1 premature-lock fix).
+            now,
           },
         ]),
       );

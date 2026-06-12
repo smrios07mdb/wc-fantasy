@@ -19,6 +19,9 @@ function fakeFeed(over: Partial<FeedClient>): FeedClient {
 }
 
 const kickoff = new Date("2026-06-10T18:00:00Z");
+// A wall clock well into the match — past kickoff and every substitution entry below — so the lock-write
+// `now` gate (lock.ts) permits the legitimate locks these existing cases assert.
+const liveNow = new Date("2026-06-10T20:00:00Z");
 
 describe("ingestRosters (squad bootstrap)", () => {
   it("upserts each player (mapped position + team link) and the team (name = country)", async () => {
@@ -87,6 +90,7 @@ describe("ingestLineups (pre-match)", () => {
       bdlId: 50,
       kickoffAt: kickoff,
       kickoffLockFallback: false,
+      now: liveNow,
     });
     expect(store.lockedAt(50, 1)).toEqual(kickoff);
     expect(store.lockedAt(50, 2)).toEqual(kickoff);
@@ -94,6 +98,28 @@ describe("ingestLineups (pre-match)", () => {
     // The pull also RETURNS the official-XI starter BDL ids (no second feed call) so the worker IO can
     // drive the player-not-starting notification (Prompt 41b); bench players (is_starter:false) excluded.
     expect(out.officialStarterBdlIds).toEqual([1, 2]);
+  });
+
+  it("does NOT stamp locked_at before kickoff, then stamps == kickoff once it has arrived", async () => {
+    // The 2026-06-11 MD1 regression guard: a scheduled match whose lineup pull runs with now < kickoff
+    // must leave locked_at NULL; only once now >= kickoff is the starter's slot stamped, at kickoff.
+    const feed = fakeFeed({
+      matchLineups: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, entries: [{ player_id: 1, is_starter: true }] }],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    const base = { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false };
+
+    // now < kickoff (kickoff is 18:00Z) → nothing stamped.
+    await ingestLineups(feed, store, { ...base, now: new Date("2026-06-10T17:30:00Z") });
+    expect(store.lockedAt(50, 1)).toBeUndefined();
+
+    // now >= kickoff → the starter locks, at kickoff (NOT at now).
+    await ingestLineups(feed, store, { ...base, now: new Date("2026-06-10T18:01:00Z") });
+    expect(store.lockedAt(50, 1)).toEqual(kickoff);
   });
 });
 
@@ -122,7 +148,12 @@ describe("ingestLive", () => {
         }),
     });
     const store = new MemoryIngestStore();
-    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    await ingestLive(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
     expect(store.lockedAt(50, 7)).toEqual(new Date("2026-06-10T19:02:00Z")); // +62 min
     expect(store.isDirty(50, 7)).toBe(true);
     expect(store.ratingFor(50, 7)).toBe(7.1);
@@ -146,7 +177,12 @@ describe("ingestLive", () => {
         }),
     });
     const store = new MemoryIngestStore();
-    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    await ingestLive(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
     expect(store.isDirty(50, 9)).toBe(true); // scorer
     expect(store.isDirty(50, 4)).toBe(true); // assist
   });
@@ -174,7 +210,12 @@ describe("ingestLive", () => {
         }),
     });
     const store = new MemoryIngestStore();
-    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    await ingestLive(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
 
     expect(store.allEvents()).toHaveLength(1); // only the valid event landed
     expect(store.isDirty(50, 11)).toBe(true); // good rows still processed
@@ -200,7 +241,12 @@ describe("ingestLive", () => {
         }),
     });
     const store = new MemoryIngestStore();
-    await ingestLive(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: true });
+    await ingestLive(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: true,
+      now: liveNow,
+    });
     expect(store.lockedAt(50, 7)).toBeUndefined();
   });
 });
@@ -248,7 +294,12 @@ describe("ingestSettle", () => {
         }),
     });
     const store = new MemoryIngestStore();
-    await ingestSettle(feed, store, { bdlId: 50, kickoffAt: kickoff, kickoffLockFallback: false });
+    await ingestSettle(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
     expect(store.ratingFor(50, 9)).toBe(8.0);
     expect(store.isDirty(50, 9)).toBe(true);
     expect(store.lockedAt(50, 9)).toBeUndefined();

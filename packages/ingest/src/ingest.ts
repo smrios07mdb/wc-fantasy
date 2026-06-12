@@ -22,6 +22,9 @@ export interface MatchCtx {
   bdlId: number;
   kickoffAt: Date;
   kickoffLockFallback: boolean;
+  /** The worker tick's wall clock. Gates the lock write so a not-yet-kicked-off match never stamps
+   *  `locked_at` (lock.ts invariant) — supplied by the orchestrator, never read here. */
+  now: Date;
 }
 
 /**
@@ -104,7 +107,7 @@ export async function ingestLineups(
     for (const e of entries) {
       if (e.isStarter) officialStarterBdlIds.push(e.playerBdlId);
     }
-    for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt)) {
+    for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt, ctx.now)) {
       await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
     }
   }
@@ -145,6 +148,7 @@ export async function ingestLive(
       const lock = lockInstantFromSub(
         { playerInBdlId: e.playerInBdlId, timeMinute: e.timeMinute, addedTime: e.addedTime },
         ctx.kickoffAt,
+        ctx.now,
       );
       if (lock) await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
     }
