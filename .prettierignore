@@ -7,6 +7,10 @@ pnpm-lock.yaml
 packages/db/prisma/migrations
 **/.prisma
 
+# Local Claude Code state + nested git worktrees (full repo checkouts): never format these.
+.claude/
+**/.claude/
+
 # Source-of-truth brain files + prompts + design handoff: hand-authored, do NOT reflow (tables, line breaks).
 PROJECT.md
 ARCHITECTURE.md

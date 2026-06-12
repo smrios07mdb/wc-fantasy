@@ -17,6 +17,9 @@ export default tseslint.config(
       "**/.prisma/**",
       "packages/db/prisma/migrations/**",
       ".remember/**",
+      // Nested git worktrees (e.g. `.claude/worktrees/<branch>/`) are full repo
+      // checkouts — never lint into them, and never copy/inherit the root config there.
+      "**/.claude/**",
     ],
   },
   js.configs.recommended,
