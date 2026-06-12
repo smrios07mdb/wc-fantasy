@@ -12,9 +12,10 @@
  *     cutoff is the league-wide period first kickoff (NOT the player's own kickoff) — the amendment
  *     supersedes the per-player-kickoff deadline. The IO layer resolves `acquisitionCutoffAt`.
  *  4. the drop ≠ the add; the drop is owned by this manager; a drop is REQUIRED once the squad is full.
- *  5. the add/drop keeps the roster within the 2/5/5/3 caps (and the 15-man cap).
+ *  5. the add/drop keeps the roster within the 15-man cap (the per-position 2/5/5/3 cap was lifted —
+ *     Prompt 44 extended to FAAB; lineup/formation legality is a separate rule in @app/lineup).
  */
-import { POSITIONS, SQUAD_COMPOSITION, SQUAD_SIZE, type Position } from "@app/shared";
+import { POSITIONS, SQUAD_SIZE, type Position } from "@app/shared";
 import type { PositionCounts } from "./resolve";
 import type { AcquisitionWindow } from "./window";
 import {
@@ -115,7 +116,7 @@ export interface FaGrantValidationContext {
  *  1. window: the add target's period must be in its free-agency phase (post-batch, pre-first-kickoff).
  *  2. eligibility: the target must be an open FA per the batch-clear snapshot (not live-unowned).
  *  3+4. the SAME drop + roster rules as a bid (shared `checkDropAndRoster`): drop ≠ add, drop owned,
- *       drop not locked-by-play, drop required when full, and the 2/5/5/3 + 15-man caps.
+ *       drop not locked-by-play, drop required when full, and the 15-man cap.
  * No amount/budget check ($0 is always affordable) and no waiver-order concern (instant FA is bids-free).
  */
 export function validateFaGrant(
@@ -134,7 +135,7 @@ export function validateFaGrant(
 
 /** The drop + roster-legality rules shared by a bid and a $0 FA grant (DECISIONS §D): a drop is
  *  required once the squad is full, the drop must be owned + not the add + not locked-by-play, and the
- *  resulting roster must stay within the 2/5/5/3 caps and the 15-man cap. Pure. */
+ *  resulting roster must stay within the 15-man cap. Pure. */
 function checkDropAndRoster(
   add: {
     playerAddId: string;
@@ -159,13 +160,12 @@ function checkDropAndRoster(
     return dropRequired();
   }
 
-  // roster legality: the drop frees a slot of its position, the add fills one of its position.
+  // roster legality: the drop frees a slot, the add fills one; only the 15-man TOTAL is capped — the
+  // per-position 2/5/5/3 cap was lifted (Prompt 44 extended to FAAB). Per-position legality is a
+  // separate matchday rule in @app/lineup (FORMATION_BOUNDS), unaffected by this.
   const after: Record<Position, number> = { ...ctx.counts };
   if (add.playerDropId !== null && add.dropPosition !== null) after[add.dropPosition] -= 1;
   after[add.addPosition] += 1;
-  if (after[add.addPosition] > SQUAD_COMPOSITION[add.addPosition]) {
-    return rosterIllegal(add.addPosition);
-  }
   const total = POSITIONS.reduce((sum, p) => sum + after[p], 0);
   if (total > SQUAD_SIZE) return rosterIllegal(add.addPosition);
 

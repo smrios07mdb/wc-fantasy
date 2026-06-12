@@ -82,6 +82,25 @@ over-drafted squad (e.g. zero keepers, or ten forwards) **can be locked out of a
 `isPositionLegal` / `isSquadComplete` became total-based, gating on a new `squadTotal(counts)` helper vs
 `SQUAD_SIZE`; `PositionFullError` is retained but defensive/unreachable in the snake flow.)
 
+### ⚠️ AMENDMENT (Prompt 44 extended to @app/faab — FAAB roster caps lifted)
+**The per-position cap is lifted at the FAAB layer too — the squad is shape-unconstrained up to the
+15-man total on EVERY acquisition path, not just the draft.** Prompt 44 lifted the *draft* caps but left
+`@app/faab` still enforcing the 2/5/5/3 per-position ceiling, so a shape legal to *draft* (or already
+held) could be rejected when reinforced via a blind bid or a $0 free-agency grab. That asymmetry is
+removed: `checkDropAndRoster` (submission + $0 FA grant) and the batch resolver's `claimLegality` now gate
+ONLY on the **15-man total** (`SQUAD_SIZE`) — they no longer read `SQUAD_COMPOSITION`. A manager may now
+roster e.g. a 4th forward (dropping a non-forward) or a 3rd keeper. **Still enforced, unchanged:** the
+15-man total, valid-drop (owned, ≠ add, required-when-full), the active-ownership-unique claim, budget,
+the waiver-order tiebreak, and the all-play-all math. **Lineup/formation legality is UNCHANGED** —
+`@app/lineup`'s `validateLineup` keys on `FORMATION_BOUNDS` (exactly 1 GK, min 3 DEF / 2 MID / 1 FWD) and
+never read `SQUAD_COMPOSITION`, so an over-stacked squad can still be locked out of a legal XI by choice.
+No schema change, no migration; `SQUAD_COMPOSITION` stays in `@app/shared` as the canonical shape
+reference (it sums to `SQUAD_SIZE`) but is no longer a FAAB ceiling. Commissioner-confirmed.
+
+**This SUPERSEDES** the commissioner-override "ALWAYS enforces … roster cap … 2/5/5/3 + 15" line in the
+`commish:roster`/`commish:lineup` section below: the always-enforced roster guard is the **15-man total**
+(plus valid-drop + active-ownership-unique), NOT the per-position cap.
+
 ### ⚠️ AMENDMENT (Prompt 54 — formation is manager-selectable; the cap-lift consequence resolved)
 The Prompt-44 cap-lift means a squad can now be **non-4-3-3-shaped** (e.g. 3 DEF / 7 MID / 4 FWD), so a
 single hardcoded default formation can be **unfieldable** — it stranded MR. ZETTA at 10 starters ("got
@@ -1633,9 +1652,11 @@ side. Two sub-commands under `apps/worker/src/commish/` (`pnpm --filter @app/wor
   - `commish:lineup` — the lineup **edit-window lock** (via `relaxPeriodLock`: `validateLineup` runs with
     `status:"open"` + `closesAt:null`, so its phase-1 window check is a no-op).
 - **ALWAYS enforces (never bypassed — reused from the engines, not re-derived):**
-  - roster: the **roster cap** (`validateFaGrant`/`checkDropAndRoster` 2/5/5/3 + 15), **valid-drop**
-    (drop owned, ≠ add, required-when-full), the **active-ownership unique** + **slot-release** + the
-    atomic drop/insert (all inside `claimFreeAgent`'s one transaction). $0 — no budget / waiver-order change.
+  - roster: the **15-man squad cap** (`validateFaGrant`/`checkDropAndRoster` total-15 via `SQUAD_SIZE`;
+    the per-position 2/5/5/3 cap was lifted — see the "Prompt 44 extended to @app/faab" amendment above),
+    **valid-drop** (drop owned, ≠ add, required-when-full), the **active-ownership unique** +
+    **slot-release** + the atomic drop/insert (all inside `claimFreeAgent`'s one transaction). $0 — no
+    budget / waiver-order change.
   - lineup: **formation/position legality**, **ownership**, the **11-distinct XI**, and the **lock-on-play
     latch** (the per-play freeze stays — `validateLineup` step 4 + `saveLineup`'s write-time re-check + the
     DB trigger `enforce_lineup_lock()`, which is NOT bypassable from app code anyway).

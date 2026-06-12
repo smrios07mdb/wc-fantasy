@@ -145,15 +145,17 @@ describe("commish:roster override", () => {
     if (res.status === "applied") expect(res.audit).toContain("commish-override");
   });
 
-  it("KEEPS the roster cap even with the window bypassed (3rd GK → roster-illegal)", async () => {
+  it("KEEPS the 15-man squad rule even with the window bypassed (no-drop add on a full squad → drop-required)", async () => {
+    // The per-position cap is retired (Prompt 44 → @app/faab), but the override still cannot push a full
+    // squad past 15 — a full-squad add must name a drop. (The per-position 3rd-GK/4th-FWD shape is now legal.)
     const store = rosterStore();
     const { deps } = rosterDeps(store);
     const res = await runRosterOverride(
       deps,
-      rosterInput({ addId: "GKADD", addName: "GK Add", apply: true }),
+      rosterInput({ dropId: null, dropName: null, apply: true }),
     );
     expect(res.status).toBe("refused");
-    if (res.status === "refused") expect(res.reason).toMatch(/roster-illegal/);
+    if (res.status === "refused") expect(res.reason).toMatch(/drop-required/);
     expect(store.grants).toHaveLength(0);
   });
 

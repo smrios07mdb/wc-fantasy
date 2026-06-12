@@ -248,14 +248,14 @@ describe("resolveFaabBatch — own multiple wins resolve highest-first, skipping
     expect(out.budgetDeltas).toEqual([{ managerId: "A", spent: 50, newBudget: 50 }]);
   });
 
-  it("rejects an own win that would break the positional cap (no valid drop frees the slot)", () => {
-    // A's roster is full; a GK add dropping a MID would push GK to 3 (cap 2). Skipped, roster-illegal.
+  it("allows an own win that changes the position shape now the cap is lifted (GK for MID; total stays 15)", () => {
+    // A's roster is full; a GK add dropping a MID pushes GK to 3 / MID to 4 (total 15). Was skipped on
+    // the old 2/5/5/3 cap (roster-illegal); now it wins — only the 15-man total gates a claim.
     const managers = [mgr("A", 1, { owned: ["Z"] })];
     const bids = [bid("A", "K", 10, { id: "ak", drop: "Z", addPos: "GK", dropPos: "MID" })];
     const out = resolveFaabBatch(input(managers, bids));
-    const r = resolutionFor(out, "ak");
-    expect(r.outcome).toBe("lost");
-    if (r.outcome === "lost") expect(r.reason).toBe("roster-illegal");
+    expect(resolutionFor(out, "ak").outcome).toBe("won");
+    expect(out.budgetDeltas).toEqual([{ managerId: "A", spent: 10, newBudget: 90 }]);
   });
 });
 

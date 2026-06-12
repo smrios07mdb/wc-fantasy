@@ -24,7 +24,7 @@
  * `faab_bid` has NO `priority` column today, so honoring it at all needs a migration first — until
  * then there is nothing to thread through here.
  */
-import { POSITIONS, SQUAD_COMPOSITION, SQUAD_SIZE, type Position } from "@app/shared";
+import { POSITIONS, SQUAD_SIZE, type Position } from "@app/shared";
 
 export type PositionCounts = Readonly<Record<Position, number>>;
 
@@ -35,7 +35,8 @@ export interface ManagerState {
   faabBudget: number;
   /** Rolling waiver order (1 = highest priority); null = unseeded (sorts last, never wins a tie). */
   waiverOrderPosition: number | null;
-  /** Active per-position roster counts (the 2/5/5/3 caps live in @app/shared). */
+  /** Active per-position roster counts (used to derive the 15-man total; the per-position 2/5/5/3 cap
+   *  was lifted — Prompt 44 extended to FAAB). */
   counts: PositionCounts;
   /** Active player ids owned by this manager (validates that a named drop is still owned). */
   ownedPlayerIds: readonly string[];
@@ -72,7 +73,7 @@ export type LostReason =
   | "lost-tiebreak" // equal top bid, lost on waiver order
   | "add-unavailable" // add target already owned league-wide (not actually on the wire)
   | "budget-exhausted" // remaining budget < amount when this bid came up
-  | "roster-illegal" // the add/drop would break the 2/5/5/3 caps or the 15-man cap
+  | "roster-illegal" // the add/drop would exceed the 15-man squad cap (per-position cap lifted — Prompt 44)
   | "drop-invalid"; // the named drop is no longer owned by this manager
 
 export type BidResolution =
@@ -287,7 +288,7 @@ function winnerForPlayer(
 
 /** Is a winning bid still applicable against the manager's CURRENT (already-updated) state? Encodes
  *  step 5's "still legal" = remaining budget ≥ amount, the named drop still owned AND not locked by
- *  play, and the add/drop keeps the roster within the 2/5/5/3 caps (and the 15-man cap with no drop). */
+ *  play, and the add/drop keeps the roster within the 15-man cap (with no drop). */
 function claimLegality(
   bid: BidInput,
   wm: WorkingManager,
@@ -304,14 +305,11 @@ function claimLegality(
     return { ok: false, reason: "drop-invalid" };
   }
 
-  // Roster after the swap: the drop frees a slot of its position, the add fills one of its position.
+  // Roster after the swap: the drop frees a slot, the add fills one; only the 15-man TOTAL is capped —
+  // the per-position 2/5/5/3 cap was lifted (Prompt 44 extended to FAAB).
   const after: Record<Position, number> = { ...wm.counts };
   if (bid.playerDropId !== null && bid.dropPosition !== null) after[bid.dropPosition] -= 1;
   after[bid.addPosition] += 1;
-
-  if (after[bid.addPosition] > SQUAD_COMPOSITION[bid.addPosition]) {
-    return { ok: false, reason: "roster-illegal" };
-  }
   const total = POSITIONS.reduce((sum, p) => sum + after[p], 0);
   if (total > SQUAD_SIZE) return { ok: false, reason: "roster-illegal" };
 

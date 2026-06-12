@@ -80,7 +80,8 @@ export interface DropLockedError {
   playerDropId: string;
 }
 
-/** The add/drop would break the 2/5/5/3 positional caps (or the 15-man cap). */
+/** The add/drop would exceed the 15-man squad cap (the per-position 2/5/5/3 cap was lifted — Prompt 44
+ *  extended to FAAB). `position` is the add's position, carried for context. */
 export interface RosterIllegalError {
   code: "roster-illegal";
   message: string;
@@ -198,7 +199,7 @@ export function dropLocked(playerDropId: string): DropLockedError {
 export function rosterIllegal(position: Position): RosterIllegalError {
   return {
     code: "roster-illegal",
-    message: `this add/drop would break your ${position} positional limit`,
+    message: "this add/drop would exceed your 15-man squad limit",
     position,
   };
 }

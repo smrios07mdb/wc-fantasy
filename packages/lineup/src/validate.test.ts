@@ -112,6 +112,31 @@ describe("validateLineup — formation bounds (illegal-formation)", () => {
     expect(code(r)).toBe("illegal-formation");
     if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "MID" });
   });
+
+  it("rejects 4 FWD even though FAAB now lets a squad hold >3 forwards (cap-lift regression)", () => {
+    // The FAAB per-position cap is retired (Prompt 44 → @app/faab), so a squad CAN now roster >3 forwards
+    // (impossible under the old 3-FWD cap). Lineup legality is a SEPARATE rule — FORMATION_BOUNDS, never
+    // SQUAD_COMPOSITION — so a 4-FWD starting XI must STILL be rejected. This pins that the cap-lift did
+    // not leak into matchday legality.
+    const fiveFwdSquad: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "d2", position: "DEF" },
+      { playerId: "d3", position: "DEF" },
+      { playerId: "m1", position: "MID" },
+      { playerId: "m2", position: "MID" },
+      { playerId: "m3", position: "MID" },
+      { playerId: "f1", position: "FWD" },
+      { playerId: "f2", position: "FWD" },
+      { playerId: "f3", position: "FWD" },
+      { playerId: "f4", position: "FWD" },
+      { playerId: "f5", position: "FWD" }, // 5 forwards rostered — impossible under the old 3-FWD cap
+    ];
+    const xi = ["gk1", "d1", "d2", "d3", "m1", "m2", "m3", "f1", "f2", "f3", "f4"]; // 1-3-3-4 = 11, FWD 4 > max 3
+    const r = validateLineup(fiveFwdSquad, xi, NO_LOCKS, OPEN, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "FWD" });
+  });
 });
 
 describe("validateLineup — XI size (incomplete-xi)", () => {

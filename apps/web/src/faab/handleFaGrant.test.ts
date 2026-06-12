@@ -214,7 +214,9 @@ describe("handleFaGrant — window + eligibility + grant", () => {
     expect(storeB.grants).toHaveLength(0);
   });
 
-  it("enforces roster legality (409 roster-illegal) — GK for MID on a full squad", async () => {
+  it("allows GK-for-MID on a full squad now the per-position cap is lifted (Prompt 44 → @app/faab)", async () => {
+    // Was a 409 roster-illegal (GK 2→3 over the old cap); the FAAB per-position cap is retired, so the
+    // grant now lands — only the 15-man total (unchanged here) gates a claim end-to-end through the route.
     const store = new MemoryFaGrantStore({
       managers: [
         {
@@ -235,7 +237,7 @@ describe("handleFaGrant — window + eligibility + grant", () => {
       { resolveManager: async () => okOutcome, store, now: NOW },
       { managerId: "A", playerAddId: "GKADD", playerDropId: "DROPMID" },
     );
-    expect(res.status).toBe(409);
-    expect((res.body as { error: string }).error).toBe("roster-illegal");
+    expect(res.status).toBe(200);
+    expect((res.body as { ok: boolean }).ok).toBe(true);
   });
 });

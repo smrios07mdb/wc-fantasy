@@ -137,12 +137,18 @@ describe("validateBidSubmission", () => {
     expect(e?.code).toBe("drop-equals-add");
   });
 
-  it("rejects an add/drop that breaks a positional cap (GK-for-MID on a full squad)", () => {
-    const e = validateBidSubmission(
-      sub({ addPosition: "GK", dropPosition: "MID" }),
-      ctx(), // full 2/5/5/3 → GK would become 3 (cap 2)
-    );
-    expect(e?.code).toBe("roster-illegal");
+  it("allows GK-for-MID on a full squad now the per-position cap is lifted (Prompt 44 → @app/faab)", () => {
+    // Was rejected (GK 2→3 over the old cap of 2); now legal — only the 15-man total is enforced.
+    expect(
+      validateBidSubmission(sub({ addPosition: "GK", dropPosition: "MID" }), ctx()),
+    ).toBeNull();
+  });
+
+  it("allows a 4th forward (drop a MID, add a FWD) on a full squad — total stays 15", () => {
+    // FULL 2/5/5/3 → add FWD / drop MID ⇒ FWD 3→4, MID 5→4, total 15. Legal now the per-position cap is gone.
+    expect(
+      validateBidSubmission(sub({ addPosition: "FWD", dropPosition: "MID" }), ctx()),
+    ).toBeNull();
   });
 
   it("accepts a same-position swap on a full squad (DEF for DEF)", () => {
@@ -236,9 +242,8 @@ describe("validateFaGrant", () => {
     expect(e?.code).toBe("drop-equals-add");
   });
 
-  it("rejects an add/drop that breaks a positional cap (GK-for-MID on a full squad)", () => {
-    expect(validateFaGrant(faSub({ addPosition: "GK", dropPosition: "MID" }), faCtx())?.code).toBe(
-      "roster-illegal",
-    );
+  it("allows GK-for-MID on a full squad now the per-position cap is lifted (Prompt 44 → @app/faab)", () => {
+    // Same lift on the $0 FA path: GK 2→3 was over the old cap; now only the 15-man total gates it.
+    expect(validateFaGrant(faSub({ addPosition: "GK", dropPosition: "MID" }), faCtx())).toBeNull();
   });
 });
