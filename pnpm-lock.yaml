@@ -287,6 +287,9 @@ importers:
         specifier: workspace:*
         version: link:../shared
     devDependencies:
+      '@app/recompute':
+        specifier: workspace:*
+        version: link:../recompute
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.19

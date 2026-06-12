@@ -86,12 +86,14 @@ END;
 $$;
 
 -- ── Embedded self-test (Theme-F precedent) ─────────────────────────────────────────────────────────────
--- Proves the EXTENDED latch on real rows, then unwinds via a sentinel-RAISE rollback (the repo idiom). Four
--- assertions: (a) the forfeit transition (benched + voided) is PERMITTED on a locked row; (b) a NON-forfeit
--- is_starter flip of a locked row is still BLOCKED; (c) a voided slot can't start again; (d) voided_at can't
--- be un-set. VALID-UUID-format TEXT ids for the auth-flowing columns (app_user.id / manager.user_id) keep
--- them canonical (the `sub::uuid` shim trap) even though this test never invokes auth.uid(). updated_at has
--- no DB default ⇒ set explicitly.
+-- Proves the EXTENDED latch on real rows, then unwinds via a sentinel-RAISE rollback (the repo idiom).
+-- NEW behaviours: (a) the forfeit transition (benched + voided) is PERMITTED on a locked row; (c) a voided
+-- slot can't start again; (d) voided_at can't be un-set. OLD-FREEZE regressions (RAISEd before this
+-- migration, MUST still RAISE): (b) a NON-forfeit is_starter flip of a locked row; (e) a role/lane (and, on
+-- the same branch, player_id) change of a locked row; (f) a locked_at re-stamp; (g) a DELETE of a locked
+-- row; (h) an INSERT born locked. VALID-UUID-format TEXT ids for the auth-flowing columns (app_user.id /
+-- manager.user_id) keep them canonical (the `sub::uuid` shim trap) even though this test never invokes
+-- auth.uid(). updated_at has no DB default ⇒ set explicitly.
 DO $$
 DECLARE
   v_user    text := '00000000-0000-0000-0000-0000000fcf01';
@@ -100,13 +102,18 @@ DECLARE
   v_period  text := '00000000-0000-0000-0000-0000000fcf04';
   v_team    text := '00000000-0000-0000-0000-0000000fcf05';
   v_p1      text := '00000000-0000-0000-0000-0000000fcf06'; -- forfeited (a,c,d)
-  v_p2      text := '00000000-0000-0000-0000-0000000fcf07'; -- non-forfeit flip (b)
+  v_p2      text := '00000000-0000-0000-0000-0000000fcf07'; -- old-freeze branches (b,e,f,g)
   v_slot1   text := '00000000-0000-0000-0000-0000000fcf08';
   v_slot2   text := '00000000-0000-0000-0000-0000000fcf09';
+  v_slot3   text := '00000000-0000-0000-0000-0000000fcf0a'; -- INSERT-with-locked_at attempt (h)
   v_forfeit_ok        boolean := false; -- (a) forfeit permitted
-  v_nonforfeit_blocked boolean := false; -- (b) non-forfeit flip blocked
+  v_nonforfeit_blocked boolean := false; -- (b) non-forfeit is_starter flip blocked
   v_start_voided_blocked boolean := false; -- (c) start-of-voided blocked
   v_unvoid_blocked    boolean := false; -- (d) un-void blocked
+  v_role_tamper_blocked    boolean := false; -- (e) role/lane change on a locked row blocked
+  v_lockedat_tamper_blocked boolean := false; -- (f) locked_at re-stamp on a locked row blocked
+  v_locked_delete_blocked  boolean := false; -- (g) DELETE of a locked row blocked
+  v_insert_locked_blocked  boolean := false; -- (h) INSERT with locked_at NOT NULL blocked
   v_fail text := NULL;
 BEGIN
   BEGIN
@@ -164,6 +171,41 @@ BEGIN
       v_unvoid_blocked := true;
     END;
 
+    -- OLD-FREEZE BRANCHES (regression — these RAISEd before this migration and MUST still RAISE). v_slot2 is
+    -- still a locked, un-voided, starting row (b's flip was rolled back by its own EXCEPTION block).
+    -- (e) role/lane change on a locked row → MUST raise (player_id shares this exact RAISE branch).
+    BEGIN
+      UPDATE "lineup_slot" SET "role" = 'FWD' WHERE "id" = v_slot2;
+      v_role_tamper_blocked := false;
+    EXCEPTION WHEN raise_exception THEN
+      v_role_tamper_blocked := true;
+    END;
+
+    -- (f) locked_at re-stamp on a locked row → MUST raise (locked_at immutable once set).
+    BEGIN
+      UPDATE "lineup_slot" SET "locked_at" = CURRENT_TIMESTAMP + interval '1 hour' WHERE "id" = v_slot2;
+      v_lockedat_tamper_blocked := false;
+    EXCEPTION WHEN raise_exception THEN
+      v_lockedat_tamper_blocked := true;
+    END;
+
+    -- (g) DELETE of a locked row → MUST raise.
+    BEGIN
+      DELETE FROM "lineup_slot" WHERE "id" = v_slot2;
+      v_locked_delete_blocked := false;
+    EXCEPTION WHEN raise_exception THEN
+      v_locked_delete_blocked := true;
+    END;
+
+    -- (h) INSERT a slot born locked (locked_at NOT NULL) → MUST raise (locks are stamped by UPDATE only).
+    BEGIN
+      INSERT INTO "lineup_slot" ("id", "manager_id", "period_id", "player_id", "role", "is_starter", "locked_at", "updated_at")
+        VALUES (v_slot3, v_mgr, v_period, v_p2, 'MID', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+      v_insert_locked_blocked := false;
+    EXCEPTION WHEN raise_exception THEN
+      v_insert_locked_blocked := true;
+    END;
+
     IF NOT v_forfeit_ok THEN
       v_fail := 'the sanctioned forfeit transition (bench + void a locked starter) was wrongly BLOCKED';
     ELSIF NOT v_nonforfeit_blocked THEN
@@ -172,6 +214,14 @@ BEGIN
       v_fail := 'a voided (forfeited) slot was allowed back into the starting XI';
     ELSIF NOT v_unvoid_blocked THEN
       v_fail := 'voided_at was allowed to be un-set (the forfeit is not one-way)';
+    ELSIF NOT v_role_tamper_blocked THEN
+      v_fail := 'a role/lane change of a locked slot was NOT blocked (player_id shares this branch)';
+    ELSIF NOT v_lockedat_tamper_blocked THEN
+      v_fail := 'locked_at was allowed to be re-stamped on a locked slot';
+    ELSIF NOT v_locked_delete_blocked THEN
+      v_fail := 'a locked slot was allowed to be DELETEd';
+    ELSIF NOT v_insert_locked_blocked THEN
+      v_fail := 'a slot was allowed to be INSERTed already locked (locked_at NOT NULL)';
     END IF;
 
     RAISE EXCEPTION 'forfeit_selftest_rollback'; -- unwind ALL seed rows
