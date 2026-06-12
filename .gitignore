@@ -35,6 +35,10 @@ coverage/
 
 # session/handoff state (Claude Code)
 .remember/
+# Local Claude Code dir (settings.local.json, nested worktrees) — never stage.
+# Keep the committed brain-file memory dir tracked via the negation.
+.claude/*
+!.claude/memory/
 
 # OS / editor
 .DS_Store
