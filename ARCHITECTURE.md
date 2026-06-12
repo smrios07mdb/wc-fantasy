@@ -163,6 +163,21 @@ import is briefly wrong. The stored value is always the true lock instant (kicko
 (the live display) — derive `locked` through the shared pure `isLockedNow(lockedAt, now)` (`@app/shared`):
 locked **iff `locked_at != null && locked_at <= now`**, so a future-dated stamp reads as movable.
 
+**Appearance-lock backstop (the opposite failure — UNDER-stamping; 2026-06-12 MD1; merged `e888f66`).**
+The two write paths above are racy: the one-shot pre-match XI-pull and per-event live sub-locking miss
+appearances the 60s poller never observed (a late/missed XI confirmation, a sub between polls), leaving a
+genuinely-played slot `locked_at = NULL` forever (e.g. Rangel, 90′). `reconcileAppearanceLocks`
+(`packages/ingest/src/ingest.ts`) closes this: it reads the authoritative appeared set
+(`store.listAppearedPlayerBdlIds` → `score_player_match`, i.e. the same `playerAppearedInMatch` participant
+gate scoring uses) and stamps every appeared player at **kickoff** via the same monotonic, **period-scoped**
+`setLockedAt` (only `locked_at IS NULL` slots in the match's own `period_id` — never the ambiguous
+team→future-fixture join, never an already-set sub lock). It is called from **both `ingestLive` and
+`ingestSettle`**, so settle — which holds the appearance proof — finally writes the lock. **Coverage limit:**
+because it only runs on a live/settle tick, it reconciles a match **only while `in_progress` or `completed &&
+!hasRating && ≤ kickoff + 12h`** (`decideMatchModes`); once the rating lands or 12h pass the match drops from
+the poll and is never reconciled again — a fix or missed settle window landing after that needs manual SQL (a
+bounded recently-completed sweep is the candidate hardening, deferred).
+
 #### FAAB cadence: per-period batch + acquisition window (Theme-D amendment — deferred ARCHITECTURE update, now landed)
 
 **Supersedes the retired daily 06:00 FAAB cron.** One blind-bid batch per scoring period (each group

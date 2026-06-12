@@ -71,6 +71,25 @@ locked iff `locked_at != null && locked_at <= now`; (3) a **cleanup SQL artifact
 live) nulls the bad MD1 stamps whose fixture is still `kickoff_at > NOW()`, leaving completed-match
 locks intact. +8 tests (1719 → 1727), all gates green. See DECISIONS (lock invariant) + ARCHITECTURE §3.
 
+**Live-incident fix (2026-06-12, MD1): `locked_at` UNDER-stamped for players who played (the opposite of
+the above).** Genuinely-played slots were left `locked_at = NULL` — e.g. **Raúl Rangel** (Mexico–SA, 90′,
+rating 7.3) — because the only lock writers were the **racy** pre-match XI-pull + per-event live sub-locking;
+the settle pass held the appearance proof and wrote nothing. **Fix merged (`e888f66`):** `reconcileAppearanceLocks`
+stamps every **appeared** player (the `score_player_match` participant set scoring already gates via
+`playerAppearedInMatch`) at kickoff, called from **both `ingestLive` and `ingestSettle`**, monotonic +
+**period-scoped** `setLockedAt` (only `locked_at IS NULL` slots in the match's OWN `period_id` — never the
+ambiguous `team → future-fixture` join). The Rangel-class is pinned by existing tests (`lock.test.ts`
+`lockInstantsFromAppearances`/`lockInstantFromSub`, `adapter.test.ts` `playerAppearedInMatch` all-null-stub
+exclusion, `ingest.test.ts` settle reconcile incl. monotonic latch). **Despite the merge, 5 prod slots were
+under-locked and hand-backfilled** — the **deploy-timing lesson**: `e888f66` was committed **2026-06-12 06:28Z**,
+*after* both completed fixtures (Mexico–SA kickoff 19:00Z, Korea–Czech kickoff 02:00Z) had finished; a merged
+fix only self-heals a completed match while it is still settling (`hasRating` false, `≤ kickoff + 12h`) **and**
+the running Render worker has redeployed to that SHA. "On `origin/main`" ≠ "running on Render." **Residual gap
+(candidate hardening, deferred):** `reconcileAppearanceLocks` runs only on a live/settle tick, so a completed
+match that has already dropped from the poll (rating landed, or 12h elapsed) is never reconciled again — a
+bounded "recently-completed matches" sweep would remove the manual-SQL dependency. See DECISIONS (appeared ⇒
+locked backstop) + ARCHITECTURE §3.
+
 **Live-incident fix (2026-06-11, MD1): `score_player_match` generated for NON-participants** —
 `score_player_match` rows were written for players who never appeared in a match. Trigger: the
 completed **Mexico–South Africa** fixture charged every rostered **GK/DEF** whose team was neither

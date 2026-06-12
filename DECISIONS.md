@@ -165,6 +165,44 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   nulls `locked_at` for MD1 slots whose player's fixture (via `player.team_id` → `fifa_match`
   home/away) is still `kickoff_at > NOW()`, leaving already-kicked-off (Mexico–SA) locks intact.
 
+#### ⚠️ BACKSTOP — appeared ⇒ locked (the opposite failure: UNDER-stamping; 2026-06-12 MD1 incident; merged `e888f66`)
+- **Backstop invariant (alongside, never against, the never-stamp-early rule above):** a player who
+  **demonstrably appeared** in a match MUST end up with `locked_at` stamped at his lock instant — the
+  two transient write paths (the one-shot pre-match XI-pull, per-event live sub-locking) are **racy**
+  and silently miss appearances the 60s poller never observed (a late/missed XI confirmation, a sub
+  event between polls). The settle pass holds the appearance proof but, before this fix, wrote no lock.
+- **Appearance = the SAME participant set scoring uses (do not re-derive).** A player counts as appeared
+  iff he is in `score_player_match` — i.e. `playerAppearedInMatch` passed: **team-in-match AND** a
+  non-stub signal (a non-stub stat line, OR named in a match event, OR took a shot). The all-null
+  `markStatPlayerDirty` stub is correctly excluded — it never lands a `score_player_match` row, so it
+  is never locked. (Practical note: the predicate is "non-stub stat line", not literally
+  `minutes_played >= 1`; a hypothetical feed stat row with a literal `minutes_played: 0` and all other
+  fields null would currently read as appeared. Source-from-input refinement deferred — it is a
+  consistency nicety, not the cause; the output path converges.)
+- **Write rule (unchanged + period-scoped):** `reconcileAppearanceLocks` stamps every appeared player at
+  **kickoff** via `setLockedAt` (`updateMany … where locked_at IS NULL` — monotonic, so a sub already
+  locked at his real entry instant is **never** overwritten; it only FILLS gaps). The fixture resolution
+  is **period-scoped** (`fifa_match.period_id = period`): only the slot in the match's OWN period is
+  touched, never the ambiguous `player.team_id → future fixture` join (one nation has ≥3 group fixtures
+  per slot — that join would let a future match null/overwrite a completed-match lock). Same write
+  boundary as above: **nothing** is emitted before kickoff.
+- **Incident root cause (MD1, 2026-06-12):** genuinely-played players (e.g. Raúl Rangel, Mexico–SA, 90′,
+  rating 7.3) were left `locked_at = NULL` because the only writers were the racy XI-pull + live-sub
+  paths; settle held the proof and wrote nothing. **5 prod slots** were under-locked and **hand-backfilled**.
+- **Why the backfill was still needed AFTER the merge (the deploy-timing lesson):** `e888f66` was
+  committed **2026-06-12 06:28Z**. Both completed fixtures — Mexico–SA (kickoff 2026-06-11 19:00Z) and
+  Korea–Czech (kickoff 2026-06-12 02:00Z) — **finished before that commit existed**. A merged-and-pushed
+  fix only self-heals a completed match if the running Render worker redeploys to that build **while the
+  match is still in its settle window** (`hasRating` false, `≤ kickoff + 12h`). Past that, the match has
+  dropped from `decideMatchModes` entirely. **"On `origin/main`" ≠ "running on Render"** — verify the
+  worker's deployed SHA, not just the merge.
+- **Known residual gap (candidate hardening, NOT yet built):** `reconcileAppearanceLocks` runs **only**
+  inside `ingestLive` / `ingestSettle`, i.e. only while a match is `in_progress` or `completed && !hasRating
+  && ≤ kickoff + 12h`. Once the rating lands (or 12h pass) the match leaves the poll and never reconciles
+  again — so a fix (or a missed settle window / deploy gap) that lands *after* a match settled-and-dropped
+  needs manual SQL. A bounded "recently-completed matches" reconciliation sweep would self-heal this
+  without manual intervention. Deferred pending decision.
+
 #### Amendment — in-matchday substitutions — STRUCK (superseded by the forfeit model below)
 > The earlier paired-substitution model (one-out/one-in, bench-size cap of 4 group / 2 playoff, each
 > bench player subbed at most once) is **superseded** and no longer in force. Decision A replaces it:
