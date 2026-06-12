@@ -58,6 +58,19 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 | E. World Cup attrition | ✅ RESOLVED — folded into the playoff transition + FAAB (reinforcement now fully specified in Theme D) |
 | Architecture & stack | ✅ LOCKED (see ARCHITECTURE.md) — TypeScript/Next.js, Postgres via Supabase (+ Auth + Realtime), Render compute (web + workers + cron), polling ingestion, recompute scoring pipeline, lock-on-play live consumer; live "vs the field" screen + draft-room infra specified (draft *rules* now locked in Theme C) |
 
+**Live-incident fixes (2026-06-11, MD1):** **premature lineup locks** — ~35 MD1 `lineup_slot` rows
+carried `locked_at ≈ now` while their `fifa_match` was still `scheduled` (kickoff days out). Root cause:
+the lock-write path (`packages/ingest/src/lock.ts` → `ingest.ts` → `setLockedAt`) stamped `kickoffAt`
+for any official-XI starter / entering sub **with no `now` gate**, and both read sites
+(`loadLineup.ts`, `loadVsField.ts:148`) treated *presence* of `locked_at` as locked. Fix on
+`fix/premature-locks` (isolated worktree, merge HELD for clearance): (1) **write side** — the pure
+primitives now take `now` and emit a lock only once its instant has arrived (starter `now >= kickoff`,
+sub `now >= entry`), threaded via `MatchCtx.now` from the scheduler tick — a self-guarding write
+boundary; (2) **read side** — both sites use the new shared pure `isLockedNow` (`@app/shared`):
+locked iff `locked_at != null && locked_at <= now`; (3) a **cleanup SQL artifact** (Sergio runs against
+live) nulls the bad MD1 stamps whose fixture is still `kickoff_at > NOW()`, leaving completed-match
+locks intact. +8 tests (1719 → 1727), all gates green. See DECISIONS (lock invariant) + ARCHITECTURE §3.
+
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
 dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection ✅ ·

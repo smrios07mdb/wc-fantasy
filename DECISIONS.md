@@ -121,6 +121,29 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
 - **Edge cases:** abandoned / postponed matches and warmup scratches → manual override
   (Cowork failsafe).
 
+#### ⚠️ INVARIANT — never stamp `locked_at` before the lock instant (2026-06-11 MD1 incident)
+- **Write invariant:** `lineup_slot.locked_at` MUST stay NULL until a player's match actually locks
+  him — a starter **at/after his match kickoff** (`now >= kickoff`), a sub **at his entry minute**.
+  It is **never** stamped for a scheduled / not-yet-kicked-off match, and the stored instant is the
+  *true* lock instant (kickoff or entry), never "≈ now". The lock latch is monotonic (only written
+  when currently NULL), so a premature stamp is permanent until a manual SQL null — which is why the
+  guard lives at the write boundary, not just upstream.
+- **Read predicate:** a reader treats a player as locked **iff `locked_at != null && locked_at <= now`**.
+  Presence alone (`locked_at != null`) is wrong — a future-dated stamp must read as *movable*.
+- **Incident root cause (MD1, 2026-06-11):** ~35 MD1 `lineup_slot` rows carried `locked_at ≈ now`
+  (19:13–20:32 UTC) while their `fifa_match` was still `scheduled` with kickoff days out (e.g. James
+  Rodríguez locked 19:59, kickoff Jun 18). `kickoff_lock_fallback` was false → the stamps came from
+  the main play-based lock path, not the fallback. Two defects, opposite ends of the same column:
+  (1) the pure lock primitives (`packages/ingest/src/lock.ts`) stamped `kickoffAt` for any official-XI
+  starter / sub with **no `now` gate** — they trusted the scheduler's mode-decision to only run them
+  post-kickoff; (2) the read sites derived `locked` from presence alone.
+- **Fix:** the lock primitives now take `now` and emit a lock **only once its instant has arrived**
+  (starter `now >= kickoff`; sub `now >= entry`) — a self-guarding write boundary that holds even if
+  an upstream gate mis-fires (corrupt kickoff import, early mode decision). The two read sites now use
+  the shared pure `isLockedNow` (`@app/shared`). Existing bad rows were cleared by a one-off SQL that
+  nulls `locked_at` for MD1 slots whose player's fixture (via `player.team_id` → `fifa_match`
+  home/away) is still `kickoff_at > NOW()`, leaving already-kicked-off (Mexico–SA) locks intact.
+
 #### Amendment — in-matchday substitutions (supersedes the bidirectional freeze; group + playoff)
 - **Lock-on-play's sub-IN half is preserved:** a player may be moved into the XI only while his
   match has not kicked off. A played player can never be promoted in (no hindsight upside; a played

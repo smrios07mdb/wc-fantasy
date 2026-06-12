@@ -150,6 +150,19 @@ table each tick):
 Live latency is a few minutes on the feed itself, so polling faster than ~60s is wasted — a sub
 who enters becomes lockable within a couple of minutes, which is fine.
 
+**Lock write path + the `now` gate (2026-06-11 MD1 premature-lock fix).** The lock instant is decided
+by the pure primitives `lockInstantsFromLineup` / `lockInstantFromSub` (`packages/ingest/src/lock.ts`),
+called from `ingestLineups` (pre-match) / `ingestLive` (live) in `packages/ingest/src/ingest.ts`, and
+written by `IngestStore.setLockedAt` (`prismaStore` `updateMany … where locked_at IS NULL` — a monotonic
+latch). The primitives take **`now`** (threaded through `MatchCtx.now`, set per worker tick in
+`apps/worker/src/scheduler.ts`) and emit a lock **only once its instant has arrived** — a starter when
+`now >= kickoff`, a sub when `now >= entry`. This makes the write boundary self-guarding: a
+not-yet-kicked-off match can never stamp `locked_at`, even if `decideMatchModes` mis-fires or a kickoff
+import is briefly wrong. The stored value is always the true lock instant (kickoff / entry), never "≈ now".
+**Read predicate:** both read sites — `loadLineup.ts` (the `/lineup` editor) and `loadVsField.ts:148`
+(the live display) — derive `locked` through the shared pure `isLockedNow(lockedAt, now)` (`@app/shared`):
+locked **iff `locked_at != null && locked_at <= now`**, so a future-dated stamp reads as movable.
+
 #### FAAB cadence: per-period batch + acquisition window (Theme-D amendment — deferred ARCHITECTURE update, now landed)
 
 **Supersedes the retired daily 06:00 FAAB cron.** One blind-bid batch per scoring period (each group
