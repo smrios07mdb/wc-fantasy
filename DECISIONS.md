@@ -1862,6 +1862,14 @@ widening the Theme-F SSR payload with per-player points or a new batch points en
 scope for the modal-only build. The row instead shows a state pill (Playing / Played / To play); the
 authoritative points live in the modal header.
 
-**PENDING: post-deploy visual confirm.** The interaction + no-forfeit guarantees are proven by jsdom
-RTL (`H2HDetail.test.tsx`, `PlayerScoreSheet.test.tsx`); the rendered look of the drill-in on the live
-`/vsfield` route is still to be eyeballed after the Render web deploy.
+Post-deploy visual confirmed on deploy 2026-06-12.
+
+**FOLLOW-UP: modal CSS duplicated across `lineup.css` + `components/PlayerScoreSheet.css` after the P54
+relocation** — unify into the shared sheet (drop the `lineup.css` copies; both layouts import shared)
+post-launch; until then any modal-style edit must touch both files. The literal overlap is 20 selectors:
+`.sl-forfeit-overlay`, `.sl-scoremodal`, `.sl-sm-close`, `.sl-sm-head`, `.sl-sm-name`, `.sl-sm-pts-hero`,
+`.sl-sm-match`, `.sl-sm-empty`, `.sl-sm-section`, `.sl-sm-section-label`, `.sl-sm-row`, `.sl-sm-tag`,
+`.sl-sm-lbl`, `.sl-sm-row-pts`, `.sl-sm-total-row`, `.sl-sm-total-num`, `.sl-sm-tracked`,
+`.sl-sm-tracked-head`, `.sl-sm-tracked-row`, `.sl-sm-season`. (The shared copy is a SUBSET — the
+forfeit-section classes `.sl-sm-forfeit` / `.sl-sm-forfeit-msg` and the lineup-token classes
+`.sl-scorepill` / `.sl-forfeit-sheet` stay lineup-only, since vsfield renders neither.)
