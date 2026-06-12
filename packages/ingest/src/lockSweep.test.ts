@@ -115,6 +115,29 @@ describe("sweepCompletedMatchLocks", () => {
     expect(results).toHaveLength(0);
   });
 
+  it("only stamps the match's own-period slot — other-period slot stays null (Rangel scenario)", async () => {
+    // Rangel scenario: player 7 appeared in MD1 (match 99, period-md1). He is also rostered in the
+    // Final (a different period, represented by match 200). The sweep processes both matches; it finds
+    // player 7 in match 99's appeared set and stamps lockedAt(99, 7). Match 200 has NO score row for
+    // player 7, so setLockedAt is never called for (200, 7).
+    //
+    // Sweep-layer guarantee: setLockedAt is only ever called with the bdlId of the match being
+    // processed — never for a cross-match slot.
+    //
+    // Prisma-layer guarantee (packages/ingest/src/prismaStore.ts:226–232): setLockedAt(99, 7, kickoff)
+    // resolves match 99's periodId and adds WHERE period_id = <md1-period> to the updateMany, so even
+    // if the DB were queried for player 7 it would only touch md1-period slots, never the Final slot.
+    const store = new MemoryIngestStore();
+    store.seedAppeared(99, [7]); // player 7 in MD1 appeared set
+    // match 200 (Final, 2h ago) — player 7 has no score_player_match row → appeared set is empty
+    const finalMatch = completedMatch(200, now.getTime() - 2 * 60 * 60_000);
+
+    await sweepCompletedMatchLocks(store, [completedMatch(99), finalMatch], now);
+
+    expect(store.lockedAt(99, 7)).toEqual(kickoff); // MD1 slot → stamped
+    expect(store.lockedAt(200, 7)).toBeUndefined(); // Final slot → untouched
+  });
+
   it("returns multiple entries when several completed matches have new locks", async () => {
     const store = new MemoryIngestStore();
     store.seedAppeared(11, [1, 2]);
