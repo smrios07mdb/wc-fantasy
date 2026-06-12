@@ -50,6 +50,9 @@ export interface RecomputeStore {
   getPlayerMatchInput(matchId: string, playerId: string): Promise<ScoreInputBundle | null>;
   /** Upsert `score_player_match` (points + breakdown_json + computed_at). */
   writeScorePlayerMatch(matchId: string, playerId: string, result: ScoreBreakdown): Promise<void>;
+  /** Remove the `score_player_match` row for (match, player) — used to evict a NON-participant's row
+   *  (the live MD1 incident). A no-op when no row exists, so it is idempotent. */
+  deleteScorePlayerMatch(matchId: string, playerId: string): Promise<void>;
   /** Clear the raw `dirty` flags for (match, player) — called LAST so a crash mid-unit re-runs safely. */
   clearRawDirty(matchId: string, playerId: string): Promise<void>;
   /** The (manager, period) pairs whose score depends on this (match, player). */

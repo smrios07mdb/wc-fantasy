@@ -163,6 +163,11 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
       });
     },
 
+    async deleteScorePlayerMatch(matchId, playerId): Promise<void> {
+      // deleteMany (not delete) → a no-op when absent, so eviction stays idempotent across re-runs.
+      await prisma.scorePlayerMatch.deleteMany({ where: { matchId, playerId } });
+    },
+
     async clearRawDirty(matchId, playerId): Promise<void> {
       const where = { matchId, playerId, dirty: true };
       await Promise.all([

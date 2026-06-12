@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { scorePlayerMatch, SCORE_CATEGORIES as C, type ScoreBreakdown } from "@app/scoring";
-import { buildScoreInput, type ScoreInputBundle, type EventRow, type ShotRow } from "./adapter";
+import {
+  buildScoreInput,
+  playerAppearedInMatch,
+  type ScoreInputBundle,
+  type EventRow,
+  type ShotRow,
+} from "./adapter";
 
 // A team-A (home) player who did nothing; tests switch on the fields they exercise.
 function bundle(overrides: Partial<ScoreInputBundle> = {}): ScoreInputBundle {
@@ -109,6 +115,90 @@ describe("adapter — clean-sheet inputs are TWO distinct values from distinct s
       }),
     );
     expect(i.goalsConcededWhileOn).toBe(2);
+  });
+});
+
+describe("adapter — only match participants are charged (live MD1 non-participant incident)", () => {
+  // The reported bug: a player whose team contested NEITHER side of the fixture was charged a
+  // conceded goal for every goal in the match. The team-in-match guard must zero that out.
+  it("a player whose team is NOT in the match concedes nothing (team-in-match guard)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "DEF",
+        // team C — neither home (A) nor away (B): an uninvolved team.
+        team: {
+          ...teamCtx(),
+          playerTeamId: "C",
+          homeScore: 0,
+          awayScore: 2,
+          teamByPlayerId: { gB: "B" },
+        },
+        events: [
+          goal({ playerId: "gB", timeMinute: 30 }),
+          goal({ playerId: "gB", timeMinute: 80 }),
+        ],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(0);
+    expect(i.teamGoalsAgainst).toBe(0);
+    expect(scorePlayerMatch(i).total).toBe(0);
+  });
+
+  it("a REAL away-team participant is still charged a conceded goal (no over-correction)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "DEF",
+        // away-team (B) defender; home (A) scores while he is on the pitch → a legitimate −1.
+        team: {
+          playerTeamId: "B",
+          homeTeamId: "A",
+          awayTeamId: "B",
+          homeScore: 1,
+          awayScore: 0,
+          teamByPlayerId: { gA: "A" },
+        },
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        events: [goal({ playerId: "gA", timeMinute: 30 })],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(1);
+    expect(pointsFor(scorePlayerMatch(i), C.goalsConceded)).toBe(-1);
+  });
+});
+
+describe("adapter — playerAppearedInMatch participant gate", () => {
+  it("true: team-in-match WITH a real stat line", () => {
+    expect(playerAppearedInMatch(bundle({ stat: { ...zeroStat(), minutesPlayed: 64 } }))).toBe(
+      true,
+    );
+  });
+  it("true: team-in-match named in a substitution event (came on)", () => {
+    expect(
+      playerAppearedInMatch(bundle({ events: [sub({ playerInId: "p1", timeMinute: 70 })] })),
+    ).toBe(true);
+  });
+  it("false: a bare dirty stub — team-in-match but NO stat line and NO events", () => {
+    expect(playerAppearedInMatch(bundle())).toBe(false); // stat: null, events: []
+  });
+  it("false: team NOT in the match, even WITH a full stat line (cross-team contamination)", () => {
+    expect(
+      playerAppearedInMatch(
+        bundle({
+          team: { ...teamCtx(), playerTeamId: "C" },
+          stat: { ...zeroStat(), minutesPlayed: 90 },
+        }),
+      ),
+    ).toBe(false);
+  });
+  it("false: player.team_id is unknown (null) — cannot confirm participation", () => {
+    expect(
+      playerAppearedInMatch(
+        bundle({
+          team: { ...teamCtx(), playerTeamId: null },
+          stat: { ...zeroStat(), minutesPlayed: 90 },
+        }),
+      ),
+    ).toBe(false);
   });
 });
 

@@ -159,35 +159,93 @@ function onPitchWindow(events: readonly EventRow[], playerId: string): OnPitch {
   return { entry, exit };
 }
 
-/** Whole-match goals against the player's team — clean-sheet input, from the match score (§7). */
+/**
+ * Was the player's team one of the two that actually contested THIS match? The keystone invariant
+ * behind the live MD1 incident: a player whose team is neither home nor away never took the pitch, so
+ * they can be neither scored nor charged a conceded goal. Used by both the conceded derivation
+ * (defense in depth) and the {@link playerAppearedInMatch} participant gate. A null team_id ⇒ we
+ * cannot confirm participation ⇒ treat as NOT in the match (conservative).
+ */
+function teamInMatch(t: MatchTeamContext): boolean {
+  return (
+    t.playerTeamId != null && (t.playerTeamId === t.homeTeamId || t.playerTeamId === t.awayTeamId)
+  );
+}
+
+/** Whole-match goals against the player's team — clean-sheet input, from the match score (§7).
+ *  Off-match teams return 0 here (no opponent score to read) — but a non-participant never reaches
+ *  scoring at all (see {@link playerAppearedInMatch}), so "0 against" never becomes a phantom clean sheet. */
 function teamGoalsAgainst(t: MatchTeamContext): number {
-  if (t.playerTeamId != null && t.playerTeamId === t.homeTeamId) return n(t.awayScore);
-  if (t.playerTeamId != null && t.playerTeamId === t.awayTeamId) return n(t.homeScore);
+  if (!teamInMatch(t)) return 0;
+  if (t.playerTeamId === t.homeTeamId) return n(t.awayScore);
+  if (t.playerTeamId === t.awayTeamId) return n(t.homeScore);
   return 0;
 }
 
-/** Is this goal event conceded by the player's team? (opponent goal, or own-goal by own team). */
-function concededByPlayerTeam(
-  e: EventRow,
-  playerTeamId: string | null,
-  teamBy: MatchTeamContext["teamByPlayerId"],
-): boolean {
-  if (playerTeamId == null || e.playerId == null) return false;
-  const scorerTeam = teamBy[e.playerId];
+/**
+ * Is this goal event conceded by the player's team? (opponent goal, or own-goal by own team).
+ * GUARD: the player's team must be in the match — without it, an uninvolved team's `scorerTeam !==
+ * playerTeam` is trivially true for EVERY goal, so a non-participant "concedes" the whole match (the
+ * live MD1 −1 bug). Defense in depth: the participant gate already blocks non-participants upstream.
+ */
+function concededByPlayerTeam(e: EventRow, t: MatchTeamContext): boolean {
+  if (!teamInMatch(t) || e.playerId == null) return false;
+  const scorerTeam = t.teamByPlayerId[e.playerId];
   if (scorerTeam == null) return false;
-  return isOwnGoalEvent(e) ? scorerTeam === playerTeamId : scorerTeam !== playerTeamId;
+  return isOwnGoalEvent(e) ? scorerTeam === t.playerTeamId : scorerTeam !== t.playerTeamId;
 }
 
-/** Goals conceded WHILE the player was on the pitch — the −1/2 input, from event minutes (§7). */
+/** Goals conceded WHILE the player was on the pitch — the −1 input, from event minutes (§7). */
 function goalsConcededWhileOn(b: ScoreInputBundle, window: OnPitch): number {
   let count = 0;
   for (const e of b.events) {
     if (e.rescinded || !isGoalEvent(e)) continue;
-    if (!concededByPlayerTeam(e, b.team.playerTeamId, b.team.teamByPlayerId)) continue;
+    if (!concededByPlayerTeam(e, b.team)) continue;
     const m = effMinute(e);
     if (m >= window.entry && m <= window.exit) count++;
   }
   return count;
+}
+
+// ── participant gate (the live MD1 "only score players who appeared" invariant) ─────────────────
+
+/** A real (non-stub) stat line has at least one populated field; the `markStatPlayerDirty` stub is all-null. */
+function statHasData(s: StatRow | null): boolean {
+  return s != null && Object.values(s).some((v) => v != null);
+}
+
+/** Is this player named in any (non-rescinded) match event — start subbed, came on, scored, booked? */
+function namedInAnyEvent(events: readonly EventRow[], playerId: string): boolean {
+  return events.some(
+    (e) =>
+      !e.rescinded &&
+      (e.playerId === playerId ||
+        e.assistPlayerId === playerId ||
+        e.playerInId === playerId ||
+        e.playerOutId === playerId),
+  );
+}
+
+/** Did this player take a shot in the match? */
+function tookAnyShot(shots: readonly ShotRow[], playerId: string): boolean {
+  return shots.some((s) => s.playerId === playerId);
+}
+
+/**
+ * Did this player ACTUALLY appear in this match? Only participants earn a `score_player_match` row —
+ * the live MD1 incident minted rows for players who never took the pitch (cross-team contamination
+ * via a bad player↔match join, and all-null dirty stubs from `markStatPlayerDirty`), and a GK/DEF
+ * stub was charged −1 for the match's goals. Two conditions, BOTH required:
+ *   1. team-in-match — their team contested the fixture (kills cross-team contamination, the keystone), AND
+ *   2. an appearance signal — a real (non-stub) stat line, OR they are named in a match event
+ *      (start/sub/goal/card), OR they took a shot.
+ * A bare dirty stub for a squad member who never featured fails (2); a wrong-match row fails (1).
+ */
+export function playerAppearedInMatch(b: ScoreInputBundle): boolean {
+  if (!teamInMatch(b.team)) return false;
+  return (
+    statHasData(b.stat) || namedInAnyEvent(b.events, b.playerId) || tookAnyShot(b.shots, b.playerId)
+  );
 }
 
 const isPenaltyShot = (s: ShotRow): boolean => s.isPenalty || norm(s.situation) === "penalty";

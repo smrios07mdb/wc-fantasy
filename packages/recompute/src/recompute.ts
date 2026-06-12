@@ -8,7 +8,7 @@
  * crash mid-unit simply re-runs and is harmless. Running a clean sweep twice is a no-op.
  */
 import { scorePlayerMatch, scoreManagerPeriod } from "@app/scoring";
-import { buildScoreInput } from "./adapter";
+import { buildScoreInput, playerAppearedInMatch } from "./adapter";
 import { computeStandings, type PeriodScores } from "./standing";
 import type { ManagerPeriodRef, PlayerMatchRef, RecomputeStore } from "./store";
 
@@ -40,6 +40,12 @@ export interface SweepResult {
  * Recompute one `score_player_match`: gather rows → adapter → engine → upsert, then mark the
  * affected (manager, period) pairs dirty and clear this input's dirty flag (last). Returns null if
  * the (match, player) has no input rows.
+ *
+ * PARTICIPANT GATE (live MD1 incident): only players who ACTUALLY appeared in the match are scored.
+ * A non-participant — cross-team contamination from a bad player↔match join, or an all-null dirty
+ * stub from `markStatPlayerDirty` — gets NO row: we DELETE any pre-existing bogus row, re-enqueue the
+ * manager-periods that referenced it (so the rollup restates without the phantom points), and clear
+ * dirty. This is the single chokepoint that keeps a stored mis-join from ever becoming a score.
  */
 export async function recomputePlayerMatch(
   store: RecomputeStore,
@@ -48,6 +54,15 @@ export async function recomputePlayerMatch(
 ): Promise<PlayerMatchResult | null> {
   const bundle = await store.getPlayerMatchInput(matchId, playerId);
   if (!bundle) return null;
+
+  if (!playerAppearedInMatch(bundle)) {
+    await store.deleteScorePlayerMatch(matchId, playerId); // evict any bogus row from an earlier sweep
+    for (const ref of await store.getAffectedManagerPeriods(matchId, playerId)) {
+      await store.enqueueManagerPeriodDirty(ref); // restate rollups that summed the phantom row
+    }
+    await store.clearRawDirty(matchId, playerId); // last: keeps re-runs safe
+    return null;
+  }
 
   const breakdown = scorePlayerMatch(buildScoreInput(bundle));
   await store.writeScorePlayerMatch(matchId, playerId, breakdown);

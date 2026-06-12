@@ -82,6 +82,76 @@ describe("recomputePlayerMatch", () => {
   });
 });
 
+describe("recomputePlayerMatch — non-participants are never scored (live MD1 incident)", () => {
+  /** An England GK wrongly tagged to a Mexico–South Africa fixture: a bare dirty stub whose team
+   *  contested NEITHER side. Without the guard, the match's goals were mis-charged as conceded → −1. */
+  function nonParticipant(): ScoreInputBundle {
+    return {
+      playerId: "pickford",
+      role: "GK",
+      rating: null,
+      ratingSource: null,
+      stat: null, // bare dirty stub (markStatPlayerDirty inserts an all-null row)
+      manual: null,
+      events: [
+        {
+          incidentType: "goal",
+          incidentClass: null,
+          timeMinute: 20,
+          addedTime: null,
+          playerId: "mex1",
+          assistPlayerId: null,
+          playerInId: null,
+          playerOutId: null,
+          rescinded: false,
+        },
+      ],
+      shots: [],
+      team: {
+        playerTeamId: "ENG",
+        homeTeamId: "MEX",
+        awayTeamId: "RSA",
+        homeScore: 1,
+        awayScore: 0,
+        teamByPlayerId: { mex1: "MEX" },
+      },
+    };
+  }
+
+  it("writes NO score, DELETES any bogus row, restates the rollup, and clears dirty", async () => {
+    const store = new MemoryStore();
+    store.seedPlayerMatch("mexsa", "pickford", nonParticipant()); // dirty by default
+    store.seedManagerLeague("FENIX", "L");
+    store.seedPeriod("MD1", { leagueId: "L", kind: "group_md" });
+    store.seedSlot("FENIX", "MD1", "pickford", true); // FENIX started him
+    store.seedPlaysIn("pickford", "MD1", "mexsa"); // slot → match link
+    // The bug's residue: a bogus −1 already persisted from an earlier (buggy) sweep.
+    store.writeScorePlayerMatch("mexsa", "pickford", { total: -1, lines: [] });
+
+    const result = await recomputePlayerMatch(store, "mexsa", "pickford");
+
+    expect(result).toBeNull(); // not a participant → not scored
+    expect(store.writtenPlayerScore("mexsa", "pickford")).toBeUndefined(); // bogus row removed
+    expect(store.isRawDirty("mexsa", "pickford")).toBe(false); // dirty cleared last (idempotent)
+    expect(store.pendingManagerPeriods()).toEqual([{ managerId: "FENIX", periodId: "MD1" }]);
+  });
+
+  it("a second sweep with the stub still present stays clean (FENIX manager-period → 0)", async () => {
+    const store = new MemoryStore();
+    store.seedPlayerMatch("mexsa", "pickford", nonParticipant());
+    store.seedManagerLeague("FENIX", "L");
+    store.seedPeriod("MD1", { leagueId: "L", kind: "group_md" });
+    store.seedSlot("FENIX", "MD1", "pickford", true);
+    store.seedPlaysIn("pickford", "MD1", "mexsa");
+    store.writeScorePlayerMatch("mexsa", "pickford", { total: -1, lines: [] });
+
+    await sweep(store);
+
+    expect(store.writtenPlayerScore("mexsa", "pickford")).toBeUndefined();
+    expect(store.writtenManagerScore("FENIX", "MD1")).toBe(0); // no negative drag
+  });
+});
+
 /** Seed a manager M, period P, match m1 lineup where every listed player played m1 in P. */
 function seedLineup(store: MemoryStore): void {
   store.seedManagerLeague("M", "L");

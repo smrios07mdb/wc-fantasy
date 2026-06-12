@@ -235,6 +235,18 @@ score is recomputable at any time.** This is exactly what the late-settling rati
   recomputes `score_player_match` -> marks affected `(manager, period)` dirty -> recomputes
   `score_manager_period` -> recomputes `standing`. No heavy event bus; a dirty-flag sweep is
   plenty at this scale.
+- **Participant-set invariant (only match participants are scored).** A dirty `(match, player)`
+  marker is necessary but **not sufficient** to score — the sweeper writes a `score_player_match`
+  row only when the player **actually appeared** in that match. `recomputePlayerMatch` gates on the
+  pure `playerAppearedInMatch` (packages/recompute/adapter): the player's `team_id` must be one of
+  the match's two teams **AND** there must be an appearance signal (a real, non-stub stat line, a
+  named match event, or a shot). A non-participant gets **no row** (any pre-existing bogus row is
+  deleted and the affected `(manager, period)` re-enqueued). Why this exists: a stored mis-join
+  (cross-team rows) or an all-null `dirty` stub from `markStatPlayerDirty` would otherwise be scored,
+  and a stub **GK/DEF** was charged −1 because **goals conceded is gated only on role, not minutes**
+  — the live 2026-06-11 MD1 incident (whole field dragged negative by a completed Mexico–South Africa
+  fixture). The per-match scoring path is the single chokepoint that refuses non-participants
+  regardless of how the upstream stub/mis-join arose.
 
 ### The rating source (resolver)
 **Sofascore is the primary rating source** — the locked ladder is calibrated to it. BALLDONTLIE
@@ -574,7 +586,11 @@ directly or derive; six lines force a call (all minor/rare).**
 - **Clean sheet (60+ min)** = goals-against 0 (match score / team stats) + `minutes_played` ≥ 60
   + role.
 - **Goals conceded** = opponent goals while on pitch (goal-event minutes + `minutes_played`);
-  attribute to GK/DEF role.
+  attribute to GK/DEF role. **Conceded requires team-in-match:** a goal counts as conceded only
+  when the player's `team_id` is the match's home or away team (`concededByPlayerTeam`,
+  packages/recompute/adapter). Without this guard an uninvolved team's `scorerTeam != playerTeam`
+  is trivially true for **every** goal, so a non-participant "concedes" the whole match (the
+  2026-06-11 MD1 −1 bug — defense in depth behind the participant gate above).
 - **Penalty missed** = `match_shots` where it's a penalty (`situation`) and `shot_type ≠ goal` ->
   charge the shooter (−3).
 - **Penalty saved** = same `match_shots` row with `shot_type = save` -> credit the opposing

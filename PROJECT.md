@@ -71,6 +71,23 @@ locked iff `locked_at != null && locked_at <= now`; (3) a **cleanup SQL artifact
 live) nulls the bad MD1 stamps whose fixture is still `kickoff_at > NOW()`, leaving completed-match
 locks intact. +8 tests (1719 → 1727), all gates green. See DECISIONS (lock invariant) + ARCHITECTURE §3.
 
+**Live-incident fix (2026-06-11, MD1): `score_player_match` generated for NON-participants** —
+`score_player_match` rows were written for players who never appeared in a match. Trigger: the
+completed **Mexico–South Africa** fixture charged every rostered **GK/DEF** whose team was neither
+home nor away a phantom **−1** (the match's goals scored as "conceded" by their uninvolved team),
+dragging the whole field negative; MID/FWD non-participants scored 0. Two defects on the per-match
+scoring path (`packages/recompute`): it scored ANY dirty `(match, player)` with **no participation
+check** (and `markStatPlayerDirty` mints all-null stubs / an upstream player↔match mis-join tags
+cross-team rows), and `concededByPlayerTeam` had **no team-in-match guard** (§6 conceded is gated on
+role, not minutes). Fix on `fix/score-nonparticipants` (worktree, merge HELD): `recomputePlayerMatch`
+now gates on the pure `playerAppearedInMatch` (team-in-match **AND** an appearance signal) and a
+non-participant gets **no row** (bogus row deleted via new `deleteScorePlayerMatch`, rollup
+re-enqueued); `concededByPlayerTeam` hardened to require team-in-match. The **rollup was correct and
+untouched** (`recomputeManagerPeriod`/`job:recompute` only re-sum). Live remediation =
+`ops/2026-06-11-clear-nonparticipant-scores.sql` (delete cross-team + stub rows) **then**
+`pnpm --filter @app/worker job:recompute -- --period "MD1"` — restate-alone won't clear bogus rows.
++9 regression tests; full suite **1747** green. See DECISIONS (participant invariant) + ARCHITECTURE §3/§7.
+
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
 dirty-flag sweeper) ✅ · Prompt 04 — standing / all-play-all + seeding + guillotine cut-selection ✅ ·
