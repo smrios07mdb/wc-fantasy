@@ -1787,3 +1787,35 @@ STOP SEAMS held: `resolveFaabBatch`/`resolve.ts`/purity/scoring untouched (`reso
 - **Scope discipline.** Fix confined to the per-match scoring path (recompute adapter/orchestration/store + one new store method); the engine (`@app/scoring`), the rollup, ingest, and the lock fix are **untouched**. The upstream "why does a cross-team/stub row arise" (feed-mapper / `markStatPlayerDirty` join) is the per-match path's job to refuse at score time — NOT reopened here.
 - **Adjacent reminder — `locked_at` is a DB-trigger latch.** A bad `locked_at` is NOT repairable by a plain `UPDATE`: `enforce_lineup_lock()` rejects edits to a locked slot. It is corrected only inside a transaction that issues `SET LOCAL app.commish_override = 'on'` (the `commish:lineup --allow-locked-slot` path; migration `20260611120000`). This remediation touches only `score_*` rows, never `locked_at`.
 - 8 regression tests (1719→1747): non-participant gets no row + no conceded line; a real away-team defender legitimately −1; the team-in-match guard rejects an uninvolved team; the end-to-end sweep restates FENIX → 0. Full gate green. `fix/score-nonparticipants`, merge HELD for Chat clearance.
+
+### 2026-06-12 — Player box-score modal: server-only data flow + surface-agnostic modal (Prompt 52)
+
+**Decision: `score_player_match` + `stat_player_match` never read by the browser (Theme F extension).**
+The box-score breakdown is served via `GET /api/player-box` (Prisma owner-bypass, `import "server-only"`
+in the loader). The browser never holds `breakdown_json` in its bundle or component state — it receives
+only the already-mapped `PlayerBoxView`. This extends Theme F (server-authoritative, no browser-direct
+table reads) to cover the scoring tables. No new RLS policy or Realtime publication is needed.
+
+**Decision: `PlayerScoreSheet` is surface-agnostic.** The modal is wired into `/lineup` (Prompt 52) but
+has no lineup-specific coupling — it only takes `{ periodId, playerId, onClose }`. Prompt 53 can mount
+it on `/vsfield` without modification, matching the reuse precedent set by `buildVsField` / `@app/vsfield`.
+
+**Decision: query params are `?periodId=` not `?matchId=`** because the client only knows `activeId`
+(the period the manager is editing). The server resolves the `fifa_match` from `(playerId, periodId)` —
+no match ID is threaded to the client and no additional prop is needed on any lineup component.
+
+**Decision: `ScorePill` uses `stopPropagation`, not a separate outer element.** Played-starters need two
+co-existing behaviors on the same token: tap the token body = forfeit confirm, tap the pts badge = score
+modal. `stopPropagation` on the pill's click handler is the minimal implementation; no structural change
+to `PitchToken` is needed.
+
+**Decision: `isLive` dot on `ScorePill` uses `slotKind === "locked"` as the heuristic.** A locked
+(kicked-off, no score row yet) slot is "possibly live"; a played-starter or played-bench slot has a
+confirmed appearance. This is approximate (~≤60s stale after final whistle) but consistent with the
+~1-tick window already documented for the forfeit affordance.
+
+**Decision: `BenchRow` locked rows are clickable (score modal), not `disabled`.** Previously locked
+bench rows had `disabled={!movable}` which blocked all clicks. Removing `disabled` and routing
+`!movable → onScore` restores interactivity for players who have already played. The `is-locked` class
+is retained for visual dimming (opacity); `aria-disabled` was also removed since the element is now
+interactive.

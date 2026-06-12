@@ -1111,3 +1111,74 @@ gate.
    next tick. Surfaced, not worked around.
 
 **Open:** legend-copy wording for "Forfeited" vs "Played" — deferred to a UX pass.
+
+---
+
+## §17 — Player box-score modal (Prompt 52)
+
+### Pure view-model: `packages/player-box` (`@app/player-box`)
+
+`buildPlayerBox(input: BuildPlayerBoxInput): PlayerBoxView` is a **pure function with no IO**: all
+inputs (player identity, fixture, score, stats, `now`) are injected; it never calls the DB or clock.
+The returned `PlayerBoxView` contains:
+
+- **`header`** — `displayName`, `shortName` ("F. Surname"), `position`, `nation`, `fixture` (nullable
+  `FixtureView`), `periodTotal`
+- **`state: BoxState`** — `"not-started" | "in-progress-no-score" | "in-progress" | "played" |
+  "no-fixture"` — drives empty-state copy in the modal
+- **`sections: SectionView[]`** — scored lines from `breakdown_json` grouped by SCORING.md §1→§8
+  using `CATEGORY_META` (27-key mapping of `SCORE_CATEGORIES` → section/label/tag)
+- **`trackedStats: TrackedStatRow[]`** — unscored context counts (minutes, dribbles attempted, etc.)
+- **`season: { total: number } | null`** — always `null` from `buildPlayerBox`; the API route injects
+  the real aggregate (see "Season total injection" below)
+
+**Nation derivation pattern:** `player.nation` is sourced from the `player→team→fifa_team.name` join in
+`loadPlayerBox.ts` (same as `loadLineup`'s `player.team.name` field). `player.country` is **never
+populated by ingestion** and must not be used; see [[player-pool-source]].
+
+### Server read: `GET /api/player-box`
+
+`apps/web/app/api/player-box/route.ts` + `loadPlayerBox.ts` + `handlePlayerBox.ts`.
+
+- **Auth posture:** `getSessionManager()` → 401 (no-session) / 403 (not-allowlisted / no-manager).
+  No 403-not-your-manager — this is a league-scoped read (any manager in the league can view any
+  player's score). `import "server-only"` in `loadPlayerBox.ts`; Prisma owner-bypass.
+- **Query params:** `?periodId=&playerId=`. Client only has `activeId` (periodId); the server resolves
+  the match from `(playerId, periodId)` — no `matchId` on the client.
+- **Four parallel reads:** `score_player_match`, `stat_player_match`, `fifa_match` (for fixture), and
+  `score_player_match` aggregate (season sum). `Promise.all` for parallelism.
+- **Fixture fallback:** prefers the match join on `scoreRow?.match`; falls back to a direct
+  `fifa_match` query when no score row exists yet (match not started).
+
+**Season total injection:** `buildPlayerBox` always returns `season: null` (pure, can't DB). The loader
+computes `_sum.points` across the player's periods for the league and injects
+`{ ...view, season: seasonTotal !== null ? { total: seasonTotal } : null }`.
+
+### UI surface: `ScorePill` + `PlayerScoreSheet`
+
+**`ScorePill`** (`apps/web/app/lineup/components.tsx`): rendered on PLAYED/LOCKED tokens. Has `role="button"` + `stopPropagation` so it captures the click without triggering the parent button's
+forfeit-confirm handler. `isLive={slotKind === "locked"}` shows an animated dot for players who have
+kicked off but have no score row yet.
+
+**`PlayerScoreSheet`** (`apps/web/app/lineup/PlayerScoreSheet.tsx`): surface-agnostic `"use client"`
+modal. Fetches `GET /api/player-box` on mount; renders the header, `StatePill`, section rows
+(`SectionBlock` → `LineRow`), tracked stats, and season total. Styled inside `.sl-scoremodal` (a
+separate card layered above the forfeit overlay) — same `.sl-forfeit-overlay` scrim is reused.
+
+**Dual affordance on played-starters:** the main `PitchToken` button tap = forfeit confirm; the
+`ScorePill` tap (with `stopPropagation`) = score modal. Both co-exist on the same token element.
+
+**`BenchRow` — locked bench rows are now clickable:** `disabled` was removed from locked bench rows;
+click routing is `movable → onSelect(player.id)`, `!movable → onScore(player.id)`. The `is-locked`
+class still applies for visual dimming; `aria-disabled` was also removed (the row is now interactive).
+
+**Wiring:** `SetLineupClient` holds `scorePlayerId: string | null` state; `onScore` callback sets it;
+period change resets it to null; `PlayerScoreSheet` renders conditionally after `ForfeitConfirmSheet`.
+
+### Seams (next thread — Prompt 53)
+
+- **Vs-the-Field wiring:** `PlayerScoreSheet` is surface-agnostic and can be mounted on `/vsfield`
+  without modification; Prompt 53 wires it there.
+- **Scoring feed panel / mini-pitch coloring:** deferred; no scope in Prompt 52.
+- **Live score refresh:** `PlayerScoreSheet` fetches once on open; polling/Realtime update for
+  in-progress matches is a follow-up.

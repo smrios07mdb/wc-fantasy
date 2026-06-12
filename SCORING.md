@@ -183,3 +183,15 @@ from the fillable ∩ lock-legal shapes; default = persisted shape else first fi
 scoring.** Formation only determines *which* owned players start (`is_starter`); the engine already keys
 on `is_starter` and scores each starter's stat line identically regardless of shape. Points per event,
 the rating ladder, position weighting, and the recompute pipeline are all **untouched** — §1–§8 stand.
+
+## ℹ️ P52 — player box-score modal (NO scoring change; breakdown_json rendered verbatim)
+
+Prompt 52 adds a `PlayerScoreSheet` modal to the set-lineup screen — a per-player point breakdown driven
+by `score_player_match.breakdown_json`. **No change to scoring.** The modal is a **read-only display
+layer** only: `buildPlayerBox` (pure `@app/player-box`) maps the pre-computed `breakdown_json` lines into
+`SectionView[]` grouped by SCORING.md §1→§8 and renders each `ScoreLine.detail` verbatim. There is **no
+point-value hardcoding in the UI layer** — the authoritative values in §1–§8 above are always the source
+of truth; the modal only renders what the engine already computed and stored. `CATEGORY_META` maps each
+`SCORE_CATEGORIES` key to its display section/tag/label using the canonical section names from this
+document; if the engine is updated, the recomputed `breakdown_json` automatically flows to the UI. **§1–§8
+values, the rating ladder, position weighting, and the recompute pipeline are all untouched.**
