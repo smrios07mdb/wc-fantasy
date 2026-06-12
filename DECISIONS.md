@@ -1819,3 +1819,49 @@ bench rows had `disabled={!movable}` which blocked all clicks. Removing `disable
 `!movable → onScore` restores interactivity for players who have already played. The `is-locked` class
 is retained for visual dimming (opacity); `aria-disabled` was also removed since the element is now
 interactive.
+
+## Vs-the-Field box-score drill-in (Prompt 52/53 reuse)
+
+**Decision: Vs-the-Field gets the box-score modal as INFO-ONLY — no forfeit affordance, ever, for ANY
+player (own XI included).** Tapping a manager surfaces that manager's XI as named, tappable players in
+the H2H drill-in; tapping a played/locked player (own OR an opponent's) opens the shared
+`PlayerScoreSheet` rendered with **no `forfeitProps`**, so the "Bench & forfeit" section never appears.
+Vsfield never edits lineups — Set Lineup is the only surface that mutates the XI. To-play players are
+identifiable but inert (no pill, no modal); there is no swap/drag anywhere on vsfield. The forfeit
+section is gated purely on the optional `forfeitProps`, so omitting it is the whole mechanism.
+
+**Decision: the modal read is reachable for opponents because `/api/player-box` is league-scoped, not
+owner-scoped.** Verified in discovery: `loadPlayerBox` filters score/stat rows by `(playerId, periodId)`
+only — no roster/`managerId` predicate — and `handlePlayerBox` gates on league membership (401 no-session
+/ 403 not-allowlisted / 403 no-manager) with **no** "not-your-manager" 403. So surfacing opponents'
+breakdowns required **no** RLS, publication, route, or auth change.
+
+**Decision: per-player POINTS stay OUT of the vsfield SSR payload (Theme F preserved) — Option 2,
+modal-only.** `loadVsField` gained ONLY a read-only select-extension (`player.display_name` +
+`player.team.name`) and `StarterView` gained exactly two fields: `name` + `nation`. It does **not** read
+`score_player_match`; the browser still receives only aggregate `StillToCome` counts +
+`score_manager_period` + `standing`. Per-player points are fetched on demand by the box-score modal via
+the existing league-scoped `GET /api/player-box`. This keeps the deliberate Theme-F boundary
+("per-opponent identities/points never reach the browser directly") from widening into a points feed.
+
+**Decision: nation on the drill-in comes from the `fifa_team.name` join, NEVER `player.country` (P34).**
+`player.country` is unwritten by ingestion; `loadVsField` resolves `nation` via `player.team.name`,
+matching `loadPlayerBox` / `loadLineup`. The `<Flag>`/`toIso2` surface is reused, not reinvented.
+
+**Decision: `PlayerScoreSheet` relocated to `apps/web/components/` (single source) with Set Lineup
+byte-unchanged in behavior.** The component is the shared single source (consumed by `/lineup` with
+`forfeitProps` and `/vsfield` without); lineup's only change is the import path. `app/lineup/lineup.css`
+is left untouched, so Set Lineup stays visually identical; the modal's `.sl-sm-*` styles reach the
+vsfield route via a focused, co-located `apps/web/components/PlayerScoreSheet.css` imported by the
+vsfield layout. The small CSS duplication is a conscious trade-off (zero Set-Lineup regression risk,
+since gates are jsdom and don't cover visual CSS); single-sourcing both copies of the modal CSS is a
+clean follow-up.
+
+**DEFERRED: a per-row `ScorePill` (live/banked points) on the vsfield XI.** It would require either
+widening the Theme-F SSR payload with per-player points or a new batch points endpoint, so it is out of
+scope for the modal-only build. The row instead shows a state pill (Playing / Played / To play); the
+authoritative points live in the modal header.
+
+**PENDING: post-deploy visual confirm.** The interaction + no-forfeit guarantees are proven by jsdom
+RTL (`H2HDetail.test.tsx`, `PlayerScoreSheet.test.tsx`); the rendered look of the drill-in on the live
+`/vsfield` route is still to be eyeballed after the Render web deploy.
