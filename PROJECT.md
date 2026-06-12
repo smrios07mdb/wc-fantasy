@@ -62,8 +62,8 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 carried `locked_at ≈ now` while their `fifa_match` was still `scheduled` (kickoff days out). Root cause:
 the lock-write path (`packages/ingest/src/lock.ts` → `ingest.ts` → `setLockedAt`) stamped `kickoffAt`
 for any official-XI starter / entering sub **with no `now` gate**, and both read sites
-(`loadLineup.ts`, `loadVsField.ts:148`) treated *presence* of `locked_at` as locked. Fix on
-`fix/premature-locks` (isolated worktree, merge HELD for clearance): (1) **write side** — the pure
+(`loadLineup.ts`, `loadVsField.ts:148`) treated *presence* of `locked_at` as locked. Fix **merged to
+`main`** (write-side now-gate `ee4c18b`, read-side predicate `fab4105`): (1) **write side** — the pure
 primitives now take `now` and emit a lock only once its instant has arrived (starter `now >= kickoff`,
 sub `now >= entry`), threaded via `MatchCtx.now` from the scheduler tick — a self-guarding write
 boundary; (2) **read side** — both sites use the new shared pure `isLockedNow` (`@app/shared`):
@@ -85,9 +85,10 @@ under-locked and hand-backfilled** — the **deploy-timing lesson**: `e888f66` w
 *after* both completed fixtures (Mexico–SA kickoff 19:00Z, Korea–Czech kickoff 02:00Z) had finished; a merged
 fix only self-heals a completed match while it is still settling (`hasRating` false, `≤ kickoff + 12h`) **and**
 the running Render worker has redeployed to that SHA. "On `origin/main`" ≠ "running on Render." **Residual gap
-(candidate hardening, deferred):** `reconcileAppearanceLocks` runs only on a live/settle tick, so a completed
-match that has already dropped from the poll (rating landed, or 12h elapsed) is never reconciled again — a
-bounded "recently-completed matches" sweep would remove the manual-SQL dependency. See DECISIONS (appeared ⇒
+— now CLOSED (`1723b5a`):** `reconcileAppearanceLocks` ran only on a live/settle tick, so a completed
+match that had already dropped from the poll (rating landed, or 12h elapsed) was never reconciled again; a
+bounded **48h "recently-completed matches" sweep** (`sweepCompletedMatchLocks`, hourly schedule-sync cadence)
+now reconciles those and removes the manual-SQL dependency. See DECISIONS (appeared ⇒
 locked backstop) + ARCHITECTURE §3.
 
 **Live-incident fix (2026-06-11, MD1): `score_player_match` generated for NON-participants** —
@@ -98,7 +99,9 @@ dragging the whole field negative; MID/FWD non-participants scored 0. Two defect
 scoring path (`packages/recompute`): it scored ANY dirty `(match, player)` with **no participation
 check** (and `markStatPlayerDirty` mints all-null stubs / an upstream player↔match mis-join tags
 cross-team rows), and `concededByPlayerTeam` had **no team-in-match guard** (§6 conceded is gated on
-role, not minutes). Fix on `fix/score-nonparticipants` (worktree, merge HELD): `recomputePlayerMatch`
+role, not minutes). Fix **merged to `main`** (SHA rebased-rewritten; in-main evidence: `recomputePlayerMatch`
+participant gate + `deleteScorePlayerMatch` in `packages/recompute` + `ops/2026-06-11-clear-nonparticipant-scores.sql`
+artifact): `recomputePlayerMatch`
 now gates on the pure `playerAppearedInMatch` (team-in-match **AND** an appearance signal) and a
 non-participant gets **no row** (bogus row deleted via new `deleteScorePlayerMatch`, rollup
 re-enqueued); `concededByPlayerTeam` hardened to require team-in-match. The **rollup was correct and
@@ -111,8 +114,8 @@ untouched** (`recomputeManagerPeriod`/`job:recompute` only re-sum). Live remedia
 Theme-B forfeit amendment): a played player is **NOT hard-locked** — his slot stays movable; benching a
 played starter is a **FINAL, one-way FORFEIT** (`lineup_slot.voided_at` stamp + `is_starter=false`),
 forfeiting his period points and barring his return to the XI. **C1 = data + server engine + read contract
-only; the destructive-confirm UI is C2.** Built on `feat/lineup-forfeit-engine` (isolated worktree, merge
-HELD — Sergio + Chat own merge). Pieces: (1) migration `20260612120000_lineup_forfeit_voided_at` adds the
+only; the destructive-confirm UI is C2.** **Merged to `main`** (`b63f0a4` engine, `9811ff4` tests +
+recompute-mirror drift guard, `121f45f` docs). Pieces: (1) migration `20260612120000_lineup_forfeit_voided_at` adds the
 column AND extends `enforce_lineup_lock()` to permit EXACTLY the forfeit transition + back-stop the one-way
 door (no un-void / no start-of-voided), self-tested + **verified on throwaway Postgres with a uuid-returning
 `auth.uid()` shim**; (2) `@app/lineup` engine — `validateLineup` now keys off per-slot play state
@@ -126,6 +129,18 @@ retirement proposed for C2). **No live destructive path pre-C2:** the route pass
 played starter is rejected (`forfeit-requires-confirm`), behaviour byte-identical to today. Rollup
 unchanged (starters-only). +N tests, all gates green. See DECISIONS (forfeit amendment) + SCORING (principle
 6) + ARCHITECTURE §16.
+
+**Lock/forfeit state — reconciled (2026-06-12):** **Both lock directions are now fixed in `main`** — premature
+**over**-stamping (now-gate write `ee4c18b` + now-respecting read `fab4105`) and played-but-unlocked
+**under**-stamping (appeared⇒locked backstop `e888f66` + bounded 48h sweep `1723b5a`). The **C1 forfeit engine
+is merged** (`b63f0a4` / `9811ff4` / `121f45f`) — earlier "merge HELD" notes above are superseded. **C2 forfeit
+UI is the next workstream, now unblocked** — its C1 read contract (`slotMeta`) + engine input are on main. The
+throwaway branch **`fix/premature-locks-statusgate` is retired**: rebased onto `main` it showed **zero unique
+delta** and never carried the agreed four-layer fix — branch + worktree deleted. The **"four-layer fix" plan is
+superseded**: **Layer 2** (no stamp on a not-yet-kicked-off match) is **already met by the in-main now-gate**,
+leaving only **optional, non-blocking hardening** — **Layer 1** (kickoff-import: **skip/flag** a missing kickoff
+instead of coalescing to ≈now) and **Layer 4** (live cleanup SQL: drop the `p.label = 'MD1'` filter to clean
+**all periods**). See DECISIONS (lock invariant + forfeit amendment).
 
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +

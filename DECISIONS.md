@@ -204,6 +204,14 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   fixtures whose kickoff is within 48h of now and runs `lockInstantsFromAppearances → setLockedAt` for each.
   The monotonic `IS NULL` latch makes it a no-op for already-locked slots; the sweep only logs
   `lock.sweep.stamped` when it actually writes (the deploy-gap / outage alert signal).
+- **Status (reconciled 2026-06-12):** both lock directions are fixed in `main` — over-stamp (now-gate write
+  `ee4c18b` + now-respecting read `fab4105`) and under-stamp (appeared⇒locked backstop `e888f66` + bounded 48h
+  sweep `1723b5a`). The throwaway branch **`fix/premature-locks-statusgate` is retired** — rebased onto `main`
+  it had **zero unique delta** and never carried the agreed four-layer fix (branch + worktree deleted). The
+  **four-layer plan is reduced to optional Layers 1 + 4** (Layer 1 = kickoff-import should **skip/flag** a
+  missing kickoff instead of coalescing to ≈now; Layer 4 = the live cleanup SQL should drop its `p.label = 'MD1'`
+  filter to clean **all periods**); **Layer 2's intent — no stamp on a not-yet-kicked-off match — is already met
+  by the in-main now-gate**, and both remaining layers are non-blocking hardening.
 
 #### Amendment — in-matchday substitutions — STRUCK (superseded by the forfeit model below)
 > The earlier paired-substitution model (one-out/one-in, bench-size cap of 4 group / 2 playoff, each
@@ -253,6 +261,9 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
 - **Standings:** a forfeit save enqueues a manager-period recompute (`recompute_dirty`) in the same
   transaction so standings restate. The rollup (`scoreManagerPeriod`) is UNCHANGED — it already sums
   starters only, so a voided (benched) player is excluded and the incoming starter counts.
+- **Status (2026-06-12):** the C1 forfeit engine is **merged to `main`** (`b63f0a4` engine, `9811ff4` tests +
+  recompute-mirror drift guard, `121f45f` docs) — earlier "merge HELD" wording is superseded. **C2 forfeit UI is
+  the next workstream, now unblocked** (its read contract `slotMeta` + engine input are on main).
 
 ### "Set multiple lineups" — defined
 Pre-set lineups for **multiple upcoming match windows/periods in advance**; within a period,
