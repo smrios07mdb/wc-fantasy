@@ -6,6 +6,7 @@
  */
 import type { IngestStore, SchedulableMatch } from "./store";
 import type { MatchRowIn, StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
+import { isLockWriteAuthorized } from "./lock";
 
 const pk = (a: number, b: number): string => `${a}:${b}`;
 
@@ -18,6 +19,19 @@ export class MemoryIngestStore implements IngestStore {
   private dirty = new Set<string>();
   private locks = new Map<string, Date>();
   private appeared = new Map<number, Set<number>>(); // matchBdlId → appeared player BDL-ids (score rows)
+  /** Opt-in lock-gate model (mirrors `fifa_match` status+teams+period for `lockSlot`). When a match's facts
+   *  are seeded the gate is enforced EXACTLY as production; an unseeded match exercises lock FLOW only — the
+   *  gate's own coverage lives in `isLockWriteAuthorized`'s unit tests + the Prisma store. */
+  private lockMatchFacts = new Map<
+    number,
+    {
+      status: string;
+      periodId: string | null;
+      homeTeamBdlId: number | null;
+      awayTeamBdlId: number | null;
+    }
+  >();
+  private lockPlayerTeam = new Map<number, number>(); // playerBdlId → teamBdlId (team-membership gate)
   private periods = new Map<string, string>(); // `${kind}:${label}` → periodId
   private matches: SchedulableMatch[] = [];
   /** bdlId → what upsertMatch was called with (records the resolved period_id + fallback flag). */
@@ -40,6 +54,27 @@ export class MemoryIngestStore implements IngestStore {
   /** Seed the authoritative appeared set (the `score_player_match` participants) for a match. */
   seedAppeared(matchBdlId: number, playerBdlIds: readonly number[]): void {
     this.appeared.set(matchBdlId, new Set(playerBdlIds));
+  }
+  /** Seed a match's lock-gate facts (status + teams + period) so `lockSlot` enforces the FULL production
+   *  gate for it. Without this a match is gate-exempt in memory (lock-FLOW-only tests). */
+  seedMatchFacts(
+    matchBdlId: number,
+    facts: {
+      status: string;
+      periodId: string | null;
+      homeTeamBdlId: number | null;
+      awayTeamBdlId: number | null;
+    },
+  ): void {
+    this.lockMatchFacts.set(matchBdlId, facts);
+  }
+  /** Seed a player's team id (for the team-membership gate). */
+  seedPlayerTeam(playerBdlId: number, teamBdlId: number): void {
+    this.lockPlayerTeam.set(playerBdlId, teamBdlId);
+  }
+  /** Pre-seed a lock directly, BYPASSING the gate — for tests asserting the monotonic latch / sweep no-ops. */
+  seedLock(matchBdlId: number, playerBdlId: number, at: Date): void {
+    this.locks.set(pk(matchBdlId, playerBdlId), at);
   }
   seedSchedulable(m: {
     bdlId: number;
@@ -160,7 +195,23 @@ export class MemoryIngestStore implements IngestStore {
   }
 
   // ── IngestStore: locking ──
-  setLockedAt(m: number, p: number, at: Date): Promise<boolean> {
+  lockSlot(m: number, p: number, at: Date, now: Date, _path: string): Promise<boolean> {
+    // Temporal now-gate — ALWAYS enforced (the boundary never trusts the caller).
+    if (at.getTime() > now.getTime()) return Promise.resolve(false);
+    // Team + status gate — enforced exactly as production WHEN the test opted in by seeding match facts.
+    const facts = this.lockMatchFacts.get(m);
+    if (facts) {
+      const authz = isLockWriteAuthorized({
+        periodId: facts.periodId,
+        matchStatus: facts.status,
+        homeTeamId: facts.homeTeamBdlId,
+        awayTeamId: facts.awayTeamBdlId,
+        playerTeamId: this.lockPlayerTeam.get(p) ?? null,
+        lockedAtMs: at.getTime(),
+        nowMs: now.getTime(),
+      });
+      if (!authz.ok) return Promise.resolve(false);
+    }
     // Monotonic latch: only set when currently unlocked (mirrors the DB trigger / Prisma store).
     if (this.locks.has(pk(m, p))) return Promise.resolve(false);
     this.locks.set(pk(m, p), at);

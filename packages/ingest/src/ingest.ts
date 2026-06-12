@@ -95,13 +95,13 @@ function isSubstitution(incidentType: string): boolean {
  * XI-pull and per-event sub-locking miss appearances the 60s poller never observed — a late/missed XI
  * confirmation, a sub event between polls — leaving played slots `locked_at = NULL` forever, since neither
  * mode re-fires once the match leaves its window. This runs every live + settle tick, so any appeared
- * player still stamps. Period-scoped + monotonic via `setLockedAt` (only `locked_at IS NULL` slots in the
- * match's period change → never another period's slots, never an already-set lock) ⇒ no phantom lock.
+ * player still stamps. Routed through the single `lockSlot` boundary, which re-checks team-in-match +
+ * status + now + period (so even a contaminated appeared set can never stamp a non-participant).
  */
 async function reconcileAppearanceLocks(store: IngestStore, ctx: MatchCtx): Promise<void> {
   const appeared = await store.listAppearedPlayerBdlIds(ctx.bdlId);
   for (const lock of lockInstantsFromAppearances(appeared, ctx.kickoffAt, ctx.now)) {
-    await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
+    await store.lockSlot(ctx.bdlId, lock.playerBdlId, lock.lockedAt, ctx.now, "reconcile");
   }
 }
 
@@ -129,7 +129,7 @@ export async function ingestLineups(
       if (e.isStarter) officialStarterBdlIds.push(e.playerBdlId);
     }
     for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt, ctx.now)) {
-      await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
+      await store.lockSlot(ctx.bdlId, lock.playerBdlId, lock.lockedAt, ctx.now, "xi-pull");
     }
   }
   return { officialStarterBdlIds };
@@ -149,9 +149,15 @@ export async function ingestLive(
   ]);
 
   const touched = new Set<number>();
+  // FOREIGN-EVENT GUARD (2026-06-12 leak root cause): the GOAT `match_id` filter is not reliably honoured,
+  // so one pull can return rows belonging to OTHER fixtures. Anything whose OWN match ≠ this match is
+  // dropped ENTIRELY — never stored, never dirtied, never lock-stamped against this match's period. This is
+  // the OUTER defence; `lockSlot`'s team+status gate is the categorical backstop. Count → one operator warn.
+  let foreignSkipped = 0;
 
   await eachItem(stats.data, async (f) => {
     const row = mapStatLine(f);
+    if (row.matchBdlId !== ctx.bdlId) return void foreignSkipped++;
     await store.upsertStatLine(row);
     const r = mapRating(f);
     await store.upsertRatingBalldontlie(r.matchBdlId, r.playerBdlId, r.rating);
@@ -160,6 +166,7 @@ export async function ingestLive(
 
   await eachItem(events.data, async (f) => {
     const e = mapEvent(f);
+    if (e.matchBdlId !== ctx.bdlId) return void foreignSkipped++;
     await store.upsertEvent(e);
     for (const id of [e.playerBdlId, e.assistPlayerBdlId, e.playerInBdlId, e.playerOutBdlId]) {
       if (id != null) touched.add(id);
@@ -171,19 +178,30 @@ export async function ingestLive(
         ctx.kickoffAt,
         ctx.now,
       );
-      if (lock) await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
+      if (lock)
+        await store.lockSlot(ctx.bdlId, lock.playerBdlId, lock.lockedAt, ctx.now, "sub-event");
     }
   });
 
   await eachItem(shots.data, async (f) => {
     const sh = mapShot(f);
+    if (sh.matchBdlId !== ctx.bdlId) return void foreignSkipped++;
     await store.upsertShot(sh);
     if (sh.playerBdlId != null) touched.add(sh.playerBdlId);
   });
 
   await eachItem(teamStats.data, async (f) => {
-    await store.upsertTeamStat(mapTeamStat(f));
+    const ts = mapTeamStat(f);
+    if (ts.matchBdlId !== ctx.bdlId) return void foreignSkipped++;
+    await store.upsertTeamStat(ts);
   });
+
+  if (foreignSkipped > 0) {
+    // The feed returned cross-match rows — the 2026-06-12 root external cause. Operator-visible signal.
+    console.warn(
+      `[ingest.live.foreign_skipped] ${JSON.stringify({ matchBdlId: ctx.bdlId, count: foreignSkipped })}`,
+    );
+  }
 
   // events/shots/team_stats have no `dirty` column → enqueue player-match markers explicitly.
   await store.markPlayersDirty(ctx.bdlId, [...touched]);
@@ -204,8 +222,11 @@ export async function ingestSettle(
     feed.matchShots({ matchId: ctx.bdlId }),
   ]);
   const touched = new Set<number>();
+  // Same foreign-event guard as ingestLive: drop any row whose own match ≠ this match (unfiltered feed).
+  let foreignSkipped = 0;
   await eachItem(stats.data, async (f) => {
     const row = mapStatLine(f);
+    if (row.matchBdlId !== ctx.bdlId) return void foreignSkipped++;
     await store.upsertStatLine(row);
     const r = mapRating(f);
     await store.upsertRatingBalldontlie(r.matchBdlId, r.playerBdlId, r.rating);
@@ -213,9 +234,15 @@ export async function ingestSettle(
   });
   await eachItem(shots.data, async (f) => {
     const sh = mapShot(f);
+    if (sh.matchBdlId !== ctx.bdlId) return void foreignSkipped++;
     await store.upsertShot(sh);
     if (sh.playerBdlId != null) touched.add(sh.playerBdlId);
   });
+  if (foreignSkipped > 0) {
+    console.warn(
+      `[ingest.settle.foreign_skipped] ${JSON.stringify({ matchBdlId: ctx.bdlId, count: foreignSkipped })}`,
+    );
+  }
   await store.markPlayersDirty(ctx.bdlId, [...touched]);
 
   // The lock-on-play coverage net: a completed match's pre_match/live stamps can't re-fire, so stamp

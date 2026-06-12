@@ -9,6 +9,7 @@ import type { PrismaClient, MatchStatus, PeriodKind, Position } from "@app/db";
 import { markStatPlayerDirty } from "@app/db";
 import type { IngestStore, SchedulableMatch } from "./store";
 import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
+import { isLockWriteAuthorized } from "./lock";
 
 type Db = PrismaClient;
 
@@ -220,19 +221,69 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       }
     },
 
-    async setLockedAt(matchBdlId, playerBdlId, lockedAt): Promise<boolean> {
+    async lockSlot(matchBdlId, playerBdlId, lockedAt, now, path): Promise<boolean> {
+      // Resolve the SOURCE match (the fixture the lock derives from) and the candidate player. A foreign
+      // event references a match not in `fifa_match`, or a player not rostered → unknown ref → no stamp.
       const match = await prisma.fifaMatch.findUnique({
         where: { balldontlieId: matchBdlId },
-        select: { periodId: true },
+        select: { id: true, periodId: true, status: true, homeTeamId: true, awayTeamId: true },
       });
-      const playerId = await playerIdFor(playerBdlId);
-      if (!match?.periodId || !playerId) return false; // no period seeded → leave unlocked (TODO(confirm))
-      // Monotonic latch: only set when currently NULL (the DB trigger also rejects re-locks).
+      const player = await prisma.player.findUnique({
+        where: { balldontlieId: playerBdlId },
+        select: { id: true, teamId: true },
+      });
+      if (!match || !player) return false;
+
+      // THE categorical gate (DECISIONS lock-on-play): team-in-source-match + in-play-or-later + now-gate +
+      // period. Blocks the 2026-06-12 wrong-match / non-participant leak class regardless of upstream bugs.
+      const periodId = match.periodId;
+      const authz = isLockWriteAuthorized({
+        periodId,
+        matchStatus: match.status,
+        homeTeamId: match.homeTeamId,
+        awayTeamId: match.awayTeamId,
+        playerTeamId: player.teamId,
+        lockedAtMs: lockedAt.getTime(),
+        nowMs: now.getTime(),
+      });
+      if (!authz.ok || periodId == null) {
+        // A would-be stamp the gate refused = the leak signature. Logged loudly (not silently dropped) so
+        // the NEXT incident is diagnosable from Render logs in minutes — fan-out is unique per league, so
+        // one refusal line per offending (player, match) pair.
+        console.warn(
+          `[lock.slot.refused] ${JSON.stringify({
+            reason: authz.ok ? "no-period" : authz.reason,
+            path,
+            sourceMatchBdlId: matchBdlId,
+            playerBdlId,
+            instant: lockedAt.toISOString(),
+          })}`,
+        );
+        return false;
+      }
+
+      // Authorised. Period-scoped + monotonic (only `locked_at IS NULL`); the DB trigger is the backstop.
+      const slot = await prisma.lineupSlot.findFirst({
+        where: { periodId, playerId: player.id, lockedAt: null },
+        select: { id: true },
+      });
+      if (!slot) return false; // already locked, or this player holds no unlocked slot in the period
       const result = await prisma.lineupSlot.updateMany({
-        where: { periodId: match.periodId, playerId, lockedAt: null },
+        where: { periodId, playerId: player.id, lockedAt: null },
         data: { lockedAt },
       });
-      return result.count > 0;
+      if (result.count === 0) return false;
+      console.info(
+        `[lock.slot.stamped] ${JSON.stringify({
+          slotId: slot.id,
+          playerId: player.id,
+          sourceMatchId: match.id,
+          sourceMatchBdlId: matchBdlId,
+          path,
+          instant: lockedAt.toISOString(),
+        })}`,
+      );
+      return true;
     },
 
     async listAppearedPlayerBdlIds(matchBdlId): Promise<number[]> {

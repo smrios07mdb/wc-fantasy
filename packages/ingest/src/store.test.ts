@@ -61,11 +61,77 @@ describe("MemoryIngestStore raw upserts", () => {
     expect(store.isDirty(1, 5)).toBe(true);
   });
 
-  it("setLockedAt records the lock for (match, player)", async () => {
+  it("lockSlot records the lock for (match, player) once the instant has arrived", async () => {
     const store = new MemoryIngestStore();
     const at = new Date("2026-06-10T18:00:00Z");
-    await store.setLockedAt(1, 2, at);
+    const now = new Date("2026-06-10T18:30:00Z");
+    await store.lockSlot(1, 2, at, now, "xi-pull");
     expect(store.lockedAt(1, 2)).toEqual(at);
+  });
+
+  it("lockSlot REFUSES a non-participant even with the outer guards bypassed (team-membership gate)", async () => {
+    // Defence-in-depth proof for the 2026-06-12 leak: suppose a foreign substitution reaches the write
+    // boundary directly — the ingestLive foreign-event guard AND the feed re-filter both bypassed. lockSlot
+    // is the categorical backstop: a player whose team is NOT one side of the SOURCE match is refused, full
+    // stop, regardless of any upstream feed/mapping bug. Seed the live match's facts + a stranger's team.
+    const store = new MemoryIngestStore();
+    const kickoff = new Date("2026-06-12T19:00:00Z");
+    const now = new Date("2026-06-12T20:00:00Z");
+    store.seedMatchFacts(50, {
+      status: "in_progress",
+      periodId: "md1",
+      homeTeamBdlId: 100, // Canada
+      awayTeamBdlId: 200, // Bosnia & Herzegovina
+    });
+
+    // A France player (team 999) whose sub leaked in from another fixture at "59'" — exactly James
+    // Rodríguez's class in the incident. He is on neither side of match 50 → refused.
+    store.seedPlayerTeam(77, 999);
+    const leaked = await store.lockSlot(
+      50,
+      77,
+      new Date(kickoff.getTime() + 59 * 60_000),
+      now,
+      "sub-event",
+    );
+    expect(leaked).toBe(false);
+    expect(store.lockedAt(50, 77)).toBeUndefined();
+
+    // Control: a real participant of the SAME in-play match IS stamped.
+    store.seedPlayerTeam(7, 100); // Canada
+    const ok = await store.lockSlot(50, 7, kickoff, now, "xi-pull");
+    expect(ok).toBe(true);
+    expect(store.lockedAt(50, 7)).toEqual(kickoff);
+  });
+
+  it("lockSlot REFUSES while the source match is not in-play-or-later (scheduled)", async () => {
+    const store = new MemoryIngestStore();
+    const now = new Date("2026-06-12T20:00:00Z");
+    // A future fixture wrongly handed a past instant: the status gate is the categorical kill — even a real
+    // participant cannot be stamped while his match is still `scheduled` (the whole defect class).
+    store.seedMatchFacts(60, {
+      status: "scheduled",
+      periodId: "md1",
+      homeTeamBdlId: 1,
+      awayTeamBdlId: 2,
+    });
+    store.seedPlayerTeam(8, 1);
+    const stamped = await store.lockSlot(60, 8, new Date("2026-06-12T19:30:00Z"), now, "xi-pull");
+    expect(stamped).toBe(false);
+    expect(store.lockedAt(60, 8)).toBeUndefined();
+  });
+
+  it("lockSlot REFUSES before the lock instant has arrived (now-gate, always on)", async () => {
+    const store = new MemoryIngestStore();
+    const stamped = await store.lockSlot(
+      70,
+      9,
+      new Date("2026-06-12T19:59:00Z"),
+      new Date("2026-06-12T19:00:00Z"), // now is BEFORE the instant
+      "sub-event",
+    );
+    expect(stamped).toBe(false);
+    expect(store.lockedAt(70, 9)).toBeUndefined();
   });
 
   it("resolvePeriodId returns the seeded period id or null", async () => {

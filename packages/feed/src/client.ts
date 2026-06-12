@@ -113,16 +113,27 @@ export function buildClient(config: FeedClientConfig): FeedClient {
     ...snakeParams({ ...p }),
     match_id: p.matchId,
   });
+  // Defence in depth (2026-06-12 cross-match lock leak): the server `match_id` filter is NOT reliably
+  // honoured — a single scoped pull can return rows belonging to OTHER fixtures. Re-filter client-side so a
+  // firehose response can never reach the ingest layer. (The ingest foreign-event guard + lockSlot's
+  // team/status gate are the inner defences; this stops the contamination at the wire.)
+  const matchScoped = async <T extends { match_id: number }>(
+    endpoint: string,
+    p: MatchScopedParams,
+  ): Promise<Paginated<T>> => {
+    const res = await getAll<T>(b, endpoint, scoped(p));
+    return { data: res.data.filter((r) => r.match_id === p.matchId), meta: res.meta };
+  };
   return {
     matches: (p?: MatchListParams) =>
       getAll<FIFAMatch>(b, "matches", snakeParams({ ...(p ?? {}) })),
-    matchLineups: (p: MatchScopedParams) => getAll<FIFAMatchLineup>(b, "match_lineups", scoped(p)),
-    matchEvents: (p: MatchScopedParams) => getAll<FIFAMatchEvent>(b, "match_events", scoped(p)),
+    matchLineups: (p: MatchScopedParams) => matchScoped<FIFAMatchLineup>("match_lineups", p),
+    matchEvents: (p: MatchScopedParams) => matchScoped<FIFAMatchEvent>("match_events", p),
     playerMatchStats: (p: MatchScopedParams) =>
-      getAll<FIFAPlayerMatchStats>(b, "player_match_stats", scoped(p)),
+      matchScoped<FIFAPlayerMatchStats>("player_match_stats", p),
     teamMatchStats: (p: MatchScopedParams) =>
-      getAll<FIFATeamMatchStats>(b, "team_match_stats", scoped(p)),
-    matchShots: (p: MatchScopedParams) => getAll<FIFAShot>(b, "match_shots", scoped(p)),
+      matchScoped<FIFATeamMatchStats>("team_match_stats", p),
+    matchShots: (p: MatchScopedParams) => matchScoped<FIFAShot>("match_shots", p),
     // Squads. `seasons[]`/`team_ids[]`/`player_ids[]` are snake_case array params (toQuery emits `[]`);
     // built explicitly here since snakeParams doesn't rename multi-word keys. Defaults to season 2026.
     rosters: (p?: RostersParams) =>

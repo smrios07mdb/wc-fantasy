@@ -40,7 +40,7 @@ describe("sweepCompletedMatchLocks", () => {
     // Player 7 was correctly locked at his sub-entry minute by the live path; sweep must not clobber it.
     const store = new MemoryIngestStore();
     const entryInstant = new Date(kickoffMs + 63 * 60_000); // sub locked at 63′
-    await store.setLockedAt(99, 7, entryInstant);
+    store.seedLock(99, 7, entryInstant);
     store.seedAppeared(99, [7]);
 
     const results = await sweepCompletedMatchLocks(store, [completedMatch(99)], now);
@@ -119,14 +119,14 @@ describe("sweepCompletedMatchLocks", () => {
     // Rangel scenario: player 7 appeared in MD1 (match 99, period-md1). He is also rostered in the
     // Final (a different period, represented by match 200). The sweep processes both matches; it finds
     // player 7 in match 99's appeared set and stamps lockedAt(99, 7). Match 200 has NO score row for
-    // player 7, so setLockedAt is never called for (200, 7).
+    // player 7, so lockSlot is never called for (200, 7).
     //
-    // Sweep-layer guarantee: setLockedAt is only ever called with the bdlId of the match being
+    // Sweep-layer guarantee: lockSlot is only ever called with the bdlId of the match being
     // processed — never for a cross-match slot.
     //
-    // Prisma-layer guarantee (packages/ingest/src/prismaStore.ts:226–232): setLockedAt(99, 7, kickoff)
-    // resolves match 99's periodId and adds WHERE period_id = <md1-period> to the updateMany, so even
-    // if the DB were queried for player 7 it would only touch md1-period slots, never the Final slot.
+    // Prisma-layer guarantee (prismaStore.ts lockSlot): the call resolves match 99's periodId and adds
+    // WHERE period_id = <md1-period> to the updateMany, AND the team/status gate requires player 7 to play
+    // in match 99 — so even if the DB were queried for player 7 it could only touch md1-period slots.
     const store = new MemoryIngestStore();
     store.seedAppeared(99, [7]); // player 7 in MD1 appeared set
     // match 200 (Final, 2h ago) — player 7 has no score_player_match row → appeared set is empty
@@ -144,7 +144,7 @@ describe("sweepCompletedMatchLocks", () => {
     store.seedAppeared(12, [3]);
     // Match 13 already fully locked — must not appear in results.
     store.seedAppeared(13, [4]);
-    await store.setLockedAt(13, 4, kickoff);
+    store.seedLock(13, 4, kickoff);
 
     const results = await sweepCompletedMatchLocks(
       store,

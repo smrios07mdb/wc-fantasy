@@ -7,6 +7,10 @@
  */
 import type { MatchRowIn, StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
 
+/** Which derivation produced a lock-write attempt — carried through `lockSlot` into the structured log
+ *  so the next incident's path is greppable in Render in minutes. */
+export type LockPath = "xi-pull" | "sub-event" | "reconcile" | "sweep";
+
 export interface SchedulableMatch {
   bdlId: number;
   status: string;
@@ -47,10 +51,23 @@ export interface IngestStore {
   markPlayersDirty(matchBdlId: number, playerBdlIds: readonly number[]): Promise<void>;
 
   // ── locking ──
-  /** Stamp `locked_at` on the slot. Monotonic: only writes when currently NULL (the DB trigger + Prisma
-   *  store also enforce this). Returns `true` when a new lock was written, `false` when already locked
-   *  (so callers that need a count, like the post-drop sweep, can distinguish new writes from no-ops). */
-  setLockedAt(matchBdlId: number, playerBdlId: number, lockedAt: Date): Promise<boolean>;
+  /**
+   * THE single lock-on-play write boundary (DECISIONS lock-on-play; ARCHITECTURE §3). Every lock writer —
+   * XI-pull, sub-event, coverage reconcile, post-drop sweep — routes through here; nothing else writes
+   * `lineup_slot.locked_at`. Before stamping it enforces the categorical invariant {@link isLockWriteAuthorized}
+   * against the SOURCE match (`matchBdlId`): the player's team must be one side of that match, the match must
+   * be in-play-or-later, the instant must have arrived, and there must be a period to scope to. This blocks
+   * the 2026-06-12 wrong-match / non-participant leak class at the boundary, independent of any upstream feed
+   * or mapping bug. The write is period-scoped + monotonic (only `locked_at IS NULL`). `now` gates the write;
+   * `path` is for the structured log. Returns `true` only when a NEW lock was written (the sweep counts these).
+   */
+  lockSlot(
+    matchBdlId: number,
+    playerBdlId: number,
+    lockedAt: Date,
+    now: Date,
+    path: LockPath,
+  ): Promise<boolean>;
   /** The AUTHORITATIVE appeared set: every player BDL-id with a `score_player_match` row for this match
    *  (the participant gate already excluded non-appearers + cross-team contamination). Drives the
    *  coverage-reconciliation lock so a played player whose feed signal the poller missed still stamps. */

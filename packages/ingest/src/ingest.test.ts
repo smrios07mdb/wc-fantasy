@@ -160,6 +160,43 @@ describe("ingestLive", () => {
     expect(store.allEvents()).toHaveLength(1);
   });
 
+  it("does NOT lock a player whose substitution event belongs to a DIFFERENT match (cross-match leak regression)", async () => {
+    // 2026-06-12 recurrence (Canada–Bosnia live window, the THIRD premature-lock incident): the live
+    // match's `feed.matchEvents` returned substitution events that belong to OTHER fixtures — the GOAT
+    // `match_id` filter is not honored and the client (getAll) never re-checks `event.match_id`. Each
+    // foreign sub's `player_in` is a pooled WC player whose OWN fixture is still scheduled/future, so he
+    // is NOT a participant of the live match. The unguarded sub-lock applies the LIVE match's kickoff +
+    // period to him (setLockedAt keyed on ctx.bdlId), stamping locked_at on a non-participant. The
+    // forensic signature is exactly this: 44 strangers (France/Portugal/Argentina/… players whose MD1
+    // fixtures are days out) stamped at `kickoff + their-other-match minute`. He must stay swappable.
+    const FOREIGN_MATCH = 999; // a different fixture — NOT ctx.bdlId (50)
+    const feed = fakeFeed({
+      matchEvents: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 903,
+              match_id: FOREIGN_MATCH, // ← belongs to another match, not the live match (50)
+              incident_type: "substitution",
+              player_in: { id: 77 }, // a stranger: his own fixture is scheduled/future, not match 50
+              time_minute: 59,
+              added_time: 0,
+            },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    await ingestLive(feed, store, {
+      bdlId: 50, // the LIVE match
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
+    // A substitution from a DIFFERENT match must never lock a player against the live match's period.
+    expect(store.lockedAt(50, 77)).toBeUndefined();
+  });
+
   it("marks the out-going player dirty even with no stat row (event-only)", async () => {
     const feed = fakeFeed({
       matchEvents: () =>
@@ -350,7 +387,7 @@ describe("ingestSettle", () => {
   it("reconciliation is monotonic — an already-locked sub keeps his earlier entry instant", async () => {
     const store = new MemoryIngestStore();
     const entry = new Date("2026-06-10T19:03:00Z"); // sub locked earlier at his entry minute
-    await store.setLockedAt(50, 7, entry);
+    store.seedLock(50, 7, entry); // pre-seed the earlier lock directly (bypasses the gate)
     store.seedAppeared(50, [7]);
     await ingestSettle(fakeFeed({}), store, {
       bdlId: 50,

@@ -6,8 +6,8 @@
  * and is never reconciled again — leaving any slot the live/settle path missed at `locked_at = NULL`.
  *
  * This module closes that gap: on the hourly schedule-sync cadence it scans completed fixtures whose
- * kickoff is within 48 hours of now and re-runs the same `lockInstantsFromAppearances → setLockedAt`
- * path.  The monotonic `IS NULL` latch makes it a no-op for already-locked slots, so it is safe to run
+ * kickoff is within 48 hours of now and re-runs the same `lockInstantsFromAppearances → lockSlot` path.
+ * The monotonic `IS NULL` latch makes it a no-op for already-locked slots, so it is safe to run
  * repeatedly.  Only matches where ≥1 slot is newly stamped appear in the return value — those entries
  * double as the deploy-gap / outage alert.
  */
@@ -28,7 +28,7 @@ export interface AppearanceSweepEntry {
 /**
  * Scan recently-completed matches and stamp any played-but-unlocked slots.
  *
- * @param store    The ingest IO port (only `listAppearedPlayerBdlIds` + `setLockedAt` are called).
+ * @param store    The ingest IO port (only `listAppearedPlayerBdlIds` + `lockSlot` are called).
  * @param matches  The schedulable-match list already loaded by the tick (no extra DB call).
  * @param now      The tick's wall clock (gates the lock-write invariant).
  * @param windowMs How far back to look; defaults to {@link APPEARANCE_SWEEP_WINDOW_MS} (48h).
@@ -53,7 +53,7 @@ export async function sweepCompletedMatchLocks(
 
     let count = 0;
     for (const lock of locks) {
-      if (await store.setLockedAt(match.bdlId, lock.playerBdlId, lock.lockedAt)) count++;
+      if (await store.lockSlot(match.bdlId, lock.playerBdlId, lock.lockedAt, now, "sweep")) count++;
     }
     if (count > 0) stamped.push({ matchBdlId: match.bdlId, count });
   }

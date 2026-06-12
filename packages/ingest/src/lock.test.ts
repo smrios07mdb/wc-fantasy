@@ -3,6 +3,7 @@ import {
   lockInstantsFromLineup,
   lockInstantFromSub,
   lockInstantsFromAppearances,
+  isLockWriteAuthorized,
   type LineupAppearance,
 } from "./lock";
 
@@ -100,5 +101,75 @@ describe("lockInstantsFromAppearances (coverage reconciliation)", () => {
 
   it("is empty for an empty appearance set (no players → no locks)", () => {
     expect(lockInstantsFromAppearances([], kickoff, afterKickoff)).toEqual([]);
+  });
+});
+
+describe("isLockWriteAuthorized (the lock-write invariant)", () => {
+  // A fully-authorising baseline: in-play source match, player on the home side, instant arrived.
+  const ok = {
+    periodId: "md1",
+    matchStatus: "in_progress",
+    homeTeamId: "team-A",
+    awayTeamId: "team-B",
+    playerTeamId: "team-A",
+    lockedAtMs: kickoff.getTime(),
+    nowMs: afterKickoff.getTime(),
+  };
+
+  it("authorises a participant of an in-play match once the instant has arrived", () => {
+    expect(isLockWriteAuthorized(ok)).toEqual({ ok: true });
+    expect(isLockWriteAuthorized({ ...ok, playerTeamId: "team-B" })).toEqual({ ok: true }); // away side
+    expect(isLockWriteAuthorized({ ...ok, matchStatus: "completed" })).toEqual({ ok: true });
+  });
+
+  it("REFUSES a player whose team is neither side of the source match (the 2026-06-12 leak)", () => {
+    // A pooled WC player (France) whose substitution event leaked in from another fixture: his team is
+    // not in the live (Canada–Bosnia) match → the categorical kill, independent of timing/mapping bugs.
+    expect(isLockWriteAuthorized({ ...ok, playerTeamId: "team-FRANCE" })).toEqual({
+      ok: false,
+      reason: "player-not-in-match",
+    });
+    expect(isLockWriteAuthorized({ ...ok, playerTeamId: null })).toEqual({
+      ok: false,
+      reason: "player-not-in-match",
+    });
+  });
+
+  it("REFUSES while the source match is not in-play-or-later (scheduled/postponed/abandoned)", () => {
+    for (const matchStatus of ["scheduled", "postponed", "abandoned", null]) {
+      expect(isLockWriteAuthorized({ ...ok, matchStatus })).toEqual({
+        ok: false,
+        reason: "match-not-in-play",
+      });
+    }
+  });
+
+  it("REFUSES before the lock instant has arrived (now-gate, re-checked at the boundary)", () => {
+    expect(isLockWriteAuthorized({ ...ok, nowMs: beforeKickoff.getTime() })).toEqual({
+      ok: false,
+      reason: "before-instant",
+    });
+  });
+
+  it("REFUSES when the source match has no period to scope the slot", () => {
+    expect(isLockWriteAuthorized({ ...ok, periodId: null })).toEqual({
+      ok: false,
+      reason: "no-period",
+    });
+  });
+
+  it("checks reasons in precedence order: period → instant → status → team", () => {
+    // All four wrong at once → the first failed check (no-period) is the reported reason.
+    expect(
+      isLockWriteAuthorized({
+        periodId: null,
+        matchStatus: "scheduled",
+        homeTeamId: "team-A",
+        awayTeamId: "team-B",
+        playerTeamId: "team-X",
+        lockedAtMs: afterKickoff.getTime(),
+        nowMs: beforeKickoff.getTime(),
+      }),
+    ).toEqual({ ok: false, reason: "no-period" });
   });
 });
