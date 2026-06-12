@@ -150,15 +150,29 @@ table each tick):
 Live latency is a few minutes on the feed itself, so polling faster than ~60s is wasted — a sub
 who enters becomes lockable within a couple of minutes, which is fine.
 
-**Lock write path + the `now` gate (2026-06-11 MD1 premature-lock fix).** The lock instant is decided
-by the pure primitives `lockInstantsFromLineup` / `lockInstantFromSub` (`packages/ingest/src/lock.ts`),
-called from `ingestLineups` (pre-match) / `ingestLive` (live) in `packages/ingest/src/ingest.ts`, and
-written by `IngestStore.setLockedAt` (`prismaStore` `updateMany … where locked_at IS NULL` — a monotonic
-latch). The primitives take **`now`** (threaded through `MatchCtx.now`, set per worker tick in
-`apps/worker/src/scheduler.ts`) and emit a lock **only once its instant has arrived** — a starter when
-`now >= kickoff`, a sub when `now >= entry`. This makes the write boundary self-guarding: a
-not-yet-kicked-off match can never stamp `locked_at`, even if `decideMatchModes` mis-fires or a kickoff
-import is briefly wrong. The stored value is always the true lock instant (kickoff / entry), never "≈ now".
+**Lock write path — the single `lockSlot` boundary + its categorical gate (2026-06-11 / 2026-06-12
+premature-lock fixes).** Lock instants are proposed by the pure primitives `lockInstantsFromLineup` /
+`lockInstantFromSub` / `lockInstantsFromAppearances` (`packages/ingest/src/lock.ts`); **every** writer —
+XI-pull, sub-event, appearance reconcile, and the post-drop sweep — then routes through **one** store method,
+`IngestStore.lockSlot(matchBdlId, playerBdlId, lockedAt, now, path)`. Nothing else writes
+`lineup_slot.locked_at` (a structural test, `lockBoundary.test.ts`, fails if a second writer appears).
+Before stamping, `lockSlot` enforces the pure invariant `isLockWriteAuthorized` against the **source** match:
+the player's `team_id` must be one side of that match (**participant proof**), the match `status ∈
+{in_progress, completed}` (**in-play-or-later**), the instant must have arrived (`lockedAt <= now`), and the
+match must have a period — only then the monotonic, period-scoped write (`updateMany … where locked_at IS
+NULL`). This is the **categorical kill for the 2026-06-12 cross-match leak**: a substitution event belonging
+to a *different* live fixture — or any `scheduled` match — can never authorise a stamp, regardless of upstream
+feed/mapping bugs. **The `now` gate is ONLY a temporal boundary** (never stamp before the instant) — it is
+explicitly NOT an identity/scoping guard; the earlier "self-guarding against a wrong match" claim was
+falsified by the recurrence (foreign-fixture sub instants are legitimately past). Two **outer defences** feed
+the boundary: `ingestLive`/`ingestSettle` drop any feed row whose own `match_id ≠ ctx.bdlId` (logs
+`ingest.{live,settle}.foreign_skipped`), and the feed client re-filters every match-scoped response by
+`match_id`. `lockSlot` logs `lock.slot.stamped` / `lock.slot.refused` (with reason) per attempt so the next
+incident is diagnosable from Render logs in minutes. **Self-heal:** migration `20260612220000` lets
+`enforce_lineup_lock()` permit `locked_at → NULL` **only while the lock-source fixture is `scheduled`** (a
+premature stamp, player/role/is_starter unchanged), so the all-periods cleanup
+(`ops/2026-06-12-clear-cross-match-locks.sql`) can repair existing rows; a played (in-play-or-later) lock
+stays immutable. `now` is threaded through `MatchCtx.now`, set per worker tick in `apps/worker/src/scheduler.ts`.
 **Read predicate:** both read sites — `loadLineup.ts` (the `/lineup` editor) and `loadVsField.ts:148`
 (the live display) — derive `locked` through the shared pure `isLockedNow(lockedAt, now)` (`@app/shared`):
 locked **iff `locked_at != null && locked_at <= now`**, so a future-dated stamp reads as movable.
@@ -170,13 +184,13 @@ genuinely-played slot `locked_at = NULL` forever (e.g. Rangel, 90′). `reconcil
 (`packages/ingest/src/ingest.ts`) closes this: it reads the authoritative appeared set
 (`store.listAppearedPlayerBdlIds` → `score_player_match`, i.e. the same `playerAppearedInMatch` participant
 gate scoring uses) and stamps every appeared player at **kickoff** via the same monotonic, **period-scoped**
-`setLockedAt` (only `locked_at IS NULL` slots in the match's own `period_id` — never the ambiguous
-team→future-fixture join, never an already-set sub lock). It is called from **both `ingestLive` and
+`lockSlot` boundary (only `locked_at IS NULL` slots in the match's own `period_id`, now also team+status
+gated — never the ambiguous team→future-fixture join, never an already-set sub lock). It is called from **both `ingestLive` and
 `ingestSettle`**, so settle — which holds the appearance proof — finally writes the lock. **Coverage limit — closed by `sweepCompletedMatchLocks`** (added `feat/appearance-lock-sweep`): the
 live/settle path reconciles only while the match is `in_progress` or `completed && !hasRating && ≤ kickoff +
 12h`. A bounded sweep over completed fixtures within 48h of now closes the post-drop gap: called at the
 hourly schedule-sync cadence in `apps/worker/src/scheduler.ts`, it runs `lockInstantsFromAppearances →
-setLockedAt` per match (the same monotonic latch — a no-op for already-locked slots; logs
+lockSlot` per match (the same gated, monotonic boundary — a no-op for already-locked slots; logs
 `lock.sweep.stamped` on actual new writes).
 
 #### FAAB cadence: per-period batch + acquisition window (Theme-D amendment — deferred ARCHITECTURE update, now landed)

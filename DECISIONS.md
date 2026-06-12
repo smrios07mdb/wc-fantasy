@@ -143,6 +143,9 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   (Cowork failsafe).
 
 #### ⚠️ INVARIANT — never stamp `locked_at` before the lock instant (2026-06-11 MD1 incident)
+> **Diagnosis later found INCOMPLETE** — the now-gate below fixes only the *temporal* boundary. The same
+> defect refired on 2026-06-12 as a cross-match / non-participant leak the now-gate cannot catch; see
+> **RECURRENCE — cross-match / non-participant leak** below for the corrected root cause + the status+team gate.
 - **Write invariant:** `lineup_slot.locked_at` MUST stay NULL until a player's match actually locks
   him — a starter **at/after his match kickoff** (`now >= kickoff`), a sub **at his entry minute**.
   It is **never** stamped for a scheduled / not-yet-kicked-off match, and the stored instant is the
@@ -204,14 +207,61 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   fixtures whose kickoff is within 48h of now and runs `lockInstantsFromAppearances → setLockedAt` for each.
   The monotonic `IS NULL` latch makes it a no-op for already-locked slots; the sweep only logs
   `lock.sweep.stamped` when it actually writes (the deploy-gap / outage alert signal).
-- **Status (reconciled 2026-06-12):** both lock directions are fixed in `main` — over-stamp (now-gate write
-  `ee4c18b` + now-respecting read `fab4105`) and under-stamp (appeared⇒locked backstop `e888f66` + bounded 48h
-  sweep `1723b5a`). The throwaway branch **`fix/premature-locks-statusgate` is retired** — rebased onto `main`
-  it had **zero unique delta** and never carried the agreed four-layer fix (branch + worktree deleted). The
-  **four-layer plan is reduced to optional Layers 1 + 4** (Layer 1 = kickoff-import should **skip/flag** a
-  missing kickoff instead of coalescing to ≈now; Layer 4 = the live cleanup SQL should drop its `p.label = 'MD1'`
-  filter to clean **all periods**); **Layer 2's intent — no stamp on a not-yet-kicked-off match — is already met
-  by the in-main now-gate**, and both remaining layers are non-blocking hardening.
+#### ⚠️ RECURRENCE — cross-match / non-participant leak (the THIRD incident; 2026-06-12 evening; `fix/premature-locks-statusgate`)
+- **What the earlier records got wrong.** The "Status (reconciled 2026-06-12)" note here previously declared
+  the over-stamp direction *fixed* by the now-gate (`ee4c18b`) and **retired** the `fix/premature-locks-statusgate`
+  branch as zero-delta (`ed7717a`). **Both were premature.** The defect refired the same evening during the
+  Canada–Bosnia live window: **44 `lineup_slot` rows in MD1** were stamped `locked_at` for **non-participants**
+  — pooled WC players (France/Portugal/Argentina/… e.g. Mbappé, James Rodríguez, Ronaldo) whose own MD-fixtures
+  are days out (`scheduled`, kickoff Jun 13–18). The 2026-06-11 "`≈ now`" reading was an **incomplete diagnosis**:
+  the stamps were always `kickoff + a-substitution-minute`, which merely *looks* like "≈ now" mid-match. The
+  now-gate fixes the temporal boundary but **cannot** catch this — those instants are legitimately past for the
+  live match. The defect is **IDENTITY/SCOPING (which slot), not timing.**
+- **Root cause.** `feed.matchEvents({matchId})` relies on the GOAT server `match_id` filter, which is **not
+  reliably honoured** — one live pull returned substitution events belonging to **other fixtures** (their
+  `match_id` not in `fifa_match`, so `upsertEvent` no-op'd → no stored trace; that asymmetry is why
+  `score_player_match` stayed clean while 44 locks appeared). `ingestLive` applied the **live match's**
+  `ctx.kickoffAt` + period to every such sub's `player_in` and `setLockedAt(ctx.bdlId, …)` stamped the
+  stranger's slot. Fan-out is **unique per league** (the active-ownership invariant): 44 slots = ~44 distinct
+  rostered `player_in` across the foreign fixtures, **one slot each** (not multi-manager). `reconcileAppearanceLocks`
+  and the XI-pull were **exonerated** — both stamp only at `kickoffAt`, and the appeared set had **zero** strangers.
+- **The fix (this branch) — a single status+team-gated write boundary.**
+  1. **One lock writer: `store.lockSlot(matchBdlId, playerBdlId, lockedAt, now, path)`** (replaces `setLockedAt`).
+     Every writer — XI-pull, sub-event, reconcile, sweep — routes through it; a structural test
+     (`lockBoundary.test.ts`) fails if any other code writes `lineup_slot.locked_at`.
+  2. **The categorical gate `isLockWriteAuthorized` (pure):** a stamp is authorised **iff** the player's
+     `team_id` is one side of the **source** match **AND** that match's `status ∈ {in_progress, completed}`
+     **AND** the instant has arrived **AND** the match has a period. A *different* live match — or a
+     `scheduled` one — can **never** authorise a stamp, which kills the entire class regardless of any future
+     feed/mapping bug. (`MatchStatus` enum literals confirmed against the schema; "in-play-or-later" =
+     `in_progress`/`completed`, never `scheduled`/`postponed`/`abandoned`.)
+  3. **Outer defences:** `ingestLive`/`ingestSettle` drop any feed row whose own `match_id ≠ ctx.bdlId`
+     (logged `ingest.{live,settle}.foreign_skipped`); the feed client re-filters every match-scoped response
+     by `match_id` client-side (server filter not trusted).
+  4. **Diagnosability:** `lockSlot` logs `lock.slot.stamped` (slot/player/source-match/path/instant) on every
+     write and `lock.slot.refused` (with reason) on every gate refusal — the next incident is greppable in Render in minutes.
+- **Trigger migration `20260612220000_lineup_lock_scheduled_unlock` — scheduled-only self-heal.** `enforce_lineup_lock()`
+  froze `locked_at` once set (any change, incl. `→ NULL`, raised), so the cleanup could only run under a manual
+  override. The trigger now permits **`locked_at → NULL` IFF the slot's lock-source fixture is still `scheduled`**
+  (a premature stamp) — player/role/is_starter unchanged; a played (`in_progress`/`completed`) lock stays immutable.
+  Verified on throwaway Postgres: scheduled-clear succeeds, completed-clear raises (embedded Theme-F self-test + live demo).
+- **Cleanup-vs-trigger finding (settles fact 4 — "stamped both days").** The committed
+  `ops/2026-06-11-clear-premature-md1-locks.sql` does a bare `UPDATE … SET locked_at = NULL` with **no
+  `app.commish_override` GUC and no `DISABLE TRIGGER`** → as written the trigger **rejects every row**. Yet live
+  data shows **zero surviving Jun-11 future-fixture locks** and James now carries a **Jun-12** stamp — only
+  reachable if his Jun-11 stamp was first cleared to NULL (monotonic latch). Conclusion: **same-leak-twice (the
+  Jun-11 stamps WERE cleared), not never-cleaned** — and the cleanup that actually ran used a **manual override
+  not captured in the committed artifact**, which is therefore trigger-unsafe. Regenerated as
+  **`ops/2026-06-12-clear-cross-match-locks.sql`** (GUC-wrapped, **all periods**, future-`scheduled` only),
+  flagged **post-migration-only** (deploy order: migration → cleanup → live-window verify).
+- **Corrupt-kickoff theory — RETIRED (verified, not hardened).** The planned "skip/flag a missing kickoff
+  instead of coalescing to `now`" (old Layer 1) is **unnecessary**: `mapMatchRow` assigns `kickoffAtIso = f.datetime`
+  verbatim and `upsertMatch` does `new Date(...)`, so a missing/garbage datetime yields `Invalid Date` and the
+  Prisma write **fails loudly** (caught at `ingest.schedule.error`) — it is **never** coalesced to `now`. No
+  `Date.now()`/`?? now` exists in the kickoff path; `fifa_match` had zero corrupt kickoffs at incident time.
+- **New invariants (canonical):** (i) **exactly one lock writer — `lockSlot()`**; no direct `locked_at` writers.
+  (ii) **a slot may be stamped only by its OWN period fixture, status-gated in-play-or-later, with team-membership
+  (participant) proof.** The now-gate is **only** a temporal boundary — it is explicitly NOT an identity/scoping guard.
 
 #### Amendment — in-matchday substitutions — STRUCK (superseded by the forfeit model below)
 > The earlier paired-substitution model (one-out/one-in, bench-size cap of 4 group / 2 playoff, each

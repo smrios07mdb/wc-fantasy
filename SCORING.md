@@ -195,3 +195,13 @@ of truth; the modal only renders what the engine already computed and stored. `C
 `SCORE_CATEGORIES` key to its display section/tag/label using the canonical section names from this
 document; if the engine is updated, the recomputed `breakdown_json` automatically flows to the UI. **§1–§8
 values, the rating ladder, position weighting, and the recompute pipeline are all untouched.**
+
+## ℹ️ 2026-06-12 cross-match lock fix (NO scoring change — `locked_at` never enters scoring)
+
+The premature-lock recurrence fix (single `lockSlot` write boundary with a team + status gate; trigger
+self-heal; cleanup SQL — see DECISIONS "RECURRENCE" / ARCHITECTURE §3) touches **only** `lineup_slot.locked_at`,
+which governs **swap-editability**, not points. **Scoring is unchanged.** `locked_at` is **never** a scoring
+input: §1–§8 read `score_player_match` (rating, events, stats, shots) gated by the recompute **participant**
+gate, and forfeits realize through `is_starter` + `voided_at` — `locked_at` appears in neither. A slot reading
+locked-or-movable has **zero** effect on the points the engine computes or stores. The §1–§8 values, the rating
+ladder, position weighting, and the recompute pipeline are all untouched by this fix.

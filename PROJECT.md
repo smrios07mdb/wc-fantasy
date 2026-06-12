@@ -130,7 +130,7 @@ played starter is rejected (`forfeit-requires-confirm`), behaviour byte-identica
 unchanged (starters-only). +N tests, all gates green. See DECISIONS (forfeit amendment) + SCORING (principle
 6) + ARCHITECTURE §16.
 
-**Lock/forfeit state — reconciled + forfeit UI shipped (2026-06-12):** **Both lock directions are now fixed in `main`** — premature
+**Lock/forfeit state — reconciled + forfeit UI shipped (2026-06-12):** *(the lock-state "fixed/retired" claim in this entry is **SUPERSEDED** — see "cross-match / non-participant lock leak" below; the over-stamp direction was NOT fully fixed and the statusgate branch was un-retired.)* **Both lock directions are now fixed in `main`** — premature
 **over**-stamping (now-gate write `ee4c18b` + now-respecting read `fab4105`) and played-but-unlocked
 **under**-stamping (appeared⇒locked backstop `e888f66` + bounded 48h sweep `1723b5a`). The **C1 forfeit engine
 is merged** (`b63f0a4` / `9811ff4` / `121f45f`) — earlier "merge HELD" notes above are superseded. **C2 forfeit
@@ -144,6 +144,30 @@ superseded**: **Layer 2** (no stamp on a not-yet-kicked-off match) is **already 
 leaving only **optional, non-blocking hardening** — **Layer 1** (kickoff-import: **skip/flag** a missing kickoff
 instead of coalescing to ≈now) and **Layer 4** (live cleanup SQL: drop the `p.label = 'MD1'` filter to clean
 **all periods**). See DECISIONS (lock invariant + forfeit amendment).
+
+**Live-incident fix (2026-06-12 evening, MD1): cross-match / non-participant lock leak — the THIRD recurrence**
+(`fix/premature-locks-statusgate`, merge HELD). During the Canada–Bosnia live window, the sub-event lock path
+stamped `locked_at` on **44** MD1 `lineup_slot` rows belonging to **non-participants** — pooled WC players
+(Mbappé, James Rodríguez, Ronaldo, …) whose own fixtures are `scheduled` Jun 13–18, **one slot each** (ownership
+is unique per league). **Root cause:** `feed.matchEvents` returned **foreign-fixture** substitution events (the
+GOAT `match_id` filter is not honoured); `ingestLive` applied the **live** match's kickoff + period and
+`setLockedAt` stamped each stranger at `kickoff + their-other-match minute`. Because those instants are
+legitimately past, the now-gate could not catch it — **the defect is identity/scoping, not timing.** The
+2026-06-11 "`≈ now`" reading was the **same** leak, misdiagnosed; **`ed7717a`'s retirement of
+`fix/premature-locks-statusgate` was premature** and is un-retired here. **Fix:** one **`lockSlot`** write
+boundary enforcing `isLockWriteAuthorized` (**team-in-source-match + status in-play-or-later + now + period**) —
+`reconcile`/XI-pull exonerated (they stamp only at kickoff; the appeared set had **zero** strangers); plus
+`ingestLive`/`ingestSettle` foreign-event guards, a feed-client `match_id` re-filter, structured
+`lock.slot.{stamped,refused}` + `*.foreign_skipped` logs, trigger migration **`20260612220000`** (scheduled-only
+self-heal unlock; verified on throwaway Postgres — scheduled-clear succeeds, completed-clear raises), and an
+all-periods GUC-wrapped cleanup **`ops/2026-06-12-clear-cross-match-locks.sql`**. **Cleanup-vs-trigger finding:**
+the committed `ops/2026-06-11-clear-premature-md1-locks.sql` (bare `set→NULL`, no GUC / `DISABLE TRIGGER`) would
+be trigger-blocked as written, yet the Jun-11 stamps were in fact cleared (James now carries a Jun-12 stamp) →
+the cleanup that ran used a **manual override not captured in the artifact** (same-leak-twice, not never-cleaned).
+**Corrupt-kickoff theory RETIRED** — `mapMatchRow`/`upsertMatch` never coalesce a missing kickoff to `now`
+(`Invalid Date` fails loudly). **Remediation order is load-bearing:** Render deploy (migration + new worker) →
+cleanup SQL → live-window verify (fact-7 predicate returns 0 throughout; James reads movable, Rangel locked).
+Tests **1861 → 1874**. See DECISIONS (RECURRENCE) + ARCHITECTURE §3.
 
 **C2 branch-hygiene incident:** during C2 development, 22 stray session-generated files were committed directly
 onto `main` alongside the feature work. Recovered via `wip/c2-recover` (isolated the clean delta), rebuilt clean
