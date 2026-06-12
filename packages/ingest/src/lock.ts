@@ -57,3 +57,24 @@ export function lockInstantFromSub(sub: SubEvent, kickoffAt: Date, now: Date): P
   if (now.getTime() < lockedAt.getTime()) return null; // entry not yet reached → not locked
   return { playerBdlId: sub.playerInBdlId, lockedAt };
 }
+
+/**
+ * Coverage reconciliation (the lock-on-play under-stamping fix): given the AUTHORITATIVE set of player
+ * BDL-ids who actually appeared in the match (the `score_player_match` participant set — team-in-match
+ * AND a real stat/event/shot signal), every one locks at kickoff. The two transient feed paths above —
+ * the one-shot pre_match XI-pull and per-event live sub-locking — silently miss appearances the 60s
+ * poller never observed (a late/missed XI confirmation, a sub event between polls), leaving a played
+ * player's slots `locked_at = NULL` forever. This reconciles against who-actually-played instead, so any
+ * appeared player still gets stamped. Same write-boundary invariant: NOTHING is emitted before kickoff
+ * (`now >= kickoff`). Stamping at kickoff (not the precise entry minute) is intentionally conservative —
+ * the store's monotonic `locked_at IS NULL` latch means a sub already locked at his real entry instant is
+ * never overwritten, so this only FILLS gaps. Mirrors the period-scoped one-off SQL repair exactly.
+ */
+export function lockInstantsFromAppearances(
+  appearedPlayerBdlIds: readonly number[],
+  kickoffAt: Date,
+  now: Date,
+): PlayerLock[] {
+  if (now.getTime() < kickoffAt.getTime()) return []; // not kicked off → never stamp (the invariant)
+  return appearedPlayerBdlIds.map((playerBdlId) => ({ playerBdlId, lockedAt: kickoffAt }));
+}

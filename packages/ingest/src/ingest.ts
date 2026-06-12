@@ -15,7 +15,12 @@ import {
   mapPosition,
   derivePeriodLabel,
 } from "./map";
-import { lockInstantsFromLineup, lockInstantFromSub, type LineupAppearance } from "./lock";
+import {
+  lockInstantsFromLineup,
+  lockInstantFromSub,
+  lockInstantsFromAppearances,
+  type LineupAppearance,
+} from "./lock";
 import { FeedShapeMismatchError } from "./errors";
 
 export interface MatchCtx {
@@ -82,6 +87,22 @@ export async function ingestRosters(feed: FeedClient, store: IngestStore): Promi
 
 function isSubstitution(incidentType: string): boolean {
   return incidentType.toLowerCase().includes("substitut");
+}
+
+/**
+ * Coverage safety-net (lock-on-play under-stamping fix): reconcile `locked_at` against the AUTHORITATIVE
+ * appeared set (`score_player_match` participants), stamping every played player at kickoff. The pre_match
+ * XI-pull and per-event sub-locking miss appearances the 60s poller never observed — a late/missed XI
+ * confirmation, a sub event between polls — leaving played slots `locked_at = NULL` forever, since neither
+ * mode re-fires once the match leaves its window. This runs every live + settle tick, so any appeared
+ * player still stamps. Period-scoped + monotonic via `setLockedAt` (only `locked_at IS NULL` slots in the
+ * match's period change → never another period's slots, never an already-set lock) ⇒ no phantom lock.
+ */
+async function reconcileAppearanceLocks(store: IngestStore, ctx: MatchCtx): Promise<void> {
+  const appeared = await store.listAppearedPlayerBdlIds(ctx.bdlId);
+  for (const lock of lockInstantsFromAppearances(appeared, ctx.kickoffAt, ctx.now)) {
+    await store.setLockedAt(ctx.bdlId, lock.playerBdlId, lock.lockedAt);
+  }
 }
 
 /** What the pre-match pull derived, surfaced to the worker IO so it can drive the player-not-starting
@@ -166,9 +187,13 @@ export async function ingestLive(
 
   // events/shots/team_stats have no `dirty` column → enqueue player-match markers explicitly.
   await store.markPlayersDirty(ctx.bdlId, [...touched]);
+
+  // Self-heal any played starter/sub whose pre_match XI-pull or live event was missed (coverage gap).
+  await reconcileAppearanceLocks(store, ctx);
 }
 
-/** Settle: re-pull stats + shots + the rating until values stabilize (same writes as live, no sub-locking). */
+/** Settle: re-pull stats + shots + the rating until values stabilize, then reconcile lock-on-play against
+ *  the appeared set (no event-driven sub-locking here — events aren't pulled in settle). */
 export async function ingestSettle(
   feed: FeedClient,
   store: IngestStore,
@@ -192,4 +217,8 @@ export async function ingestSettle(
     if (sh.playerBdlId != null) touched.add(sh.playerBdlId);
   });
   await store.markPlayersDirty(ctx.bdlId, [...touched]);
+
+  // The lock-on-play coverage net: a completed match's pre_match/live stamps can't re-fire, so stamp
+  // every appeared player here. This is what fixes the partially-locked completed-match XI going forward.
+  await reconcileAppearanceLocks(store, ctx);
 }

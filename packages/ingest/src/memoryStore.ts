@@ -17,6 +17,7 @@ export class MemoryIngestStore implements IngestStore {
   private teamStats = new Map<string, TeamStatRowIn>();
   private dirty = new Set<string>();
   private locks = new Map<string, Date>();
+  private appeared = new Map<number, Set<number>>(); // matchBdlId → appeared player BDL-ids (score rows)
   private periods = new Map<string, string>(); // `${kind}:${label}` → periodId
   private matches: SchedulableMatch[] = [];
   /** bdlId → what upsertMatch was called with (records the resolved period_id + fallback flag). */
@@ -35,6 +36,10 @@ export class MemoryIngestStore implements IngestStore {
   // ── seeding / assertions (test setup) ──
   seedPeriod(kind: string, label: string, id: string): void {
     this.periods.set(`${kind}:${label}`, id);
+  }
+  /** Seed the authoritative appeared set (the `score_player_match` participants) for a match. */
+  seedAppeared(matchBdlId: number, playerBdlIds: readonly number[]): void {
+    this.appeared.set(matchBdlId, new Set(playerBdlIds));
   }
   seedSchedulable(m: {
     bdlId: number;
@@ -159,6 +164,9 @@ export class MemoryIngestStore implements IngestStore {
     // Monotonic latch: only set when currently unlocked (mirrors the DB trigger / Prisma store).
     if (!this.locks.has(pk(m, p))) this.locks.set(pk(m, p), at);
     return Promise.resolve();
+  }
+  listAppearedPlayerBdlIds(matchBdlId: number): Promise<number[]> {
+    return Promise.resolve([...(this.appeared.get(matchBdlId) ?? [])]);
   }
 
   // ── IngestStore: scheduler reads ──

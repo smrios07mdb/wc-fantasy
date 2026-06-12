@@ -234,6 +234,19 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       });
     },
 
+    async listAppearedPlayerBdlIds(matchBdlId): Promise<number[]> {
+      const matchId = await matchIdFor(matchBdlId);
+      if (!matchId) return [];
+      // The authoritative appeared set: `score_player_match` holds ONLY participants — the recompute
+      // participant gate already excluded non-appearers + cross-team contamination. Map internal
+      // player ids back to BDL ids so the orchestration can drive the (BDL-keyed) lock write.
+      const rows = await prisma.scorePlayerMatch.findMany({
+        where: { matchId },
+        select: { player: { select: { balldontlieId: true } } },
+      });
+      return rows.map((r) => r.player.balldontlieId);
+    },
+
     async listSchedulableMatches(): Promise<SchedulableMatch[]> {
       const rows = await prisma.fifaMatch.findMany({
         where: { status: { in: ["scheduled", "in_progress", "completed"] } },

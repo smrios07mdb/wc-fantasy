@@ -48,6 +48,10 @@ export interface IngestStore {
 
   // ── locking ──
   setLockedAt(matchBdlId: number, playerBdlId: number, lockedAt: Date): Promise<void>;
+  /** The AUTHORITATIVE appeared set: every player BDL-id with a `score_player_match` row for this match
+   *  (the participant gate already excluded non-appearers + cross-team contamination). Drives the
+   *  coverage-reconciliation lock so a played player whose feed signal the poller missed still stamps. */
+  listAppearedPlayerBdlIds(matchBdlId: number): Promise<number[]>;
 
   // ── scheduler reads ──
   listSchedulableMatches(): Promise<SchedulableMatch[]>;

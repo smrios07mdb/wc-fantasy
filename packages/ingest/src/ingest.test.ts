@@ -249,6 +249,20 @@ describe("ingestLive", () => {
     });
     expect(store.lockedAt(50, 7)).toBeUndefined();
   });
+
+  it("self-heals a starter the pre_match XI-pull missed, by reconciling the appeared set at kickoff", async () => {
+    // Player 3 appeared (score row) but was never in an observed XI-pull or sub event. Live reconciles
+    // it to a kickoff lock so an in-progress played starter can't be swapped out mid-match.
+    const store = new MemoryIngestStore();
+    store.seedAppeared(50, [3]);
+    await ingestLive(fakeFeed({}), store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
+    expect(store.lockedAt(50, 3)).toEqual(kickoff);
+  });
 });
 
 describe("ingestSchedule (schedule-sync)", () => {
@@ -302,6 +316,48 @@ describe("ingestSettle", () => {
     });
     expect(store.ratingFor(50, 9)).toBe(8.0);
     expect(store.isDirty(50, 9)).toBe(true);
+    // No score_player_match row seeded → player is not in the appeared set → no reconciliation lock.
     expect(store.lockedAt(50, 9)).toBeUndefined();
+  });
+
+  it("RECONCILES the lock for EVERY appeared player (the coverage-gap fix), at kickoff", async () => {
+    // The bug: a completed match left some played XI slots unstamped because pre_match/live missed
+    // their feed signal. Settle now reconciles against score_player_match (the authoritative appeared
+    // set), so a player who demonstrably appeared gets ALL their current-period slots locked at kickoff.
+    const feed = fakeFeed({
+      playerMatchStats: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, player_id: 9, minutes_played: 90, rating: 8.0 }],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    // Appeared per score_player_match: 9 (had a stat line) AND 5, 6 (appeared via event/shot only — the
+    // exact slots the live poller missed). All three must lock; the absent 7 (never played) must NOT.
+    store.seedAppeared(50, [9, 5, 6]);
+    await ingestSettle(feed, store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
+    expect(store.lockedAt(50, 9)).toEqual(kickoff);
+    expect(store.lockedAt(50, 5)).toEqual(kickoff);
+    expect(store.lockedAt(50, 6)).toEqual(kickoff);
+    expect(store.lockedAt(50, 7)).toBeUndefined(); // never appeared → stays swappable (no phantom lock)
+  });
+
+  it("reconciliation is monotonic — an already-locked sub keeps his earlier entry instant", async () => {
+    const store = new MemoryIngestStore();
+    const entry = new Date("2026-06-10T19:03:00Z"); // sub locked earlier at his entry minute
+    await store.setLockedAt(50, 7, entry);
+    store.seedAppeared(50, [7]);
+    await ingestSettle(fakeFeed({}), store, {
+      bdlId: 50,
+      kickoffAt: kickoff,
+      kickoffLockFallback: false,
+      now: liveNow,
+    });
+    expect(store.lockedAt(50, 7)).toEqual(entry); // NOT overwritten with kickoff
   });
 });

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { lockInstantsFromLineup, lockInstantFromSub, type LineupAppearance } from "./lock";
+import {
+  lockInstantsFromLineup,
+  lockInstantFromSub,
+  lockInstantsFromAppearances,
+  type LineupAppearance,
+} from "./lock";
 
 const kickoff = new Date("2026-06-10T18:00:00Z");
 const afterKickoff = new Date("2026-06-10T18:05:00Z"); // match has kicked off
@@ -69,5 +74,31 @@ describe("lockInstantFromSub", () => {
     expect(
       lockInstantFromSub({ playerInBdlId: null, timeMinute: 61, addedTime: null }, kickoff, now),
     ).toBeNull();
+  });
+});
+
+describe("lockInstantsFromAppearances (coverage reconciliation)", () => {
+  it("locks EVERY appeared player at kickoff once the match has kicked off", () => {
+    // The authoritative appearance set (score_player_match): a starter the XI-pull missed AND a sub the
+    // live event missed both reconcile to a kickoff lock — closing the under-stamping coverage gap.
+    expect(lockInstantsFromAppearances([4, 5, 9], kickoff, afterKickoff)).toEqual([
+      { playerBdlId: 4, lockedAt: kickoff },
+      { playerBdlId: 5, lockedAt: kickoff },
+      { playerBdlId: 9, lockedAt: kickoff },
+    ]);
+  });
+
+  it("locks AT kickoff (>= boundary inclusive)", () => {
+    expect(lockInstantsFromAppearances([4], kickoff, kickoff)).toEqual([
+      { playerBdlId: 4, lockedAt: kickoff },
+    ]);
+  });
+
+  it("stamps NOTHING before kickoff — preserves the write-boundary invariant", () => {
+    expect(lockInstantsFromAppearances([4, 5], kickoff, beforeKickoff)).toEqual([]);
+  });
+
+  it("is empty for an empty appearance set (no players → no locks)", () => {
+    expect(lockInstantsFromAppearances([], kickoff, afterKickoff)).toEqual([]);
   });
 });
