@@ -348,13 +348,15 @@ describe("commish:lineup override", () => {
     expect(again.status).toBe("skipped");
   });
 
-  it("WITHOUT --allow-locked-slot: a slot locked by play stays frozen (regression — refused)", async () => {
+  it("WITHOUT --allow-locked-slot: a played slot stays frozen (regression — refused, forfeit model)", async () => {
     const store = lineupStore();
-    store.seedSlot("m1", "md1", "d1", "DEF", { isStarter: true, locked: true }); // d1 played → frozen
+    store.seedSlot("m1", "md1", "d1", "DEF", { isStarter: true, hasPlayed: true }); // d1 played → frozen
     const { deps } = lineupDeps(store);
     const res = await runLineupOverride(deps, lineupInput({ starterIds: SWAP_XI, apply: true }));
     expect(res.status).toBe("refused");
-    if (res.status === "refused") expect(res.reason).toMatch(/locked/);
+    // Forfeit model: benching a played starter without --allow-locked-slot is refused as a forfeit that
+    // needs confirming (the commish tool passes none), preserving the "stays frozen" regression guard.
+    if (res.status === "refused") expect(res.reason).toMatch(/forfeit-requires-confirm/);
     expect(store.starterIdsOf("m1", "md1")).toEqual(["d1"]); // unchanged
   });
 

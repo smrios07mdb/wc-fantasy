@@ -6,7 +6,12 @@
  * — the SAME function the server enforces — so the "save disabled + why" the manager sees is precisely
  * what the route will allow. The UI freeze is presentation; the server is the real latch.
  */
-import { validateLineup, type SquadPlayer, type LineupValidation } from "@app/lineup";
+import {
+  validateLineup,
+  type SquadPlayer,
+  type SlotState,
+  type LineupValidation,
+} from "@app/lineup";
 import { POSITIONS, type Position } from "@app/shared";
 import type { LineupPlayer, OpponentInfo, PeriodLineup, PeriodLock } from "./types";
 
@@ -154,7 +159,11 @@ export function buildPitch(squad: readonly LineupPlayer[], period: PeriodLineup)
   };
 }
 
-/** Run the lock-respecting legality check for a proposed XI — the same one the server enforces. */
+/** Run the legality check for a proposed XI — the same one the server enforces. C1 keeps the client's
+ *  behaviour byte-identical: a played (locked) player still can't be dragged (`isMovable` reads `locks`),
+ *  and here each lock maps to a played slot with NO forfeit confirm — so benching a played starter still
+ *  reports "save disabled", exactly as before. C2 swaps `period.locks` for the richer `slotMeta` contract
+ *  and threads real forfeit confirmations through the destructive-confirm UI. */
 export function evaluateProposal(
   squad: readonly LineupPlayer[],
   period: PeriodLineup,
@@ -162,10 +171,16 @@ export function evaluateProposal(
   now: Date,
 ): LineupValidation {
   const squadPlayers: SquadPlayer[] = squad.map((p) => ({ playerId: p.id, position: p.position }));
+  const slotStates: SlotState[] = period.locks.map((l) => ({
+    playerId: l.playerId,
+    isStarter: l.isStarter,
+    hasPlayed: true, // a lock IS a played player (C1's client signal); voids aren't surfaced client-side yet
+    voided: false,
+  }));
   return validateLineup(
     squadPlayers,
     starterIds,
-    period.locks,
+    slotStates,
     {
       id: period.periodId,
       status: period.status,

@@ -55,6 +55,7 @@ function period(over: Partial<PeriodLineup> = {}): PeriodLineup {
     closesAt: "2026-06-12T18:00:00.000Z",
     starterIds: XI,
     locks: [],
+    slotMeta: {},
     kickoffByPlayer: {},
     opponentByPlayer: {},
     ...over,
@@ -154,13 +155,15 @@ describe("evaluateProposal — live legality feedback (drives save-disabled + re
     expect(res.error.message).toMatch(/DEF/);
   });
 
-  it("a move of a locked player disables save (lock-respecting on the client too)", () => {
+  it("benching a played (locked) player disables save (the C1 client still blocks it — needs a forfeit confirm)", () => {
     const p = period({ locks: [{ playerId: "d1", isStarter: true }] });
     const benchD1 = ["gk1", "d5", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"];
     const res = evaluateProposal(SQUAD, p, benchD1, NOW);
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error("expected failure");
-    expect(res.error.code).toBe("locked-player-moved");
+    // C1 sends no forfeit confirm → benching a played starter is rejected (save stays disabled), exactly
+    // as before; only the reason code is now the forfeit-model one. C2 adds the destructive-confirm path.
+    expect(res.error.code).toBe("forfeit-requires-confirm");
   });
 });
 

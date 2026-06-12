@@ -32,6 +32,26 @@ export interface PeriodLock {
   isStarter: boolean;
 }
 
+/**
+ * Per-slot forfeit-model metadata for ONE squad player in a period — the C1 read contract the
+ * destructive-confirm UI (C2) consumes. C1 does NOT render any of this (no new destructive affordance):
+ * the live client still drives drag/movability off {@link PeriodLineup.locks} (unchanged), so adding these
+ * fields surfaces no bench-played action until C2 wires the confirm.
+ */
+export interface SlotMeta {
+  /** A `score_player_match` row exists for (player, his match this period) — the authoritative "has played"
+   *  (NOT `locked_at`). Note: the row lands at the first recompute tick, slightly after kickoff. */
+  hasPlayed: boolean;
+  /** The points the player has already earned this period — what benching him would FORFEIT. 0 if unplayed. */
+  pointsAtStake: number;
+  /** `voided_at IS NOT NULL` — he was already forfeited (one-way). */
+  voided: boolean;
+  /** May this slot still be edited at all? `period.frozen_at IS NULL AND voided_at IS NULL` (the forfeit
+   *  model's movability gate). Has-played no longer blocks movement — only a frozen period or a prior
+   *  forfeit does. (Promoting a played player into the XI is still blocked at the mutation, not here.) */
+  movable: boolean;
+}
+
 /** One editable (or pre-settable) period: its window, the saved XI, and what's already locked. */
 export interface PeriodLineup {
   periodId: string;
@@ -40,8 +60,11 @@ export interface PeriodLineup {
   closesAt: string | null; // ISO; null = no explicit close
   /** The currently-saved starters (the other squad players are the bench). */
   starterIds: string[];
-  /** Slots already locked by play in this period (frozen — not movable). */
+  /** Slots already locked by play in this period (frozen — not movable). Drives the C1 client's drag
+   *  movability UNCHANGED (the forfeit model's new `movable` lives in {@link slotMeta} for C2). */
   locks: PeriodLock[];
+  /** The C1 forfeit read contract, per squad player id (C2 consumes; C1 does not render). */
+  slotMeta: Record<string, SlotMeta>;
   /** ISO kickoff of each player's match in this period, for the per-player indicator (optional). */
   kickoffByPlayer: Record<string, string | null>;
   /** Opponent for each player's match in this period; null when the player's team has no fixture or the

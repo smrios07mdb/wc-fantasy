@@ -122,12 +122,12 @@ describe("setLineup — typed rejections (nothing persisted)", () => {
   });
 });
 
-describe("setLineup — server-authoritative lock (the latch the client can't be trusted to honor)", () => {
-  it("rejects benching a locked starter, even though the client proposed it", async () => {
+describe("setLineup — the forfeit model (server-authoritative; the client can't be trusted)", () => {
+  it("rejects benching a PLAYED starter WITHOUT a confirm (forfeit-requires-confirm), nothing voided", async () => {
     const store = seedStore();
-    // d1 has played: a LOCKED starter slot already exists for md1.
-    store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, locked: true });
-    // Client (compromised UI) sends a proposal that benches d1 (starts d5 instead) — legal shape.
+    // d1 has played: a played (locked) starter slot already exists for md1.
+    store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, hasPlayed: true });
+    // Client (compromised UI) sends a proposal that benches d1 (starts d5 instead) — legal shape, no confirm.
     const sneaky = ["gk1", "d5", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"];
     const res = await setLineup(
       store,
@@ -136,14 +136,56 @@ describe("setLineup — server-authoritative lock (the latch the client can't be
     );
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error("expected failure");
-    expect(res.error.code).toBe("locked-player-moved");
-    // The locked slot is untouched: d1 is still a starter.
+    expect(res.error.code).toBe("forfeit-requires-confirm");
+    // d1 is still a starter and NOT voided — no destructive write happened.
     expect(store.slotsOf("mgr-1", "md1").find((s) => s.playerId === "d1")?.isStarter).toBe(true);
+    expect(store.voidedIdsOf("mgr-1", "md1")).toEqual([]);
+    expect(store.enqueuedRecomputes()).toEqual([]);
   });
 
-  it("accepts a save that keeps every locked player in his frozen role", async () => {
+  it("benches + VOIDS a played starter when the forfeit is confirmed, and enqueues a recompute", async () => {
     const store = seedStore();
-    store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, locked: true }); // locked starter, stays
+    store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, hasPlayed: true });
+    const benched = ["gk1", "d5", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"]; // d5 starts for d1
+    const res = await setLineup(
+      store,
+      {
+        managerId: "mgr-1",
+        periodId: "md1",
+        starterIds: benched,
+        forfeitConfirmedPlayerIds: ["d1"],
+      },
+      NOW,
+    );
+    expect(res.ok).toBe(true);
+    const d1 = store.slotsOf("mgr-1", "md1").find((s) => s.playerId === "d1");
+    expect(d1?.isStarter).toBe(false); // benched
+    expect(store.voidedIdsOf("mgr-1", "md1")).toEqual(["d1"]); // one-way forfeit stamped
+    expect(store.enqueuedRecomputes()).toEqual([{ managerId: "mgr-1", periodId: "md1" }]);
+  });
+
+  it("rejects returning a VOIDED player to the XI even with a confirm (voided-player-started)", async () => {
+    const store = seedStore();
+    // d1 was forfeited earlier: voided + benched. He can never start again this period.
+    store.seedSlot("mgr-1", "md1", "d1", "DEF", {
+      isStarter: false,
+      hasPlayed: true,
+      voided: true,
+    });
+    const back = ["gk1", "d1", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"]; // d1 back in
+    const res = await setLineup(
+      store,
+      { managerId: "mgr-1", periodId: "md1", starterIds: back, forfeitConfirmedPlayerIds: ["d1"] },
+      NOW,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected failure");
+    expect(res.error.code).toBe("voided-player-started");
+  });
+
+  it("accepts a save that keeps every played player in his current role (no transition)", async () => {
+    const store = seedStore();
+    store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, hasPlayed: true }); // played starter, stays
     const res = await setLineup(
       store,
       { managerId: "mgr-1", periodId: "md1", starterIds: XI },
@@ -151,23 +193,50 @@ describe("setLineup — server-authoritative lock (the latch the client can't be
     );
     expect(res.ok).toBe(true);
     expect(store.slotsOf("mgr-1", "md1").find((s) => s.playerId === "d1")?.isStarter).toBe(true);
+    expect(store.enqueuedRecomputes()).toEqual([]); // no forfeit → no recompute
   });
 });
 
 describe("MemoryLineupStore.saveLineup — the write-time latch (mirrors the DB trigger)", () => {
-  it("refuses to change a locked slot and reports the conflict (write-time re-check)", async () => {
+  it("refuses a NON-forfeit flip of a locked slot and reports the conflict (write-time re-check)", async () => {
     const store = seedStore();
     store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, locked: true });
-    // A commit that would FLIP the locked d1 to the bench — the store must refuse it.
+    // A commit that would FLIP the locked d1 to the bench WITHOUT voiding it — the store must refuse it.
     const desired = SQUAD.map(([playerId, role]) => ({
       playerId,
       role,
       isStarter: playerId !== "d1" && XI.includes(playerId), // d1 forced to bench
     }));
-    const outcome = await store.saveLineup({ managerId: "mgr-1", periodId: "md1", desired });
+    const outcome = await store.saveLineup({
+      managerId: "mgr-1",
+      periodId: "md1",
+      desired,
+      voidPlayerIds: [], // NOT a forfeit
+      now: NOW,
+    });
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected a conflict");
     expect(outcome.conflict.playerId).toBe("d1");
     expect(store.slotsOf("mgr-1", "md1").find((s) => s.playerId === "d1")?.isStarter).toBe(true);
+  });
+
+  it("permits the forfeit transition on a locked slot (benched + voided) and enqueues a recompute", async () => {
+    const store = seedStore();
+    store.seedSlot("mgr-1", "md1", "d1", "DEF", { isStarter: true, locked: true });
+    const desired = SQUAD.map(([playerId, role]) => ({
+      playerId,
+      role,
+      isStarter: playerId !== "d1" && XI.includes(playerId),
+    }));
+    const outcome = await store.saveLineup({
+      managerId: "mgr-1",
+      periodId: "md1",
+      desired,
+      voidPlayerIds: ["d1"], // the sanctioned forfeit
+      now: NOW,
+    });
+    expect(outcome.ok).toBe(true);
+    expect(store.voidedIdsOf("mgr-1", "md1")).toEqual(["d1"]);
+    expect(store.enqueuedRecomputes()).toEqual([{ managerId: "mgr-1", periodId: "md1" }]);
   });
 });

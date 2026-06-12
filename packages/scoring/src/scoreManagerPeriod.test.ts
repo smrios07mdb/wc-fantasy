@@ -55,3 +55,21 @@ describe("scoreManagerPeriod — pure aggregation over starters", () => {
     expect(scoreManagerPeriod({ slots: [] })).toEqual({ total: 0, countedStarters: 0 });
   });
 });
+
+describe("scoreManagerPeriod — the forfeit model (no engine change; starters-only already handles it)", () => {
+  // The lineup-forfeit engine (C1) records a forfeit by benching the played starter (is_starter → false)
+  // and stamping voided_at; recompute reads is_starter only. So the rollup needs NO forfeit awareness: a
+  // forfeited (voided) player arrives here as a NON-starter slot whose score (he played) is excluded, and
+  // the player promoted in his place arrives as a starter and counts. This pins that contract.
+  it("excludes a forfeited (benched-after-playing) starter's points and counts the player who replaced him", () => {
+    const r = scoreManagerPeriod({
+      slots: [
+        scored(true, 9), // a normal starter
+        scored(false, 12), // the FORFEITED player: he played (12) but was benched + voided → excluded
+        scored(true, 4), // the incoming starter who replaced him → counts
+      ],
+    });
+    expect(r.total).toBe(13); // 9 + 4; the forfeited 12 does not count
+    expect(r.countedStarters).toBe(2);
+  });
+});

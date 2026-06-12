@@ -13,7 +13,7 @@ import {
   resolveKickoffByPlayer,
   resolveOpponentByPlayer,
 } from "../../src/lineup/view";
-import type { LineupPlayer, PeriodLineup, SetLineupState } from "../../src/lineup/types";
+import type { LineupPlayer, PeriodLineup, SetLineupState, SlotMeta } from "../../src/lineup/types";
 
 /** Load the set-lineup snapshot for `sessionManagerId`, or null if the manager has no squad / windows. */
 export async function loadLineup(sessionManagerId: string): Promise<SetLineupState | null> {
@@ -51,7 +51,8 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     prisma.period.findMany({
       where: { leagueId: manager.leagueId, status: { in: ["open", "pending"] } },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
-      select: { id: true, label: true, status: true, closesAt: true },
+      // frozenAt feeds the forfeit-model movability gate (frozen period → nothing movable).
+      select: { id: true, label: true, status: true, closesAt: true, frozenAt: true },
     }),
   ]);
 
@@ -68,11 +69,19 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
   const squadTeams = rosterRows.map((r) => ({ id: r.player.id, teamId: r.player.teamId }));
 
   const periodIds = periodRows.map((p) => p.id);
-  const [slotRows, matchRows] = await Promise.all([
+  const squadIds = squad.map((p) => p.id);
+  const [slotRows, matchRows, scoreRows] = await Promise.all([
     periodIds.length
       ? prisma.lineupSlot.findMany({
           where: { managerId: sessionManagerId, periodId: { in: periodIds } },
-          select: { periodId: true, playerId: true, isStarter: true, lockedAt: true },
+          // voidedAt is the forfeit latch (the C2 read contract); lockedAt still drives `locks` (unchanged).
+          select: {
+            periodId: true,
+            playerId: true,
+            isStarter: true,
+            lockedAt: true,
+            voidedAt: true,
+          },
         })
       : Promise.resolve([]),
     // Each period's fixtures — drives both the per-player kickoff (= lock/sub deadline) and the
@@ -91,11 +100,43 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
           },
         })
       : Promise.resolve([]),
+    // Each squad player's earned points per period — the authoritative "has played" (row exists) + the
+    // "points at stake" (the score) for the C2 forfeit contract. Joined through the player's match in the
+    // period (fifa_match.period_id). A player plays at most one match per period.
+    periodIds.length && squadIds.length
+      ? prisma.scorePlayerMatch.findMany({
+          where: { playerId: { in: squadIds }, match: { periodId: { in: periodIds } } },
+          select: { playerId: true, points: true, match: { select: { periodId: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
   const unorderedPeriods: PeriodLineup[] = periodRows.map((p) => {
     const slots = slotRows.filter((s) => s.periodId === p.id);
     const savedStarters = slots.filter((s) => s.isStarter).map((s) => s.playerId);
+
+    // The C1 forfeit read contract per squad player (C2 consumes; C1 renders none of it). hasPlayed /
+    // pointsAtStake come ONLY from score_player_match; voided from the slot; movable = period not frozen
+    // AND not voided (has-played no longer blocks movement). The live client ignores this and still drives
+    // drag off `locks` below — so no destructive bench affordance appears pre-C2.
+    const pointsByPlayer = new Map(
+      scoreRows
+        .filter((r) => r.match.periodId === p.id)
+        .map((r) => [r.playerId, r.points] as const),
+    );
+    const voidedByPlayer = new Map(slots.map((s) => [s.playerId, s.voidedAt !== null] as const));
+    const periodFrozen = p.frozenAt !== null;
+    const slotMeta: Record<string, SlotMeta> = {};
+    for (const player of squad) {
+      const voided = voidedByPlayer.get(player.id) ?? false;
+      slotMeta[player.id] = {
+        hasPlayed: pointsByPlayer.has(player.id),
+        pointsAtStake: pointsByPlayer.get(player.id) ?? 0,
+        voided,
+        movable: !periodFrozen && !voided,
+      };
+    }
+
     const periodMatches = matchRows
       .filter((m) => m.periodId === p.id)
       .map((m) => ({
@@ -117,6 +158,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       locks: slots
         .filter((s) => isLockedNow(s.lockedAt, now))
         .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter })),
+      slotMeta,
       // Per-player kickoff = his team's fixture kickoff in THIS period (ISO), or null when his team
       // isn't playing yet (knockout TBD). The client formats it in the league tz as the lock/sub deadline.
       kickoffByPlayer: resolveKickoffByPlayer(squadTeams, periodMatches),

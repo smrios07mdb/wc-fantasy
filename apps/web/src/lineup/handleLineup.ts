@@ -38,7 +38,10 @@ export interface LineupHandlerDeps {
  *  rejections: an unknown period is "not found" (404); everything else is a conflict with the rules (409). */
 function lineupErrorStatus(error: LineupError): number {
   if (error.code === "wrong-period" && error.reason === "unknown") return 404;
-  return 409; // illegal-formation / incomplete-xi / not-your-player / locked-player-moved / closed window
+  // 409 for every other rule conflict: illegal-formation / incomplete-xi / not-your-player / a closed
+  // window / and the forfeit-model codes (forfeit-requires-confirm / voided-player-started /
+  // played-player-started / the write-time locked-player-moved race).
+  return 409;
 }
 
 export async function handleSetLineup(

@@ -12,6 +12,9 @@ export type LineupErrorCode =
   | "incomplete-xi"
   | "not-your-player"
   | "locked-player-moved"
+  | "played-player-started"
+  | "voided-player-started"
+  | "forfeit-requires-confirm"
   | "wrong-period";
 
 /** A starting XI whose per-position count breaks a Theme B formation bound (FORMATION_BOUNDS). */
@@ -40,13 +43,40 @@ export interface NotYourPlayerError {
   playerId: string;
 }
 
-/** A locked (already-played) player was moved into or out of the XI — forbidden by lock-on-play. */
+/** A locked (already-played) player was moved at write time — the latch caught a player who locked between
+ *  the read and the commit (the read-time play rules are the three codes below). */
 export interface LockedPlayerMovedError {
   code: "locked-player-moved";
   message: string;
   playerId: string;
   /** The role the player is frozen in (where he played from). */
   frozenRole: "starter" | "bench";
+}
+
+/** A player who has already PLAYED was promoted INTO the XI from the bench — forbidden (hindsight upside:
+ *  the forfeit model relaxes the OUT direction only; the IN direction stays a hard block, DECISIONS Theme B
+ *  in-matchday-substitution amendment). */
+export interface PlayedPlayerStartedError {
+  code: "played-player-started";
+  message: string;
+  playerId: string;
+}
+
+/** A VOIDED (forfeited) slot was put back in the XI — forbidden: a forfeit is a one-way door for the period. */
+export interface VoidedPlayerStartedError {
+  code: "voided-player-started";
+  message: string;
+  playerId: string;
+}
+
+/** A played starter was benched WITHOUT an explicit forfeit confirmation. Benching a played starter forfeits
+ *  his earned points one-way, so the engine refuses it unless the caller confirms the player by id. The C1
+ *  route never confirms (the current UI sends no confirm) → benching a played starter is rejected, exactly
+ *  as before; the destructive-confirm path is C2. */
+export interface ForfeitRequiresConfirmError {
+  code: "forfeit-requires-confirm";
+  message: string;
+  playerId: string;
 }
 
 /** The target period is not editable: it doesn't exist, its wave is closed, or `now` is past the window. */
@@ -62,6 +92,9 @@ export type LineupError =
   | IncompleteXiError
   | NotYourPlayerError
   | LockedPlayerMovedError
+  | PlayedPlayerStartedError
+  | VoidedPlayerStartedError
+  | ForfeitRequiresConfirmError
   | WrongPeriodError;
 
 // ── constructors (centralise the messages) ────────────────────────────────────
@@ -109,6 +142,30 @@ export function lockedPlayerMoved(
     } — he can't be moved`,
     playerId,
     frozenRole,
+  };
+}
+
+export function playedPlayerStarted(playerId: string): PlayedPlayerStartedError {
+  return {
+    code: "played-player-started",
+    message: `player ${playerId} has already played — he can't be moved into the starting XI`,
+    playerId,
+  };
+}
+
+export function voidedPlayerStarted(playerId: string): VoidedPlayerStartedError {
+  return {
+    code: "voided-player-started",
+    message: `player ${playerId} was benched after playing — that forfeit is final and can't be undone this period`,
+    playerId,
+  };
+}
+
+export function forfeitRequiresConfirm(playerId: string): ForfeitRequiresConfirmError {
+  return {
+    code: "forfeit-requires-confirm",
+    message: `benching ${playerId} forfeits his points for this period and can't be undone — confirm the forfeit to proceed`,
+    playerId,
   };
 }
 

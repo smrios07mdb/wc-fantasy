@@ -124,18 +124,21 @@ describe("handleSetLineup — server-authoritative persistence", () => {
     expect(new Set(store.starterIdsOf("mgr-alice", "md1"))).toEqual(new Set(XI));
   });
 
-  it("409 locked-player-moved when the client sends a benching of a LOCKED starter (rejected server-side)", async () => {
+  it("409 forfeit-requires-confirm when the client benches a PLAYED starter without a confirm (rejected server-side)", async () => {
     const store = aliceStore();
-    store.seedSlot("mgr-alice", "md1", "d1", "DEF", { isStarter: true, locked: true }); // d1 played
+    store.seedSlot("mgr-alice", "md1", "d1", "DEF", { isStarter: true, hasPlayed: true }); // d1 played
     const { deps: d } = deps(store, { kind: "ok", manager: aliceManager, isCommissioner: false });
     const sneaky = ["gk1", "d5", "d2", "d3", "d4", "m1", "m2", "m3", "m4", "f1", "f2"]; // benches d1
     const res = await handleSetLineup(d, { ...body, starterIds: sneaky });
+    // Server is authoritative: the C1 route passes no forfeit confirm, so the destructive bench is refused
+    // (409), preserving the current behaviour — the destructive-confirm path is C2.
     expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ error: "locked-player-moved" });
-    // The locked slot is untouched.
+    expect(res.body).toMatchObject({ error: "forfeit-requires-confirm" });
+    // The played slot is untouched: d1 is still a starter and NOT voided.
     expect(store.slotsOf("mgr-alice", "md1").find((s) => s.playerId === "d1")?.isStarter).toBe(
       true,
     );
+    expect(store.voidedIdsOf("mgr-alice", "md1")).toEqual([]);
   });
 
   it("409 illegal-formation surfaces the typed error (auth passed; the validator decided)", async () => {

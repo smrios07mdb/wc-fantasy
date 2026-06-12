@@ -15,7 +15,7 @@
  * and a structured audit line (`lockOverride` records the latch carve-out). Injected deps → testable
  * against `MemoryLineupStore`.
  */
-import { validateLineup, type DesiredSlot, type LineupStore } from "@app/lineup";
+import { validateLineup, type DesiredSlot, type SlotState, type LineupStore } from "@app/lineup";
 import { formatAudit, isCommissionerActor, lineupEndStateHolds, relaxPeriodLock } from "./core";
 
 export interface LineupDeps {
@@ -78,20 +78,25 @@ export async function runLineupOverride(
     };
   }
 
-  // Authoritative lock state from the store (server truth, not the caller) — keeps lock-on-play enforced,
-  // UNLESS the commissioner passed --allow-locked-slot, which relaxes ONLY the played-player freeze: an
-  // empty lock state makes validateLineup's phase-4 a no-op while formation/ownership/XI stay enforced.
-  const lockState = input.allowLockedSlot
+  // Authoritative play state from the store (server truth, not the caller) — keeps the forfeit-model play
+  // rules enforced, UNLESS the commissioner passed --allow-locked-slot, which relaxes ONLY the played-player
+  // constraints: an empty play state makes validateLineup's phase-4 a no-op while formation/ownership/XI
+  // stay enforced. (A commissioner correction is not a forfeit — `voidPlayerIds` stays empty below — and the
+  // adapter's GUC bypasses the DB latch so a played player can be rearranged without stamping `voided_at`.)
+  const slotStates: SlotState[] = input.allowLockedSlot
     ? []
-    : ctx.slots
-        .filter((s) => s.locked)
-        .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter }));
+    : ctx.slots.map((s) => ({
+        playerId: s.playerId,
+        isStarter: s.isStarter,
+        hasPlayed: s.hasPlayed,
+        voided: s.voided,
+      }));
 
-  // KEEP formation/position/ownership/XI/lock-on-play; bypass ONLY the edit-window lock.
+  // KEEP formation/position/ownership/XI/play-state rules; bypass ONLY the edit-window lock.
   const verdict = validateLineup(
     ctx.squad,
     input.starterIds,
-    lockState,
+    slotStates,
     relaxPeriodLock(ctx.period),
     deps.now,
   );
@@ -126,6 +131,8 @@ export async function runLineupOverride(
     managerId: input.managerId,
     periodId: input.periodId,
     desired,
+    voidPlayerIds: [], // a commissioner correction never forfeits (no voided_at stamp)
+    now: deps.now,
     allowLockedSlot: input.allowLockedSlot,
   });
   if (!outcome.ok) {

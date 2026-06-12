@@ -42,7 +42,7 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         }),
         prisma.lineupSlot.findMany({
           where: { managerId, periodId },
-          select: { playerId: true, isStarter: true, lockedAt: true },
+          select: { playerId: true, isStarter: true, voidedAt: true },
         }),
         prisma.period.findUnique({
           where: { id: periodId },
@@ -50,13 +50,27 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         }),
       ]);
 
+      // "Has played" is the SINGLE authoritative source (DECISIONS Theme B forfeit model): a
+      // score_player_match row exists for (player, his match in THIS period). NOT locked_at — locked_at is
+      // retired from movability. A player plays at most one match per period (his team's fixture).
+      const slotPlayerIds = slotRows.map((s) => s.playerId);
+      const playedRows =
+        slotPlayerIds.length > 0
+          ? await prisma.scorePlayerMatch.findMany({
+              where: { playerId: { in: slotPlayerIds }, match: { periodId } },
+              select: { playerId: true },
+            })
+          : [];
+      const playedSet = new Set(playedRows.map((r) => r.playerId));
+
       return {
         leagueId: manager.leagueId,
         squad: rosterRows.map((r) => ({ playerId: r.player.id, position: r.player.position })),
         slots: slotRows.map((s) => ({
           playerId: s.playerId,
           isStarter: s.isStarter,
-          locked: s.lockedAt !== null, // the lock-on-play latch
+          hasPlayed: playedSet.has(s.playerId), // authoritative: a score_player_match row exists
+          voided: s.voidedAt !== null, // the one-way forfeit latch
         })),
         period:
           periodRow && periodRow.leagueId === manager.leagueId
@@ -67,6 +81,7 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
 
     async saveLineup(commit: LineupCommit): Promise<SaveOutcome> {
       const override = commit.allowLockedSlot === true;
+      const voidSet = new Set(commit.voidPlayerIds);
       return prisma.$transaction(async (tx) => {
         // Commissioner carve-out: a TRANSACTION-LOCAL GUC the lock-on-play trigger reads + exempts. Set
         // ONLY for an --allow-locked-slot override; the normal path never sets it, so the DB latch holds.
@@ -79,12 +94,15 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         const cur = new Map(current.map((r) => [r.playerId, r]));
 
         // (1) Latch re-check (server-authoritative): refuse the WHOLE commit if a locked slot would
-        //     change its is_starter. Checked before any write — no partial save. Skipped under the
-        //     commissioner override (the deliberate move of a played player).
+        //     change its is_starter — EXCEPT the sanctioned forfeit transition (a played starter benched
+        //     AND voided this save, in the void set). Checked before any write — no partial save. Skipped
+        //     under the commissioner override (the deliberate move of a played player).
         if (!override) {
           for (const d of commit.desired) {
             const c = cur.get(d.playerId);
-            if (c && c.lockedAt !== null && c.isStarter !== d.isStarter) {
+            if (!c || c.lockedAt === null || c.isStarter === d.isStarter) continue;
+            const isForfeit = voidSet.has(d.playerId) && c.isStarter && !d.isStarter;
+            if (!isForfeit) {
               return { ok: false, conflict: { playerId: d.playerId, isStarter: c.isStarter } };
             }
           }
@@ -100,10 +118,10 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         // BENIGN NOW: through the group stage the squad is fixed at 15 (dropped_at always NULL), so no
         // orphan can be produced — there is no add/drop write path yet.
 
-        // (2) Apply: insert missing slots (born unlocked) and overwrite changed slots. On the normal path
-        //     a locked row is left frozen (the `lockedAt: null` guard means a row that locked mid-write
-        //     matches zero rows); under the override a locked row is updated too — the GUC set above lets
-        //     the DB trigger pass. locked_at itself is never written, so the latch instant is preserved.
+        // (2) Apply: a FORFEIT target is benched AND stamped voided_at in one UPDATE — the only way a
+        //     locked row's is_starter changes (the extended trigger permits exactly this transition; no
+        //     `lockedAt: null` guard, since the row IS locked). Otherwise: insert missing slots (born
+        //     unlocked/unvoided) and overwrite changed unlocked slots. locked_at itself is never written.
         for (const d of commit.desired) {
           const c = cur.get(d.playerId);
           if (!c) {
@@ -116,6 +134,18 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
                 isStarter: d.isStarter,
               },
             });
+          } else if (voidSet.has(d.playerId)) {
+            // The forfeit: bench + stamp voided_at (one-way). Idempotency-guarded on voidedAt: null so a
+            // re-run can't re-stamp (the trigger also forbids re-voiding).
+            await tx.lineupSlot.updateMany({
+              where: {
+                managerId: commit.managerId,
+                periodId: commit.periodId,
+                playerId: d.playerId,
+                voidedAt: null,
+              },
+              data: { isStarter: false, voidedAt: commit.now },
+            });
           } else if (c.isStarter !== d.isStarter && (override || c.lockedAt === null)) {
             await tx.lineupSlot.updateMany({
               where: {
@@ -125,6 +155,30 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
                 ...(override ? {} : { lockedAt: null }),
               },
               data: { isStarter: d.isStarter },
+            });
+          }
+        }
+
+        // (3) A forfeit changes who counts toward the manager-period score → enqueue a restate in the SAME
+        //     transaction (deduped, mirroring @app/recompute's enqueueManagerPeriodDirty so @app/lineup
+        //     stays free of an @app/recompute dependency). No forfeit → no enqueue (the unchanged path).
+        if (voidSet.size > 0) {
+          const existing = await tx.recomputeDirty.findFirst({
+            where: {
+              scope: "manager_period",
+              managerId: commit.managerId,
+              periodId: commit.periodId,
+              processedAt: null,
+            },
+            select: { id: true },
+          });
+          if (!existing) {
+            await tx.recomputeDirty.create({
+              data: {
+                scope: "manager_period",
+                managerId: commit.managerId,
+                periodId: commit.periodId,
+              },
             });
           }
         }

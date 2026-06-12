@@ -44,6 +44,7 @@ function stateFor(squad: LineupPlayer[]): SetLineupState {
     closesAt: "2099-01-01T00:00:00.000Z", // far future → the window is editable
     starterIds: defaultStarterIds(squad), // mirrors the SSR loader's seed
     locks: [],
+    slotMeta: {},
     kickoffByPlayer: {},
     opponentByPlayer: {},
   };

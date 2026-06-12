@@ -78,6 +78,7 @@ function period(
     closesAt: "2026-06-12T18:00:00.000Z",
     starterIds,
     locks,
+    slotMeta: {},
     kickoffByPlayer: {},
     opponentByPlayer: {},
   };

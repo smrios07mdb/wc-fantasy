@@ -445,8 +445,13 @@ model LineupSlot {
   playerId  String    @map("player_id")
   role      Position
   isStarter Boolean   @default(false) @map("is_starter")
-  /// NULL = still swappable. Set at kickoff (starter) or entry minute (sub). UTC.
+  /// NULL = still swappable. Set at kickoff (starter) or entry minute (sub). UTC. Retired from movability
+  /// (DECISIONS Theme B forfeit model): a played player is no longer hard-locked — `voided_at` is the gate.
+  /// Still stamped by the lock-on-play job + enforced by the trigger (now also permits the forfeit bench).
   lockedAt  DateTime? @map("locked_at") @db.Timestamptz(6)
+  /// One-way FORFEIT latch: stamped (= now, UTC) when a played starter is benched. His earned points are
+  /// forfeited for the period AND he can never return to the XI this period. NULL = not forfeited.
+  voidedAt  DateTime? @map("voided_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 

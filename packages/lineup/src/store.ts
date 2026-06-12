@@ -13,12 +13,15 @@
 import type { Position } from "@app/shared";
 import type { SquadPlayer, PeriodWindow } from "./validate";
 
-/** An existing `lineup_slot` row for a (manager, period): who, starting or benched, and locked-by-play? */
+/** An existing `lineup_slot` row for a (manager, period): who, starting or benched, and its play state. */
 export interface SlotRow {
   playerId: string;
   isStarter: boolean;
-  /** `lineup_slot.locked_at IS NOT NULL` — the player has played and the row is frozen. */
-  locked: boolean;
+  /** A `score_player_match` row exists for (player, his period match) — the authoritative "has played"
+   *  (NOT `locked_at`). Drives the forfeit / hindsight rules in {@link validateLineup}. */
+  hasPlayed: boolean;
+  /** `lineup_slot.voided_at IS NOT NULL` — the player was forfeited (benched after playing), one-way. */
+  voided: boolean;
 }
 
 /** Everything `setLineup` reads in one shot: the squad, the current slots (→ lock state), the window. */
@@ -44,6 +47,12 @@ export interface LineupCommit {
   managerId: string;
   periodId: string;
   desired: DesiredSlot[];
+  /** Player ids being FORFEITED this save: played starters the caller confirmed benching. Their slot is
+   *  stamped `voided_at = now` (is_starter → false) — the one sanctioned way a locked row's is_starter
+   *  changes — and a manager-period recompute is enqueued so standings restate. Empty = no forfeit. */
+  voidPlayerIds: readonly string[];
+  /** The forfeit timestamp (the injected clock) — what `voided_at` is stamped to. */
+  now: Date;
   /** Commissioner `--allow-locked-slot` carve-out: write even a slot locked by play. The store SKIPS its
    *  write-time latch re-check, and the Prisma adapter sets a per-transaction GUC the DB trigger
    *  `enforce_lineup_lock()` reads and exempts. The normal path leaves this false/undefined → latch holds. */
