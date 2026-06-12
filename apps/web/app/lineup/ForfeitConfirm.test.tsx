@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 /**
- * C2 forfeit UI — two layers of proof:
+ * Tap-routing + C2 forfeit UI — two layers of proof:
  *   1. Pure helpers: classifySlot + fillEligibleIds cover all 6 classification branches and
  *      position / lock eligibility filters (no DOM; logic-only).
- *   2. RTL mounts: SetLineupClient driven through jsdom to prove the played-starter token is
- *      distinct from movable + locked, the destructive confirm sheet opens / cancels / confirms,
- *      and the pre-flight block fires a toast instead of the sheet when no eligible fill exists.
+ *   2. RTL mounts: SetLineupClient driven through jsdom to prove:
+ *      - A tap on a played-starter token opens the score modal (NOT the forfeit confirm).
+ *      - Forfeit is reachable via "Bench & forfeit" inside the modal → ForfeitConfirmSheet.
+ *      - Pre-flight block: no eligible fill → modal button shows a toast, no confirm sheet.
+ *      - Cancel and confirm lifecycle on the ForfeitConfirmSheet are intact.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
@@ -95,6 +97,9 @@ function state(period: PeriodLineup = BASE_PERIOD): SetLineupState {
     timezone: "UTC",
   };
 }
+
+// Title emitted by PitchToken for a played-starter with points (new format after tap-routing fix).
+const DEF1_TITLE = /DEF1.*played.*7 pts.*tap for breakdown/i;
 
 // ── classifySlot ─────────────────────────────────────────────────────────
 
@@ -189,20 +194,43 @@ describe("fillEligibleIds — position + lock filtering", () => {
 describe("PitchToken — played-starter visual state", () => {
   it("played-starter is enabled, shows pts badge, is distinct from a locked token", () => {
     render(<SetLineupClient initialState={state()} />);
-    const token = screen.getByTitle(
-      /DEF1.*played — tap to bench \(forfeits 7 pts\)/i,
-    ) as HTMLButtonElement;
+    const token = screen.getByTitle(DEF1_TITLE) as HTMLButtonElement;
     // tappable=true: movable=false but isPlayedStarter=true → disabled must be false
     expect(token.disabled).toBe(false);
-    // ScorePill is rendered as a role=button with a title (replaced the static sl-tok-pts badge)
-    expect(screen.queryByTitle(/7 pts — tap for breakdown/i)).not.toBeNull();
+    // ScorePill is rendered as a role=button with a title (replaced the static sl-tok-pts badge).
+    // Both the pill and the token title include this text, so use queryAllByTitle.
+    expect(screen.queryAllByTitle(/7 pts — tap for breakdown/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ── RTL: tap-routing ──────────────────────────────────────────────────────
+
+describe("tap routing — played starter opens score modal, not forfeit confirm", () => {
+  it("tapping a played-starter token opens the score modal, never the forfeit confirm", () => {
+    render(<SetLineupClient initialState={state()} />);
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
+    const dialog = screen.getByRole("dialog");
+    // Score modal aria-label (loading state before fetch resolves/fails)
+    expect(dialog.getAttribute("aria-label")).toMatch(/score breakdown/i);
+    // Forfeit confirm copy must NOT be the dialog label (that belongs to ForfeitConfirmSheet)
+    expect(dialog.getAttribute("aria-label")).not.toBe("Bench DEF1");
+  });
+
+  it("score modal contains the forfeit copy + 'Bench & forfeit' button for a played starter", () => {
+    render(<SetLineupClient initialState={state()} />);
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
+    const dialog = screen.getByRole("dialog");
+    // ForfeitSection renders immediately (doesn't wait for fetch)
+    expect(dialog.textContent).toMatch(/forfeits his 7 pts this period/);
+    expect(dialog.textContent).toMatch(/can't return to your XI this period/);
+    expect(screen.getByRole("button", { name: /Bench.*forfeit/i })).toBeTruthy();
   });
 });
 
 // ── RTL: pre-flight block ─────────────────────────────────────────────────
 
 describe("ForfeitConfirmSheet — pre-flight block (no eligible fill)", () => {
-  it("tapping played starter with ALL bench locked shows a toast, not the confirm sheet", () => {
+  it("modal opens; 'Bench & forfeit' shows a toast and closes modal when no eligible fill exists", () => {
     const noFillPeriod: PeriodLineup = {
       ...BASE_PERIOD,
       locks: [
@@ -213,47 +241,51 @@ describe("ForfeitConfirmSheet — pre-flight block (no eligible fill)", () => {
       ],
     };
     render(<SetLineupClient initialState={state(noFillPeriod)} />);
-    fireEvent.click(screen.getByTitle(/DEF1.*played — tap to bench/i));
-    // The confirm sheet must NOT appear
+    // Tap opens the score modal
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
+    expect(screen.queryByRole("dialog")).not.toBeNull();
+    // Clicking "Bench & forfeit" fires the no-fill guard: closes modal, shows toast
+    fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    // But a status toast must be visible
     expect(screen.getByRole("status")).toBeTruthy();
   });
 });
 
-// ── RTL: confirm sheet lifecycle ──────────────────────────────────────────
+// ── RTL: forfeit confirm sheet lifecycle ──────────────────────────────────
 
-describe("ForfeitConfirmSheet — open / cancel / confirm lifecycle", () => {
-  it("tapping played starter opens the confirm sheet with the correct destructive copy", () => {
+describe("ForfeitConfirmSheet — open via modal / cancel / confirm lifecycle", () => {
+  it("'Bench & forfeit' in score modal opens the forfeit confirm sheet", () => {
     render(<SetLineupClient initialState={state()} />);
-    fireEvent.click(screen.getByTitle(/DEF1.*played — tap to bench \(forfeits 7 pts\)/i));
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
+    fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i }));
     const dialog = screen.getByRole("dialog");
     expect(dialog.getAttribute("aria-label")).toBe("Bench DEF1");
     expect(dialog.textContent).toMatch(/forfeits his 7 pts this period/);
     expect(dialog.textContent).toMatch(/can't return to your XI this period/);
   });
 
-  it("Cancel closes the sheet — full undo; played-starter token returns to its tappable state", () => {
+  it("Cancel on confirm sheet closes it — full undo; played-starter token stays tappable", () => {
     render(<SetLineupClient initialState={state()} />);
-    fireEvent.click(screen.getByTitle(/DEF1.*played — tap to bench \(forfeits 7 pts\)/i));
-    expect(screen.queryByRole("dialog")).not.toBeNull();
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
+    fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i }));
+    expect(screen.queryByRole("dialog")).not.toBeNull(); // forfeit confirm is open
     fireEvent.click(screen.getByRole("button", { name: /Cancel/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    // Token is still tappable after full undo
-    const token = screen.getByTitle(
-      /DEF1.*played — tap to bench \(forfeits 7 pts\)/i,
-    ) as HTMLButtonElement;
+    // Token still tappable after full undo
+    const token = screen.getByTitle(DEF1_TITLE) as HTMLButtonElement;
     expect(token.disabled).toBe(false);
   });
 
-  it("'Bench & forfeit' arms the fill step: sheet closes, DEF1 token shows st-selected state", () => {
+  it("confirming forfeit arms the fill step: confirm closes, DEF1 token shows st-selected", () => {
     render(<SetLineupClient initialState={state()} />);
-    fireEvent.click(screen.getByTitle(/DEF1.*played — tap to bench \(forfeits 7 pts\)/i));
+    // Open score modal → click forfeit → confirm sheet opens
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
     fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i }));
-    // Sheet is dismissed
+    // Confirm — this button is now in the ForfeitConfirmSheet (score modal already closed)
+    fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i }));
+    // Confirm sheet dismissed, fill step armed
     expect(screen.queryByRole("dialog")).toBeNull();
-    // DEF1 is now the selected player — its token has st-selected in its className
-    const def1Token = screen.getByTitle(/DEF1.*played — tap to bench \(forfeits 7 pts\)/i);
+    const def1Token = screen.getByTitle(DEF1_TITLE);
     expect(def1Token.className).toMatch(/st-selected/);
   });
 });

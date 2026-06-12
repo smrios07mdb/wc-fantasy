@@ -182,14 +182,15 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
 
   const title = isPlayedStarter
     ? pointsAtStake > 0
-      ? `${player.displayName} · ${player.position} · played — tap to bench (forfeits ${pointsAtStake} pts)`
-      : `${player.displayName} · ${player.position} · played — tap to bench (forfeits points)`
+      ? `${player.displayName} · ${player.position} · played — ${pointsAtStake} pts — tap for breakdown`
+      : `${player.displayName} · ${player.position} · played — tap for breakdown`
     : isLocked
       ? `${player.displayName} · ${player.position} · locked — tap for score breakdown`
       : `${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`;
 
-  // Locked tokens open the score modal; all other tappable states use the swap/forfeit flow.
-  const handleClick = () => (isLocked ? onScore(player.id) : onSelect(player.id));
+  // Played/locked tokens open the score modal; forfeit is accessible from within the modal.
+  const handleClick = () =>
+    isLocked || isPlayedStarter ? onScore(player.id) : onSelect(player.id);
 
   return (
     <button

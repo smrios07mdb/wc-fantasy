@@ -645,6 +645,18 @@
   border-top: 1px solid var(--hairline);
 }
 
+/* ── In-modal forfeit section (played starters only) ─────────────────────── */
+.sl-sm-forfeit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--hairline);
+}
+.sl-sm-forfeit-msg {
+  margin: 0;
+}
+
 /* ── Cursor update: locked tokens now open score modal (clickable) ───────── */
 /* Previously cursor:not-allowed — locked tokens now open the score sheet. */
 .sl-tok.is-locked {

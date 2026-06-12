@@ -119,26 +119,35 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
   const onScore = useCallback((playerId: string) => setScorePlayerId(playerId), []);
 
+  // Triggered by the "Bench & forfeit" button inside the PlayerScoreSheet modal. Closes the modal,
+  // then either shows a no-fill toast or opens the standalone ForfeitConfirmSheet.
+  const onForfeitFromModal = useCallback(() => {
+    if (!scorePlayerId) return;
+    const p = squad.find((q) => q.id === scorePlayerId);
+    if (!p) return;
+    const eligibles = fillEligibleIds(period, squad, starterIds, scorePlayerId);
+    setScorePlayerId(null);
+    if (eligibles.size === 0) {
+      setToast({
+        kind: "error",
+        text: `No unplayed ${p.position} reserve available — can't bench ${p.displayName} right now.`,
+      });
+      return;
+    }
+    setForfeitingPlayer({
+      playerId: scorePlayerId,
+      displayName: p.displayName,
+      pointsAtStake: period.slotMeta[scorePlayerId]?.pointsAtStake ?? 0,
+    });
+  }, [scorePlayerId, period, squad, starterIds]);
+
   const onSelect = useCallback(
     (playerId: string) => {
-      // C2 path A: played starter — open forfeit confirm (or block with a toast if no eligible fill).
+      // Played-starter taps are routed to onScore (score modal) by PitchToken.handleClick; this
+      // guard is a defensive belt-and-suspenders in case the token calls onSelect directly.
       const kind = classifySlot(period, playerId, starterIds.includes(playerId));
       if (kind === "played-starter") {
-        const eligibles = fillEligibleIds(period, squad, starterIds, playerId);
-        if (eligibles.size === 0) {
-          const p = squad.find((q) => q.id === playerId)!;
-          setToast({
-            kind: "error",
-            text: `No unplayed ${p.position} reserve available — can't bench ${p.displayName} right now.`,
-          });
-          return;
-        }
-        const p = squad.find((q) => q.id === playerId)!;
-        setForfeitingPlayer({
-          playerId,
-          displayName: p.displayName,
-          pointsAtStake: period.slotMeta[playerId]?.pointsAtStake ?? 0,
-        });
+        setScorePlayerId(playerId);
         return;
       }
 
@@ -213,6 +222,21 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     }
     setForfeitingPlayer(null);
   }, [forfeitingPlayer]);
+
+  // Props forwarded to PlayerScoreSheet so the in-modal "Bench & forfeit" button appears only for
+  // played starters (the one case where forfeit is a legal next action).
+  const forfeitPropsForModal = useMemo(() => {
+    if (!scorePlayerId) return undefined;
+    const kind = classifySlot(period, scorePlayerId, starterIds.includes(scorePlayerId));
+    if (kind !== "played-starter") return undefined;
+    const p = squad.find((q) => q.id === scorePlayerId);
+    if (!p) return undefined;
+    return {
+      playerName: p.displayName,
+      pointsAtStake: period.slotMeta[scorePlayerId]?.pointsAtStake ?? 0,
+      onForfeit: onForfeitFromModal,
+    };
+  }, [scorePlayerId, period, squad, starterIds, onForfeitFromModal]);
 
   const onSelectPeriod = useCallback((periodId: string) => {
     setActiveId(periodId);
@@ -346,6 +370,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
           periodId={activeId}
           playerId={scorePlayerId}
           onClose={() => setScorePlayerId(null)}
+          forfeitProps={forfeitPropsForModal}
         />
       )}
     </div>

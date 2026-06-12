@@ -14,13 +14,27 @@ import { Pos } from "./components";
 import { Flag } from "../draft/Flag";
 import { toIso2 } from "../../src/draft/flag";
 
+export interface ForfeitProps {
+  playerName: string;
+  /** Points the player has earned this period; 0 means score row hasn't landed yet. */
+  pointsAtStake: number;
+  onForfeit: () => void;
+}
+
 export interface PlayerScoreSheetProps {
   periodId: string;
   playerId: string;
   onClose: () => void;
+  /** Present only for played starters — renders the "Bench & forfeit" action inside the modal. */
+  forfeitProps?: ForfeitProps;
 }
 
-export function PlayerScoreSheet({ periodId, playerId, onClose }: PlayerScoreSheetProps) {
+export function PlayerScoreSheet({
+  periodId,
+  playerId,
+  onClose,
+  forfeitProps,
+}: PlayerScoreSheetProps) {
   const [view, setView] = useState<PlayerBoxView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -71,6 +85,7 @@ export function PlayerScoreSheet({ periodId, playerId, onClose }: PlayerScoreShe
         {loading && <div className="sl-sm-empty t-sm">Loading…</div>}
         {error && <div className="sl-sm-empty t-sm">Couldn&apos;t load breakdown.</div>}
         {view && <BreakdownBody view={view} />}
+        {forfeitProps && <ForfeitSection forfeitProps={forfeitProps} />}
       </div>
     </div>
   );
@@ -193,6 +208,22 @@ function LineRow({ line }: { line: ScoreLineView }) {
         {sign}
         {line.points}
       </span>
+    </div>
+  );
+}
+
+function ForfeitSection({ forfeitProps }: { forfeitProps: ForfeitProps }) {
+  const ptsText =
+    forfeitProps.pointsAtStake > 0 ? `his ${forfeitProps.pointsAtStake} pts` : "his points";
+  return (
+    <div className="sl-sm-forfeit">
+      <p className="sl-sm-forfeit-msg t-sm text-secondary">
+        Bench <strong>{forfeitProps.playerName}</strong> — forfeits {ptsText} this period.{" "}
+        <em>Final: he can&apos;t return to your XI this period.</em>
+      </p>
+      <button type="button" className="btn btn-danger btn-sm" onClick={forfeitProps.onForfeit}>
+        Bench &amp; forfeit
+      </button>
     </div>
   );
 }
