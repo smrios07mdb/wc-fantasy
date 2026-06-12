@@ -1,0 +1,24 @@
+Claude Code — Prompt 49: batch idempotency + window.ts purity coverage + migration confirm
+
+Run Opus 4.8, high. Run only AFTER Prompt 48 is committed (it is — 6fade39 on feat/faab-fa-grant). Work on the current tip feat/faab-fa-grant (it carries 47's dispatch.ts and 48's window.ts). Do NOT check out or modify feat/faab-per-matchday — editing the base under the stack risks moving the branch under active work. Land the work as separate conventional commits on the tip.
+Scope is three things:
+
+A. Verify (and only if needed, harden) per-period batch idempotency.
+Prove the per-period FAAB batch fires at most once per period — even under overlapping worker ticks, a crash mid-apply, or a second worker instance. This guards an irreversible mutation (budget debit + add/drop + waiver-order renumber) that deploys to prod before MD1.
+DO NOT TOUCH packages/faab/src/resolve.ts — this is the impure driver (apps/worker/src/faab/dispatch.ts + the apply path / Prisma store), not the resolver.
+Verify these three, with evidence (paste the relevant lines):
+
+Serial ticks — does the scheduler await each dispatch to completion before the next tick can start, or is it interval fire-and-forget (overlap possible)?
+Single transaction — are the batch apply (add/drop, budget debit, waiver-order renumber) and the batch_cleared_at stamp in one DB transaction, so a crash can't leave applied-but-unstamped (→ re-apply next tick) or stamped-but-unapplied?
+Conditional claim — is the stamp a guarded claim — UPDATE period SET batch_cleared_at = … WHERE id = ? AND batch_cleared_at IS NULL, rowcount-checked, aborting if 0 rows — rather than read-selectPeriodsToClear-then-write?
+
+If all three already hold: report the evidence and make no change. If any gap exists: harden minimally to that shape (apply + conditional IS NULL claim in one transaction, rowcount-gate entry, abort on 0) — no machinery beyond once-only correctness — and add a test proving a second concurrent/overlapping dispatch for the same due period is a no-op (no double debit, no double add/drop).
+
+B. Add window.ts to the purity matrix.
+packages/faab/src/window.ts (added in 48) is now a security-critical pure module gating the acquisition window, but it isn't in the 70-case matrix. Add it as the 8th module (→ 80 cases, the same 10 forbidden patterns). Carve-out to the rule above: you MAY edit packages/faab/src/purity.test.ts solely to register window.ts — still no edits to resolve.ts itself.
+
+C. Confirm 47's migration (read-only — report, don't fix silently).
+Inspect 20260610150000_period_faab_cadence. Confirm it's a pure column-add (period.waiver_batch_at + period.batch_cleared_at, no RLS policy change → no migration-embedded self-test needed). If it did touch a policy, confirm it used the UUID-returning shim (not the plain-Postgres one that masks the auth.uid() cast bug). Report which; if a policy was touched without the shim, flag it — don't fix it here.
+
+Gate: pnpm -w typecheck && pnpm lint && pnpm format:check && pnpm test.
+STOP after committing (conventional, no force-push). Report: (A) which of the three held + what (if anything) you changed + the new/updated test; (B) the matrix now at 80 cases with window.ts registered; (C) the migration finding; gate output; and confirm resolve.ts still byte-unchanged. No merge, no push — Chat clears the stack as a unit.

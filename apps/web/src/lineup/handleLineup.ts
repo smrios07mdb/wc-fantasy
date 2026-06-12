@@ -20,6 +20,8 @@ export interface LineupRequestBody {
   periodId: string;
   /** The player ids chosen to START; the rest of the squad is the bench. */
   starterIds: string[];
+  /** Player ids the manager has confirmed forfeiting (benching after play). Optional; defaults to none. */
+  forfeitConfirmedPlayerIds?: string[];
 }
 
 export interface LineupHandlerResult {
@@ -70,7 +72,12 @@ export async function handleSetLineup(
   // (3) Identity verified — hand off to the controller, which is server-authoritative on the lock.
   const result = await setLineup(
     deps.store,
-    { managerId: body.managerId, periodId: body.periodId, starterIds: body.starterIds },
+    {
+      managerId: body.managerId,
+      periodId: body.periodId,
+      starterIds: body.starterIds,
+      forfeitConfirmedPlayerIds: body.forfeitConfirmedPlayerIds,
+    },
     deps.now,
   );
   if (result.ok) return { status: 200, body: { ok: true } };

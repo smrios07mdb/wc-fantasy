@@ -1,0 +1,63 @@
+PROMPT 53 — Show each squad player's opponent next to the kickoff date+time (lineup tab)
+
+SCOPE: display-only, additive to Prompt 51 part-4. Extend the per-player fixture
+resolution on the Set Lineup screen to also surface the OPPONENT, rendered inline
+with the existing kickoff date+time on both the pitch token and the bench row.
+
+HARD STOP SEAMS (do not cross):
+- Engine byte-untouched: no change to @app/faab, scoring, resolver/resolve.ts,
+  @app/recompute, the purity matrix, or any Realtime / data-shape / loader contract
+  beyond the additive field below. SCORING.md is NOT touched.
+- This is the same surface Prompt 51 part-4 added kickoff date+time to. Reuse it;
+  do not re-derive a parallel match lookup.
+
+BASE: branch off the commit that contains Prompt 51 part-4's resolveKickoffByPlayer.
+  - if Prompt 51 is merged to main → off main
+  - else → off feat/lineup-waivers-polish
+  (Sergio confirms which before you start; build name: feat/lineup-opponent-label)
+
+IMPLEMENT (apps/web/src/lineup/view.ts — pure):
+1. Resolve opponent from the SAME fifa_match row that resolveKickoffByPlayer picks
+   for the player (player.teamId vs fifa_match.homeTeamId/awayTeamId). Return a small
+   descriptor per player, e.g. { opponentName, opponentNation, isHome } | null.
+   - player.teamId === homeTeamId → opponent = away side, isHome = true
+   - player.teamId === awayTeamId → opponent = home side, isHome = false
+   - resolve-miss (TBD/unplaying team, no fixture) → null  → render "TBD"
+   Prefer extending the existing per-player fixture pass so the match row is read
+   once and kickoff+opponent can never diverge. opponentNation comes from the
+   fifa_team join exactly as Prompt 51 part-3 derives nation (player.country is
+   unwritten) so the opponent <Flag> resolves via the sole <Flag>/toIso2 surface.
+
+2. loadLineup: fill opponentByPlayer per period alongside kickoffByPlayer; add the
+   field to SetLineupState (timezone already threaded — no new thread needed).
+
+RENDER (pitch token + bench row — the two spots that show the kickoff line today):
+- Immediately adjacent to the existing date+time (same line if it fits, else directly
+  under), same scale/treatment (the t-micro/text-tertiary class the kickoff uses).
+- Format: "vs " (isHome) / "@ " (!isHome) + opponent <Flag> (reuse toIso2 on
+  opponentNation) + opponent name. null → "TBD" (no flag), matching the kickoff TBD.
+- No new flag/IP surface, no background-image kit chips.
+
+TESTS (pure, mirror the Prompt 51 part-4 kickoff tests):
+- home player → away opponent + isHome true
+- away player → home opponent + isHome false
+- resolve-miss → null
+- loader fill: opponentByPlayer present per period, consistent with kickoffByPlayer
+  (same match row).
+
+BRAIN FILES (you write these as part of this prompt — do NOT hand Sergio doc lines):
+- ARCHITECTURE.md §14: extend the "Per-player kickoff" paragraph to note the opponent
+  is resolved from the same fifa_match row (kickoff+opponent share one read; isHome
+  drives vs/@; resolve-miss → TBD).
+- PROJECT.md: add the Prompt 53 entry (display-only, engine byte-untouched, +N tests).
+- DECISIONS.md: record the label decision (same-match-row consistency, vs/@ venue
+  prefix, opponent flag reuse, resolve-miss → TBD).
+- SCORING.md: untouched (state so in the report).
+
+GATE (must all exit 0, report the new test count):
+  pnpm -w typecheck && pnpm lint && pnpm format:check && pnpm test
+
+REPORT BACK: diff summary, new test names + count delta, confirmation the engine /
+resolver / Realtime / data-shape are byte-untouched, and the rendered token/bench
+before+after. Branch only — no merge, no push, no force-push. Merge is HELD for Chat
+clearance.

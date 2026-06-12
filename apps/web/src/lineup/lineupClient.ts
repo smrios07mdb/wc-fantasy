@@ -8,6 +8,7 @@ export interface LineupSubmitBody {
   managerId: string;
   periodId: string;
   starterIds: string[];
+  forfeitConfirmedPlayerIds?: string[];
 }
 
 export interface LineupSubmitError {

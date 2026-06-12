@@ -383,6 +383,87 @@
   background: var(--locked);
 }
 
+/* ── C2: played-starter token on the pitch ────────────────────────────── */
+/* Distinct from is-movable (full-bright + accent-selectable) and is-locked (dimmed + steel). The
+   amber border signals 'points at stake'; the token is still tappable (no opacity kill, no not-allowed). */
+.sl-tok.sl-tok-played {
+  border-color: var(--ytp);
+  opacity: 0.88;
+  cursor: pointer;
+}
+.sl-tok.sl-tok-played:hover {
+  transform: translateY(-1px);
+  opacity: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ytp) 30%, transparent);
+}
+/* Small pts badge — sits in sl-tok-top beside the avatar; no background, just the ytp colour number. */
+.sl-tok-pts {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ytp);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* ── C2: voided bench player ───────────────────────────────────────────── */
+.sl-bench-name.is-voided {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* ── C2: danger pill (Forfeited) ───────────────────────────────────────── */
+.pill-danger {
+  background: color-mix(in srgb, var(--loss) 12%, transparent);
+  color: var(--loss);
+  border-color: color-mix(in srgb, var(--loss) 28%, transparent);
+}
+
+/* ── C2: danger button (Bench & forfeit) ───────────────────────────────── */
+.btn-danger {
+  background: var(--loss);
+  color: white;
+  border: 1px solid var(--loss);
+}
+.btn-danger:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── C2: forfeit confirm sheet (modal overlay) ─────────────────────────── */
+.sl-forfeit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+.sl-forfeit-sheet {
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+}
+.sl-forfeit-msg {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+.sl-forfeit-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 /* ── save bar ──────────────────────────────────────────────────────────── */
 .sl-savebar {
   position: sticky;

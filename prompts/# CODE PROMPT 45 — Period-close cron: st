@@ -1,0 +1,53 @@
+# CODE PROMPT 45 — Period-close cron: stamp frozen_at after the freeze window
+
+## CONFIRM FIRST (STOP if already done)
+`grep -n "placeholder\|not yet implemented\|TODO" apps/worker/src/jobs/periodClose.ts`. If the job is
+already wired with real freeze logic (not the Prompt-12 placeholder), STOP and report — do not rebuild.
+Proceed only if it's still the inert placeholder.
+
+## Goal
+Replace the inert `wc-fantasy-period-close` cron body with the real freeze logic: stamp
+`period.frozen_at` once a period's results have been settled long enough to be final. Per DECISIONS §2:
+a period stays restatable for `result_freeze_hours` after the wave's last full-time, then freezes.
+No new product rules — implement the locked spec.
+
+## Spec (DECISIONS §2 — implement exactly)
+- A period is **freezable** when every fixture in it has a final result (FT) AND
+  `now >= max(FT among the period's fixtures) + league.resultFreezeHours`.
+- Read `league.resultFreezeHours` — the RUNTIME league-row column, NOT the seed default (per the
+  `LEAGUE_SEED_DEFAULTS` warning in `@app/shared`; the DB row wins).
+- Stamp `frozen_at` on each freezable, not-yet-frozen period. **Idempotent**: a period already carrying
+  `frozen_at` is skipped (never re-stamped). `// TODO(confirm):` whether `frozen_at` = `now` or the
+  computed `max(FT)+freezeHours` instant — pick one, note it.
+- Anomalies (a period with a postponed/abandoned/unresolved fixture) → do NOT freeze; skip + log for the
+  manual Cowork override (DECISIONS edge-cases). `// TODO(confirm):` the exact "all fixtures final" test
+  against the fixture status enum.
+
+## Shape (mirror the FAAB split — pure core + thin cron IO)
+- Pure, IO-free decision fn — `selectPeriodsToFreeze(periods, fixturesByPeriod, freezeHours, now) →
+  periodIds[]` (no Prisma/Supabase/clock). Place it in the existing period/standings domain package
+  (confirm the right home — likely `packages/recompute`); grep-clean it's IO-free.
+- Thin cron body in `apps/worker/src/jobs/periodClose.ts`: load periods + their fixtures + the league
+  freeze hours, call the pure fn, write `frozen_at` for the selected periods in one transaction, log
+  structured results. Idempotent re-run.
+
+## Scope / out of scope
+- Touch ONLY `apps/worker/src/jobs/periodClose.ts`, the pure helper + its test, in the chosen package.
+- NO schema/migration (`period.frozen_at`, `league.result_freeze_hours` exist). NO churn to scoring /
+  recompute / standings / draft / vsfield / ingestion signatures — consume only. Do NOT touch the cron
+  schedule/IaC. NO UI. NO brain-file edits (report a docs delta).
+
+## Tests (Vitest; TDD the pure fn)
+- freezable only when all fixtures final AND past `lastFT + freezeHours`; not before.
+- already-frozen period skipped (idempotent); anomaly period skipped.
+- boundary: exactly at `lastFT + freezeHours`.
+- multiple periods, mixed states → correct subset. Report test-count delta.
+
+## DoD
+- `pnpm db:generate && pnpm -w typecheck && pnpm lint && pnpm format:check && pnpm test` exit 0;
+  `pnpm --filter @app/web build` exits 0. Cron schedule untouched; a frozen period isn't re-stamped.
+- Report diffs, test-count delta, the docs delta, branch@sha. Do NOT merge — Chat holds clearance.
+
+## Commit discipline
+`git worktree add ../wc-period-close -b feat/period-close main` (isolated worktree). Conventional commit,
+no force-push. Hold the merge.

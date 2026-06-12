@@ -19,7 +19,21 @@ function parseBody(raw: unknown): LineupRequestBody | null {
   if (typeof b.managerId !== "string" || typeof b.periodId !== "string") return null;
   if (!Array.isArray(b.starterIds) || !b.starterIds.every((x) => typeof x === "string"))
     return null;
-  return { managerId: b.managerId, periodId: b.periodId, starterIds: b.starterIds as string[] };
+  let forfeitConfirmedPlayerIds: string[] | undefined;
+  if (b.forfeitConfirmedPlayerIds !== undefined) {
+    if (
+      !Array.isArray(b.forfeitConfirmedPlayerIds) ||
+      !b.forfeitConfirmedPlayerIds.every((x) => typeof x === "string")
+    )
+      return null;
+    forfeitConfirmedPlayerIds = b.forfeitConfirmedPlayerIds as string[];
+  }
+  return {
+    managerId: b.managerId,
+    periodId: b.periodId,
+    starterIds: b.starterIds as string[],
+    forfeitConfirmedPlayerIds,
+  };
 }
 
 export async function POST(request: Request) {

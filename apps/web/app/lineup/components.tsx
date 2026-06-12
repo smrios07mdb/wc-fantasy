@@ -26,7 +26,7 @@
  */
 import type { Position } from "@app/shared";
 import { formatInLeagueTz } from "@app/shared";
-import type { PitchSlot, PitchView } from "../../src/lineup/view";
+import type { PitchSlot, PitchView, SlotKind } from "../../src/lineup/view";
 import type { LineupPlayer, OpponentInfo, PeriodLineup } from "../../src/lineup/types";
 import { PlayerAvatar } from "../../components/PlayerAvatar";
 import { Flag } from "../draft/Flag";
@@ -106,14 +106,22 @@ function IcoOpen() {
   );
 }
 
-/** Movable ⇒ yet-to-play caution pill; locked ⇒ steel "locked" pill (always colour + icon + word). */
-export function LockTag({ movable, mini }: { movable: boolean; mini?: boolean }) {
+/** Bench-rail status pill: Movable / Locked / Forfeited — derived from the C2 slot classification. */
+export function LockTag({ slotKind, mini }: { slotKind: SlotKind; mini?: boolean }) {
+  const cls = mini ? "sl-locktag-mini" : "";
+  if (slotKind === "voided") {
+    return (
+      <span className={`pill pill-danger ${cls}`}>
+        <IcoLock />
+        Forfeited
+      </span>
+    );
+  }
+  const isMovableKind = slotKind === "movable";
   return (
-    <span
-      className={`pill ${movable ? "pill-ytp" : "pill-locked"} ${mini ? "sl-locktag-mini" : ""}`}
-    >
-      {movable ? <IcoOpen /> : <IcoLock />}
-      {movable ? "Movable" : "Locked"}
+    <span className={`pill ${isMovableKind ? "pill-ytp" : "pill-locked"} ${cls}`}>
+      {isMovableKind ? <IcoOpen /> : <IcoLock />}
+      {isMovableKind ? "Movable" : "Locked"}
     </span>
   );
 }
@@ -128,18 +136,32 @@ export interface TokenProps {
 }
 
 export function PitchToken({ slot, selected, eligible, timezone, onSelect }: TokenProps) {
-  const { player, movable } = slot;
+  const { player, movable, slotKind, pointsAtStake } = slot;
+  const isPlayedStarter = slotKind === "played-starter";
+  // Played starters tap into the forfeit-confirm path; all others follow movable/eligible.
+  const tappable = movable || eligible || isPlayedStarter;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
+
+  let kindClass: string;
+  if (movable) kindClass = "is-movable";
+  else if (isPlayedStarter) kindClass = "sl-tok-played";
+  else kindClass = "is-locked";
+
+  const title = isPlayedStarter
+    ? pointsAtStake > 0
+      ? `${player.displayName} · ${player.position} · played — tap to bench (forfeits ${pointsAtStake} pts)`
+      : `${player.displayName} · ${player.position} · played — tap to bench (forfeits points)`
+    : `${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`;
+
   return (
     <button
       type="button"
-      className={`sl-tok st-${state} ${movable ? "is-movable" : "is-locked"}`}
-      // Locked players are non-draggable / non-selectable — the freeze the manager sees.
+      className={`sl-tok st-${state} ${kindClass}`}
       draggable={false}
-      aria-disabled={!movable}
-      disabled={!movable && !eligible}
+      aria-disabled={!tappable}
+      disabled={!tappable}
       onClick={() => onSelect(player.id)}
-      title={`${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`}
+      title={title}
     >
       <span className="sl-tok-top">
         <PlayerAvatar
@@ -150,7 +172,13 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect }: Tok
           position={player.position}
           size="sm"
         />
-        {!movable && <IcoLock />}
+        {/* Padlock only for genuinely frozen slots; played starters show pts badge instead. */}
+        {!movable && !isPlayedStarter && <IcoLock />}
+        {isPlayedStarter && pointsAtStake > 0 && (
+          <span className="sl-tok-pts" aria-label={`${pointsAtStake} points`}>
+            {pointsAtStake}
+          </span>
+        )}
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
       <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-tok-ko" />
@@ -201,7 +229,7 @@ export function Pitch({ view, selected, eligibleIds, timezone, onSelect }: Pitch
 }
 
 export function BenchRow({ slot, selected, eligible, timezone, onSelect }: TokenProps) {
-  const { player, movable } = slot;
+  const { player, movable, slotKind } = slot;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
   return (
     <button
@@ -209,7 +237,7 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect }: Token
       className={`sl-bench-row st-${state} ${movable ? "is-movable" : "is-locked"}`}
       draggable={false}
       aria-disabled={!movable}
-      disabled={!movable && !eligible}
+      disabled={!movable}
       onClick={() => onSelect(player.id)}
     >
       <PlayerAvatar
@@ -220,12 +248,14 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect }: Token
         position={player.position}
         size="sm"
       />
-      <span className="sl-bench-name">{shortName(player)}</span>
+      <span className={`sl-bench-name${slotKind === "voided" ? " is-voided" : ""}`}>
+        {shortName(player)}
+      </span>
       <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-bench-ko" />
       {slot.kickoffAt && (
         <OpponentTag opponent={slot.opponent} className="sl-bench-opp t-micro text-tertiary" />
       )}
-      <LockTag movable={movable} mini />
+      <LockTag slotKind={slotKind} mini />
     </button>
   );
 }
@@ -381,6 +411,59 @@ export function FormationPicker({ offered, active, disabled, onPick }: Formation
             {formation}
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+export interface ForfeitConfirmSheetProps {
+  playerName: string;
+  /** Points the manager would forfeit; 0 or null means the score row hasn't landed yet. */
+  pointsAtStake: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+/**
+ * Modal confirm sheet for the destructive bench-played-starter action. Shown when the manager taps a
+ * played-starter token; the forfeit is only wired server-side if they explicitly confirm here.
+ * Cancel = full undo (the token returns to its played-starter state; re-confirm is required to re-arm).
+ */
+export function ForfeitConfirmSheet({
+  playerName,
+  pointsAtStake,
+  onConfirm,
+  onCancel,
+}: ForfeitConfirmSheetProps) {
+  const ptsText = pointsAtStake > 0 ? `his ${pointsAtStake} pts` : "his points";
+  return (
+    // Clicking the overlay backdrop = cancel (same as the Cancel button).
+    <div
+      className="sl-forfeit-overlay"
+      role="presentation"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Bench ${playerName}`}
+        className="sl-forfeit-sheet card"
+        // Stop the backdrop's onClick from propagating through the card.
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="sl-forfeit-msg t-body">
+          Bench <strong>{playerName}</strong> — forfeits {ptsText} this period.{" "}
+          <em>Final: he can&apos;t return to your XI this period.</em>
+        </p>
+        <div className="sl-forfeit-actions">
+          {/* Cancel is autoFocused — the safe default for a destructive action. */}
+          <button type="button" className="btn btn-ghost" onClick={onCancel} autoFocus>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm}>
+            Bench &amp; forfeit
+          </button>
+        </div>
       </div>
     </div>
   );

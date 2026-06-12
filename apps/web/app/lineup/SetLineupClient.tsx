@@ -13,7 +13,9 @@ import { submitLineup } from "../../src/lineup/lineupClient";
 import {
   buildPitch,
   canSwap,
+  classifySlot,
   evaluateProposal,
+  fillEligibleIds,
   formationKeyOf,
   GROUP_FORMATIONS,
   isMovable,
@@ -22,7 +24,15 @@ import {
   swapStarters,
 } from "../../src/lineup/view";
 import type { SetLineupState } from "../../src/lineup/types";
-import { Bench, FormationPicker, LockHero, PeriodTabs, Pitch, SaveBar } from "./components";
+import {
+  Bench,
+  ForfeitConfirmSheet,
+  FormationPicker,
+  LockHero,
+  PeriodTabs,
+  Pitch,
+  SaveBar,
+} from "./components";
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
@@ -44,6 +54,13 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  // C2 forfeit state: players confirmed for forfeit this session + the player awaiting confirm.
+  const [pendingForfeits, setPendingForfeits] = useState(() => new Set<string>());
+  const [forfeitingPlayer, setForfeitingPlayer] = useState<{
+    playerId: string;
+    displayName: string;
+    pointsAtStake: number;
+  } | null>(null);
 
   const period = useMemo(() => periods.find((p) => p.periodId === activeId)!, [periods, activeId]);
   const starterIds = lineups[activeId] ?? period.starterIds;
@@ -56,9 +73,10 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
   // Re-sample the clock on each edit / period switch so the window check stays fresh (presentation only;
   // the server clock is authoritative).
   const now = useMemo(() => new Date(), [activeId, starterIds]);
+  // C2: thread pendingForfeits so the Save button enables after the confirm sheet fires.
   const validation = useMemo(
-    () => evaluateProposal(squad, period, starterIds, now),
-    [squad, period, starterIds, now],
+    () => evaluateProposal(squad, period, starterIds, now, pendingForfeits),
+    [squad, period, starterIds, now, pendingForfeits],
   );
 
   const editable =
@@ -69,10 +87,13 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
   const eligibleIds = useMemo(() => {
     if (!selected) return new Set<string>();
+    // Post-confirm fill: selected player is a pending forfeit (still in XI) — show position-legal
+    // unplayed bench players as eligible targets (canSwap would fail the isMovable guard for him).
+    if (pendingForfeits.has(selected)) return fillEligibleIds(period, squad, starterIds, selected);
     const set = new Set<string>();
     for (const p of squad) if (canSwap(period, squad, starterIds, selected, p.id)) set.add(p.id);
     return set;
-  }, [selected, squad, period, starterIds]);
+  }, [selected, squad, period, starterIds, pendingForfeits]);
 
   // The shapes this manager can actually field right now = roster-fillable ∩ lock-legal. Only these are
   // offered, so every pick lands on a complete, immediately-savable XI (the fix for an unfieldable default).
@@ -95,7 +116,54 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
   const onSelect = useCallback(
     (playerId: string) => {
-      if (!isMovable(period, playerId)) return; // locked → frozen, ignore taps
+      // C2 path A: played starter — open forfeit confirm (or block with a toast if no eligible fill).
+      const kind = classifySlot(period, playerId, starterIds.includes(playerId));
+      if (kind === "played-starter") {
+        const eligibles = fillEligibleIds(period, squad, starterIds, playerId);
+        if (eligibles.size === 0) {
+          const p = squad.find((q) => q.id === playerId)!;
+          setToast({
+            kind: "error",
+            text: `No unplayed ${p.position} reserve available — can't bench ${p.displayName} right now.`,
+          });
+          return;
+        }
+        const p = squad.find((q) => q.id === playerId)!;
+        setForfeitingPlayer({
+          playerId,
+          displayName: p.displayName,
+          pointsAtStake: period.slotMeta[playerId]?.pointsAtStake ?? 0,
+        });
+        return;
+      }
+
+      // C2 path B: post-confirm fill step — selected player is a pending forfeit (still in XI).
+      if (selected !== null && pendingForfeits.has(selected)) {
+        if (playerId === selected) {
+          // Tap same player again → full undo: remove from pendingForfeits, return to played-starter state.
+          setPendingForfeits((prev) => {
+            const next = new Set(prev);
+            next.delete(selected);
+            return next;
+          });
+          setSelected(null);
+          return;
+        }
+        // Check fill eligibility inline (avoids capturing the memoised Set in the dep array).
+        if (fillEligibleIds(period, squad, starterIds, selected).has(playerId)) {
+          // Swap: forfeit player exits XI, eligible reserve enters.
+          const next = swapStarters(starterIds, selected, playerId);
+          setLineups((all) => ({ ...all, [activeId]: next }));
+          setJustSaved(false);
+          setSelected(null);
+          return;
+        }
+        // Non-eligible tap during fill step → ignore (never surface an action the engine rejects).
+        return;
+      }
+
+      // C1 path: locked / played-bench / voided → frozen, ignore taps.
+      if (!isMovable(period, playerId)) return;
       if (selected === null) {
         setSelected(playerId);
         return;
@@ -117,21 +185,46 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       }
       setSelected(playerId); // not a legal target → move the selection instead
     },
-    [period, squad, selected, starterIds, activeId],
+    [period, squad, selected, starterIds, activeId, pendingForfeits],
   );
+
+  const onConfirmForfeit = useCallback(() => {
+    if (!forfeitingPlayer) return;
+    const { playerId } = forfeitingPlayer;
+    setPendingForfeits((prev) => new Set([...prev, playerId]));
+    setSelected(playerId); // enter the fill step: selected = forfeit player, eligibles highlight
+    setForfeitingPlayer(null);
+    setJustSaved(false);
+  }, [forfeitingPlayer]);
+
+  const onCancelForfeit = useCallback(() => {
+    // Full undo: if somehow pre-confirmed, remove; always close the sheet.
+    if (forfeitingPlayer) {
+      setPendingForfeits((prev) => {
+        const next = new Set(prev);
+        next.delete(forfeitingPlayer.playerId);
+        return next;
+      });
+    }
+    setForfeitingPlayer(null);
+  }, [forfeitingPlayer]);
 
   const onSelectPeriod = useCallback((periodId: string) => {
     setActiveId(periodId);
     setSelected(null);
     setJustSaved(false);
     setToast(null);
+    // C2: period switch resets all forfeit state — confirms are period-scoped.
+    setPendingForfeits(new Set());
+    setForfeitingPlayer(null);
   }, []);
 
   const onSave = useCallback(async () => {
     setSaving(true);
     setToast(null);
+    const forfeitConfirmedPlayerIds = pendingForfeits.size > 0 ? [...pendingForfeits] : undefined;
     const res = await submitLineup(
-      { managerId: sessionManagerId, periodId: activeId, starterIds },
+      { managerId: sessionManagerId, periodId: activeId, starterIds, forfeitConfirmedPlayerIds },
       { fetch: (input, init) => fetch(input, init) },
     );
     setSaving(false);
@@ -139,10 +232,12 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       setSavedLineups((all) => ({ ...all, [activeId]: [...starterIds] }));
       setJustSaved(true);
       setToast({ kind: "success", text: "Lineup saved." });
+      // Clear pending forfeits after a successful save — they're now committed server-side.
+      setPendingForfeits(new Set());
     } else {
       setToast({ kind: "error", text: res.error.message });
     }
-  }, [sessionManagerId, activeId, starterIds]);
+  }, [sessionManagerId, activeId, starterIds, pendingForfeits]);
 
   const movable = squad.filter((p) => isMovable(period, p.id)).length;
 
@@ -227,6 +322,15 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
         >
           {toast.text}
         </div>
+      )}
+
+      {forfeitingPlayer && (
+        <ForfeitConfirmSheet
+          playerName={forfeitingPlayer.displayName}
+          pointsAtStake={forfeitingPlayer.pointsAtStake}
+          onConfirm={onConfirmForfeit}
+          onCancel={onCancelForfeit}
+        />
       )}
     </div>
   );
