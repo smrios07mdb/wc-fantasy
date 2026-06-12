@@ -1063,3 +1063,51 @@ the engine rejects every bench-of-a-played-starter. C2 flips the client to `slot
 **`locked_at` verdict.** Retired from movability, NOT deleted: the lock-on-play job still stamps it and the
 trigger still reads it (the IN-direction backstop). Retiring the stamping + the latch's locked_at arm is a
 proposed C2/follow-up, left intact in C1 so the live lock machinery isn't disturbed mid-tournament.
+
+### C2 — forfeit confirm UI (shipped `9bee8d1`, merged to `main`)
+
+C2 wires the C1 engine to a destruction-confirm UI. No new server paths — the existing `POST
+/api/lineup` route simply receives a non-empty `forfeitConfirmedPlayerIds` array for the first
+time.
+
+**Read approach (pure, in `view.ts`).** Two new helpers:
+- `classifySlot(slot, slotMeta)` — maps a slot to one of `"normal" | "played-starter" |
+  "voided"` using the `slotMeta.{hasPlayed, isStarter, voided}` flags from the C1 read contract.
+  A `"played-starter"` token gets a live pts badge + the forfeit affordance; a `"voided"` token
+  renders strikethrough.
+- `fillEligibleIds(squad, slotMeta, locks)` — candidates the bench-fill logic can promote into a
+  forfeited slot: un-played, movable, position-compatible reserves. **Not formation-aware** (the
+  Save gate backstops any shape violation; deferred minor).
+
+**Client classification split.** `SetLineupClient` classifies played starters via `slotMeta`
+(the C1 read contract) while keeping the existing `locks` map for `buildPitch` movability
+(drag-and-drop legality). This is deliberate: flipping `buildPitch` from `locks` to `slotMeta`
+would surface the drag affordance on played starters in the unchanged UI — the engine rejects it
+but UX would be confusing. The split is correct in C2 because the confirm sheet is the explicit
+gate.
+
+**Route.** `route.ts` type-validates `forfeitConfirmedPlayerIds: string[]` from the request body
+(already the `SetLineupInput` shape from C1); the engine stays the sole legality gate.
+
+**Four locked UX decisions (render-verified):**
+- **Q1 — played-starter token:** pts badge + "Forfeit" affordance (no padlock icon — the
+  forfeit is NOT a hard lock; the player is movable). `classifySlot` drives the token variant.
+- **Q2 — confirm cancel = full undo:** tapping Cancel in `ForfeitConfirmSheet` closes the sheet
+  and reverts the in-progress bench swap completely; the starter is restored to the XI.
+- **Q3 — pre-flight eligibility block:** if `fillEligibleIds` returns empty (no valid
+  replacement), the forfeit affordance is disabled at the token level — the manager cannot
+  initiate a forfeit they can't legally complete (Save gate is still the backstop).
+- **Q4 — voided render:** a voided slot renders strikethrough text + a muted "Forfeited" label;
+  it is excluded from the draggable surface (non-interactive).
+
+**Three deferred minors (non-blocking):**
+1. `fillEligibleIds` is not formation-aware — a promoted bench player may yield a shape the
+   validator rejects. The Save gate surfaces the error; a formation-aware pre-fill is a follow-up.
+2. No in-place undo after a forfeit save — once `voided_at` is stamped the slot is permanent;
+   UX shows "Forfeited" with no undo affordance (the one-way door is correct by design).
+3. **~1-tick post-kickoff window:** a player who just kicked off may have no `score_player_match`
+   row yet (the recompute tick hasn't landed). During this window the client reads
+   `hasPlayed: false` — no pts badge, no forfeit affordance — typically ≤60s; resolves on the
+   next tick. Surfaced, not worked around.
+
+**Open:** legend-copy wording for "Forfeited" vs "Played" — deferred to a UX pass.

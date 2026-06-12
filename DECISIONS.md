@@ -262,8 +262,21 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   transaction so standings restate. The rollup (`scoreManagerPeriod`) is UNCHANGED — it already sums
   starters only, so a voided (benched) player is excluded and the incoming starter counts.
 - **Status (2026-06-12):** the C1 forfeit engine is **merged to `main`** (`b63f0a4` engine, `9811ff4` tests +
-  recompute-mirror drift guard, `121f45f` docs) — earlier "merge HELD" wording is superseded. **C2 forfeit UI is
-  the next workstream, now unblocked** (its read contract `slotMeta` + engine input are on main).
+  recompute-mirror drift guard, `121f45f` docs) — earlier "merge HELD" wording is superseded.
+- **C2 forfeit UI — SHIPPED (`9bee8d1`, merged to `main`, render-verified).** The demote-OUT UI is now live.
+  Four UX decisions locked and verified:
+  - **Q1 — played-starter token:** pts badge + "Forfeit" affordance; NO padlock (the played slot is movable,
+    not hard-locked; the icon would be misleading).
+  - **Q2 — confirm cancel = full undo:** Cancel in `ForfeitConfirmSheet` reverts the in-progress bench swap
+    completely — the starter is restored to the XI, no partial state.
+  - **Q3 — pre-flight eligibility block:** `fillEligibleIds` empty → forfeit affordance disabled at the token
+    level; manager cannot initiate an uncompletable forfeit (Save gate still backstops).
+  - **Q4 — voided render:** forfeited slot renders strikethrough text + muted "Forfeited" label; non-interactive
+    (excluded from the drag surface).
+  Three deferred minors: `fillEligibleIds` is not formation-aware (Save gate backstops shape errors);
+  no in-place undo post-save (one-way door by design); ~1-tick post-kickoff window where `hasPlayed` reads
+  false until the first recompute row lands (≤60s, surfaced not worked around).
+  Open: legend-copy wording ("Forfeited" vs "Played") — deferred to a UX pass.
 
 ### "Set multiple lineups" — defined
 Pre-set lineups for **multiple upcoming match windows/periods in advance**; within a period,

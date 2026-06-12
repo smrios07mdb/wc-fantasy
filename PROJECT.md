@@ -130,17 +130,25 @@ played starter is rejected (`forfeit-requires-confirm`), behaviour byte-identica
 unchanged (starters-only). +N tests, all gates green. See DECISIONS (forfeit amendment) + SCORING (principle
 6) + ARCHITECTURE §16.
 
-**Lock/forfeit state — reconciled (2026-06-12):** **Both lock directions are now fixed in `main`** — premature
+**Lock/forfeit state — reconciled + forfeit UI shipped (2026-06-12):** **Both lock directions are now fixed in `main`** — premature
 **over**-stamping (now-gate write `ee4c18b` + now-respecting read `fab4105`) and played-but-unlocked
 **under**-stamping (appeared⇒locked backstop `e888f66` + bounded 48h sweep `1723b5a`). The **C1 forfeit engine
 is merged** (`b63f0a4` / `9811ff4` / `121f45f`) — earlier "merge HELD" notes above are superseded. **C2 forfeit
-UI is the next workstream, now unblocked** — its C1 read contract (`slotMeta`) + engine input are on main. The
+UI is merged and render-verified** (`9bee8d1`) — played starters show a pts badge + "Forfeit" affordance (no
+padlock — movable, not hard-locked); `ForfeitConfirmSheet` is the one-way confirm gate; Cancel reverts the bench
+swap fully; pre-flight `fillEligibleIds` empty → affordance disabled; voided slots render strikethrough +
+non-interactive. See ARCHITECTURE §16 (C2 section) + DECISIONS (forfeit amendment). The
 throwaway branch **`fix/premature-locks-statusgate` is retired**: rebased onto `main` it showed **zero unique
 delta** and never carried the agreed four-layer fix — branch + worktree deleted. The **"four-layer fix" plan is
 superseded**: **Layer 2** (no stamp on a not-yet-kicked-off match) is **already met by the in-main now-gate**,
 leaving only **optional, non-blocking hardening** — **Layer 1** (kickoff-import: **skip/flag** a missing kickoff
 instead of coalescing to ≈now) and **Layer 4** (live cleanup SQL: drop the `p.label = 'MD1'` filter to clean
 **all periods**). See DECISIONS (lock invariant + forfeit amendment).
+
+**C2 branch-hygiene incident:** during C2 development, 22 stray session-generated files were committed directly
+onto `main` alongside the feature work. Recovered via `wip/c2-recover` (isolated the clean delta), rebuilt clean
+on `feat/lineup-forfeit-ui` — `9bee8d1` is tidy. Reinforces the **worktree/branch-disjoint discipline**: feature
+work on an isolated branch (or worktree), never directly on `main`, even for small changes.
 
 **Build progress (Claude Code):** Prompt 01 — repo scaffold + Postgres schema ✅ · Prompt 02 — pure
 scoring engine + tests ✅ · Prompt 03 — recompute pipeline (DB→ScoreInput adapter + rating resolver +
