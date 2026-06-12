@@ -81,11 +81,13 @@ describe("lineup re-skin — the formation view + bench + locked-frozen affordan
     expect(components).toContain("view.lanes[pos]");
   });
 
-  it("freezes locked players — non-draggable, disabled, dimmed via `is-locked` (the freeze the manager sees)", () => {
+  it("dims locked players via `is-locked`; locked bench rows now route to score modal (not disabled)", () => {
     expect(components).toContain("draggable={false}");
-    expect(components).toContain("aria-disabled={!movable}");
+    // is-locked class is still applied for visual dimming (opacity); the row is no longer aria-disabled
     expect(components).toContain('${movable ? "is-movable" : "is-locked"}');
-    // taps on a locked player are ignored before any swap is attempted
+    // locked bench rows route to onScore (score breakdown modal) — not disabled
+    expect(components).toContain("onScore(player.id)");
+    // taps on a locked player in the pitch swap flow are still ignored (isMovable guard)
     expect(client).toContain("if (!isMovable(period, playerId)) return;");
   });
 });

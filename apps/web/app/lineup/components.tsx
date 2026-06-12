@@ -126,6 +126,36 @@ export function LockTag({ slotKind, mini }: { slotKind: SlotKind; mini?: boolean
   );
 }
 
+/** Compact clickable points badge shown on played/locked tokens (not movable). */
+export function ScorePill({
+  points,
+  playerId,
+  isLive,
+  onOpen,
+}: {
+  points: number;
+  playerId: string;
+  /** True for kicked-off players who haven't appeared yet — shows live dot. */
+  isLive: boolean;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <span
+      className={`sl-scorepill${isLive ? " is-live" : ""}`}
+      role="button"
+      tabIndex={0}
+      title={`${points} pts — tap for breakdown`}
+      onClick={(ev) => {
+        ev.stopPropagation();
+        onOpen(playerId);
+      }}
+    >
+      {isLive && <span className="sl-score-dot" aria-hidden="true" />}
+      <b>{points}</b>
+    </span>
+  );
+}
+
 export interface TokenProps {
   slot: PitchSlot;
   selected: boolean;
@@ -133,13 +163,16 @@ export interface TokenProps {
   /** League IANA tz — formats the per-player kickoff/lock deadline. */
   timezone: string;
   onSelect: (playerId: string) => void;
+  /** Open the score breakdown modal for this player. */
+  onScore: (playerId: string) => void;
 }
 
-export function PitchToken({ slot, selected, eligible, timezone, onSelect }: TokenProps) {
+export function PitchToken({ slot, selected, eligible, timezone, onSelect, onScore }: TokenProps) {
   const { player, movable, slotKind, pointsAtStake } = slot;
   const isPlayedStarter = slotKind === "played-starter";
-  // Played starters tap into the forfeit-confirm path; all others follow movable/eligible.
-  const tappable = movable || eligible || isPlayedStarter;
+  // Locked tokens (kicked off, no appearance yet) now open the score modal on tap.
+  const isLocked = slotKind === "locked";
+  const tappable = movable || eligible || isPlayedStarter || isLocked;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
 
   let kindClass: string;
@@ -151,7 +184,12 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect }: Tok
     ? pointsAtStake > 0
       ? `${player.displayName} · ${player.position} · played — tap to bench (forfeits ${pointsAtStake} pts)`
       : `${player.displayName} · ${player.position} · played — tap to bench (forfeits points)`
-    : `${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`;
+    : isLocked
+      ? `${player.displayName} · ${player.position} · locked — tap for score breakdown`
+      : `${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`;
+
+  // Locked tokens open the score modal; all other tappable states use the swap/forfeit flow.
+  const handleClick = () => (isLocked ? onScore(player.id) : onSelect(player.id));
 
   return (
     <button
@@ -160,7 +198,7 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect }: Tok
       draggable={false}
       aria-disabled={!tappable}
       disabled={!tappable}
-      onClick={() => onSelect(player.id)}
+      onClick={handleClick}
       title={title}
     >
       <span className="sl-tok-top">
@@ -172,12 +210,10 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect }: Tok
           position={player.position}
           size="sm"
         />
-        {/* Padlock only for genuinely frozen slots; played starters show pts badge instead. */}
+        {/* Padlock for frozen/locked slots; played starters show a clickable ScorePill instead. */}
         {!movable && !isPlayedStarter && <IcoLock />}
         {isPlayedStarter && pointsAtStake > 0 && (
-          <span className="sl-tok-pts" aria-label={`${pointsAtStake} points`}>
-            {pointsAtStake}
-          </span>
+          <ScorePill points={pointsAtStake} playerId={player.id} isLive={false} onOpen={onScore} />
         )}
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
@@ -195,9 +231,10 @@ export interface PitchProps {
   eligibleIds: ReadonlySet<string>;
   timezone: string;
   onSelect: (playerId: string) => void;
+  onScore: (playerId: string) => void;
 }
 
-export function Pitch({ view, selected, eligibleIds, timezone, onSelect }: PitchProps) {
+export function Pitch({ view, selected, eligibleIds, timezone, onSelect, onScore }: PitchProps) {
   return (
     <div className="sl-pitch">
       <div className="sl-pitch-lines" aria-hidden="true">
@@ -219,6 +256,7 @@ export function Pitch({ view, selected, eligibleIds, timezone, onSelect }: Pitch
                 eligible={eligibleIds.has(slot.player.id)}
                 timezone={timezone}
                 onSelect={onSelect}
+                onScore={onScore}
               />
             ))}
           </div>
@@ -228,17 +266,17 @@ export function Pitch({ view, selected, eligibleIds, timezone, onSelect }: Pitch
   );
 }
 
-export function BenchRow({ slot, selected, eligible, timezone, onSelect }: TokenProps) {
-  const { player, movable, slotKind } = slot;
+export function BenchRow({ slot, selected, eligible, timezone, onSelect, onScore }: TokenProps) {
+  const { player, movable, slotKind, pointsAtStake } = slot;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
+  // Non-movable bench rows now open the score modal; the is-locked class is kept for visual dimming.
+  const handleClick = () => (movable ? onSelect(player.id) : onScore(player.id));
   return (
     <button
       type="button"
       className={`sl-bench-row st-${state} ${movable ? "is-movable" : "is-locked"}`}
       draggable={false}
-      aria-disabled={!movable}
-      disabled={!movable}
-      onClick={() => onSelect(player.id)}
+      onClick={handleClick}
     >
       <PlayerAvatar
         displayName={player.displayName}
@@ -256,6 +294,14 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect }: Token
         <OpponentTag opponent={slot.opponent} className="sl-bench-opp t-micro text-tertiary" />
       )}
       <LockTag slotKind={slotKind} mini />
+      {!movable && (
+        <ScorePill
+          points={pointsAtStake}
+          playerId={player.id}
+          isLive={slotKind === "locked"}
+          onOpen={onScore}
+        />
+      )}
     </button>
   );
 }
@@ -266,9 +312,10 @@ export interface BenchProps {
   eligibleIds: ReadonlySet<string>;
   timezone: string;
   onSelect: (playerId: string) => void;
+  onScore: (playerId: string) => void;
 }
 
-export function Bench({ bench, selected, eligibleIds, timezone, onSelect }: BenchProps) {
+export function Bench({ bench, selected, eligibleIds, timezone, onSelect, onScore }: BenchProps) {
   return (
     <div className="sl-bench card">
       <div className="sl-bench-head between">
@@ -284,6 +331,7 @@ export function Bench({ bench, selected, eligibleIds, timezone, onSelect }: Benc
             eligible={eligibleIds.has(slot.player.id)}
             timezone={timezone}
             onSelect={onSelect}
+            onScore={onScore}
           />
         ))}
       </div>

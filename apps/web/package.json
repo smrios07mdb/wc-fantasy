@@ -16,6 +16,7 @@
     "@app/feed": "workspace:*",
     "@app/lineup": "workspace:*",
     "@app/notify": "workspace:*",
+    "@app/player-box": "workspace:*",
     "@app/pool": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",

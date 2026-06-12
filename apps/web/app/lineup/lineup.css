@@ -464,6 +464,200 @@
   justify-content: flex-end;
 }
 
+/* ── ScorePill — small clickable pts badge on played/locked tokens ─────── */
+.sl-scorepill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--locked);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--locked) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--locked) 22%, transparent);
+  transition: opacity 0.1s ease;
+}
+.sl-scorepill:hover {
+  opacity: 0.78;
+}
+.sl-scorepill.is-live {
+  color: var(--live);
+  background: color-mix(in srgb, var(--live) 10%, transparent);
+  border-color: color-mix(in srgb, var(--live) 22%, transparent);
+}
+.sl-score-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--live);
+  flex-shrink: 0;
+}
+
+/* ── Score modal (PlayerScoreSheet) ────────────────────────────────────── */
+.sl-scoremodal {
+  max-width: 400px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  box-shadow: var(--e3);
+}
+.sl-sm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.sl-sm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 36px;
+}
+.sl-sm-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-sm-pts-hero {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--win);
+  white-space: nowrap;
+}
+.sl-sm-pts-hero small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+.sl-sm-match {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sl-sm-empty {
+  color: var(--text-secondary);
+  padding: 6px 0;
+  line-height: 1.55;
+}
+/* Each SCORING.md section block */
+.sl-sm-section {
+  display: flex;
+  flex-direction: column;
+}
+.sl-sm-section-label {
+  display: block;
+  padding: 2px 0 6px;
+}
+/* Row grid: tag | label+detail | pts (mirrors design spec 34px · 1fr · 38px) */
+.sl-sm-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 38px;
+  align-items: start;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+.sl-sm-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  text-align: center;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.sl-sm-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 13px;
+}
+.sl-sm-row-pts {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sl-sm-row-pts.is-pos { color: var(--win); }
+.sl-sm-row-pts.is-neg { color: var(--loss); }
+/* Total row — heavier top border, display-font number */
+.sl-sm-total-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 38px;
+  gap: 8px;
+  padding: 10px 0 0;
+  border-top: 2px solid var(--hairline-strong);
+  align-items: baseline;
+}
+.sl-sm-total-num {
+  text-align: right;
+  font-size: 18px;
+  font-weight: 700;
+}
+/* Context stats (unscored) */
+.sl-sm-tracked {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 10px;
+}
+.sl-sm-tracked-head {
+  display: block;
+  margin-bottom: 4px;
+}
+.sl-sm-tracked-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+/* Season total */
+.sl-sm-season {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--hairline);
+}
+
+/* ── Cursor update: locked tokens now open score modal (clickable) ───────── */
+/* Previously cursor:not-allowed — locked tokens now open the score sheet. */
+.sl-tok.is-locked {
+  opacity: 0.62;
+  filter: saturate(0.7);
+  cursor: pointer;
+  border-color: var(--locked-soft);
+}
+.sl-bench-row.is-locked {
+  opacity: 0.62;
+  cursor: pointer;
+}
+
 /* ── save bar ──────────────────────────────────────────────────────────── */
 .sl-savebar {
   position: sticky;

@@ -194,8 +194,8 @@ describe("PitchToken — played-starter visual state", () => {
     ) as HTMLButtonElement;
     // tappable=true: movable=false but isPlayedStarter=true → disabled must be false
     expect(token.disabled).toBe(false);
-    // Points badge is rendered with accessible label
-    expect(screen.queryByLabelText("7 points")).not.toBeNull();
+    // ScorePill is rendered as a role=button with a title (replaced the static sl-tok-pts badge)
+    expect(screen.queryByTitle(/7 pts — tap for breakdown/i)).not.toBeNull();
   });
 });
 

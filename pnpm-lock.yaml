@@ -84,6 +84,9 @@ importers:
       '@app/notify':
         specifier: workspace:*
         version: link:../../packages/notify
+      '@app/player-box':
+        specifier: workspace:*
+        version: link:../../packages/player-box
       '@app/pool':
         specifier: workspace:*
         version: link:../../packages/pool
@@ -309,6 +312,19 @@ importers:
       '@types/web-push':
         specifier: ^3.6.4
         version: 3.6.4
+
+  packages/player-box:
+    dependencies:
+      '@app/scoring':
+        specifier: workspace:*
+        version: link:../scoring
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
 
   packages/pool:
     dependencies:

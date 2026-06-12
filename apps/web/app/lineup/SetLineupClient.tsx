@@ -33,6 +33,7 @@ import {
   Pitch,
   SaveBar,
 } from "./components";
+import { PlayerScoreSheet } from "./PlayerScoreSheet";
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
@@ -54,6 +55,8 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  // Score modal state: which player's breakdown is open (null = closed).
+  const [scorePlayerId, setScorePlayerId] = useState<string | null>(null);
   // C2 forfeit state: players confirmed for forfeit this session + the player awaiting confirm.
   const [pendingForfeits, setPendingForfeits] = useState(() => new Set<string>());
   const [forfeitingPlayer, setForfeitingPlayer] = useState<{
@@ -113,6 +116,8 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     },
     [squad, period.locks, starterIds, activeId],
   );
+
+  const onScore = useCallback((playerId: string) => setScorePlayerId(playerId), []);
 
   const onSelect = useCallback(
     (playerId: string) => {
@@ -217,6 +222,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     // C2: period switch resets all forfeit state — confirms are period-scoped.
     setPendingForfeits(new Set());
     setForfeitingPlayer(null);
+    setScorePlayerId(null);
   }, []);
 
   const onSave = useCallback(async () => {
@@ -276,6 +282,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
             eligibleIds={eligibleIds}
             timezone={timezone}
             onSelect={onSelect}
+            onScore={onScore}
           />
           {/* Two-state legend: the authoritative lock is the binary `lineup_slot.locked_at` projection
               (movable vs locked) — the design's third "Locked · playing" row needs the live feed (the
@@ -303,6 +310,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
             eligibleIds={eligibleIds}
             timezone={timezone}
             onSelect={onSelect}
+            onScore={onScore}
           />
         </aside>
       </div>
@@ -330,6 +338,14 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
           pointsAtStake={forfeitingPlayer.pointsAtStake}
           onConfirm={onConfirmForfeit}
           onCancel={onCancelForfeit}
+        />
+      )}
+
+      {scorePlayerId && (
+        <PlayerScoreSheet
+          periodId={activeId}
+          playerId={scorePlayerId}
+          onClose={() => setScorePlayerId(null)}
         />
       )}
     </div>
