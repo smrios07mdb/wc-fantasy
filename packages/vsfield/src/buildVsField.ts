@@ -115,7 +115,14 @@ export function buildVsField(input: BuildVsFieldInput): VsFieldView {
     const starters: StarterView[] = (lineupByManager.get(m.managerId) ?? []).map((s) => {
       const { state, bucket } = classifyStarter(s.teamId ? statusByTeam.get(s.teamId) : undefined);
       counts[bucket] += 1;
-      return { playerId: s.playerId, role: s.role, state, locked: s.locked };
+      return {
+        playerId: s.playerId,
+        name: s.name,
+        nation: s.nation,
+        role: s.role,
+        state,
+        locked: s.locked,
+      };
     });
 
     const isMe = m.managerId === input.viewerManagerId;

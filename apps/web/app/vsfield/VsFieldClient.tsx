@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { startVsFieldLive } from "@/src/vsfield/liveController";
 import { fetchVsField } from "@/src/vsfield/snapshotClient";
 import type { RealtimeClientLike } from "@/src/vsfield/realtime";
+import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import {
   ConnPill,
   FieldTable,
@@ -37,6 +38,9 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
   const [conn, setConn] = useState<ConnState>("loading");
   const [tab, setTab] = useState<"period" | "season">("period");
   const [selected, setSelected] = useState<string | null>(null);
+  // Box-score modal target. INFO-ONLY on vsfield: opened from the H2H XI lists for a played/locked
+  // player (own OR opponent's), rendered with NO forfeitProps — vsfield never edits lineups.
+  const [boxPlayer, setBoxPlayer] = useState<string | null>(null);
 
   const { leagueId } = initialView;
   // Drive the subscription from the LIVE period, not the SSR-frozen one: a mid-session wave rollover
@@ -158,11 +162,26 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
             <div className="vf-rail">
               <YouVsField field={view.field} periodLabel={periodLabel} />
               {selected && (
-                <H2HDetail field={view.field} oppId={selected} onClose={() => setSelected(null)} />
+                <H2HDetail
+                  field={view.field}
+                  oppId={selected}
+                  onClose={() => setSelected(null)}
+                  onOpenPlayer={setBoxPlayer}
+                />
               )}
             </div>
           </div>
         </>
+      )}
+
+      {/* Info-only box-score modal — NO forfeitProps (vsfield never edits lineups). currentPeriod is
+          present whenever a played/locked player exists, but guard it so playerId+periodId pair up. */}
+      {boxPlayer && view.currentPeriod && (
+        <PlayerScoreSheet
+          periodId={view.currentPeriod.id}
+          playerId={boxPlayer}
+          onClose={() => setBoxPlayer(null)}
+        />
       )}
     </div>
   );

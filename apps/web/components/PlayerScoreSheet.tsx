@@ -3,16 +3,23 @@
 /**
  * Surface-agnostic player score breakdown modal. Fetches GET /api/player-box on open and renders
  * the PlayerBoxView returned by the server: grouped scored lines, tracked context stats, season
- * total. Reusable for Vs-the-Field in a later prompt.
+ * total. Shared single source — consumed by Set Lineup (with forfeitProps) and Vs-the-Field
+ * (info-only, NO forfeitProps). Lives in apps/web/components alongside the other shared UI
+ * (Brand / PlayerAvatar / NationFilter); each host route supplies the `.sl-sm-*` modal styles.
  *
  * Auth: league-scoped read — any manager can view any player's breakdown.
  * Server-only data: score_player_match and stat_player_match never flow to the browser directly.
  */
 import { useEffect, useState } from "react";
 import type { PlayerBoxView, SectionView, ScoreLineView } from "@app/player-box";
-import { Pos } from "./components";
-import { Flag } from "../draft/Flag";
-import { toIso2 } from "../../src/draft/flag";
+import type { Position } from "@app/shared";
+import { Flag } from "@/app/draft/Flag";
+import { toIso2 } from "@/src/draft/flag";
+
+/** Position badge (ds.css `.pos-*`). Inlined so this shared modal has no route-local dependency. */
+function Pos({ position }: { position: Position }) {
+  return <span className={`pos pos-${position}`}>{position}</span>;
+}
 
 export interface ForfeitProps {
   playerName: string;

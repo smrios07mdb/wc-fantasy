@@ -33,7 +33,7 @@ import {
   Pitch,
   SaveBar,
 } from "./components";
-import { PlayerScoreSheet } from "./PlayerScoreSheet";
+import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;

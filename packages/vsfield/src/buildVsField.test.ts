@@ -61,14 +61,44 @@ const LINEUPS: ManagerLineupInput[] = [
   {
     managerId: "m1",
     starters: [
-      { playerId: "p1a", role: "GK", teamId: "teamX", locked: false }, // scheduled
-      { playerId: "p1b", role: "DEF", teamId: "teamZ", locked: true }, // in_progress
-      { playerId: "p1c", role: "FWD", teamId: "teamP", locked: true }, // completed
+      {
+        playerId: "p1a",
+        name: "Gianluigi Buffon",
+        nation: "Italy",
+        role: "GK",
+        teamId: "teamX",
+        locked: false,
+      }, // scheduled
+      {
+        playerId: "p1b",
+        name: "Virgil van Dijk",
+        nation: "Netherlands",
+        role: "DEF",
+        teamId: "teamZ",
+        locked: true,
+      }, // in_progress
+      {
+        playerId: "p1c",
+        name: "Kylian Mbappé",
+        nation: "France",
+        role: "FWD",
+        teamId: "teamP",
+        locked: true,
+      }, // completed
     ],
   },
   {
     managerId: "m2",
-    starters: [{ playerId: "p2a", role: "MID", teamId: "teamY", locked: false }], // scheduled
+    starters: [
+      {
+        playerId: "p2a",
+        name: "Luka Modrić",
+        nation: "Croatia",
+        role: "MID",
+        teamId: "teamY",
+        locked: false,
+      },
+    ], // scheduled
   },
 ];
 
@@ -268,13 +298,23 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
     ]);
   });
 
+  it("surfaces each starter's name + nation so the XI drill-in is identifiable (no per-player points)", () => {
+    const view = buildVsField(baseInput());
+    const m1 = field(view, "m1").starters;
+    expect(m1.map((s) => s.name)).toEqual(["Gianluigi Buffon", "Virgil van Dijk", "Kylian Mbappé"]);
+    expect(m1.map((s) => s.nation)).toEqual(["Italy", "Netherlands", "France"]);
+    // Theme F: per-player points are NEVER carried in the snapshot — the box-score modal
+    // fetches a breakdown on demand. Assert the field simply does not exist on a starter.
+    expect(m1[0]).not.toHaveProperty("points");
+  });
+
   it("counts all starters as yet-to-play when every match is scheduled", () => {
     const lineups: ManagerLineupInput[] = [
       {
         managerId: "m1",
         starters: [
-          { playerId: "a", role: "GK", teamId: "teamX", locked: false },
-          { playerId: "b", role: "DEF", teamId: "teamY", locked: false },
+          { playerId: "a", name: "A", nation: null, role: "GK", teamId: "teamX", locked: false },
+          { playerId: "b", name: "B", nation: null, role: "DEF", teamId: "teamY", locked: false },
         ],
       },
     ];
@@ -292,8 +332,8 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
       {
         managerId: "m1",
         starters: [
-          { playerId: "a", role: "GK", teamId: "teamP", locked: true },
-          { playerId: "b", role: "DEF", teamId: "teamQ", locked: true },
+          { playerId: "a", name: "A", nation: null, role: "GK", teamId: "teamP", locked: true },
+          { playerId: "b", name: "B", nation: null, role: "DEF", teamId: "teamQ", locked: true },
         ],
       },
     ];
@@ -314,9 +354,16 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
       {
         managerId: "m1",
         starters: [
-          { playerId: "a", role: "GK", teamId: null, locked: false }, // no team
-          { playerId: "b", role: "DEF", teamId: "teamX", locked: false }, // postponed
-          { playerId: "c", role: "MID", teamId: "teamUNSEEDED", locked: false }, // no fixture
+          { playerId: "a", name: "A", nation: null, role: "GK", teamId: null, locked: false }, // no team
+          { playerId: "b", name: "B", nation: null, role: "DEF", teamId: "teamX", locked: false }, // postponed
+          {
+            playerId: "c",
+            name: "C",
+            nation: null,
+            role: "MID",
+            teamId: "teamUNSEEDED",
+            locked: false,
+          }, // no fixture
         ],
       },
     ];

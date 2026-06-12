@@ -1,0 +1,173 @@
+/**
+ * Styles for the shared <PlayerScoreSheet> box-score modal (apps/web/components/PlayerScoreSheet.tsx).
+ *
+ * Set Lineup carries its own copy of these `.sl-sm-*` rules in app/lineup/lineup.css (left untouched
+ * so that surface stays byte-identical). This file makes the same modal renderable on routes that do
+ * NOT import lineup.css — currently Vs-the-Field, which imports it from its layout. Route-scoped CSS
+ * imports never co-exist on one page, so the duplicate selectors don't collide; de-duping both copies
+ * into this single source is a clean follow-up. Forfeit-section styles are deliberately omitted —
+ * vsfield never renders the forfeit action.
+ */
+
+/* ── Scrim / overlay (shared with the lineup forfeit sheet on its own route) ─── */
+.sl-forfeit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+/* ── Score modal (PlayerScoreSheet) ────────────────────────────────────── */
+.sl-scoremodal {
+  max-width: 400px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  box-shadow: var(--e3);
+}
+.sl-sm-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.sl-sm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 36px;
+}
+.sl-sm-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sl-sm-pts-hero {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--win);
+  white-space: nowrap;
+}
+.sl-sm-pts-hero small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+.sl-sm-match {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sl-sm-empty {
+  color: var(--text-secondary);
+  padding: 6px 0;
+  line-height: 1.55;
+}
+/* Each SCORING.md section block */
+.sl-sm-section {
+  display: flex;
+  flex-direction: column;
+}
+.sl-sm-section-label {
+  display: block;
+  padding: 2px 0 6px;
+}
+/* Row grid: tag | label+detail | pts (mirrors design spec 34px · 1fr · 38px) */
+.sl-sm-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 38px;
+  align-items: start;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+.sl-sm-tag {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  text-align: center;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.sl-sm-lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 13px;
+}
+.sl-sm-row-pts {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sl-sm-row-pts.is-pos {
+  color: var(--win);
+}
+.sl-sm-row-pts.is-neg {
+  color: var(--loss);
+}
+/* Total row — heavier top border, display-font number */
+.sl-sm-total-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 38px;
+  gap: 8px;
+  padding: 10px 0 0;
+  border-top: 2px solid var(--hairline-strong);
+  align-items: baseline;
+}
+.sl-sm-total-num {
+  text-align: right;
+  font-size: 18px;
+  font-weight: 700;
+}
+/* Context stats (unscored) */
+.sl-sm-tracked {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 10px;
+}
+.sl-sm-tracked-head {
+  display: block;
+  margin-bottom: 4px;
+}
+.sl-sm-tracked-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+/* Season total */
+.sl-sm-season {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--hairline);
+}

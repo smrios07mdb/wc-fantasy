@@ -30,10 +30,16 @@ export interface CurrentPeriod {
 /**
  * One starter in a manager's current-period lineup (a `lineup_slot` with `is_starter = true`).
  * `teamId` (= `player.team_id`) is the join key to the period's `fifa_match`; `locked` mirrors
- * `lineup_slot.locked_at !== null` (lock-on-play).
+ * `lineup_slot.locked_at !== null` (lock-on-play). `name` (= `player.display_name`) + `nation`
+ * (= the `fifa_team.name` join, NEVER `player.country` — P34) make each starter identifiable so the
+ * vsfield drill-in can render a named, tappable XI. Per-player POINTS are intentionally NOT carried
+ * here (Theme F: the browser reads only `score_manager_period` + `standing`; the box-score modal
+ * fetches a player's breakdown on demand via `GET /api/player-box`).
  */
 export interface StarterInput {
   playerId: string;
+  name: string;
+  nation: string | null;
   role: Position;
   teamId: string | null;
   locked: boolean;
@@ -103,6 +109,10 @@ export type StarterState = "yet-to-play" | "playing" | "played";
 
 export interface StarterView {
   playerId: string;
+  /** `player.display_name` — surfaced so the drill-in XI is identifiable + tappable. */
+  name: string;
+  /** Nation from the `fifa_team.name` join (NEVER `player.country` — P34); null if no team link. */
+  nation: string | null;
   role: Position;
   state: StarterState;
   locked: boolean;

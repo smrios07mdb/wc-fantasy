@@ -23,6 +23,8 @@ import type {
   StillToCome,
 } from "@app/vsfield";
 import type { Position } from "@app/shared";
+import { Flag } from "@/app/draft/Flag";
+import { toIso2 } from "@/src/draft/flag";
 
 export type ConnState = "live" | "reconnecting" | "stale" | "loading";
 
@@ -400,14 +402,87 @@ export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; period
 }
 
 /** Per-opponent H2H detail: scoreline + verdict + each side's still-to-play + the two XI shapes. */
+/** Mini status pill for an XI-list row (color + word, per the functional-color rule). */
+function StarterStatePill({ state }: { state: StarterState }) {
+  if (state === "playing")
+    return (
+      <span className="pill pill-live vf-pill-mini">
+        <span className="vf-livedot" aria-hidden="true" />
+        Playing
+      </span>
+    );
+  if (state === "played") return <span className="pill pill-locked vf-pill-mini">Played</span>;
+  return <span className="pill pill-ytp vf-pill-mini">To play</span>;
+}
+
+/** One starter row in the H2H XI list. Played/locked → a button that opens the box-score modal;
+ *  to-play (match not kicked off) → an inert row (vsfield is read-only — no swap/drag, no forfeit). */
+function XINode({
+  starter,
+  onOpenPlayer,
+}: {
+  starter: StarterView;
+  onOpenPlayer: (playerId: string) => void;
+}) {
+  const iso2 = starter.nation ? toIso2(starter.nation) : null;
+  // Tappable once his match has kicked off (playing/played) or lock-on-play has stamped him.
+  const tappable = starter.state !== "yet-to-play" || starter.locked;
+  const body = (
+    <>
+      <Pos p={starter.role} />
+      {iso2 && <Flag code={iso2} label={starter.nation ?? undefined} />}
+      <span className="vf-xi-name">{starter.name}</span>
+      <StarterStatePill state={starter.state} />
+    </>
+  );
+  if (!tappable) {
+    return (
+      <div className="vf-xi-row is-inert" aria-disabled="true">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="vf-xi-row"
+      onClick={() => onOpenPlayer(starter.playerId)}
+      title={`${starter.name} — tap for score breakdown`}
+    >
+      {body}
+    </button>
+  );
+}
+
+/** A manager's full XI as identifiable, tappable rows for the per-opponent H2H drill-in. */
+export function XIList({
+  starters,
+  onOpenPlayer,
+}: {
+  starters: StarterView[];
+  onOpenPlayer: (playerId: string) => void;
+}) {
+  if (starters.length === 0) return null;
+  return (
+    <div className="vf-xi-list">
+      {starters.map((s) => (
+        <XINode key={s.playerId} starter={s} onOpenPlayer={onOpenPlayer} />
+      ))}
+    </div>
+  );
+}
+
 export function H2HDetail({
   field,
   oppId,
   onClose,
+  onOpenPlayer,
 }: {
   field: FieldEntry[];
   oppId: string;
   onClose: () => void;
+  /** Opens the info-only box-score modal for a played/locked player (own XI or opponent's). */
+  onOpenPlayer: (playerId: string) => void;
 }) {
   const me = field.find((e) => e.isMe);
   const opp = field.find((e) => e.managerId === oppId);
@@ -454,9 +529,10 @@ export function H2HDetail({
           to play
         </span>
       </div>
-      {/* TODO(prompt-NN): a named per-player XI compare with per-player points needs player display
-          names in the snapshot + score_player_match (scoring-display internals — out of scope here).
-          For now the XI shapes show who has played / is playing / is still to come. */}
+      {/* XI shapes give the at-a-glance played / playing / still-to-come picture; the named lists
+          below them make each starter identifiable + tappable. A played/locked player opens the
+          info-only box-score modal (per-player points are fetched on demand by that modal — they are
+          intentionally NOT in this snapshot; Theme F). No forfeit, no swap/drag: vsfield is read-only. */}
       <div className="vf-h2h-cols">
         <div className="vf-h2h-col">
           <div className="vf-h2h-colhead">
@@ -465,6 +541,7 @@ export function H2HDetail({
             <span className="mono vf-h2h-coltot">{me.points}</span>
           </div>
           <PitchMini starters={me.starters} orient="v" className="vf-pitch-mini" />
+          <XIList starters={me.starters} onOpenPlayer={onOpenPlayer} />
         </div>
         <div className="vf-h2h-col">
           <div className="vf-h2h-colhead">
@@ -473,6 +550,7 @@ export function H2HDetail({
             <span className="mono vf-h2h-coltot">{opp.points}</span>
           </div>
           <PitchMini starters={opp.starters} orient="v" className="vf-pitch-mini" />
+          <XIList starters={opp.starters} onOpenPlayer={onOpenPlayer} />
         </div>
       </div>
     </div>

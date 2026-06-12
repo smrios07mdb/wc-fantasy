@@ -105,7 +105,12 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
             playerId: true,
             role: true,
             lockedAt: true,
-            player: { select: { teamId: true } },
+            // displayName + the fifa_team name (NEVER player.country — P34) make the drill-in XI
+            // identifiable. NO score_player_match read here: per-player points stay OUT of the SSR
+            // payload (Theme F); the box-score modal fetches a breakdown on demand.
+            player: {
+              select: { teamId: true, displayName: true, team: { select: { name: true } } },
+            },
           },
         })
       : Promise.resolve([]),
@@ -143,6 +148,8 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
     }
     entry.starters.push({
       playerId: s.playerId,
+      name: s.player.displayName,
+      nation: s.player.team?.name ?? null,
       role: s.role,
       teamId: s.player.teamId,
       // Lock-on-play READ predicate: locked only once the stamped instant has arrived (not presence

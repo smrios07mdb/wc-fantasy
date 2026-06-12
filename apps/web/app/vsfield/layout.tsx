@@ -9,6 +9,8 @@
 import type { ReactNode } from "react";
 import "./ds.css";
 import "./vsfield.css";
+// Shared box-score modal styles — the drill-in opens <PlayerScoreSheet> (info-only) on this route.
+import "@/components/PlayerScoreSheet.css";
 import { AppShell } from "../shell/AppShell";
 
 export default function VsFieldLayout({ children }: { children: ReactNode }) {

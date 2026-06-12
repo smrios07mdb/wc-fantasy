@@ -725,6 +725,59 @@
   font-weight: 800;
 }
 
+/* ── H2H named XI list — identifiable, tappable players (box-score drill-in) ──── */
+.vf-xi-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+.vf-xi-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 4px;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  border-radius: var(--r-sm);
+}
+.vf-xi-list .vf-xi-row:first-child {
+  border-top: none;
+}
+/* Played/locked rows are buttons → open the box-score modal. */
+button.vf-xi-row {
+  cursor: pointer;
+}
+button.vf-xi-row:hover {
+  background: var(--surface-3);
+}
+/* To-play rows are inert (vsfield is read-only). */
+.vf-xi-row.is-inert {
+  opacity: 0.66;
+}
+.vf-xi-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+.vf-xi-row .pill {
+  margin-left: auto;
+}
+/* Compact pill variant for the dense XI rows. */
+.vf-pill-mini {
+  font-size: 9px;
+  padding: 1px 5px;
+  gap: 3px;
+}
+
 /* season */
 .vf-season-note {
   margin-bottom: 14px;
