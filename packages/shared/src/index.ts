@@ -5,5 +5,6 @@
 export * from "./enums";
 export * from "./constants";
 export * from "./periodOrder";
+export * from "./lock";
 export * from "./time";
 export * from "./types";

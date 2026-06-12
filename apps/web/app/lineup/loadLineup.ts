@@ -7,7 +7,7 @@
  * edge has no unit test (it needs a live DB); `tsc` + the pure-logic suites cover the shapes it produces.
  */
 import { prisma } from "@app/db";
-import { sortByPeriodOrder } from "@app/shared";
+import { sortByPeriodOrder, isLockedNow } from "@app/shared";
 import {
   defaultStarterIds,
   resolveKickoffByPlayer,
@@ -22,6 +22,10 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     select: { id: true, leagueId: true, displayName: true, league: { select: { timezone: true } } },
   });
   if (!manager) return null;
+
+  // Lock-on-play READ instant: a slot reads as locked only once its stamped `locked_at` has ARRIVED
+  // (isLockedNow), never on presence alone — a future-dated stamp is still movable (DECISIONS Theme B).
+  const now = new Date();
 
   const [rosterRows, periodRows] = await Promise.all([
     prisma.rosterPlayer.findMany({
@@ -111,7 +115,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       // immediately). A saved lineup is loaded as-is — its shape is never overridden.
       starterIds: savedStarters.length > 0 ? savedStarters : defaultStarterIds(squad),
       locks: slots
-        .filter((s) => s.lockedAt !== null)
+        .filter((s) => isLockedNow(s.lockedAt, now))
         .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter })),
       // Per-player kickoff = his team's fixture kickoff in THIS period (ISO), or null when his team
       // isn't playing yet (knockout TBD). The client formats it in the league tz as the lock/sub deadline.

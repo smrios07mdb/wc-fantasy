@@ -11,7 +11,7 @@
  * `buildVsField` suite cover the shapes it produces. It is shared by the SSR page AND `GET /api/vsfield`.
  */
 import { prisma } from "@app/db";
-import { selectCurrentPeriod } from "@app/shared";
+import { selectCurrentPeriod, isLockedNow } from "@app/shared";
 
 /** Max wall-clock window to consider a period still live after its last scheduled kickoff. */
 const MATCH_DURATION_MS = 120 * 60 * 1000; // covers regulation + extra time
@@ -145,7 +145,9 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
       playerId: s.playerId,
       role: s.role,
       teamId: s.player.teamId,
-      locked: s.lockedAt !== null,
+      // Lock-on-play READ predicate: locked only once the stamped instant has arrived (not presence
+      // alone) — a future-dated stamp still reads movable (DECISIONS Theme B). Shares loadLineup's `now`.
+      locked: isLockedNow(s.lockedAt, now),
     });
   }
 
