@@ -19,6 +19,11 @@ export interface PitchSlot {
   player: LineupPlayer;
   /** False when the player is locked by play — the UI must NOT let him be dragged/swapped. */
   movable: boolean;
+  /** C2: the full forfeit-model classification for this slot (visual + interaction). */
+  slotKind: SlotKind;
+  /** C2: points earned this period — shown on played-starter tokens and in the forfeit confirm sheet.
+   *  Zero for unplayed players or when the score row hasn't landed yet. */
+  pointsAtStake: number;
   kickoffAt: string | null;
   /** Opponent fixture for this player's period: team name + nation (for flag) + home/away. Null when
    *  the player's team has no fixture this period or the opponent side is TBD (knockout not decided). */
@@ -37,6 +42,59 @@ export interface PitchView {
 /** Is this player still movable in the period? (Not locked by play.) */
 export function isMovable(period: PeriodLineup, playerId: string): boolean {
   return !period.locks.some((l) => l.playerId === playerId);
+}
+
+/**
+ * How a slot reads to the C2 forfeit UI — determines the visual state and which interactions apply.
+ * The five kinds map the full intersection of lock state × play state × position (starter/bench):
+ *
+ *   movable        — unplayed, freely swappable
+ *   played-starter — played, unvoided, in the XI: forfeit affordance (tappable; confirm required)
+ *   played-bench   — played, unvoided, on bench: padlock; IN-direction blocked by the engine
+ *   voided         — forfeit already stamped (one-way): Forfeited pill + strikethrough
+ *   locked         — frozen-period or otherwise immovable for reasons outside the play state
+ */
+export type SlotKind = "movable" | "played-starter" | "played-bench" | "voided" | "locked";
+
+/**
+ * Classify a slot for C2 rendering: pure function of the authoritative period data + current role.
+ * The `isStarter` parameter reflects the WORKING starter set (not necessarily the saved set), so
+ * the classification is live during edits.
+ */
+export function classifySlot(period: PeriodLineup, playerId: string, isStarter: boolean): SlotKind {
+  const meta = period.slotMeta[playerId];
+  if (meta?.voided) return "voided";
+  if (meta?.hasPlayed) {
+    // Forfeit affordance: played starter, period not frozen, not yet voided.
+    if (isStarter && meta.movable) return "played-starter";
+    // Played starter in frozen period → fully locked; played bench → IN-direction blocked.
+    return isStarter ? "locked" : "played-bench";
+  }
+  if (!isMovable(period, playerId)) return "locked";
+  return "movable";
+}
+
+/**
+ * The bench players eligible to FILL the XI slot vacated by a forfeit: unplayed + same position
+ * group as the forfeited player (GK ↔ GK or outfield ↔ outfield, matching `canSwap`'s rule).
+ * Used for two purposes: the pre-flight check (block confirm when count = 0) and the eligibles
+ * highlight shown during the fill step after confirm.
+ */
+export function fillEligibleIds(
+  period: PeriodLineup,
+  squad: readonly LineupPlayer[],
+  starterIds: readonly string[],
+  forfeitPlayerId: string,
+): Set<string> {
+  const set = new Set<string>();
+  const forfeitIsGK = squad.find((p) => p.id === forfeitPlayerId)?.position === "GK";
+  for (const p of squad) {
+    if (starterIds.includes(p.id)) continue; // must be a bench player
+    if (period.locks.some((l) => l.playerId === p.id)) continue; // must be unplayed
+    if ((p.position === "GK") !== forfeitIsGK) continue; // same side of the GK line
+    set.add(p.id);
+  }
+  return set;
 }
 
 /** One of a period's fixtures, reduced to what the per-player kickoff + opponent resolution needs. */
@@ -137,13 +195,16 @@ export function buildPitch(squad: readonly LineupPlayer[], period: PeriodLineup)
   const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
 
   for (const p of squad) {
+    const inXI = starters.has(p.id);
     const slot: PitchSlot = {
       player: p,
       movable: isMovable(period, p.id),
+      slotKind: classifySlot(period, p.id, inXI),
+      pointsAtStake: period.slotMeta[p.id]?.pointsAtStake ?? 0,
       kickoffAt: period.kickoffByPlayer[p.id] ?? null,
       opponent: period.opponentByPlayer[p.id] ?? null,
     };
-    if (starters.has(p.id)) {
+    if (inXI) {
       lanes[p.position].push(slot);
       counts[p.position] += 1;
     } else {
@@ -159,23 +220,25 @@ export function buildPitch(squad: readonly LineupPlayer[], period: PeriodLineup)
   };
 }
 
-/** Run the legality check for a proposed XI — the same one the server enforces. C1 keeps the client's
- *  behaviour byte-identical: a played (locked) player still can't be dragged (`isMovable` reads `locks`),
- *  and here each lock maps to a played slot with NO forfeit confirm — so benching a played starter still
- *  reports "save disabled", exactly as before. C2 swaps `period.locks` for the richer `slotMeta` contract
- *  and threads real forfeit confirmations through the destructive-confirm UI. */
+/**
+ * Run the legality check for a proposed XI — the same one the server enforces. C2 adds two wires:
+ *  - `voided` is now sourced from `slotMeta` so an already-forfeited player can't be re-started;
+ *  - `forfeitConfirmed` is threaded through so the Save button enables after the confirm sheet fires.
+ * Both default to their safe C1 values when omitted so callers that haven't migrated yet still work.
+ */
 export function evaluateProposal(
   squad: readonly LineupPlayer[],
   period: PeriodLineup,
   starterIds: readonly string[],
   now: Date,
+  forfeitConfirmed: ReadonlySet<string> = new Set(),
 ): LineupValidation {
   const squadPlayers: SquadPlayer[] = squad.map((p) => ({ playerId: p.id, position: p.position }));
   const slotStates: SlotState[] = period.locks.map((l) => ({
     playerId: l.playerId,
     isStarter: l.isStarter,
-    hasPlayed: true, // a lock IS a played player (C1's client signal); voids aren't surfaced client-side yet
-    voided: false,
+    hasPlayed: true, // a lock IS a played player
+    voided: period.slotMeta[l.playerId]?.voided ?? false, // C2: pull voided from slotMeta
   }));
   return validateLineup(
     squadPlayers,
@@ -187,6 +250,7 @@ export function evaluateProposal(
       closesAt: period.closesAt ? new Date(period.closesAt) : null,
     },
     now,
+    forfeitConfirmed,
   );
 }
 

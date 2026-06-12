@@ -92,7 +92,7 @@ describe("lineup re-skin — the formation view + bench + locked-frozen affordan
 
 describe("lineup re-skin — preserves the behaviours it restyles (no mechanism change)", () => {
   it("disables Save + surfaces the reason exactly when validateLineup rejects (the server's own check)", () => {
-    expect(client).toContain("evaluateProposal(squad, period, starterIds, now)");
+    expect(client).toContain("evaluateProposal(squad, period, starterIds, now, pendingForfeits)");
     expect(client).toContain("canSave={validation.ok && editable}");
     expect(client).toContain("reason");
     // the legality core IS the server's validateLineup, delegated by the pure view helper
