@@ -47,7 +47,10 @@ export interface IngestStore {
   markPlayersDirty(matchBdlId: number, playerBdlIds: readonly number[]): Promise<void>;
 
   // ── locking ──
-  setLockedAt(matchBdlId: number, playerBdlId: number, lockedAt: Date): Promise<void>;
+  /** Stamp `locked_at` on the slot. Monotonic: only writes when currently NULL (the DB trigger + Prisma
+   *  store also enforce this). Returns `true` when a new lock was written, `false` when already locked
+   *  (so callers that need a count, like the post-drop sweep, can distinguish new writes from no-ops). */
+  setLockedAt(matchBdlId: number, playerBdlId: number, lockedAt: Date): Promise<boolean>;
   /** The AUTHORITATIVE appeared set: every player BDL-id with a `score_player_match` row for this match
    *  (the participant gate already excluded non-appearers + cross-team contamination). Drives the
    *  coverage-reconciliation lock so a played player whose feed signal the poller missed still stamps. */

@@ -160,10 +160,11 @@ export class MemoryIngestStore implements IngestStore {
   }
 
   // ── IngestStore: locking ──
-  setLockedAt(m: number, p: number, at: Date): Promise<void> {
+  setLockedAt(m: number, p: number, at: Date): Promise<boolean> {
     // Monotonic latch: only set when currently unlocked (mirrors the DB trigger / Prisma store).
-    if (!this.locks.has(pk(m, p))) this.locks.set(pk(m, p), at);
-    return Promise.resolve();
+    if (this.locks.has(pk(m, p))) return Promise.resolve(false);
+    this.locks.set(pk(m, p), at);
+    return Promise.resolve(true);
   }
   listAppearedPlayerBdlIds(matchBdlId: number): Promise<number[]> {
     return Promise.resolve([...(this.appeared.get(matchBdlId) ?? [])]);

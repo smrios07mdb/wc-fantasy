@@ -220,18 +220,19 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       }
     },
 
-    async setLockedAt(matchBdlId, playerBdlId, lockedAt): Promise<void> {
+    async setLockedAt(matchBdlId, playerBdlId, lockedAt): Promise<boolean> {
       const match = await prisma.fifaMatch.findUnique({
         where: { balldontlieId: matchBdlId },
         select: { periodId: true },
       });
       const playerId = await playerIdFor(playerBdlId);
-      if (!match?.periodId || !playerId) return; // no period seeded → leave unlocked (TODO(confirm))
+      if (!match?.periodId || !playerId) return false; // no period seeded → leave unlocked (TODO(confirm))
       // Monotonic latch: only set when currently NULL (the DB trigger also rejects re-locks).
-      await prisma.lineupSlot.updateMany({
+      const result = await prisma.lineupSlot.updateMany({
         where: { periodId: match.periodId, playerId, lockedAt: null },
         data: { lockedAt },
       });
+      return result.count > 0;
     },
 
     async listAppearedPlayerBdlIds(matchBdlId): Promise<number[]> {

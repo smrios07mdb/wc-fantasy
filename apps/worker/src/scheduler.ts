@@ -20,6 +20,7 @@ import {
   ingestLineups,
   ingestLive,
   ingestSettle,
+  sweepCompletedMatchLocks,
   type ModeMatch,
   type MatchCtx,
   type SchedulableMatch,
@@ -100,6 +101,28 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
           rows = await ingestStore.listSchedulableMatches();
         } catch (err) {
           log.error("ingest.schedule.error", { message: (err as Error).message });
+        }
+      }
+
+      // Post-drop appearance-lock sweep: on the slow (hourly) cadence only, re-run the
+      // lockInstantsFromAppearances reconciliation for completed fixtures whose kickoff is within
+      // WORKER_LOCK_SWEEP_WINDOW_MS (48h default) of now.  Closes the gap where a fix or missed settle
+      // window lands AFTER a match exits decideMatchModes, leaving played slots locked_at = NULL forever.
+      // DB-only (no feed call); monotonic latch means already-locked slots are no-ops.  A non-empty result
+      // (log.info "lock.sweep.stamped") signals the live/settle path missed something — operator alert.
+      if (onSlowCadence) {
+        try {
+          const swept = await sweepCompletedMatchLocks(
+            ingestStore,
+            rows,
+            now,
+            config.lockSweepWindowMs,
+          );
+          for (const s of swept) {
+            log.info("lock.sweep.stamped", { matchBdlId: s.matchBdlId, count: s.count });
+          }
+        } catch (err) {
+          log.error("lock.sweep.error", { message: (err as Error).message });
         }
       }
 

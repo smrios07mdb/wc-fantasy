@@ -172,11 +172,12 @@ genuinely-played slot `locked_at = NULL` forever (e.g. Rangel, 90′). `reconcil
 gate scoring uses) and stamps every appeared player at **kickoff** via the same monotonic, **period-scoped**
 `setLockedAt` (only `locked_at IS NULL` slots in the match's own `period_id` — never the ambiguous
 team→future-fixture join, never an already-set sub lock). It is called from **both `ingestLive` and
-`ingestSettle`**, so settle — which holds the appearance proof — finally writes the lock. **Coverage limit:**
-because it only runs on a live/settle tick, it reconciles a match **only while `in_progress` or `completed &&
-!hasRating && ≤ kickoff + 12h`** (`decideMatchModes`); once the rating lands or 12h pass the match drops from
-the poll and is never reconciled again — a fix or missed settle window landing after that needs manual SQL (a
-bounded recently-completed sweep is the candidate hardening, deferred).
+`ingestSettle`**, so settle — which holds the appearance proof — finally writes the lock. **Coverage limit — closed by `sweepCompletedMatchLocks`** (added `feat/appearance-lock-sweep`): the
+live/settle path reconciles only while the match is `in_progress` or `completed && !hasRating && ≤ kickoff +
+12h`. A bounded sweep over completed fixtures within 48h of now closes the post-drop gap: called at the
+hourly schedule-sync cadence in `apps/worker/src/scheduler.ts`, it runs `lockInstantsFromAppearances →
+setLockedAt` per match (the same monotonic latch — a no-op for already-locked slots; logs
+`lock.sweep.stamped` on actual new writes).
 
 #### FAAB cadence: per-period batch + acquisition window (Theme-D amendment — deferred ARCHITECTURE update, now landed)
 

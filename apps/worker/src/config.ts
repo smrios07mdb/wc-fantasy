@@ -40,6 +40,9 @@ export const config = {
   /** Lead time before kickoff to fire the match-starting notification (minutes; Prompt 41b). The 60s
    *  ingestion tick + the notification_sent ledger collapse repeats to one alert per fixture. Default 15. */
   notifyMatchLeadMs: intEnv("NOTIFY_MATCH_LEAD_MIN", 15) * 60_000,
+  /** How far back the completed-match appearance-lock sweep looks (ms). 48h covers the 12h settle ceiling
+   *  + overnight gap without scanning the whole tournament. See `sweepCompletedMatchLocks`. */
+  lockSweepWindowMs: intEnv("WORKER_LOCK_SWEEP_WINDOW_MS", 48 * 60 * 60_000),
   /** How far BEFORE a period's first kickoff its blind-bid FAAB batch clears, when the commissioner has
    *  not set `period.waiver_batch_at` (DECISIONS.md → Theme D "per-matchday acquisition window"). The
    *  retired daily model cleared 06:00 league-local before a ~12:00 WC first kickoff ≈ 6h, so 360 min

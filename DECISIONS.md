@@ -196,12 +196,14 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   match is still in its settle window** (`hasRating` false, `≤ kickoff + 12h`). Past that, the match has
   dropped from `decideMatchModes` entirely. **"On `origin/main`" ≠ "running on Render"** — verify the
   worker's deployed SHA, not just the merge.
-- **Known residual gap (candidate hardening, NOT yet built):** `reconcileAppearanceLocks` runs **only**
-  inside `ingestLive` / `ingestSettle`, i.e. only while a match is `in_progress` or `completed && !hasRating
-  && ≤ kickoff + 12h`. Once the rating lands (or 12h pass) the match leaves the poll and never reconciles
-  again — so a fix (or a missed settle window / deploy gap) that lands *after* a match settled-and-dropped
-  needs manual SQL. A bounded "recently-completed matches" reconciliation sweep would self-heal this
-  without manual intervention. Deferred pending decision.
+- **Residual gap — closed by the recently-completed sweep (48h window):** `reconcileAppearanceLocks` ran
+  **only** inside `ingestLive` / `ingestSettle`, i.e. only while a match is `in_progress` or `completed &&
+  !hasRating && ≤ kickoff + 12h`. A fix or missed settle window landing *after* that window required manual
+  SQL (the 2026-06-11 Rangel incident: 5 slots hand-backfilled). **Closed by `sweepCompletedMatchLocks`**
+  (added on `feat/appearance-lock-sweep`): on the hourly schedule-sync cadence the sweep selects completed
+  fixtures whose kickoff is within 48h of now and runs `lockInstantsFromAppearances → setLockedAt` for each.
+  The monotonic `IS NULL` latch makes it a no-op for already-locked slots; the sweep only logs
+  `lock.sweep.stamped` when it actually writes (the deploy-gap / outage alert signal).
 
 #### Amendment — in-matchday substitutions — STRUCK (superseded by the forfeit model below)
 > The earlier paired-substitution model (one-out/one-in, bench-size cap of 4 group / 2 playoff, each

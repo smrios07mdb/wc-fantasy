@@ -11,4 +11,5 @@ export * from "./lock";
 export * from "./mode";
 export * from "./store";
 export * from "./ingest";
+export * from "./lockSweep";
 export { MemoryIngestStore } from "./memoryStore";
