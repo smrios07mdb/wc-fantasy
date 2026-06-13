@@ -1937,6 +1937,22 @@ and resolves `StarterView.nation` (the `fifa_team.name` join) via the shared `to
 first — the exact `<Flag>` precedent; Scotland (no kit in the 8-kit library) and every unmapped nation
 fall back to `var(--surface-4)`, never a broken kit.
 
+**Decision (F1.1): kit map expanded 8 → 30 nations (`feat/vsfield-nation-kits`).** The 22 remaining
+WC2026 nations were ported into `kitOf.ts` VERBATIM from the approved Claude Design jersey-gradients
+handoff (`design/design_handoff_jersey_gradients`) — gradient values are locked, so they are dropped in
+as literal strings, not re-expressed via the original helper builders (which still build the original 8,
+byte-identical). Name resolution rides the **existing** shared `toIso2` and its pre-existing alias table
+(`czechia` / `türkiye` / `south korea` / `côte d'ivoire` incl. **both** apostrophe forms U+0027 `'` and
+U+2019 `’` — Node's `Intl.DisplayNames` returns the curly form). All 22 prod feed strings were verified
+against `fifa_team` rows with **zero misses** → NO shared-mapper edit, NO kit-local normalizer, and the
+earlier "promote a kit alias into the shared mapper" follow-up is now **MOOT**. Scotland (still no ISO2)
+resolves by name via `isHomeNation`, which already contained it; only its saltire kit was added to
+`HOME_NATION_KITS`. **Croatia upgraded** from the plain red/white/blue tricolor to a conic šahovnica
+**checkerboard** dot over the tricolor, specifically to break the **NED↔CRO collision** (the new clean
+Netherlands kit was also red/white/blue); a test locks `kitOf("Croatia") !== kitOf("Netherlands")`. The
+no-`background-size:cover` render-contract guard now covers all 30 kits incl. CRO. Final suite: **1896
+tests** green.
+
 **Decision (F2): CompareBand ships Facts 1+2 only; Fact 3 (player-by-player lineup edge) is DEFERRED.**
 Fact 3 needs per-player points, which Theme F deliberately keeps out of the SSR snapshot — no
 `score_player_match` read enters `loadVsField`. The deferral is pinned by a `TODO(F2)` in

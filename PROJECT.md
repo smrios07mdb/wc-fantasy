@@ -335,9 +335,16 @@ all green. Visual proof: local production build (`next build` + `next start`), d
 Theme-F-safe (test-enforced: no per-player score renders on any token; no `score_player_match` read in
 the loader).
 
+**Full WC2026 nation→kit gradient map — SHIPPED ✅** (`feat/vsfield-nation-kits`). `kitOf.ts` now
+covers all **30 in-scope nations** (8 original + 22 from the approved Claude Design jersey-gradients
+handoff), ISO2-keyed via the shared `toIso2`, Scotland resolved by name (saltire). Croatia upgraded
+from a plain red/white/blue tricolor to a conic **šahovnica checkerboard** dot to break the NED↔CRO
+collision. `var(--surface-4)` fallback retained for any nation outside the set. Prod feed strings
+verified against `fifa_team` rows (Côte d'Ivoire / Czechia / South Korea / Türkiye match the resolved
+keys); zero resolution misses → no shared-mapper edit and no kit-local alias table. (Merge/deploy by
+operator.)
+
 **Horizon (vsfield reskin follow-ups):**
-- **Full WC2026 nation→kit gradient map** — `kitOf.ts` covers 8 nations; all others fall to neutral
-  `var(--surface-4)`. Design in progress via Claude Design.
 - **/lineup jersey introduction** — production lineup has NO jerseys today (PlayerAvatar discs);
   adopting kits there is a feature build using the now-synced global `--kit-outline`.
 - **AppShell mobile topbar wraps at 375px** — pre-existing global shell issue (visible in the mobile

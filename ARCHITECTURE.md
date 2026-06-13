@@ -1207,10 +1207,15 @@ leaderboard's `da-lb-wld` chip off `h2hVsViewer`). Added: `Leaderboard`/`LbRow` 
 `ConnPill`, `Pos`, `Avatar`, `useScorePulse`, `RecordBadge`, `PitchMini`/`XILegend` (the dot-node
 aggregate pitch), `YouVsField` (reclassed `.v2-agg`), `SeasonTable` (reclassed `.v2-season`).
 
-**New pure module `apps/web/app/vsfield/kitOf.ts`** — ISO2 → CSS-gradient jersey map (8 nations) +
-`kitOf(nation)`; reuses `toIso2`/`isHomeNation` from `src/draft/flag.ts` (no second nation table);
-fallback `var(--surface-4)`. Kits are multi-layer backgrounds — never `background-size: cover`
-(test-guarded).
+**New pure module `apps/web/app/vsfield/kitOf.ts`** — ISO2 → CSS-gradient jersey map (**30 nations**:
+8 original + 22 from the approved jersey-gradients handoff) + `kitOf(nation)`; reuses
+`toIso2`/`isHomeNation` from `src/draft/flag.ts` (no second nation table); fallback `var(--surface-4)`.
+Croatia is a conic **šahovnica checkerboard** dot over the tricolor (upgraded from a plain
+red/white/blue tricolor to break the NED↔CRO collision — both were red/white/blue). England + Scotland
+resolve by name via `isHomeNation` (saltire added for Scotland). The shared `toIso2` already covers the
+full feed names — incl. Côte d'Ivoire with **either apostrophe** (U+0027 `'` and U+2019 `’`), Czechia,
+Türkiye, South Korea — so no kit-local alias table was needed. Kits are multi-layer backgrounds — never
+`background-size: cover` (test-guarded, incl. CRO).
 
 **Mechanism unchanged:** `liveController.ts` / `snapshotClient.ts` / `realtime.ts` /
 `loadVsField.ts` / `page.tsx` / `layout.tsx` / `packages/vsfield` are byte-identical.
