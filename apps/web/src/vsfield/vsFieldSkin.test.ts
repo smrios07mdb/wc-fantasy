@@ -9,7 +9,7 @@ import { dirname, resolve } from "node:path";
 // tie = neither W nor L, the inactive-0 manager, still-to-come counts, season read),
 // handleVsField.test.ts (authed read 401 / no 403), snapshotClient/realtime/liveController
 // (JWT-authed subscribe → change-nudge → refetch + the polling fallback), and the jsdom
-// CompareBand.test.tsx (Facts 1+2, the jersey-pitch drill-in, the Theme-F no-per-player-score rule).
+// CompareBand.test.tsx (Facts 1+2, the jersey-pitch drill-in, the Prompt-41 per-player points chip).
 // Here we guard the re-skin's source CONTRACTS: the Direction-A vocabulary is wired (leaderboard rail,
 // compare band, dual jersey pitches, mobile tree), the jersey kit comes from kitOf (shared iso2 flag
 // mapper), the still-to-come COUNT (not a projection, §5), avatars as initials, the gold-free palette,
@@ -109,16 +109,18 @@ describe("vsfield re-skin — flag-kit jerseys (kitOf) + the lineup class-collis
   });
 });
 
-describe("vsfield re-skin — Theme F: state only, never a per-player score in the snapshot UI", () => {
-  it("tokens render worded states (playing/played/to play), no per-player pts element", () => {
-    expect(components).toContain("sl-jersey-state");
-    expect(components).toContain("sl-jersey-toplay");
-    expect(components).not.toContain("sl-tok-score"); // the design's pts line — deliberately NOT ported
-    expect(components).not.toContain("sl-tok-pts");
+describe("vsfield points chip — per-player points under each jersey (Prompt 41 / path a)", () => {
+  it("tokens render a points CHIP (sl-jersey-score + sl-jersey-pts + the real number), not a worded label", () => {
+    expect(components).toContain("sl-jersey-score"); // the chip container (vsfield-local rename)
+    expect(components).toContain("sl-jersey-pts"); // the PTS / TO PLAY unit
+    expect(components).toContain("starter.points"); // the REAL score_player_match.points is the headline
+    expect(components).not.toContain("sl-jersey-state"); // the old worded state chip is gone
+    expect(components).not.toContain("sl-jersey-toplay"); // ditto
+    expect(components).not.toContain("sl-tok-score"); // still NOT the lineup-colliding bare design name
   });
 
-  it("CompareBand ships Facts 1+2 only; Fact 3 carries the F2 deferral TODO", () => {
-    expect(components).toContain("TODO(F2): lineup-edge needs per-player pts");
+  it("CompareBand still ships Facts 1+2 only; Fact 3 stays deferred (now a scope step, not blocked)", () => {
+    expect(components).toContain("Fact 3 (player-by-player lineup edge) is still deferred");
     expect(components).not.toContain("Player-by-player");
     expect(components).not.toContain("biggest edge");
   });
@@ -153,11 +155,13 @@ describe("vsfield re-skin — preserves the loader / Realtime / gate it restyles
     expect(client).toContain("fetchVsField"); // server-computed snapshot refetch
   });
 
-  it("keeps the league-scoped server loader reusing buildVsField (the Prompt-04 helper)", () => {
+  it("keeps the league-scoped server loader reusing buildVsField; per-player points composed SERVER-side", () => {
     expect(loader).toContain("buildVsField");
     expect(loader).toContain('scope: "group_stage"'); // the season standing read is league-scoped
-    // Theme F holds at the source: no per-player score read enters the loader
-    expect(loader).not.toContain("scorePlayerMatch");
+    // Prompt 41 (path a): per-player points ARE composed at the SERVER source — the loader reads
+    // score_player_match (joined via match.periodId). The browser's direct read scope is unchanged;
+    // that boundary is locked by src/vsfield/pointsPath.test.ts (no browser-direct read / subscription).
+    expect(loader).toContain("scorePlayerMatch");
   });
 
   it("keeps the gate authenticated-league-member only — 401 (sign-in) / not-member (denied), no 403", () => {

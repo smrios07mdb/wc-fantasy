@@ -15,12 +15,16 @@
  * tokens, but Next.js route CSS persists across client navigation, so both stylesheets can be live at
  * once and lineup.css already owns those classes with different rules. The vsfield token therefore
  * uses `.sl-tok-jersey` as its base class (no bare `.sl-tok`) and vsfield-unique inner names
- * (`.sl-jersey`, `.sl-jersey-name`, `.sl-jersey-state`), all scoped under `.da-pitch` in vsfield.css.
+ * (`.sl-jersey`, `.sl-jersey-name`, and the points chip `.sl-jersey-score`/`.sl-jersey-pts` — renamed
+ * from the design's bare lineup-colliding score class for the same reason), all scoped under
+ * `.da-pitch` in vsfield.css.
  *
- * Theme F: `StarterView` carries NO per-player points — tokens show state (kit brightness +
- * playing/played/to-play label), never a score; tapping a played/locked player opens the box-score
- * modal, which fetches the breakdown on demand. Deliberately NOT ported: the FeedTicker (see the
- * no-op stub below) and Direction B (`.db-*` — not chosen).
+ * Per-player points (Prompt 41 / path a): `StarterView` now carries `points` (the real
+ * `score_player_match.points`, composed SERVER-SIDE into the snapshot — the browser's direct read scope
+ * is unchanged), so each token shows a points CHIP under the jersey (the number is the headline) instead
+ * of a worded state label; lock-on-play reads through the single live dot. Tapping a played/locked player
+ * still opens the box-score modal for the full breakdown (unchanged). Deliberately NOT ported: the
+ * FeedTicker (see the no-op stub below) and Direction B (`.db-*` — not chosen).
  */
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -358,10 +362,14 @@ function formationOf(starters: StarterView[]): string {
 }
 
 /**
- * One starter as a flag-kit jersey token. State is the kit + a worded label (color + word, never color
- * alone): playing = lit, played = dimmed kit ("lock-on-play via kit brightness"), to-play = full-bright
- * + "to play". NO per-player points here (Theme F) — tapping a played/locked player opens the box-score
- * modal, which fetches the breakdown on demand; to-play tokens are inert (vsfield is read-only).
+ * One starter as a flag-kit jersey token, with a points chip in a fixed slot under it (Prompt 41 /
+ * handoff vsfield_points — the NUMBER is the headline). Three chip states keyed off `starter.state`:
+ * playing = solid dark pill + red pulsing dot + `N` PTS · played = the SAME dark pill + `N` PTS, no dot
+ * (the dot is the sole live↔played differentiator; played kits are NOT dimmed) · yet-to-play = dashed
+ * pill, "– TO PLAY", no number. `points` is the REAL `score_player_match.points` carried in the
+ * server-composed snapshot (path a). Tapping a played/locked player opens the box-score modal (the full
+ * breakdown, unchanged); to-play tokens are inert (vsfield is read-only). `dimLive` (stale feed)
+ * suppresses the live dot so a frozen feed doesn't imply live action.
  */
 function XIToken({
   starter,
@@ -374,6 +382,8 @@ function XIToken({
 }) {
   const cls = "sl-tok-jersey " + NODE_CLASS[starter.state] + (dimLive ? " is-dim" : "");
   const tappable = starter.state !== "yet-to-play" || starter.locked;
+  // Chip state class mirrors the node class: s-ytp | s-live | s-played.
+  const chipState = NODE_CLASS[starter.state];
   const body = (
     <>
       <span
@@ -383,14 +393,20 @@ function XIToken({
       />
       <span className="sl-jersey-name">{starter.name}</span>
       {starter.state === "yet-to-play" ? (
-        <span className="sl-jersey-toplay">to play</span>
-      ) : starter.state === "playing" ? (
-        <span className="sl-jersey-state s-live">
-          {!dimLive && <span className="sl-score-dot" aria-hidden="true" />}
-          Playing
+        <span className="sl-jersey-score s-ytp">
+          <span className="sl-jersey-dash" aria-hidden="true">
+            –
+          </span>
+          <span className="sl-jersey-pts">to play</span>
         </span>
       ) : (
-        <span className="sl-jersey-state s-played">Played</span>
+        <span className={"sl-jersey-score " + chipState + (starter.points === 0 ? " is-zero" : "")}>
+          {starter.state === "playing" && !dimLive && (
+            <span className="sl-score-dot" aria-hidden="true" />
+          )}
+          <b>{starter.points}</b>
+          <span className="sl-jersey-pts">pts</span>
+        </span>
       )}
     </>
   );
@@ -483,8 +499,9 @@ export function XIPanel({
 /**
  * The H2H compare band — the user's ranked facts. Fact 1 = the live margin (primary band), Fact 2 =
  * upside still to come.
- * TODO(F2): lineup-edge needs per-player pts; blocked on Theme F — no score_player_match read in
- * loadVsField. Fact 3 (player-by-player) renders nothing until that decision is reopened.
+ * Fact 3 (player-by-player lineup edge) is still deferred — NOT this prompt. As of Prompt 41 the data it
+ * needs (per-player `points`) IS now in the snapshot (no longer blocked on Theme F / the modal-only
+ * rule), so building Fact 3 is a future scope step, not a reopening; this band still renders Facts 1 + 2.
  */
 export function CompareBand({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
   const diff = me.points - opp.points;

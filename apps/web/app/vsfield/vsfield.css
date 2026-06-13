@@ -510,55 +510,88 @@
 .da-pitch .sl-tok-jersey.s-played .sl-jersey-name {
   opacity: 0.66;
 }
-/* worded state chip under the token (color + word, never color alone) */
-.da-pitch .sl-jersey-state {
+/* points chip under the token — the at-a-glance headline (Prompt 41 ScorePill; handoff
+   design/handoff/vsfield_points/vsfield2/v2.css `.sl-tok-score`). The NUMBER is the dominant element;
+   lock-on-play reads through the single live dot, not a worded label. Renamed to vsfield-local
+   `.sl-jersey-score` because lineup.css owns `.sl-tok*` and Next.js route CSS persists across client
+   navigation (both sheets can be live at once). Pill overlays keep the handoff's literal rgba — they are
+   translucent legibility layers over the pitch turf (same convention as `.sl-jersey` above), gold-free
+   per BRAND.md §1; the live dot is `--live`, radius/easing/fonts are ds tokens. */
+.da-pitch .sl-jersey-score {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 3px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: var(--r-pill);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
-.da-pitch .sl-jersey-state.s-live {
-  color: var(--text-primary);
-  background: rgba(7, 11, 17, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+.da-pitch .sl-jersey-score b {
+  font-size: 17px;
+  letter-spacing: -0.01em;
 }
-.da-pitch .sl-jersey-state.s-played {
-  color: var(--text-secondary);
-  background: rgba(7, 11, 17, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-[data-theme="light"] .da-pitch .sl-jersey-state.s-live {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(0, 0, 0, 0.1);
-}
-[data-theme="light"] .da-pitch .sl-jersey-state.s-played {
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.74);
-  border-color: rgba(0, 0, 0, 0.08);
-}
-.da-pitch .sl-jersey-toplay {
-  font: 700 9px/1 var(--font-sans);
+.da-pitch .sl-jersey-pts {
+  font-size: 8.5px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.98);
-  text-shadow:
-    0 0 2px rgba(0, 0, 0, 0.9),
-    0 1px 1px rgba(0, 0, 0, 0.95),
-    1px 0 1px rgba(0, 0, 0, 0.9),
-    -1px 0 1px rgba(0, 0, 0, 0.9);
+  letter-spacing: 0.04em;
+  opacity: 0.62;
 }
-.sl-score-dot {
+/* live AND played share ONE dark pill — only the dot differs (README: played is NOT dimmed/greyed) */
+.da-pitch .sl-jersey-score.s-live,
+.da-pitch .sl-jersey-score.s-played {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(7, 11, 17, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+[data-theme="light"] .da-pitch .sl-jersey-score.s-live,
+[data-theme="light"] .da-pitch .sl-jersey-score.s-played {
+  color: rgba(14, 23, 38, 1);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+/* a true 0 reads slightly softer but stays legible */
+.da-pitch .sl-jersey-score.is-zero {
+  opacity: 0.78;
+}
+.da-pitch .sl-jersey-score.is-zero b {
+  opacity: 0.55;
+}
+/* yet-to-play: dashed, no shadow, em-dash instead of a number — keeps the slot so the eye still lands */
+.da-pitch .sl-jersey-score.s-ytp {
+  color: var(--text-tertiary);
+  background: rgba(7, 11, 17, 0.42);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+[data-theme="light"] .da-pitch .sl-jersey-score.s-ytp {
+  color: rgba(107, 117, 136, 1);
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+.da-pitch .sl-jersey-dash {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.7;
+}
+.da-pitch .sl-jersey-score.s-ytp .sl-jersey-pts {
+  opacity: 0.85;
+}
+/* live pulse dot — the sole live↔played differentiator. Scoped under .da-pitch so it doesn't collide
+   with lineup.css's static (non-pulsing) `.sl-score-dot` (route CSS persists across client navigation). */
+.da-pitch .sl-score-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
+  align-self: center;
   background: var(--live);
   animation: livepulse 1.4s var(--ease-standard) infinite;
+}
+.da-pitch .sl-tok-jersey.is-dim .sl-score-dot {
+  animation: none;
 }
 
 /* ───────────────────────────── compare band (ranked facts) ───────────────────────────── */
