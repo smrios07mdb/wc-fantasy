@@ -19,11 +19,14 @@ import { fetchVsField } from "@/src/vsfield/snapshotClient";
 import type { RealtimeClientLike } from "@/src/vsfield/realtime";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import {
+  CompareBand,
   ConnPill,
-  FieldTable,
-  H2HDetail,
+  Leaderboard,
+  MaH2H,
+  MaStandings,
   MatchStrip,
   SeasonTable,
+  XIPanel,
   YouVsField,
   type ConnState,
 } from "./components";
@@ -37,7 +40,11 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
   const [view, setView] = useState<VsFieldView>(initialView);
   const [conn, setConn] = useState<ConnState>("loading");
   const [tab, setTab] = useState<"period" | "season">("period");
-  const [selected, setSelected] = useState<string | null>(null);
+  // Direction-A selection (replaces `selected`): `"field"` = the aggregate view, a managerId (UUID —
+  // can never collide with the sentinel) = that opponent's H2H, null = nothing picked yet. Desktop
+  // resolves null → "field" (the cockpit always shows something); mobile keeps null as the
+  // leaderboard-first home and treats "field"/managerId as drill-ins with a back button.
+  const [effSel, setEffSel] = useState<string | null>(null);
   // Box-score modal target. INFO-ONLY on vsfield: opened from the H2H XI lists for a played/locked
   // player (own OR opponent's), rendered with NO forfeitProps — vsfield never edits lineups.
   const [boxPlayer, setBoxPlayer] = useState<string | null>(null);
@@ -100,6 +107,15 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
   const noPeriod = view.currentPeriod === null;
   const empty = view.field.every((e) => e.points === 0);
 
+  // Desktop always shows a main view; selecting your own row collapses to the aggregate.
+  const meId = view.field.find((e) => e.isMe)?.managerId ?? null;
+  const select = (id: string) => setEffSel(id === meId ? "field" : id);
+  const desktopSel = effSel ?? "field";
+  const opp =
+    desktopSel !== "field" ? view.field.find((e) => e.managerId === desktopSel) : undefined;
+  const me = view.field.find((e) => e.isMe);
+  const dimLive = conn !== "live";
+
   return (
     <div className="vf-app">
       <div className="vf-top">
@@ -151,25 +167,63 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
               </div>
             )
           )}
-          <div className="vf-body">
-            <div className="vf-main">
-              <FieldTable
+          {/* Desktop split cockpit: leaderboard left rail + the compare/aggregate main area.
+              Hidden on phones via the .da-body media query (the .ma-scroll tree takes over). */}
+          <div className="da-body">
+            <Leaderboard
+              field={view.field}
+              effSel={desktopSel}
+              onSelect={select}
+              dimLive={dimLive}
+            />
+            <div className="da-main">
+              <div className="da-scroll">
+                {me && opp && !opp.isMe ? (
+                  <>
+                    <CompareBand me={me} opp={opp} />
+                    <div className="da-teams2">
+                      <XIPanel entry={me} onOpenPlayer={setBoxPlayer} dimLive={dimLive} />
+                      <XIPanel entry={opp} onOpenPlayer={setBoxPlayer} dimLive={dimLive} />
+                    </div>
+                    <p
+                      className="t-caption text-tertiary"
+                      style={{ textAlign: "center", margin: "2px 0 0" }}
+                    >
+                      Tap any player for the categories &amp; stats behind their points · kit
+                      brightness shows lock-on-play
+                    </p>
+                  </>
+                ) : (
+                  <YouVsField field={view.field} periodLabel={periodLabel} />
+                )}
+              </div>
+            </div>
+          </div>
+          {/* Mobile (leaderboard-first) tree — shown only under the .ma-scroll media query. */}
+          <div className="ma-scroll">
+            {effSel === null ? (
+              <MaStandings field={view.field} onSelect={select} dimLive={dimLive} />
+            ) : effSel === "field" || effSel === meId ? (
+              <>
+                <button
+                  type="button"
+                  className="ma-back"
+                  onClick={() => setEffSel(null)}
+                  style={{ marginBottom: 10 }}
+                >
+                  ‹ Standings
+                </button>
+                <YouVsField field={view.field} periodLabel={periodLabel} />
+              </>
+            ) : (
+              <MaH2H
                 field={view.field}
-                onSelect={(id) => setSelected((sel) => (sel === id ? null : id))}
-                selected={selected}
+                oppId={effSel}
+                onBack={() => setEffSel(null)}
+                onOpenPlayer={setBoxPlayer}
+                dimLive={dimLive}
               />
-            </div>
-            <div className="vf-rail">
-              <YouVsField field={view.field} periodLabel={periodLabel} />
-              {selected && (
-                <H2HDetail
-                  field={view.field}
-                  oppId={selected}
-                  onClose={() => setSelected(null)}
-                  onOpenPlayer={setBoxPlayer}
-                />
-              )}
-            </div>
+            )}
           </div>
         </>
       )}

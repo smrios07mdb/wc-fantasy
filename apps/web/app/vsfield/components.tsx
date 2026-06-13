@@ -1,16 +1,26 @@
 "use client";
 /**
- * Presentational components for the live "vs the field" screen. Ported 1:1 from
- * design/design_reference/vsfield/{components,desktop}.jsx and adapted to the server-computed
- * `VsFieldView` (@app/vsfield). Mapping:
- *   Pos ← components.jsx <Pos/> · Avatar ← <Avatar/> (initials only — the snapshot has no per-manager
- *   colors) · ConnPill ← <ConnPill/> · PitchMini ← <PitchMini/> · RecordBadge ← <RecordBadge/> ·
- *   H2HResultChip ← <H2HResult/> · MatchStrip ← <MatchStrip/>/<MatchCard/> · XILegend ← <XILegend/> ·
- *   FieldTable/FieldRow ← desktop.jsx <FieldTable/>/<FieldRow/> · YouVsField ← <YouVsField/> ·
- *   H2HDetail ← <H2HDetail/> · SeasonTable ← <SeasonTable/> · useScorePulse ← <useScorePulse/>.
+ * Presentational components for the live "vs the field" screen — the Direction-A "split cockpit"
+ * re-skin. Ported from design/design_handoff_vs_the_field/vsfield2/{directionA,shared,mobile}.jsx and
+ * adapted to the server-computed `VsFieldView` (@app/vsfield). Mapping:
+ *   Leaderboard/LbRow ← directionA.jsx (the prominent left rail; the per-opponent W/L/D chip uses the
+ *   snapshot's `h2hVsViewer`, not a client recompute) · XIPanel/XIPitch/XIToken ← directionA.jsx (the
+ *   Set-Lineup-style flag-kit jersey pitches; kit backgrounds from kitOf.ts) · CompareBand ←
+ *   shared.jsx (Facts 1+2 only — see the TODO(F2) inside) · YouVsField ← shared.jsx `.v2-agg` ·
+ *   SeasonTable ← shared.jsx `.v2-season` · MatchStrip ← mobile.jsx/v2.css `.v2-match` · MaYou/MaRow/
+ *   MaCompare/MaH2H ← mobile.jsx (the net-new phone layout) · Pos/Avatar/ConnPill/PitchMini/XILegend/
+ *   RecordBadge/useScorePulse kept from the prior port.
  *
- * Deliberately NOT ported (data out of this prompt's scope): the scoring FeedPanel (needs event-level
- * rows) and the per-player named XI list / per-player points inside H2HDetail — see TODO(prompt-NN)s.
+ * CLASS-NAMESPACE NOTE: the design reuses /lineup's `.sl-tok`/`.sl-tok-name` names for the jersey
+ * tokens, but Next.js route CSS persists across client navigation, so both stylesheets can be live at
+ * once and lineup.css already owns those classes with different rules. The vsfield token therefore
+ * uses `.sl-tok-jersey` as its base class (no bare `.sl-tok`) and vsfield-unique inner names
+ * (`.sl-jersey`, `.sl-jersey-name`, `.sl-jersey-state`), all scoped under `.da-pitch` in vsfield.css.
+ *
+ * Theme F: `StarterView` carries NO per-player points — tokens show state (kit brightness +
+ * playing/played/to-play label), never a score; tapping a played/locked player opens the box-score
+ * modal, which fetches the breakdown on demand. Deliberately NOT ported: the FeedTicker (see the
+ * no-op stub below) and Direction B (`.db-*` — not chosen).
  */
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -23,8 +33,7 @@ import type {
   StillToCome,
 } from "@app/vsfield";
 import type { Position } from "@app/shared";
-import { Flag } from "@/app/draft/Flag";
-import { toIso2 } from "@/src/draft/flag";
+import { kitOf } from "./kitOf";
 
 export type ConnState = "live" | "reconnecting" | "stale" | "loading";
 
@@ -154,21 +163,6 @@ export function RecordBadge({ rec }: { rec: ProvisionalRecord }) {
   );
 }
 
-/** Per-opponent H2H chip (the viewer vs this manager), W/L/D + signed margin. */
-export function H2HResultChip({ h2h }: { h2h: NonNullable<FieldEntry["h2hVsViewer"]> }) {
-  const k = h2h.result === "win" ? "W" : h2h.result === "loss" ? "L" : "D";
-  const d = h2h.margin;
-  return (
-    <span className="vf-h2h">
-      <span className={"wld wld-" + k}>{k}</span>
-      <span className={"mono vf-h2h-margin " + (d > 0 ? "is-up" : d < 0 ? "is-down" : "")}>
-        {d > 0 ? "+" : ""}
-        {d}
-      </span>
-    </span>
-  );
-}
-
 function matchClock(m: MatchView): { label: string; cls: string; live: boolean } {
   if (m.status === "in_progress") return { label: "LIVE", cls: "is-live", live: true };
   if (m.status === "completed") return { label: "FT", cls: "is-final", live: false };
@@ -183,28 +177,28 @@ function matchClock(m: MatchView): { label: string; cls: string; live: boolean }
 export function MatchStrip({ matches }: { matches: MatchView[] }) {
   if (matches.length === 0) return null;
   return (
-    <div className="vf-matchstrip">
+    <div className="v2-matchstrip">
       <span className="t-label" style={{ alignSelf: "center", whiteSpace: "nowrap" }}>
         This period
       </span>
-      <div className="vf-matchstrip-scroll">
+      <div className="v2-matchstrip-scroll">
         {matches.map((m) => {
           const c = matchClock(m);
           const scored = m.status !== "scheduled";
           return (
-            <div className="vf-match" key={m.matchId}>
-              <div className={"vf-match-clock " + c.cls}>
+            <div className="v2-match" key={m.matchId}>
+              <div className={"v2-match-clock " + c.cls}>
                 {c.live && <span className="vf-livedot" aria-hidden="true" />}
                 {c.label}
               </div>
-              <div className="vf-match-teams">
-                <span className="vf-mt">
+              <div className="v2-match-teams">
+                <span className="v2-mt">
                   <b>{m.homeTeamName ?? "—"}</b>
                 </span>
-                <span className="mono vf-match-score">
+                <span className="mono v2-match-score">
                   {scored ? `${m.homeScore ?? 0}–${m.awayScore ?? 0}` : "–"}
                 </span>
-                <span className="vf-mt">
+                <span className="v2-mt">
                   <b>{m.awayTeamName ?? "—"}</b>
                 </span>
               </div>
@@ -233,87 +227,332 @@ export function useScorePulse(value: number): boolean {
   return pulse;
 }
 
-function FieldRow({
+/* ───────────────────────────── leaderboard (left rail, Direction A) ───────────────────────────── */
+
+/** Per-opponent W/L/D + signed margin off the snapshot's `h2hVsViewer` (the viewer vs this manager). */
+function LbWld({ h2h }: { h2h: NonNullable<FieldEntry["h2hVsViewer"]> }) {
+  const k = h2h.result === "win" ? "W" : h2h.result === "loss" ? "L" : "D";
+  const d = h2h.margin;
+  return (
+    <span className={"da-lb-wld " + k}>
+      {k}
+      {d > 0 ? " +" + d : d < 0 ? " " + d : ""}
+    </span>
+  );
+}
+
+function LbRow({
   entry,
-  onSelect,
   selected,
+  onSelect,
+  dimLive,
 }: {
   entry: FieldEntry;
-  onSelect: (id: string) => void;
   selected: boolean;
+  onSelect: (id: string) => void;
+  dimLive: boolean;
 }) {
   const pulse = useScorePulse(entry.points);
-  const r = entry.record;
+  const left = stillToCome(entry.counts);
   return (
     <button
       type="button"
-      className={"vf-row" + (entry.isMe ? " is-me" : "") + (selected ? " is-selected" : "")}
+      className={"da-lb-row" + (entry.isMe ? " is-me" : "") + (selected ? " is-sel" : "")}
       onClick={() => onSelect(entry.managerId)}
     >
-      <div className="vf-c-rank mono">{entry.rank}</div>
-      <div className="vf-c-mgr">
-        <Avatar name={entry.displayName} isMe={entry.isMe} />
-        <div className="vf-mgr-name">
-          <b>{entry.isMe ? "You" : entry.displayName}</b>
-          <span className="t-micro text-tertiary">
-            vs field {r.w}-{r.l}
-            {r.d ? "-" + r.d : ""}
-          </span>
-        </div>
-      </div>
-      <div className={"vf-c-score mono" + (pulse ? " score-pulse" : "")}>{entry.points}</div>
-      <div className="vf-c-xi">
-        <PitchMini starters={entry.starters} orient="h" className="vf-pitch-table" />
-      </div>
-      <div className="vf-c-ytp">
-        <span className="vf-ytp-num mono">{stillToCome(entry.counts)}</span>
-        <span className="vf-ytp-lab">to play</span>
-      </div>
-      <div className="vf-c-h2h">
-        {entry.h2hVsViewer ? (
-          <H2HResultChip h2h={entry.h2hVsViewer} />
+      <span className="da-lb-rk mono">{entry.rank}</span>
+      <Avatar name={entry.displayName} isMe={entry.isMe} />
+      <span className="da-lb-name">
+        <b>{entry.isMe ? "You" : entry.displayName}</b>
+        <span className="da-lb-sub">
+          {entry.counts.playing > 0 ? (
+            <em className={"da-lb-live" + (dimLive ? " is-dim" : "")}>
+              <span className="vf-livedot" aria-hidden="true" />
+              {entry.counts.playing} live · {left} left
+            </em>
+          ) : (
+            <>{left} to play</>
+          )}
+        </span>
+      </span>
+      <span className="da-lb-right">
+        <span className={"da-lb-pts mono" + (pulse ? " score-pulse" : "")}>{entry.points}</span>
+        {entry.isMe ? (
+          <span className="da-lb-wld-self">you</span>
+        ) : entry.h2hVsViewer ? (
+          <LbWld h2h={entry.h2hVsViewer} />
         ) : (
-          <span className="text-tertiary t-caption">—</span>
+          <span className="text-tertiary t-micro">—</span>
         )}
-      </div>
+      </span>
     </button>
   );
 }
 
-export function FieldTable({
+export function Leaderboard({
   field,
+  effSel,
   onSelect,
-  selected,
+  dimLive,
 }: {
   field: FieldEntry[];
+  /** `"field"` (the aggregate view) or an opponent's managerId. */
+  effSel: string;
   onSelect: (id: string) => void;
-  selected: string | null;
+  dimLive: boolean;
 }) {
+  const me = field.find((e) => e.isMe);
   return (
-    <div className="vf-table">
-      <div className="vf-thead">
-        <div className="vf-c-rank">#</div>
-        <div className="vf-c-mgr">Manager</div>
-        <div className="vf-c-score">Points</div>
-        <div className="vf-c-xi">Lineup</div>
-        <div className="vf-c-ytp">Players left</div>
-        <div className="vf-c-h2h">vs You</div>
+    <div className="da-lb">
+      <button
+        type="button"
+        className={"da-lb-fieldbtn" + (effSel === "field" ? " is-sel" : "")}
+        onClick={() => onSelect("field")}
+        title="You vs the whole field"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+        <span>
+          <b>You vs the field</b>
+          <span>
+            {me ? `record ${me.record.w}–${me.record.l} · rank ${me.rank}` : "the aggregate view"}
+          </span>
+        </span>
+      </button>
+      <div className="da-lb-head">
+        <span className="t-label">Standings</span>
+        <span className="t-micro text-tertiary">live · pts</span>
       </div>
-      <div className="vf-tbody">
-        {field.map((e) => (
-          <FieldRow
-            key={e.managerId}
-            entry={e}
-            onSelect={onSelect}
-            selected={selected === e.managerId}
-          />
-        ))}
+      {field.map((e) => (
+        <LbRow
+          key={e.managerId}
+          entry={e}
+          selected={effSel === e.managerId}
+          onSelect={onSelect}
+          dimLive={dimLive}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────── XI pitch — flag-kit jersey tokens (Direction A) ─────────────────────────── */
+
+/** "4-3-3"-style formation label derived from the XI's role counts (the snapshot has no formation field). */
+function formationOf(starters: StarterView[]): string {
+  const n: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const s of starters) n[s.role] += 1;
+  return `${n.DEF}-${n.MID}-${n.FWD}`;
+}
+
+/**
+ * One starter as a flag-kit jersey token. State is the kit + a worded label (color + word, never color
+ * alone): playing = lit, played = dimmed kit ("lock-on-play via kit brightness"), to-play = full-bright
+ * + "to play". NO per-player points here (Theme F) — tapping a played/locked player opens the box-score
+ * modal, which fetches the breakdown on demand; to-play tokens are inert (vsfield is read-only).
+ */
+function XIToken({
+  starter,
+  onOpenPlayer,
+  dimLive,
+}: {
+  starter: StarterView;
+  onOpenPlayer: (playerId: string) => void;
+  dimLive: boolean;
+}) {
+  const cls = "sl-tok-jersey " + NODE_CLASS[starter.state] + (dimLive ? " is-dim" : "");
+  const tappable = starter.state !== "yet-to-play" || starter.locked;
+  const body = (
+    <>
+      <span
+        className="sl-jersey"
+        style={{ background: kitOf(starter.nation) }}
+        aria-hidden="true"
+      />
+      <span className="sl-jersey-name">{starter.name}</span>
+      {starter.state === "yet-to-play" ? (
+        <span className="sl-jersey-toplay">to play</span>
+      ) : starter.state === "playing" ? (
+        <span className="sl-jersey-state s-live">
+          {!dimLive && <span className="sl-score-dot" aria-hidden="true" />}
+          Playing
+        </span>
+      ) : (
+        <span className="sl-jersey-state s-played">Played</span>
+      )}
+    </>
+  );
+  if (!tappable) {
+    return (
+      <div className={cls + " is-inert"} aria-disabled="true" title={starter.name}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={cls}
+      onClick={() => onOpenPlayer(starter.playerId)}
+      title={`${starter.name} — tap for score breakdown`}
+    >
+      {body}
+    </button>
+  );
+}
+
+/** A full XI as jersey tokens in formation lanes over the turf, with pitch markings. */
+export function XIPitch({
+  starters,
+  onOpenPlayer,
+  dimLive,
+  mob,
+}: {
+  starters: StarterView[];
+  onOpenPlayer: (playerId: string) => void;
+  dimLive: boolean;
+  mob?: boolean;
+}) {
+  const byPos: Record<Position, StarterView[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+  for (const s of starters) byPos[s.role].push(s);
+  return (
+    <div className={"da-pitch" + (mob ? " da-pitch-mob" : "")}>
+      <div className="da-pl" aria-hidden="true">
+        <span className="da-pl-box da-pl-box-top" />
+        <span className="da-pl-mid" />
+        <span className="da-pl-circle" />
+        <span className="da-pl-box da-pl-box-bot" />
+      </div>
+      <div className="da-pitch-lanes">
+        {PITCH_LANES_V.map((pos) =>
+          byPos[pos].length > 0 ? (
+            <div className={"da-lane da-lane-" + pos} key={pos}>
+              {byPos[pos].map((s) => (
+                <XIToken
+                  key={s.playerId}
+                  starter={s}
+                  onOpenPlayer={onOpenPlayer}
+                  dimLive={dimLive}
+                />
+              ))}
+            </div>
+          ) : null,
+        )}
       </div>
     </div>
   );
 }
 
-/** The "you vs the field" hero — running score, rank, provisional record, still-to-come, swing. */
+export function XIPanel({
+  entry,
+  onOpenPlayer,
+  dimLive,
+}: {
+  entry: FieldEntry;
+  onOpenPlayer: (playerId: string) => void;
+  dimLive: boolean;
+}) {
+  const pulse = useScorePulse(entry.points);
+  return (
+    <div className={"da-xi" + (entry.isMe ? " is-me" : "")}>
+      <div className="da-xi-hd">
+        <Avatar name={entry.displayName} isMe={entry.isMe} />
+        <b>{entry.isMe ? "You" : entry.displayName}</b>
+        <span className="da-team-form">{formationOf(entry.starters)}</span>
+        <span className={"da-team-tot mono" + (pulse ? " score-pulse" : "")}>{entry.points}</span>
+      </div>
+      <XIPitch starters={entry.starters} onOpenPlayer={onOpenPlayer} dimLive={dimLive} />
+    </div>
+  );
+}
+
+/* ─────────────────────────────── compare band (ranked facts) ─────────────────────────────── */
+
+/**
+ * The H2H compare band — the user's ranked facts. Fact 1 = the live margin (primary band), Fact 2 =
+ * upside still to come.
+ * TODO(F2): lineup-edge needs per-player pts; blocked on Theme F — no score_player_match read in
+ * loadVsField. Fact 3 (player-by-player) renders nothing until that decision is reopened.
+ */
+export function CompareBand({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
+  const diff = me.points - opp.points;
+  const k = diff > 0 ? "win" : diff < 0 ? "loss" : "draw";
+  const word = diff > 0 ? "WINNING" : diff < 0 ? "LOSING" : "LEVEL";
+  const mineLeft = stillToCome(me.counts);
+  const theirsLeft = stillToCome(opp.counts);
+  const edge = mineLeft - theirsLeft;
+  return (
+    <div className="v2-band">
+      <div className="v2-band-primary">
+        <div className="v2-bp-side">
+          <Avatar name={me.displayName} isMe />
+          <div className="v2-bp-id">
+            <b>You</b>
+            <span className="v2-bp-meta">
+              rank {me.rank} · {me.record.w}–{me.record.l} vs field
+            </span>
+          </div>
+          <span className="v2-bp-score mono">{me.points}</span>
+        </div>
+        <div className="v2-bp-mid">
+          <span className={"v2-bp-verdict is-" + k}>{word}</span>
+          <span className={"v2-bp-margin mono is-" + k}>
+            {diff > 0 ? "+" : ""}
+            {diff}
+          </span>
+          <span className="t-micro">live margin</span>
+        </div>
+        <div className="v2-bp-side right">
+          <Avatar name={opp.displayName} />
+          <div className="v2-bp-id">
+            <b>{opp.displayName}</b>
+            <span className="v2-bp-meta">
+              rank {opp.rank} · {opp.record.w}–{opp.record.l} vs field
+            </span>
+          </div>
+          <span className="v2-bp-score mono">{opp.points}</span>
+        </div>
+      </div>
+      <div className="v2-band-facts">
+        <div className="v2-fact">
+          <span className="v2-fact-rank">2</span>
+          <div className="v2-fact-body">
+            <span className="v2-fact-lab">Upside still to come</span>
+            <span className="v2-fact-val">
+              <b className="pos">{mineLeft}</b> of yours yet to play · they have <b>{theirsLeft}</b>
+              {edge !== 0 && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span className={edge > 0 ? "up" : "down"}>
+                    {edge > 0 ? "+" : ""}
+                    {edge} player edge
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────── you vs the field (aggregate) ─────────────────────────────── */
+
+/** The "you vs the field" aggregate — running score, rank, provisional record, still-to-come, swing. */
 export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; periodLabel: string }) {
   const me = field.find((e) => e.isMe);
   const pulse = useScorePulse(me?.points ?? 0);
@@ -323,46 +562,46 @@ export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; period
   const above = myIdx > 0 ? field[myIdx - 1] : undefined; // nearest manager I'm chasing
   const below = myIdx < field.length - 1 ? field[myIdx + 1] : undefined; // nearest chasing me
   return (
-    <div className="vf-hero card">
+    <div className="v2-agg card">
       <div className="t-label">You vs the field · {periodLabel}</div>
 
-      <div className="vf-hero-sec first vf-hero-headline">
+      <div className="v2-agg-sec first v2-agg-head">
         <div>
-          <div className={"vf-hero-score-num mono" + (pulse ? " score-pulse" : "")}>
+          <div className={"v2-agg-scorenum mono" + (pulse ? " score-pulse" : "")}>
             {me.points}
             <span style={{ fontSize: 18, fontWeight: 700, marginLeft: 5 }}>pts</span>
           </div>
-          <span className="vf-hero-score-lab">points this period</span>
+          <span className="v2-agg-scorelab">points this period</span>
         </div>
-        <div className="vf-hero-rankchip">
-          <span className="vf-hero-rank-num display">{me.rank}</span>
-          <span className="vf-hero-rank-sub">rank · of {n}</span>
+        <div className="v2-agg-rank">
+          <b className="display">{me.rank}</b>
+          <span>rank · of {n}</span>
         </div>
       </div>
 
-      <div className="vf-hero-sec vf-hero-recsec">
+      <div className="v2-agg-sec v2-agg-recsec">
         <RecordBadge rec={me.record} />
-        <p className="vf-hero-recnote t-caption text-secondary">
+        <p className="v2-agg-recnote t-caption text-secondary">
           Scored against <b>all {Math.max(0, n - 1)}</b> managers at once — this <b>W-L</b> is your
           record for the period; ties break on points.
         </p>
       </div>
 
-      <div className="vf-hero-sec">
-        <div className="vf-hero-pitchsec">
+      <div className="v2-agg-sec">
+        <div className="v2-agg-pitchsec">
           <PitchMini starters={me.starters} orient="v" className="vf-pitch-hero" />
-          <div className="vf-pitch-side">
-            <div className="vf-ps-stat">
-              <span className="vf-ps-num">{stillToCome(me.counts)}</span>
-              <span className="vf-ps-lab">still to come</span>
+          <div className="v2-agg-pside">
+            <div className="v2-ps">
+              <span className="v2-ps-num">{stillToCome(me.counts)}</span>
+              <span className="v2-ps-lab">still to come</span>
             </div>
-            <div className="vf-ps-stat">
-              <span className="vf-ps-num is-live">{me.counts.playing}</span>
-              <span className="vf-ps-lab">playing now</span>
+            <div className="v2-ps">
+              <span className="v2-ps-num is-live">{me.counts.playing}</span>
+              <span className="v2-ps-lab">playing now</span>
             </div>
-            <div className="vf-ps-stat">
-              <span className="vf-ps-num">{me.counts.played}</span>
-              <span className="vf-ps-lab">played</span>
+            <div className="v2-ps">
+              <span className="v2-ps-num">{me.counts.played}</span>
+              <span className="v2-ps-lab">played</span>
             </div>
           </div>
         </div>
@@ -379,21 +618,21 @@ export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; period
         </p>
       </div>
 
-      <div className="vf-hero-sec last vf-swing">
+      <div className="v2-agg-sec last v2-agg-swing">
         {above ? (
-          <div className="vf-swing-row">
-            <span className="vf-swing-dir">▲ catch</span>
-            <b className="t-sm vf-swing-name">{above.displayName}</b>
-            <span className="mono vf-swing-gap">+{above.points - me.points}</span>
+          <div className="v2-swing-row">
+            <span className="v2-swing-dir">▲ catch</span>
+            <b className="t-sm v2-swing-name">{above.displayName}</b>
+            <span className="mono v2-swing-gap">+{above.points - me.points}</span>
           </div>
         ) : (
-          <div className="vf-swing-row vf-swing-top">🏆 You lead the field</div>
+          <div className="v2-swing-row v2-swing-top">🏆 You lead the field</div>
         )}
         {below && (
-          <div className="vf-swing-row">
-            <span className="vf-swing-dir vf-swing-down">▼ holding off</span>
-            <b className="t-sm vf-swing-name">{below.displayName}</b>
-            <span className="mono vf-swing-gap is-down">{below.points - me.points}</span>
+          <div className="v2-swing-row">
+            <span className="v2-swing-dir v2-swing-down">▼ holding off</span>
+            <b className="t-sm v2-swing-name">{below.displayName}</b>
+            <span className="mono v2-swing-gap is-down">{below.points - me.points}</span>
           </div>
         )}
       </div>
@@ -401,174 +640,27 @@ export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; period
   );
 }
 
-/** Per-opponent H2H detail: scoreline + verdict + each side's still-to-play + the two XI shapes. */
-/** Mini status pill for an XI-list row (color + word, per the functional-color rule). */
-function StarterStatePill({ state }: { state: StarterState }) {
-  if (state === "playing")
-    return (
-      <span className="pill pill-live vf-pill-mini">
-        <span className="vf-livedot" aria-hidden="true" />
-        Playing
-      </span>
-    );
-  if (state === "played") return <span className="pill pill-locked vf-pill-mini">Played</span>;
-  return <span className="pill pill-ytp vf-pill-mini">To play</span>;
+/* ─────────────────────────────────── feed ticker (deferred) ─────────────────────────────────── */
+
+/** No-op stub. TODO: FeedTicker needs event-level feed not in VsFieldView. */
+export function FeedTicker() {
+  return null;
 }
 
-/** One starter row in the H2H XI list. Played/locked → a button that opens the box-score modal;
- *  to-play (match not kicked off) → an inert row (vsfield is read-only — no swap/drag, no forfeit). */
-function XINode({
-  starter,
-  onOpenPlayer,
-}: {
-  starter: StarterView;
-  onOpenPlayer: (playerId: string) => void;
-}) {
-  const iso2 = starter.nation ? toIso2(starter.nation) : null;
-  // Tappable once his match has kicked off (playing/played) or lock-on-play has stamped him.
-  const tappable = starter.state !== "yet-to-play" || starter.locked;
-  const body = (
-    <>
-      <Pos p={starter.role} />
-      {iso2 && <Flag code={iso2} label={starter.nation ?? undefined} />}
-      <span className="vf-xi-name">{starter.name}</span>
-      <StarterStatePill state={starter.state} />
-    </>
-  );
-  if (!tappable) {
-    return (
-      <div className="vf-xi-row is-inert" aria-disabled="true">
-        {body}
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="vf-xi-row"
-      onClick={() => onOpenPlayer(starter.playerId)}
-      title={`${starter.name} — tap for score breakdown`}
-    >
-      {body}
-    </button>
-  );
-}
-
-/** A manager's full XI as identifiable, tappable rows for the per-opponent H2H drill-in. */
-export function XIList({
-  starters,
-  onOpenPlayer,
-}: {
-  starters: StarterView[];
-  onOpenPlayer: (playerId: string) => void;
-}) {
-  if (starters.length === 0) return null;
-  return (
-    <div className="vf-xi-list">
-      {starters.map((s) => (
-        <XINode key={s.playerId} starter={s} onOpenPlayer={onOpenPlayer} />
-      ))}
-    </div>
-  );
-}
-
-export function H2HDetail({
-  field,
-  oppId,
-  onClose,
-  onOpenPlayer,
-}: {
-  field: FieldEntry[];
-  oppId: string;
-  onClose: () => void;
-  /** Opens the info-only box-score modal for a played/locked player (own XI or opponent's). */
-  onOpenPlayer: (playerId: string) => void;
-}) {
-  const me = field.find((e) => e.isMe);
-  const opp = field.find((e) => e.managerId === oppId);
-  if (!me || !opp || opp.isMe) return null;
-  const diff = me.points - opp.points;
-  return (
-    <div className="vf-h2hwrap card">
-      <div className="vf-h2h-head">
-        <div className="t-label">Head-to-head</div>
-        <button
-          className="btn btn-quiet btn-sm"
-          onClick={onClose}
-          style={{ minHeight: 28, padding: "2px 8px" }}
-        >
-          ✕ close
-        </button>
-      </div>
-      <div className="vf-h2h-scoreline">
-        <span className="vf-h2h-side">
-          <b>You</b>
-          <span className="mono">{me.points}</span>
-        </span>
-        <span
-          className={"vf-h2h-verdict " + (diff > 0 ? "is-win" : diff < 0 ? "is-loss" : "is-draw")}
-        >
-          {diff > 0 ? "WINNING" : diff < 0 ? "LOSING" : "LEVEL"}{" "}
-          <span className="mono">
-            {diff > 0 ? "+" : ""}
-            {diff}
-          </span>
-        </span>
-        <span className="vf-h2h-side">
-          <b>{opp.displayName}</b>
-          <span className="mono">{opp.points}</span>
-        </span>
-      </div>
-      <div className="vf-h2h-upside t-caption">
-        <span>
-          <b style={{ color: "var(--text-primary)" }}>{stillToCome(me.counts)}</b> of yours still to
-          play
-        </span>
-        <span>
-          <b style={{ color: "var(--text-primary)" }}>{stillToCome(opp.counts)}</b> of theirs still
-          to play
-        </span>
-      </div>
-      {/* XI shapes give the at-a-glance played / playing / still-to-come picture; the named lists
-          below them make each starter identifiable + tappable. A played/locked player opens the
-          info-only box-score modal (per-player points are fetched on demand by that modal — they are
-          intentionally NOT in this snapshot; Theme F). No forfeit, no swap/drag: vsfield is read-only. */}
-      <div className="vf-h2h-cols">
-        <div className="vf-h2h-col">
-          <div className="vf-h2h-colhead">
-            <Avatar name={me.displayName} isMe />
-            <b>You</b>
-            <span className="mono vf-h2h-coltot">{me.points}</span>
-          </div>
-          <PitchMini starters={me.starters} orient="v" className="vf-pitch-mini" />
-          <XIList starters={me.starters} onOpenPlayer={onOpenPlayer} />
-        </div>
-        <div className="vf-h2h-col">
-          <div className="vf-h2h-colhead">
-            <Avatar name={opp.displayName} />
-            <b>{opp.displayName}</b>
-            <span className="mono vf-h2h-coltot">{opp.points}</span>
-          </div>
-          <PitchMini starters={opp.starters} orient="v" className="vf-pitch-mini" />
-          <XIList starters={opp.starters} onOpenPlayer={onOpenPlayer} />
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ─────────────────────────────────────── season table ─────────────────────────────────────── */
 
 /** The season power-record standings (record + total points + seed, from `standing`). */
 export function SeasonTable({ season }: { season: SeasonEntry[] }) {
   return (
-    <div className="vf-season">
-      <div className="vf-season-note alert alert-info">
+    <div className="v2-season">
+      <div className="v2-season-note alert alert-info">
         <div>
           <b>Power record.</b> All-play-all every period: your weekly W-L is your result against
           every other manager that period. Season standings rank by total wins; ties break on total
           points.
         </div>
       </div>
-      <table className="dtable vf-seasontable">
+      <table className="dtable">
         <thead>
           <tr>
             <th style={{ width: 36 }}>#</th>
@@ -584,7 +676,7 @@ export function SeasonTable({ season }: { season: SeasonEntry[] }) {
             <tr key={s.managerId} className={s.isMe ? "row-me" : ""}>
               <td className="mono">{s.seed ?? s.rank}</td>
               <td>
-                <div className="vf-st-mgr">
+                <div className="v2-st-mgr">
                   <Avatar name={s.displayName} isMe={s.isMe} />
                   <b>{s.isMe ? "You" : s.displayName}</b>
                 </div>
@@ -597,12 +689,12 @@ export function SeasonTable({ season }: { season: SeasonEntry[] }) {
               <td className="num mono">{Math.round(s.winPct * 100)}%</td>
               <td className="num mono">{s.totalPoints}</td>
               <td>
-                <div className="vf-st-periods">
+                <div className="v2-st-periods">
                   {s.byPeriod.map((p, pi) => {
                     const k = p.w > p.l ? "W" : p.w < p.l ? "L" : "D";
                     const isLive = pi === s.byPeriod.length - 1;
                     return (
-                      <span key={p.periodId} className={"vf-st-chip" + (isLive ? " is-live" : "")}>
+                      <span key={p.periodId} className={"v2-st-chip" + (isLive ? " is-live" : "")}>
                         <span className={"wld wld-" + k}>{k}</span>
                         <span className="mono t-micro">{p.points}</span>
                       </span>
@@ -614,6 +706,266 @@ export function SeasonTable({ season }: { season: SeasonEntry[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ──────────────────────────────── mobile (Direction A on phone) ──────────────────────────────── */
+
+/** Compact "you" hero at the top of the mobile leaderboard. */
+export function MaYou({ field }: { field: FieldEntry[] }) {
+  const me = field.find((e) => e.isMe);
+  const pulse = useScorePulse(me?.points ?? 0);
+  if (!me) return null;
+  return (
+    <div className="ma-you">
+      <div className="ma-you-row">
+        <div className={"ma-you-score" + (pulse ? " score-pulse" : "")}>
+          <span className="mono">{me.points}</span>
+          <span className="ma-you-lab">pts this period</span>
+        </div>
+        <div className="ma-you-rank">
+          <b className="mono">{me.rank}</b>
+          <span>rank · of {field.length}</span>
+        </div>
+      </div>
+      <div className="ma-you-rec">
+        <RecordBadge rec={me.record} />
+        <span className="t-caption text-secondary">
+          scored vs all {Math.max(0, field.length - 1)} ·{" "}
+          <b style={{ color: "var(--text-primary)" }}>{stillToCome(me.counts)}</b> still to come
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MaRow({
+  entry,
+  onTap,
+  dimLive,
+}: {
+  entry: FieldEntry;
+  onTap: (id: string) => void;
+  dimLive: boolean;
+}) {
+  const pulse = useScorePulse(entry.points);
+  return (
+    <button
+      type="button"
+      className={"ma-row" + (entry.isMe ? " is-me" : "")}
+      onClick={() => onTap(entry.managerId)}
+    >
+      <span className="ma-row-rk mono">{entry.rank}</span>
+      <Avatar name={entry.displayName} isMe={entry.isMe} />
+      <span className="ma-row-name">
+        <b>{entry.isMe ? "You" : entry.displayName}</b>
+        <span className="ma-row-sub">
+          {entry.counts.playing > 0 && (
+            <span className={"ma-livetag" + (dimLive ? " is-dim" : "")}>
+              <span className="vf-livedot" aria-hidden="true" />
+              {entry.counts.playing} live
+            </span>
+          )}
+          <span className="ma-ytptag">{stillToCome(entry.counts)} to play</span>
+        </span>
+      </span>
+      <span className="ma-row-right">
+        <span className={"ma-row-pts mono" + (pulse ? " score-pulse" : "")}>{entry.points}</span>
+        {entry.isMe ? (
+          <span className="da-lb-wld-self">you</span>
+        ) : entry.h2hVsViewer ? (
+          <span
+            className={
+              "ma-row-wld " +
+              (entry.h2hVsViewer.result === "win"
+                ? "W"
+                : entry.h2hVsViewer.result === "loss"
+                  ? "L"
+                  : "D")
+            }
+          >
+            {entry.h2hVsViewer.result === "win"
+              ? "W"
+              : entry.h2hVsViewer.result === "loss"
+                ? "L"
+                : "D"}
+            {entry.h2hVsViewer.margin > 0
+              ? " +" + entry.h2hVsViewer.margin
+              : entry.h2hVsViewer.margin < 0
+                ? " " + entry.h2hVsViewer.margin
+                : ""}
+          </span>
+        ) : (
+          <span className="text-tertiary t-micro">—</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** The mobile standings (leaderboard-first home): you-hero + field button + tappable rows. */
+export function MaStandings({
+  field,
+  onSelect,
+  dimLive,
+}: {
+  field: FieldEntry[];
+  onSelect: (id: string) => void;
+  dimLive: boolean;
+}) {
+  const me = field.find((e) => e.isMe);
+  return (
+    <>
+      <MaYou field={field} />
+      <button type="button" className="ma-fieldbtn" onClick={() => onSelect("field")}>
+        <svg
+          viewBox="0 0 24 24"
+          width="17"
+          height="17"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+        <span>
+          <b>You vs the whole field</b>
+          <span>
+            {me ? `record ${me.record.w}–${me.record.l} · rank ${me.rank}` : "the aggregate view"}
+          </span>
+        </span>
+        <span className="ma-chev" aria-hidden="true">
+          ›
+        </span>
+      </button>
+      <div className="ma-listlab">
+        <span className="t-label">Standings · tap to compare</span>
+        <span className="t-micro text-tertiary">live · pts</span>
+      </div>
+      <div className="ma-list">
+        {field.map((e) => (
+          <MaRow key={e.managerId} entry={e} onTap={onSelect} dimLive={dimLive} />
+        ))}
+      </div>
+      <FeedTicker />
+    </>
+  );
+}
+
+/** Condensed compare band for the phone (same Facts 1+2; same TODO(F2) deferral as CompareBand). */
+function MaCompare({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
+  const diff = me.points - opp.points;
+  const k = diff > 0 ? "win" : diff < 0 ? "loss" : "draw";
+  const word = diff > 0 ? "WINNING" : diff < 0 ? "LOSING" : "LEVEL";
+  const mineLeft = stillToCome(me.counts);
+  const theirsLeft = stillToCome(opp.counts);
+  const edge = mineLeft - theirsLeft;
+  return (
+    <div className="ma-cmp">
+      <div className="ma-cmp-top">
+        <div className="ma-cmp-side">
+          <Avatar name={me.displayName} isMe />
+          <div className="ma-cmp-id">
+            <b>You</b>
+            <span>
+              {me.record.w}–{me.record.l} · rk {me.rank}
+            </span>
+          </div>
+        </div>
+        <div className="ma-cmp-mid">
+          <span className={"ma-cmp-verdict is-" + k}>{word}</span>
+          <span className={"ma-cmp-margin mono is-" + k}>
+            {diff > 0 ? "+" : ""}
+            {diff}
+          </span>
+        </div>
+        <div className="ma-cmp-side right">
+          <Avatar name={opp.displayName} />
+          <div className="ma-cmp-id">
+            <b>{opp.displayName}</b>
+            <span>
+              {opp.record.w}–{opp.record.l} · rk {opp.rank}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="ma-cmp-facts">
+        <div className="ma-cmp-fact">
+          <span className="ma-fk">2</span>
+          <span>
+            <b className="pos">{mineLeft}</b> of yours still to play · they have <b>{theirsLeft}</b>
+            {edge !== 0 && (
+              <>
+                {" "}
+                ·{" "}
+                <span className={edge > 0 ? "up" : "down"}>
+                  {edge > 0 ? "+" : ""}
+                  {edge}
+                </span>
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The mobile H2H: back + condensed compare band + a You/Opponent toggle over ONE jersey pitch.
+ * The side toggle is deliberately a LOCAL useState (F3) — pure presentation, not Realtime-coupled.
+ */
+export function MaH2H({
+  field,
+  oppId,
+  onBack,
+  onOpenPlayer,
+  dimLive,
+}: {
+  field: FieldEntry[];
+  oppId: string;
+  onBack: () => void;
+  onOpenPlayer: (playerId: string) => void;
+  dimLive: boolean;
+}) {
+  const [side, setSide] = useState<"me" | "opp">("me");
+  const me = field.find((e) => e.isMe);
+  const opp = field.find((e) => e.managerId === oppId);
+  if (!me || !opp || opp.isMe) return null;
+  const shown = side === "me" ? me : opp;
+  return (
+    <div className="ma-h2h">
+      <button type="button" className="ma-back" onClick={onBack}>
+        ‹ Standings
+      </button>
+      <MaCompare me={me} opp={opp} />
+      <div className="ma-sideseg">
+        <button
+          type="button"
+          className={side === "me" ? "is-on" : ""}
+          onClick={() => setSide("me")}
+        >
+          You <span className="ma-seg-pts">{me.points}</span>
+        </button>
+        <button
+          type="button"
+          className={side === "opp" ? "is-on" : ""}
+          onClick={() => setSide("opp")}
+        >
+          {opp.displayName} <span className="ma-seg-pts">{opp.points}</span>
+        </button>
+      </div>
+      <div className="ma-pitchwrap">
+        <XIPitch starters={shown.starters} onOpenPlayer={onOpenPlayer} dimLive={dimLive} mob />
+      </div>
+      <p className="t-micro text-tertiary" style={{ textAlign: "center", margin: "2px 0 0" }}>
+        Tap a player for the points breakdown · kit brightness = lock-on-play
+      </p>
     </div>
   );
 }

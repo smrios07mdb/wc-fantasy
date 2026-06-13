@@ -3,18 +3,17 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
-// Pure-Node source-contract smoke for the Prompt-24 /vsfield re-skin. The repo's Vitest run has no
-// DOM/JSX transform (by design — see components/Brand.test.ts + the landing/shell/draft/lineup smokes),
-// so we verify the re-skin's load-bearing CONTRACTS from source rather than mounting. Component
-// compilation is covered by `tsc --noEmit` + `next build`; visual fidelity is confirmed on the live
-// deploy. The BEHAVIOUR the re-skin must PRESERVE is already unit-tested at the right altitude:
-// packages/vsfield buildVsField.test.ts (running scores + the provisional record / per-opponent H2H via
-// the Prompt-04 pairwise helper, tie = neither W nor L, the inactive-0 manager, still-to-come counts,
-// season read), handleVsField.test.ts (authed read 401 / no 403), snapshotClient/realtime/liveController
-// (JWT-authed subscribe → change-nudge → refetch + the polling fallback). Here we guard only that the
-// *visual* re-skin de-duplicated the body brand, ported the design's pitch markings, kept every region
-// wired + the still-to-come COUNT (not a projection, §5), avatars as initials, the gold-free palette,
-// and did NOT touch the loader / Realtime wiring / the gate / the dynamic (ƒ) shape.
+// Pure-Node source-contract smoke for the /vsfield Direction-A re-skin ("split cockpit"). The
+// load-bearing BEHAVIOUR the re-skin must PRESERVE is unit-tested at the right altitude:
+// packages/vsfield buildVsField.test.ts (running scores + the provisional record / per-opponent H2H,
+// tie = neither W nor L, the inactive-0 manager, still-to-come counts, season read),
+// handleVsField.test.ts (authed read 401 / no 403), snapshotClient/realtime/liveController
+// (JWT-authed subscribe → change-nudge → refetch + the polling fallback), and the jsdom
+// CompareBand.test.tsx (Facts 1+2, the jersey-pitch drill-in, the Theme-F no-per-player-score rule).
+// Here we guard the re-skin's source CONTRACTS: the Direction-A vocabulary is wired (leaderboard rail,
+// compare band, dual jersey pitches, mobile tree), the jersey kit comes from kitOf (shared iso2 flag
+// mapper), the still-to-come COUNT (not a projection, §5), avatars as initials, the gold-free palette,
+// the lineup-route class-collision guard, and the untouched loader / Realtime wiring / gate / ƒ shape.
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(here, "../../app");
 const read = (rel: string) => readFileSync(resolve(appDir, rel), "utf8");
@@ -25,14 +24,14 @@ const css = read("vsfield/vsfield.css");
 const layout = read("vsfield/layout.tsx");
 const page = read("vsfield/page.tsx");
 const loader = read("vsfield/loadVsField.ts");
+const kit = read("vsfield/kitOf.ts");
+const ds = read("styles/ds.css");
 
-describe("vsfield re-skin — the body brand lockup is de-duplicated (the shell owns the brand)", () => {
-  it("drops the body `.vf-logo` 'W' badge — no second brand mark (mirrors the Prompt-22 dr-logo de-dup)", () => {
+describe("vsfield re-skin — the body brand lockup stays de-duplicated (the shell owns the brand)", () => {
+  it("keeps the body de-branded — no `.vf-logo` 'W' badge, no second brand mark", () => {
     expect(client).not.toContain('className="vf-logo"');
     expect(client).not.toContain('className="vf-brand"');
-    // the trophy/"XI" brand belongs to the AppShell topbar, never the vsfield body
     expect(client).not.toContain("BrandBadge");
-    // `.vf-logo` was vsfield-LOCAL (defined+used only here), so the orphaned CSS rule is gone too
     expect(css).not.toMatch(/^\.vf-logo\s*\{/m);
     expect(css).not.toMatch(/^\.vf-brand\s*\{/m);
   });
@@ -40,55 +39,110 @@ describe("vsfield re-skin — the body brand lockup is de-duplicated (the shell 
   it("keeps `.vf-top` as a de-branded status stack — screen label + live period line", () => {
     expect(client).toContain('className="vf-status"');
     expect(css).toMatch(/^\.vf-status\s*\{/m);
-    // the period line is still rendered (vsfield-local context, not a brand mark)
     expect(client).toContain("periodLabel.toUpperCase()");
   });
 });
 
-describe("vsfield re-skin — the design's pitch markings are ported (the fidelity fix)", () => {
-  it("adds a centre circle + halfway line so the formation pitch reads as a pitch", () => {
-    expect(css).toMatch(/\.vf-pitch::after\s*\{/);
-    expect(css).toMatch(/\.vf-pitch-v::before\s*\{/);
-    expect(css).toMatch(/\.vf-pitch-h::before\s*\{/);
-    // the centre circle is a circle (aspect-ratio:1 is unique to it)
-    expect(css).toContain("aspect-ratio: 1");
+describe("vsfield re-skin — the Direction-A split cockpit is wired (presentation only)", () => {
+  it("renders the leaderboard rail + compare band + dual XI panels + season + live indicator", () => {
+    expect(client).toContain('tab === "season"');
+    expect(client).toContain("<MatchStrip");
+    expect(client).toContain("<Leaderboard");
+    expect(client).toContain("<CompareBand");
+    expect(client).toContain("<XIPanel");
+    expect(client).toContain("<YouVsField");
+    expect(client).toContain("<SeasonTable");
+    expect(client).toContain("<ConnPill");
+    expect(css).toMatch(/^\.da-lb\s*\{/m); // the prominent left leaderboard rail
+    expect(css).toMatch(/^\.da-xi\s*\{/m); // the dual jersey-pitch panels
+    expect(css).toMatch(/^\.v2-band\s*\{/m); // the compare band
+  });
+
+  it("renders the net-new mobile tree (leaderboard-first, media-query swapped — no JS fork)", () => {
+    expect(client).toContain("<MaStandings");
+    expect(client).toContain("<MaH2H");
+    expect(css).toMatch(/^\.ma-scroll\s*\{/m);
+    expect(css).toContain("@media (max-width: 760px)");
+    // the mobile You/Opp side toggle is a LOCAL useState (F3), not Realtime-coupled
+    expect(components).toContain('useState<"me" | "opp">');
+  });
+
+  it("keeps each per-manager region in the leaderboard row — score + H2H + still-to-come", () => {
+    expect(components).toContain("da-lb-pts"); // running score
+    expect(components).toContain("da-lb-wld"); // per-opponent head-to-head W/L/D + margin
+    expect(components).toContain("h2hVsViewer"); // ... off the snapshot, not a client recompute
+    expect(components).toContain("to play");
+  });
+
+  it("selection state is the 'field' sentinel | managerId (UUIDs — no collision)", () => {
+    expect(client).toContain("effSel");
+    expect(client).toContain("useState<string | null>(null)");
+    expect(client).toContain('?? "field"');
   });
 });
 
-describe("vsfield re-skin — every region stays wired (presentation only)", () => {
-  it("renders the period field + season view + live indicator off the view tabs", () => {
-    expect(client).toContain('tab === "season"');
-    expect(client).toContain("<MatchStrip");
-    expect(client).toContain("<FieldTable");
-    expect(client).toContain("<YouVsField");
-    expect(client).toContain("<SeasonTable");
-    expect(client).toContain("<H2HDetail");
-    expect(client).toContain("<ConnPill");
+describe("vsfield re-skin — flag-kit jerseys (kitOf) + the lineup class-collision guard", () => {
+  it("derives every kit through kitOf, which reuses the SHARED iso2 flag mapper (no second table)", () => {
+    expect(components).toContain('import { kitOf } from "./kitOf"');
+    expect(components).toContain("kitOf(starter.nation)");
+    expect(kit).toContain('from "@/src/draft/flag"'); // toIso2 + isHomeNation — the existing mapper
+    expect(kit).toContain("toIso2");
+    expect(kit).toContain("isHomeNation");
   });
 
-  it("keeps each per-manager region in the field row — score + record + H2H + still-to-come", () => {
-    expect(components).toContain("vf-c-score"); // running score
-    expect(components).toContain("vs field "); // provisional all-play-all record subline
-    expect(components).toContain("<H2HResultChip"); // per-opponent head-to-head
-    expect(components).toContain("vf-ytp-num"); // still-to-come count
-    expect(components).toContain("to play");
+  it("never sets background-size: cover on the jersey (the multi-layer kit gotcha)", () => {
+    expect(css).not.toMatch(/background-size:\s*cover/);
+  });
+
+  it("namespaces the jersey token as `.sl-tok-jersey` under `.da-pitch` — never bare `.sl-tok` (lineup owns it)", () => {
+    expect(components).toContain("sl-tok-jersey");
+    expect(components).not.toMatch(/"sl-tok[" ]/); // no bare sl-tok class emitted
+    expect(css).toContain(".da-pitch .sl-tok-jersey");
+    expect(css).not.toMatch(/^\.sl-tok\s*\{/m); // no unscoped .sl-tok rule to fight lineup.css
+    expect(css).not.toMatch(/^\.sl-tok-name\s*\{/m); // lineup's class — not redefined here
+  });
+
+  it("uses the shared --kit-outline token (defined globally in ds.css, dark + light)", () => {
+    expect(css).toContain("var(--kit-outline)");
+    expect(ds).toContain("--kit-outline: rgba(255,255,255,0.82)"); // :root (dark)
+    expect(ds).toContain("--kit-outline: rgba(20,28,42,0.5)"); // [data-theme="light"]
+  });
+});
+
+describe("vsfield re-skin — Theme F: state only, never a per-player score in the snapshot UI", () => {
+  it("tokens render worded states (playing/played/to play), no per-player pts element", () => {
+    expect(components).toContain("sl-jersey-state");
+    expect(components).toContain("sl-jersey-toplay");
+    expect(components).not.toContain("sl-tok-score"); // the design's pts line — deliberately NOT ported
+    expect(components).not.toContain("sl-tok-pts");
+  });
+
+  it("CompareBand ships Facts 1+2 only; Fact 3 carries the F2 deferral TODO", () => {
+    expect(components).toContain("TODO(F2): lineup-edge needs per-player pts");
+    expect(components).not.toContain("Player-by-player");
+    expect(components).not.toContain("biggest edge");
+  });
+
+  it("the FeedTicker stays a no-op stub with its data-gap TODO", () => {
+    expect(components).toContain("TODO: FeedTicker needs event-level feed not in VsFieldView");
   });
 });
 
 describe("vsfield re-skin — still-to-come is a COUNT, never a projection (ARCHITECTURE §5)", () => {
   it("derives the indicator from the bucket counts (yet-to-play + no-match), not a projected score", () => {
     expect(components).toContain("c.yetToPlay + c.noMatch");
-    // §5 forbids a projected-points number for the upside indicator
     expect(components).not.toContain("projection");
     expect(components).not.toContain("projected");
   });
 });
 
 describe("vsfield re-skin — avatars stay initials, not the parrot (BRAND.md §6)", () => {
-  it("renders the initials Avatar and never introduces the parrot mascot as an avatar", () => {
+  it("renders the initials Avatar for MANAGERS and never the parrot mascot", () => {
     expect(components).toContain("function initials(");
     expect(components).toContain("{initials(name)}");
     expect(components).not.toContain("parrot");
+    // manager rows are manager-identity — PlayerAvatar (player/nation-scoped) is NOT used here
+    expect(components).not.toContain("PlayerAvatar");
   });
 });
 
@@ -102,14 +156,14 @@ describe("vsfield re-skin — preserves the loader / Realtime / gate it restyles
   it("keeps the league-scoped server loader reusing buildVsField (the Prompt-04 helper)", () => {
     expect(loader).toContain("buildVsField");
     expect(loader).toContain('scope: "group_stage"'); // the season standing read is league-scoped
+    // Theme F holds at the source: no per-player score read enters the loader
+    expect(loader).not.toContain("scorePlayerMatch");
   });
 
   it("keeps the gate authenticated-league-member only — 401 (sign-in) / not-member (denied), no 403", () => {
     expect(page).toContain("getSessionManager()"); // the Prompt-07 session→manager resolve
     expect(page).toContain('redirect("/sign-in")'); // no session
     expect(page).toContain('redirect("/auth/denied")'); // not allow-listed / no linked manager
-    // league-scoped read: the outcome is gated only on kind !== "ok"; there is NO own-manager target to
-    // compare against, so no 403-not-your-manager path is introduced (the doc comment notes its absence).
     expect(page).toContain('outcome.kind !== "ok"');
   });
 });
@@ -118,12 +172,11 @@ describe("vsfield re-skin — colour + shape invariants (BRAND.md §1, ARCHITECT
   it("keeps vsfield.css gold-free — every hex is one of the two documented non-gold overrides", () => {
     // vsfield.css legitimately carries `--pos-gk` slate + `--node-played` steel-blue (the gold-removal
     // overrides ported from the design). Those are the ONLY hex literals allowed; any other hex — and in
-    // particular any amber/gold — would be a regression. (The pitch markings use rgba white, not hex.)
+    // particular any amber/gold — would be a regression. (Pitch markings + on-kit text use rgba, not
+    // hex; the jersey flag colors live in kitOf.ts as content imagery, like flag emoji.)
     const hexes = [...css.matchAll(/#[0-9a-fA-F]{3,8}\b/g)].map((m) => m[0].toLowerCase());
     const allowed = new Set(["#5e6e8c", "#6e86b4"]);
     for (const h of hexes) expect(allowed.has(h)).toBe(true);
-    // (a word-match on "gold" would false-positive on the file's own "No gold" comments — the hex
-    // allowlist above is the substantive guard: no amber/gold colour value can be present.)
   });
 
   it("stays AppShell-wrapped (brand from the shell) on the dark cobalt surface", () => {
