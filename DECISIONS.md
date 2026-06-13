@@ -41,8 +41,9 @@ untouched, fully reversible):
   (+1 ea), *player-level offsides* (−1/2 — only team-level offsides exists).
 - **KEEP via manual entry** (Cowork surface; a few per tournament): *penalty won* (+2),
   *penalty committed* (−2).
-- **REMAP**: *dispossessed* (−1/3) → feed-native **possession lost** (broader stat; the −1/3 rate
-  is kept, accepting that it now catches all careless giveaways, not only being tackled).
+- **REMAP**: *dispossessed* (−1/3) → feed-native **possession lost**, recalibrated to **−1/8**
+  (broader stat; `possession_lost` scales with touches/involvement, not only being tackled, so the
+  rate was softened from −1/3 to −1/8 to keep it a minor nudge rather than a per-giveaway penalty).
 
 ### Card-handling clarification (build thread — folded into SCORING.md §8)
 §8 left one point open: does a **second-yellow dismissal** also incur the first yellow's −1?

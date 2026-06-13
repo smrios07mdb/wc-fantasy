@@ -274,7 +274,7 @@ function penaltySaved(b: ScoreInputBundle, window: OnPitch): number {
   }).length;
 }
 
-/** Own goals (−2) charged to this player, from own-goal-flagged goal incidents. */
+/** Own goals (−4) charged to this player, from own-goal-flagged goal incidents. */
 function ownGoals(b: ScoreInputBundle): number {
   return b.events.filter((e) => !e.rescinded && isOwnGoalEvent(e) && e.playerId === b.playerId)
     .length;

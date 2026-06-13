@@ -101,7 +101,7 @@ _(threshold-gated sub-table removed in Prompt 29; dribbles, duels won, accurate 
 | Red card (min 0–29 / 30–59 / ≥60) | −4 / −3 / −2 |
 | Own goal | −4 |
 | ~~Offsides~~ → **dropped** (player-level n/a; only team-level exists) | ~~−1 / 2~~ |
-| ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 3 |
+| ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 8 _(was −1/3; recalibrated — possession_lost is BALLDONTLIE's BROAD turnover stat, not Sofascore "dispossessed", so it scales with touches; /8 keeps it a minor nudge)_ |
 
 **Card handling (clarification — additive; no suppression).** Each card row scores independently
 and is summed; a yellow is never removed because a later card followed. A player dismissed for a
@@ -140,8 +140,8 @@ field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 de
 - **❌ Dropped (no feed field; rare / low magnitude):** **clearance off the line (+2)**,
   **successful run-out (+1 each)**, **player-level offsides (−1/2)** (only team-level offsides
   exists; can't attribute to a player).
-- **🟡 Proxy:** **dispossessed (−1/3)** → `possession_lost` (broader than Sofascore "dispossessed",
-  so slightly over-counts; accepted).
+- **🟡 Proxy:** **dispossessed (−1/8)** → `possession_lost` (broader than Sofascore "dispossessed";
+  recalibrated −1/3 → −1/8 since it scales with touches, keeping it a minor nudge).
 - **⚠️ Confirm during the GOAT trial:** whether `duels_won` includes aerials (affects the duel
   bucket); own-goal `incident_class` label; that `match_shots.situation` flags `penalty` reliably.
 

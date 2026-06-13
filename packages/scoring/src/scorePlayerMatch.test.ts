@@ -514,12 +514,15 @@ describe("§8 Discipline & negatives", () => {
     expect(only(C.ownGoal, { ownGoals })).toBe(expected);
   });
 
+  // recalibrated −1/3 → −1/8 (broad feed turnover stat scales with involvement).
   it.each<[number, number]>([
-    [2, 0],
-    [3, -1],
-    [7, -2],
-    [9, -3],
-  ])("possession lost %s -> %s (−1/3, the dispossessed remap)", (possessionLost, expected) => {
+    [0, 0],
+    [7, 0],
+    [8, -1],
+    [15, -1],
+    [16, -2],
+    [24, -3],
+  ])("possession lost %s -> %s (−1/8, the dispossessed remap)", (possessionLost, expected) => {
     expect(only(C.possessionLost, { possessionLost })).toBe(expected);
   });
 
@@ -627,8 +630,8 @@ describe("locked amendments (SCORING.md amendment block / Theme A)", () => {
     expect(only(C.penaltyCommitted, { penaltyCommitted: 1 })).toBe(-2);
   });
 
-  it("REMAP: dispossessed is scored as possession_lost at −1/3", () => {
-    expect(only(C.possessionLost, { possessionLost: 6 })).toBe(-2);
+  it("REMAP: dispossessed is scored as possession_lost at −1/8", () => {
+    expect(only(C.possessionLost, { possessionLost: 16 })).toBe(-2);
   });
 });
 

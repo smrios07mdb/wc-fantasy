@@ -204,13 +204,14 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
     const pts = redCardPoints(input.redCardMinute);
     add(C.redCard, pts, `red card (${input.redCardMinute}′) → ${signed(pts)}`);
   }
-  // updated: own goal −2 → −4 per Prompt 29.
+  // own goal −4 (live value; Prompt 29).
   add(C.ownGoal, input.ownGoals * -4, `${input.ownGoals} own goal(s) × −4`);
-  // §8 remap: dispossessed → possession_lost (−1/3).
+  // §8 remap: dispossessed → possession_lost. Recalibrated −1/3 → −1/8: possession_lost is
+  // BALLDONTLIE's broad turnover stat (scales with touches), not Sofascore "dispossessed".
   add(
     C.possessionLost,
-    -floorPer(input.possessionLost, 3),
-    `${input.possessionLost} possession lost ÷ 3`,
+    -floorPer(input.possessionLost, 8),
+    `${input.possessionLost} possession lost ÷ 8`,
   );
 
   const total = lines.reduce((sum, line) => sum + line.points, 0);
