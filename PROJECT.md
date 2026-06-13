@@ -371,3 +371,12 @@ operator.)
 - **Playwright proof:** 75/75 assertions passed at 320/375/390/414 px (phone) + 768 px (desktop) across
   5 routes. Screenshots in `apps/web/screenshots/`. iOS safe-area/touch-ergonomics gated on real-device
   deploy pass.
+- **Per-page mobile fit closed — mobile sweep complete (Prompt 41).** The two pages whose content was
+  built wider than the viewport (and so *clipped* by the global backstop, not reflowed) now fit:
+  `/lineup` (the formation pitch column was pinned ~384 px by a bare-`1fr` grid track → `minmax(0,1fr)`
+  + token scaling 78→62→52 px; full XI in formation, tappable at 320 px) and `/pool` (auto-layout
+  leaderboard forced ~670 px by long names/emails → `table-layout:fixed`, MANAGER ellipsis-truncates,
+  PLAYED/CORRECT/POINTS fully visible, YOU row intact). Fixes live in per-route `lineup.css`/`pool.css`;
+  `ds.css` byte-identity untouched. **Proof (`verify-page-fit.mjs`) asserts element bounds** — every
+  `getBoundingClientRect()` within `[-1, clientWidth+1]` at 320/375/390/414 (8/8), not document
+  `scrollWidth` (which the backstop satisfies by clipping); screenshots eyeballed. Merge HELD for Chat.

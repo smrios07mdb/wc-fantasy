@@ -886,6 +886,14 @@ nothing live to stream. The live logic is a pure, IO-free `apps/web/src/pool/poo
 timers/visibility/clock — the draft `resilience.ts` / vsfield `liveController.ts` shape). The **dormant
 P40 `supabase_realtime` publication entry is left in place** (out of scope to remove).
 
+**Mobile leaderboard fit (Prompt 41):** `LeaderboardTable` renders `.dtable.pl-board`, whose default
+auto-layout is forced ~670 px wide by a long team name / email-address fallback in MANAGER (then clipped
+by the body backstop). `pool.css` (`≤480`) switches it to **`table-layout: fixed; width: 100%`**:
+`#`/PLAYED/CORRECT/POINTS hold narrow fixed widths, MANAGER takes the remainder and **truncates with an
+ellipsis on the cell's block child** (`td:nth-child(2) > *` — an inline `<b>` would still report full
+geometry past the viewport even when paint-clipped). `row-me` ("YOU") inherits the same fixed layout, so
+it never causes its own horizontal scroll.
+
 ---
 
 ## 13. Notifications — Web Push transport (Prompt 41a; triggers in 41b)
@@ -1069,6 +1077,17 @@ repo's first DOM test infra: `jsdom` (root devDep, where Vitest resolves the env
 `@testing-library/react` + `@testing-library/dom` (apps/web devDeps, sharing its React 19 instance),
 `oxc: { jsx: "automatic" }` + `.tsx` include globs in `vitest.config.ts`, and a per-file
 `// @vitest-environment jsdom` docblock so only component tests pay the jsdom cost (the rest stay Node).
+
+**Responsive pitch sizing (Prompt 41).** The set-lineup body is a grid (`.sl-body`); below 820 px it
+collapsed to a bare `1fr` column, which (= `minmax(auto,1fr)`) took its **min-content** from the 5-wide
+MID lane and so never shrank to a phone — the pitch column was pinned ~384 px wide and clipped at the
+viewport edge. `lineup.css` now uses **`minmax(0, 1fr)`** + `min-width:0` on `.sl-pitchcol`/`.sl-rail`
+(the 0 floor lets the column shrink to the viewport, the pitch's `overflow:hidden` + wrapping lanes
+reflow inside it), plus `≤480`/`≤360` blocks that scale the screen gutter, pitch padding, lane gap, and
+**player-token width (78→62→52 px)** so the full XI shows in a clean formation and stays tappable
+(`flex-wrap` on `.sl-lane` is the narrow-width safety net; the header rows — period/formation chips,
+LockHero — already `flex-wrap`). `TODO(confirm)`: ~52 px token at 320 px is the practical floor for a
+5-wide lane.
 
 ## 16. Lineup forfeit engine (C1)
 

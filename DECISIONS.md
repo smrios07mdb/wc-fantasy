@@ -1121,6 +1121,36 @@ landing hub.
   `viewportFit: 'cover'`. Real-device testing of the iOS home-indicator clearance is gated on deploy
   (Chromium cannot render the home indicator).
 
+## Per-page mobile fit (Prompt 41) — `/lineup` pitch + `/pool` leaderboard
+
+- **Page content must FIT the viewport — the global clip backstop is not a layout.** Prompt 40's
+  `html, body { overflow-x:hidden }` backstop *clips* nested overflow; it does **not** reflow it. So a
+  page whose content is *built* wider than the phone (a fixed-width pitch column, an auto-layout table)
+  is cut off at the edge, not contained. Each page is responsible for fitting its own content; the
+  backstop only stops the whole document sliding. Two pages were closed under this rule:
+  - **`/lineup` pitch scales to width.** The mobile body grid track was bare `1fr` (= `minmax(auto,1fr)`);
+    `auto` resolves to the column's **min-content**, which the 5-wide MID lane made wider than a phone, so
+    the pitch column never shrank and was clipped. Fix: **`minmax(0, 1fr)`** + `min-width:0` on
+    `.sl-pitchcol`/`.sl-rail` (the 0 floor lets the column shrink to the viewport), plus a `≤480`/`≤360`
+    block scaling the screen gutter, pitch padding, lane gap, and **token width (78→62→52 px)** so the full
+    XI shows in formation and stays tappable. `flex-wrap` on `.sl-lane` remains the narrow-width safety net.
+  - **`/pool` wide table truncates.** The default `.dtable` is auto-layout, so a long team name / an
+    email-address fallback in MANAGER forced the table ~670 px wide. Fix (`≤480`): **`table-layout:fixed`
+    + `width:100%`**; `#`/PLAYED/CORRECT/POINTS hold narrow fixed widths; **MANAGER takes the remainder and
+    truncates with an ellipsis** (prefer fit-with-ellipsis to horizontal-scrolling a leaderboard). The
+    ellipsis lives on the cell's **block child** (`td:nth-child(2) > *`) so the truncating box fills the
+    fixed cell — an inline child still reports full geometry past the viewport even when paint-clipped.
+- **Gate refinement — assert ELEMENT BOUNDS, not document `scrollWidth`.** The Prompt-40 check
+  (`documentElement.scrollWidth <= clientWidth`) passes even when content overflows inside a nested
+  container, because the backstop satisfies it by clipping. Prompt 41's proof
+  (`apps/web/scripts/verify-page-fit.mjs`) instead asserts **every element's `getBoundingClientRect()`
+  has `left >= -1` and `right <= clientWidth + 1`** at 320/375/390/414 — `getBoundingClientRect` reports
+  true geometry even under `overflow:hidden`, so it catches the clipped/nested overflow the document
+  check misses. Faithful `.sl-*`/`.pl-*` DOM + real CSS, no Next server (same isolation model as
+  `verify-mobile-nav.mjs`).
+- **Fixes live in per-route CSS (`lineup.css` / `pool.css`), never `ds.css`** — preserves the `ds.css`
+  byte-identity invariant across its global + per-route copies.
+
 ## Sign-in / Join skin (Prompt 21) — `/sign-in` + `/auth/denied` off Tailwind onto ds
 
 - **Architecture decision this prompt advances — `/sign-in` + `/auth/denied` join the ds-only set**
