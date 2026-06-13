@@ -13,8 +13,8 @@
  *     unrevealed individual pick is exposed — only per-manager counts.
  *
  * The group↔knockout split + every result derivation key off `period.kind` (NEVER `fifa_match.round`;
- * DECISIONS → Pool). `round` is used ONLY to feed the reused P38 `selectTournamentPhase`, whose own
- * documented contract reads `round` for the tournament-level phase.
+ * DECISIONS → Pool). As of Prompt 44 the reused `selectTournamentPhase` ALSO keys on `period.kind`
+ * (it no longer takes `round`), so this loader no longer touches `fifa_match.round` at all.
  */
 import { prisma } from "@app/db";
 import { derivePoolResult, type LeaderboardMatch, type PoolPick } from "@app/pool";
@@ -28,7 +28,6 @@ const MATCH_SELECT = {
   id: true,
   status: true,
   kickoffAt: true,
-  round: true,
   homeScore: true,
   awayScore: true,
   homeScoreEt: true,
@@ -123,7 +122,13 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
     };
   });
 
-  const phase = selectTournamentPhase(matchRows.map((m) => ({ status: m.status, round: m.round })));
+  const phase = selectTournamentPhase(
+    matchRows.map((m) => ({
+      status: m.status,
+      periodKind: m.period?.kind ?? null,
+      periodLabel: m.period?.label ?? null,
+    })),
+  );
 
   // The leaderboard projection: a LeaderboardMatch per fixture (result derivation + canonical label).
   const leaderboardMatches: LeaderboardMatch[] = matchRows.map((m) => ({

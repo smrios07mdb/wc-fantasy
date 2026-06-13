@@ -3,8 +3,9 @@
  * `DashboardData` the home page hydrates. Reuses `loadDraftRoom` DIRECTLY (no second source, no
  * re-derivation of draft state — the exact same shape that /draft reads). When the draft is
  * complete the loader ALSO:
- *   1. reads a minimal `fifa_match` summary (status + round + kickoffAt) to derive the tournament
- *      phase via the pure `selectTournamentPhase` selector (Prompt 38), and
+ *   1. reads a minimal `fifa_match` summary (status + period.kind/label + kickoffAt) to derive the
+ *      tournament phase via the pure `selectTournamentPhase` selector (Prompt 38; the group↔knockout
+ *      discriminator is `period.kind`, NEVER `fifa_match.round` — Prompt 44), and
  *   2. calls `loadVsField` READ-ONLY for the group-phase module data.
  *
  * No scoring/engine touch, no RLS bypass beyond the established loader posture.
@@ -47,8 +48,8 @@ export interface DashboardData {
  * Load the dashboard snapshot for the session manager. Reuses `loadDraftRoom` so the dashboard
  * reads the SAME authoritative data as /draft — no parallel reads, no stale divergence.
  *
- * When the draft is complete, additionally reads `fifa_match` (minimal: status, round, kickoffAt)
- * to derive the tournament phase, and calls `loadVsField` for the group phase module data.
+ * When the draft is complete, additionally reads `fifa_match` (minimal: status, period.kind/label,
+ * kickoffAt) to derive the tournament phase, and calls `loadVsField` for the group phase module data.
  */
 export async function loadDashboard(sessionManagerId: string): Promise<DashboardData> {
   const draft = await loadDraftRoom(sessionManagerId);
@@ -65,18 +66,26 @@ export async function loadDashboard(sessionManagerId: string): Promise<Dashboard
   }
 
   // Draft complete — derive tournament phase from fifa_match rows.
-  // The match query is READ-ONLY and minimal: only status + round for phase detection,
-  // plus kickoffAt for the pre-kickoff countdown (NOT used for phase logic).
+  // The match query is READ-ONLY and minimal: status + period.kind/label for phase detection (the
+  // group↔knockout discriminator is period.kind, NEVER fifa_match.round — the feed labels group games
+  // with the matchday number; Prompt 44), plus kickoffAt for the pre-kickoff countdown (NOT used for
+  // phase logic). round is no longer read.
   const matchRows = await prisma.fifaMatch.findMany({
-    select: { status: true, round: true, kickoffAt: true },
+    select: { status: true, kickoffAt: true, period: { select: { kind: true, label: true } } },
   });
 
-  const phase = selectTournamentPhase(matchRows);
+  const phase = selectTournamentPhase(
+    matchRows.map((m) => ({
+      status: m.status,
+      periodKind: m.period?.kind ?? null,
+      periodLabel: m.period?.label ?? null,
+    })),
+  );
 
   if (phase === "pre-kickoff") {
     // Find the earliest scheduled group kickoff for the real countdown display.
     const earliest = matchRows
-      .filter((m) => m.round === null && m.status === "scheduled")
+      .filter((m) => m.period?.kind === "group_md" && m.status === "scheduled")
       .sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime())[0];
     return {
       phase,

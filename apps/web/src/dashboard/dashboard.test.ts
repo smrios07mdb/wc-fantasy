@@ -208,19 +208,23 @@ describe("dashboard — selectTournamentPhase is pure, exhaustive, with never gu
     expect(tournamentSelector).toContain('"complete"');
   });
 
-  it("uses status + round fields only — no kickoffAt for phase detection", () => {
+  it("uses status + period.kind/label fields only — no kickoffAt for phase detection", () => {
     expect(tournamentSelector).toContain("status");
-    expect(tournamentSelector).toContain("round");
-    // Phase logic reads status/round; kickoffAt is NOT used in selectTournamentPhase.
+    expect(tournamentSelector).toContain("periodKind");
+    expect(tournamentSelector).toContain("periodLabel");
+    // Phase logic reads status + period.kind/label; kickoffAt is NOT used in selectTournamentPhase.
     expect(tournamentSelector).not.toContain("kickoffAt");
   });
 
-  it("distinguishes knockout matches by round !== null (not stage or periodId)", () => {
-    expect(tournamentSelector).toContain("round !== null");
+  it("distinguishes knockout matches by period.kind (not round / stage / periodId)", () => {
+    expect(tournamentSelector).toContain('periodKind === "knockout_round"');
+    // Prompt 44: the retired round-based discriminator is gone — the selector never reads m.round
+    // (the live feed labels group games with the matchday number, so round !== null mis-fires).
+    expect(tournamentSelector).not.toContain("m.round");
   });
 
   it("never returns complete for an in_progress Final (only completed)", () => {
-    expect(tournamentSelector).toContain('round === "Final"');
+    expect(tournamentSelector).toContain('periodLabel === "Final"');
     expect(tournamentSelector).toContain('status === "completed"');
   });
 });
@@ -249,7 +253,7 @@ describe("dashboard — loadDashboard P38 composition + vsField population", () 
   it("queries fifa_match for tournament phase + earliest kickoff — minimal select", () => {
     expect(loader38).toContain("prisma.fifaMatch.findMany");
     expect(loader38).toContain("status: true");
-    expect(loader38).toContain("round: true");
+    expect(loader38).toContain("period: { select: { kind: true, label: true } }");
     expect(loader38).toContain("kickoffAt: true");
   });
 
