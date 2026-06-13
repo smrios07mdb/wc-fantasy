@@ -35,6 +35,10 @@ import {
 export function playerPointsLookup(
   rows: { playerId: string; points: number }[],
 ): (playerId: string) => number {
+  // INVARIANT: at most one row per playerId in this read — `(matchId, playerId)` is the table's composite
+  // PK (`@@id([matchId, playerId])`) and a team plays exactly one match per period, so a player maps to one
+  // match. The Map's last-write-wins therefore never actually overwrites; it's a documented no-op, not an
+  // aggregation choice (duplicate (matchId, playerId) rows are impossible by the schema).
   const byPlayer = new Map(rows.map((r) => [r.playerId, r.points] as const));
   return (playerId) => byPlayer.get(playerId) ?? 0;
 }
