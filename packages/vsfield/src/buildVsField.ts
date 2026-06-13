@@ -121,6 +121,9 @@ export function buildVsField(input: BuildVsFieldInput): VsFieldView {
         nation: s.nation,
         role: s.role,
         state,
+        // Per-player points copied straight through (path a): the loader sourced them from
+        // score_player_match and resolved no-row → 0; buildVsField stays pure (no derivation/clock).
+        points: s.points,
         locked: s.locked,
       };
     });

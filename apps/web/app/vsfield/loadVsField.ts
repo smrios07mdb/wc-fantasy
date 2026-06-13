@@ -25,6 +25,20 @@ import {
   type VsFieldView,
 } from "@app/vsfield";
 
+/**
+ * Build a (playerId → points) lookup from the period's `score_player_match` rows, defaulting a player
+ * with no scored row to 0. PURE — this is the path-(a) join the loader applies per starter: a
+ * yet-to-play starter (or a live one with no row yet) reads 0; a played/live starter reads his real
+ * `score_player_match.points`. Extracted + exported so it is unit-tested without a live DB (the IO
+ * loader itself stays untested by design — same convention as loadDraftRoom's exported `toPlayer`).
+ */
+export function playerPointsLookup(
+  rows: { playerId: string; points: number }[],
+): (playerId: string) => number {
+  const byPlayer = new Map(rows.map((r) => [r.playerId, r.points] as const));
+  return (playerId) => byPlayer.get(playerId) ?? 0;
+}
+
 /** Build the whole-league vs-the-field snapshot for the league `viewerManagerId` belongs to. */
 export async function loadVsField(viewerManagerId: string): Promise<VsFieldView | null> {
   const viewer = await prisma.manager.findUnique({
@@ -90,7 +104,7 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
     ? Array.from(new Set([currentPeriod.id, ...groupMdPeriodIds]))
     : groupMdPeriodIds;
 
-  const [scoreRows, lineupRows, matchRows] = await Promise.all([
+  const [scoreRows, lineupRows, matchRows, playerScoreRows] = await Promise.all([
     scorePeriodIds.length
       ? prisma.scoreManagerPeriod.findMany({
           where: { periodId: { in: scorePeriodIds } },
@@ -106,8 +120,8 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
             role: true,
             lockedAt: true,
             // displayName + the fifa_team name (NEVER player.country — P34) make the drill-in XI
-            // identifiable. NO score_player_match read here: per-player points stay OUT of the SSR
-            // payload (Theme F); the box-score modal fetches a breakdown on demand.
+            // identifiable. Per-player points are joined from the whole-field score_player_match read
+            // below (path a) — SERVER-SIDE only; the box-score modal still serves the full breakdown.
             player: {
               select: { teamId: true, displayName: true, team: { select: { name: true } } },
             },
@@ -130,7 +144,21 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
           },
         })
       : Promise.resolve([]),
+    // Whole-field per-player points for the current period (Prompt 41, path a): the SAME owner-bypass
+    // source loadPlayerBox reads (score_player_match, joined to the period via match.periodId), but for
+    // every starter at once (~N×11 rows — trivial payload). SERVER-SIDE only — this introduces NO
+    // browser-direct read, NO RLS policy, NO publication entry, and NO migration; the points reach the
+    // client solely inside this server-computed snapshot. The browser's direct read scope is unchanged
+    // (still only score_manager_period + standing), so the live nudge→refetch carries the chip for free.
+    currentPeriod
+      ? prisma.scorePlayerMatch.findMany({
+          where: { match: { periodId: currentPeriod.id } },
+          select: { playerId: true, points: true },
+        })
+      : Promise.resolve([]),
   ]);
+  // Default a starter with no scored row (yet-to-play, or live-but-not-yet-appeared) to 0 points.
+  const pointsForPlayer = playerPointsLookup(playerScoreRows);
 
   const currentPeriodScores: ManagerPeriodPoints[] = currentPeriod
     ? scoreRows
@@ -155,6 +183,9 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
       // Lock-on-play READ predicate: locked only once the stamped instant has arrived (not presence
       // alone) — a future-dated stamp still reads movable (DECISIONS Theme B). Shares loadLineup's `now`.
       locked: isLockedNow(s.lockedAt, now),
+      // Path-(a) per-player points: real score_player_match.points for a played/live starter who has a
+      // scored row; 0 otherwise (yet-to-play, or live-but-not-yet-appeared). Browser never reads this.
+      points: pointsForPlayer(s.playerId),
     });
   }
 

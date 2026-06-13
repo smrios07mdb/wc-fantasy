@@ -25,8 +25,20 @@ const VIEW: VsFieldView = {
       rank: 1,
       points: 20,
       record: { w: 2, l: 0, d: 0 },
-      starters: [],
-      counts: { yetToPlay: 0, playing: 0, played: 0, noMatch: 0 },
+      // Prompt 41 (path a): the server-computed snapshot now carries per-player points; assert the
+      // authed read passes them through untouched (handleVsField is a pure gate, no transform).
+      starters: [
+        {
+          playerId: "p-alice-1",
+          name: "Played Star",
+          nation: "Brazil",
+          role: "FWD",
+          state: "played",
+          points: 12,
+          locked: true,
+        },
+      ],
+      counts: { yetToPlay: 0, playing: 0, played: 1, noMatch: 0 },
       h2hVsViewer: null,
     },
     {
@@ -88,6 +100,8 @@ describe("handleVsField — league-scoped read gate (401, no 403-not-your-manage
     // Loaded league-scoped for the viewer; the snapshot carries the whole field, not just the viewer.
     expect(loadSpy).toHaveBeenCalledWith("mgr-alice");
     expect((res.body as VsFieldView).field).toHaveLength(2);
+    // …and the per-player points ride along inside the server-composed snapshot (path a).
+    expect((res.body as VsFieldView).field[0]!.starters[0]!.points).toBe(12);
   });
 
   it("never returns 403-not-your-manager for a valid member (there is no own-manager target)", async () => {

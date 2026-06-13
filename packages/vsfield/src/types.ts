@@ -32,9 +32,12 @@ export interface CurrentPeriod {
  * `teamId` (= `player.team_id`) is the join key to the period's `fifa_match`; `locked` mirrors
  * `lineup_slot.locked_at !== null` (lock-on-play). `name` (= `player.display_name`) + `nation`
  * (= the `fifa_team.name` join, NEVER `player.country` — P34) make each starter identifiable so the
- * vsfield drill-in can render a named, tappable XI. Per-player POINTS are intentionally NOT carried
- * here (Theme F: the browser reads only `score_manager_period` + `standing`; the box-score modal
- * fetches a player's breakdown on demand via `GET /api/player-box`).
+ * vsfield drill-in can render a named, tappable XI. `points` (= `score_player_match.points` for the
+ * starter's match this period; 0 when no scored row exists yet) is the at-a-glance pitch chip value
+ * (Prompt 41, path a). It is composed SERVER-SIDE on the owner-bypass loader, so the browser's direct
+ * read scope is UNCHANGED (still only `score_manager_period` + `standing`) — the points reach the
+ * client exclusively inside the server-computed snapshot JSON (this supersedes the modal-only decision
+ * that kept per-player points out of the payload; the box-score modal still serves the full breakdown).
  */
 export interface StarterInput {
   playerId: string;
@@ -43,6 +46,8 @@ export interface StarterInput {
   role: Position;
   teamId: string | null;
   locked: boolean;
+  /** Live/banked points for the starter's match this period; 0 when no scored row exists yet. */
+  points: number;
 }
 
 /** A manager's starters for the current period. */
@@ -115,6 +120,13 @@ export interface StarterView {
   nation: string | null;
   role: Position;
   state: StarterState;
+  /**
+   * Per-player points for this period — the pitch "points chip" headline (Prompt 41, path a). Mapped
+   * verbatim from `StarterInput.points` (`score_player_match.points`); 0 for a yet-to-play starter or a
+   * live one with no scored row yet. Carried in the server-computed snapshot, NOT a browser-direct read
+   * (Theme F's real invariant — the browser's direct read scope — holds; the modal-only rule is revised).
+   */
+  points: number;
   locked: boolean;
 }
 

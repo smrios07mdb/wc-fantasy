@@ -68,6 +68,7 @@ const LINEUPS: ManagerLineupInput[] = [
         role: "GK",
         teamId: "teamX",
         locked: false,
+        points: 0, // scheduled · ytp → loader resolves no-row to 0
       }, // scheduled
       {
         playerId: "p1b",
@@ -76,6 +77,7 @@ const LINEUPS: ManagerLineupInput[] = [
         role: "DEF",
         teamId: "teamZ",
         locked: true,
+        points: 4, // in_progress · live with a scored row
       }, // in_progress
       {
         playerId: "p1c",
@@ -84,6 +86,7 @@ const LINEUPS: ManagerLineupInput[] = [
         role: "FWD",
         teamId: "teamP",
         locked: true,
+        points: 9, // completed · played
       }, // completed
     ],
   },
@@ -97,6 +100,7 @@ const LINEUPS: ManagerLineupInput[] = [
         role: "MID",
         teamId: "teamY",
         locked: false,
+        points: 0,
       },
     ], // scheduled
   },
@@ -298,14 +302,45 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
     ]);
   });
 
-  it("surfaces each starter's name + nation so the XI drill-in is identifiable (no per-player points)", () => {
+  it("surfaces each starter's name + nation + per-player points so the XI drill-in is identifiable", () => {
     const view = buildVsField(baseInput());
     const m1 = field(view, "m1").starters;
     expect(m1.map((s) => s.name)).toEqual(["Gianluigi Buffon", "Virgil van Dijk", "Kylian Mbappé"]);
     expect(m1.map((s) => s.nation)).toEqual(["Italy", "Netherlands", "France"]);
-    // Theme F: per-player points are NEVER carried in the snapshot — the box-score modal
-    // fetches a breakdown on demand. Assert the field simply does not exist on a starter.
-    expect(m1[0]).not.toHaveProperty("points");
+    // Prompt 41 (path a) supersedes the modal-only rule: per-player points ARE carried now (the loader
+    // sources them server-side from score_player_match; the browser's direct read scope is unchanged).
+    expect(m1[0]).toHaveProperty("points");
+  });
+
+  it("maps per-player points verbatim from input → output (played, live, and a no-row 0)", () => {
+    const view = buildVsField(baseInput());
+    // p1a scheduled→ytp (loader fed 0), p1b in_progress→live (4), p1c completed→played (9): copied as-is,
+    // no derivation/clock (purity). The 0-resolution for yet-to-play / live-but-no-row is the loader's
+    // map-lookup default (see playerPointsLookup); buildVsField faithfully carries whatever it is fed.
+    expect(field(view, "m1").starters.map((s) => s.points)).toEqual([0, 4, 9]);
+  });
+
+  it("carries a live starter with no scored row as 0 (the chip shows the dot + a 0, not a number gap)", () => {
+    const lineups: ManagerLineupInput[] = [
+      {
+        managerId: "m1",
+        // teamZ is in_progress (→ state 'playing') but the loader found no score_player_match row → 0.
+        starters: [
+          {
+            playerId: "z",
+            name: "Z",
+            nation: null,
+            role: "MID",
+            teamId: "teamZ",
+            locked: true,
+            points: 0,
+          },
+        ],
+      },
+    ];
+    const m1 = field(buildVsField(baseInput({ lineupsForPeriod: lineups })), "m1").starters;
+    expect(m1[0]!.state).toBe("playing");
+    expect(m1[0]!.points).toBe(0);
   });
 
   it("counts all starters as yet-to-play when every match is scheduled", () => {
@@ -313,8 +348,24 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
       {
         managerId: "m1",
         starters: [
-          { playerId: "a", name: "A", nation: null, role: "GK", teamId: "teamX", locked: false },
-          { playerId: "b", name: "B", nation: null, role: "DEF", teamId: "teamY", locked: false },
+          {
+            playerId: "a",
+            name: "A",
+            nation: null,
+            role: "GK",
+            teamId: "teamX",
+            locked: false,
+            points: 0,
+          },
+          {
+            playerId: "b",
+            name: "B",
+            nation: null,
+            role: "DEF",
+            teamId: "teamY",
+            locked: false,
+            points: 0,
+          },
         ],
       },
     ];
@@ -332,8 +383,24 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
       {
         managerId: "m1",
         starters: [
-          { playerId: "a", name: "A", nation: null, role: "GK", teamId: "teamP", locked: true },
-          { playerId: "b", name: "B", nation: null, role: "DEF", teamId: "teamQ", locked: true },
+          {
+            playerId: "a",
+            name: "A",
+            nation: null,
+            role: "GK",
+            teamId: "teamP",
+            locked: true,
+            points: 7,
+          },
+          {
+            playerId: "b",
+            name: "B",
+            nation: null,
+            role: "DEF",
+            teamId: "teamQ",
+            locked: true,
+            points: 2,
+          },
         ],
       },
     ];
@@ -354,8 +421,24 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
       {
         managerId: "m1",
         starters: [
-          { playerId: "a", name: "A", nation: null, role: "GK", teamId: null, locked: false }, // no team
-          { playerId: "b", name: "B", nation: null, role: "DEF", teamId: "teamX", locked: false }, // postponed
+          {
+            playerId: "a",
+            name: "A",
+            nation: null,
+            role: "GK",
+            teamId: null,
+            locked: false,
+            points: 0,
+          }, // no team
+          {
+            playerId: "b",
+            name: "B",
+            nation: null,
+            role: "DEF",
+            teamId: "teamX",
+            locked: false,
+            points: 0,
+          }, // postponed
           {
             playerId: "c",
             name: "C",
@@ -363,6 +446,7 @@ describe("buildVsField — starters yet to play (count grounded in §4 match sta
             role: "MID",
             teamId: "teamUNSEEDED",
             locked: false,
+            points: 0,
           }, // no fixture
         ],
       },
