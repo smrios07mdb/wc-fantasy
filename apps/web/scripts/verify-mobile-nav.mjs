@@ -17,6 +17,10 @@
  * Run:  node apps/web/scripts/verify-mobile-nav.mjs
  */
 
+/* eslint-disable no-undef */
+// The page.evaluate() callbacks run in the browser (Chromium), not Node.js.
+// document / getComputedStyle are browser globals, not Node globals — the
+// no-undef rule fires a false positive here; disable it for this file.
 import { chromium } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -255,7 +259,11 @@ async function main() {
 
       // Clean up temp HTML
       import("node:fs").then(({ unlinkSync }) => {
-        try { unlinkSync(tmpPath); } catch { /* ignore */ }
+        try {
+          unlinkSync(tmpPath);
+        } catch {
+          /* ignore */
+        }
       });
     }
   }
