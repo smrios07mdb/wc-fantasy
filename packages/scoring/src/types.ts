@@ -41,7 +41,15 @@ export interface ScoreInput {
   blockedShots: number;
   interceptions: number;
   tacklesWon: number;
-  /** §8 remap of "dispossessed" -> feed-native possession_lost (−1 per 3). */
+  /** §4 accumulators promoted from `extra` (feat/scoring-promote-lines): per-N floor buckets.
+   *  shots on target +1/3 (all), ball recoveries +1/5 (OUTFIELD only — gated like interceptions),
+   *  big chances created +1/1 (all), accurate crosses +1/4 (all), touches +1/25 (all). */
+  shotsOnTarget: number;
+  ballRecoveries: number;
+  bigChancesCreated: number;
+  crossesAccurate: number;
+  touches: number;
+  /** §8 remap of "dispossessed" -> feed-native possession_lost (−1 per 10). */
   possessionLost: number;
 
   // §5 Goalkeeping (scored only when `role === 'GK'`)
@@ -98,6 +106,11 @@ export const SCORE_CATEGORIES = {
   blockedShots: "blocked_shots",
   interceptions: "interceptions",
   tacklesWon: "tackles_won",
+  shotsOnTarget: "shots_on_target",
+  ballRecoveries: "ball_recoveries",
+  bigChancesCreated: "big_chances_created",
+  crossesAccurate: "crosses_accurate",
+  touches: "touches",
   saveInsideBox: "save_inside_box",
   saveOutsideBox: "save_outside_box",
   penaltySaved: "penalty_saved",

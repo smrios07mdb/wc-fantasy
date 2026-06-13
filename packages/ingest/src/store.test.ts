@@ -40,9 +40,9 @@ describe("MemoryIngestStore raw upserts", () => {
     expect(store.isDirty(1, 2)).toBe(true); // (b) re-dirtied
   });
 
-  it("round-trips `extra` through a stat write, and an event-only dirty re-mark leaves it intact", async () => {
-    // A real stat write carries the un-promoted feed fields into `extra`...
+  it("round-trips the five promoted columns + `extra` on create AND update; an event-only dirty re-mark leaves them intact", async () => {
     const store = new MemoryIngestStore();
+    // CREATE: a feed row carrying all five promoted fields + two STILL-un-promoted fields.
     await store.upsertStatLine(
       mapStatLine({
         match_id: 1,
@@ -50,25 +50,46 @@ describe("MemoryIngestStore raw upserts", () => {
         minutes_played: 90,
         goals: 1,
         shots_on_target: 3,
-        aerial_duels_won: 5,
-        expected_goals: 0.7,
+        ball_recoveries: 7,
+        big_chances_created: 1,
+        crosses_accurate: 2,
+        touches: 80,
+        aerial_duels_won: 5, // un-promoted → extra
+        expected_goals: 0.7, // un-promoted → extra
       } as never),
     );
-    expect(store.statLines()[0]?.extra).toEqual({
-      shots_on_target: 3,
-      aerial_duels_won: 5,
-      expected_goals: 0.7,
+    // (a) the five promoted fields land on their own StatLineRow columns...
+    expect(store.statLines()[0]).toMatchObject({
+      shotsOnTarget: 3,
+      ballRecoveries: 7,
+      bigChancesCreated: 1,
+      crossesAccurate: 2,
+      touches: 80,
     });
+    // (b) ...and `extra` carries ONLY the un-promoted fields — NONE of the five (omit-set proven).
+    expect(store.statLines()[0]?.extra).toEqual({ aerial_duels_won: 5, expected_goals: 0.7 });
 
-    // ...and a later event-only re-mark (the dirty-ONLY no-clobber path) must NOT null it out.
+    // UPDATE: a changed-value re-poll overwrites the promoted columns (and refreshes extra).
+    store.clearDirty(1, 2);
+    await store.upsertStatLine(
+      mapStatLine({
+        match_id: 1,
+        player_id: 2,
+        minutes_played: 90,
+        shots_on_target: 4,
+        touches: 95,
+        aerial_duels_won: 6,
+      } as never),
+    );
+    expect(store.statLines()[0]).toMatchObject({ shotsOnTarget: 4, touches: 95 });
+    expect(store.statLines()[0]?.extra).toEqual({ aerial_duels_won: 6 });
+    expect(store.isDirty(1, 2)).toBe(true);
+
+    // NO-CLOBBER: a later event-only re-mark (the dirty-ONLY path) must NOT null the columns or extra.
     store.clearDirty(1, 2);
     await store.markPlayersDirty(1, [2]);
-    expect(store.statLines()[0]).toMatchObject({ minutesPlayed: 90, goals: 1 });
-    expect(store.statLines()[0]?.extra).toEqual({
-      shots_on_target: 3,
-      aerial_duels_won: 5,
-      expected_goals: 0.7,
-    });
+    expect(store.statLines()[0]).toMatchObject({ shotsOnTarget: 4, touches: 95 });
+    expect(store.statLines()[0]?.extra).toEqual({ aerial_duels_won: 6 });
     expect(store.isDirty(1, 2)).toBe(true);
   });
 

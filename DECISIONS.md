@@ -41,9 +41,10 @@ untouched, fully reversible):
   (+1 ea), *player-level offsides* (−1/2 — only team-level offsides exists).
 - **KEEP via manual entry** (Cowork surface; a few per tournament): *penalty won* (+2),
   *penalty committed* (−2).
-- **REMAP**: *dispossessed* (−1/3) → feed-native **possession lost**, recalibrated to **−1/8**
+- **REMAP**: *dispossessed* (−1/3) → feed-native **possession lost**, recalibrated to **−1/10**
   (broader stat; `possession_lost` scales with touches/involvement, not only being tackled, so the
-  rate was softened from −1/3 to −1/8 to keep it a minor nudge rather than a per-giveaway penalty).
+  rate was softened from −1/3 → −1/8 → −1/10 to keep it a minor nudge rather than a per-giveaway
+  penalty — see the feat/scoring-promote-lines amendment below for the −1/8 → −1/10 step).
 
 ### Card-handling clarification (build thread — folded into SCORING.md §8)
 §8 left one point open: does a **second-yellow dismissal** also incur the first yellow's −1?
@@ -59,6 +60,38 @@ minute** (incl. `added_time`). **Feed→input requirement (recompute/ingestion p
 `match_events`→`ScoreInput` mapping must set the first-yellow signal alongside the second-yellow and
 classify a two-yellow dismissal as **second yellow, not red** (the `incident_class` confirm-in-code
 item, ARCHITECTURE §7). **No point values changed** — purely disambiguating; reversible.
+
+### ⚠️ AMENDMENT (feat/scoring-promote-lines — five new §4 lines + possession −1/8 → −1/10)
+
+Five `FIFAPlayerMatchStats` fields that the capture-extra-stats prompt had parked in
+`stat_player_match.extra` are **promoted to typed columns and given §4 scoring lines**, and the
+possession-lost rate is softened one more step. *Decisive reason:* a read-only pull of completed
+prior-tournament rows confirmed these fields are populated in the GOAT feed (they are not dead
+columns), so the ladder can reward involvement it was previously discarding.
+
+- **shots on target** — **+1 / 3**, all positions.
+- **ball recoveries** — **+1 / 5**, **outfield only** (gated exactly like interceptions/tackles — a
+  GK's recoveries are not rewarded, mirroring the existing defensive-bucket eligibility).
+- **big chances created** — **+1 / 1**, all positions (a created clear-cut chance is rare and
+  high-value, so it scores 1-for-1 rather than on a bucket).
+- **accurate crosses** — **+1 / 4**, all positions.
+- **touches** — **+1 / 25**, all positions (a gentle volume reward; 25-per-point keeps a busy 90′
+  worth ~3–4 at most).
+- **possession lost** recalibrated **−1/8 → −1/10** (continuation of the Theme-A REMAP rationale: it
+  scales with touches/involvement, so the softer divisor keeps it a minor nudge).
+
+**Aerials — considered and REJECTED.** `aerial_duels_won` is a strict subset of `duels_won` (already
+scored in §4), so a separate aerial line would double-count. Verified read-only against the live API
+(51-row completed-match sample, 13 rows with aerial data): **0 superset violations**, **non-negative
+remainders**, **aerial never present without duels**. `aerial_duels_won` / `aerial_duels_lost` stay in
+`extra`, **unscored**. This **resolves** the long-open "confirm whether `duels_won` includes aerials"
+feed question.
+
+**This is a scoring change** (unlike capture-extra-stats, which was pure data-capture): a feed
+re-ingest of completed matches (to populate the new columns) **then** a full recompute + standings
+restate are required. Mark stat rows `dirty` → the dirty sweep re-derives via the engine;
+`job:recompute` (forced restate) alone is insufficient (it only re-sums stored breakdowns). The
+participant gate is unchanged; no scoring path outside §1–§8 was added.
 
 ---
 

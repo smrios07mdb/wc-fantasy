@@ -98,6 +98,11 @@ export interface StatLineRow {
   punches: number | null;
   highClaims: number | null;
   possessionLost: number | null;
+  shotsOnTarget: number | null;
+  ballRecoveries: number | null;
+  bigChancesCreated: number | null;
+  crossesAccurate: number | null;
+  touches: number | null;
   /** Un-promoted feed fields, verbatim (see {@link buildStatExtra}). null when none. Unscored. */
   extra: Record<string, unknown> | null;
 }
@@ -130,6 +135,11 @@ const STAT_EXTRA_OMIT: ReadonlySet<string> = new Set([
   "punches",
   "high_claims",
   "possession_lost",
+  "shots_on_target",
+  "ball_recoveries",
+  "big_chances_created",
+  "crosses_accurate",
+  "touches",
   // identity / separate path
   "match_id",
   "player_id",
@@ -139,9 +149,9 @@ const STAT_EXTRA_OMIT: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * CATCH-ALL for the un-promoted FIFAPlayerMatchStats fields (xG/xA, shots_on_target, crosses, aerial
- * duels, fouls_committed, touches, ball_recoveries, big_chances, …). Every own key the feed actually
- * sent that isn't in {@link STAT_EXTRA_OMIT} is retained VERBATIM — including any field a future feed
+ * CATCH-ALL for the un-promoted FIFAPlayerMatchStats fields (expected_goals/assists, crosses_total,
+ * tackles, aerial_duels_won/lost, fouls_committed, big_chances_missed, …). Every own key the feed
+ * actually sent that isn't in {@link STAT_EXTRA_OMIT} is retained VERBATIM — including any field a future feed
  * edition adds (forward-compat, matching the schema comment). Values are kept as-sent (nulls retained);
  * only keys the feed didn't send are omitted. Empty result → null.
  */
@@ -183,6 +193,11 @@ export function mapStatLine(f: FIFAPlayerMatchStats): StatLineRow {
     punches: n(f.punches),
     highClaims: n(f.high_claims),
     possessionLost: n(f.possession_lost),
+    shotsOnTarget: n(f.shots_on_target),
+    ballRecoveries: n(f.ball_recoveries),
+    bigChancesCreated: n(f.big_chances_created),
+    crossesAccurate: n(f.crosses_accurate),
+    touches: n(f.touches),
     extra: buildStatExtra(f),
   };
 }

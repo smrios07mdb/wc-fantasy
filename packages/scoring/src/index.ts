@@ -139,6 +139,24 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
     `${input.longBallsAccurate} ÷ 2 accurate long balls`,
   ); // updated: ÷2 accurate long balls per Prompt 29
 
+  // §4 accumulators promoted from `extra` (feat/scoring-promote-lines) — per-N buckets, any player.
+  add(
+    C.shotsOnTarget,
+    floorPer(input.shotsOnTarget, 3),
+    `${input.shotsOnTarget} shots on target ÷ 3`,
+  );
+  add(
+    C.bigChancesCreated,
+    floorPer(input.bigChancesCreated, 1),
+    `${input.bigChancesCreated} big chances created ÷ 1`,
+  );
+  add(
+    C.crossesAccurate,
+    floorPer(input.crossesAccurate, 4),
+    `${input.crossesAccurate} accurate crosses ÷ 4`,
+  );
+  add(C.touches, floorPer(input.touches, 25), `${input.touches} touches ÷ 25`);
+
   // §4 Universal accumulators — OUTFIELD-only defensive buckets (role played ≠ GK).
   if (isOutfield) {
     add(C.clearances, floorPer(input.clearances, 5), `${input.clearances} clearances ÷ 5`);
@@ -149,6 +167,12 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
       `${input.interceptions} interceptions ÷ 3`,
     );
     add(C.tacklesWon, floorPer(input.tacklesWon, 3), `${input.tacklesWon} tackles won ÷ 3`);
+    // ball_recoveries is OUTFIELD-only (feat/scoring-promote-lines) — gated exactly like interceptions.
+    add(
+      C.ballRecoveries,
+      floorPer(input.ballRecoveries, 5),
+      `${input.ballRecoveries} ball recoveries ÷ 5`,
+    );
   }
 
   // §5 Goalkeeping — role played === GK.
@@ -206,12 +230,13 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
   }
   // own goal −4 (live value; Prompt 29).
   add(C.ownGoal, input.ownGoals * -4, `${input.ownGoals} own goal(s) × −4`);
-  // §8 remap: dispossessed → possession_lost. Recalibrated −1/3 → −1/8: possession_lost is
-  // BALLDONTLIE's broad turnover stat (scales with touches), not Sofascore "dispossessed".
+  // §8 remap: dispossessed → possession_lost. Recalibrated −1/8 → −1/10 (feat/scoring-promote-lines):
+  // possession_lost is BALLDONTLIE's broad turnover stat (scales with touches), not Sofascore
+  // "dispossessed"; a softer divisor keeps it a minor nudge rather than a per-giveaway penalty.
   add(
     C.possessionLost,
-    -floorPer(input.possessionLost, 8),
-    `${input.possessionLost} possession lost ÷ 8`,
+    -floorPer(input.possessionLost, 10),
+    `${input.possessionLost} possession lost ÷ 10`,
   );
 
   const total = lines.reduce((sum, line) => sum + line.points, 0);

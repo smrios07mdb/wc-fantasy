@@ -29,6 +29,11 @@ function base(overrides: Partial<ScoreInput> = {}): ScoreInput {
     blockedShots: 0,
     interceptions: 0,
     tacklesWon: 0,
+    shotsOnTarget: 0,
+    ballRecoveries: 0,
+    bigChancesCreated: 0,
+    crossesAccurate: 0,
+    touches: 0,
     possessionLost: 0,
     saves: 0,
     savesInsideBox: 0,
@@ -308,6 +313,69 @@ describe("§4 Universal accumulators — per-N buckets (dribbles, duels, passing
   });
 });
 
+describe("§4 accumulators promoted from `extra` (feat/scoring-promote-lines)", () => {
+  it.each<[number, number]>([
+    [2, 0],
+    [3, 1],
+    [6, 2],
+  ])("shots on target %s -> %s (+1/3, any role)", (shotsOnTarget, expected) => {
+    expect(only(C.shotsOnTarget, { shotsOnTarget })).toBe(expected);
+  });
+
+  it("big chances created are +1 each (+1/1, any role)", () => {
+    expect(only(C.bigChancesCreated, { bigChancesCreated: 2 })).toBe(2);
+  });
+
+  it.each<[number, number]>([
+    [3, 0],
+    [4, 1],
+    [8, 2],
+  ])("accurate crosses %s -> %s (+1/4, any role)", (crossesAccurate, expected) => {
+    expect(only(C.crossesAccurate, { crossesAccurate })).toBe(expected);
+  });
+
+  it.each<[number, number]>([
+    [24, 0],
+    [25, 1],
+    [50, 2],
+    [75, 3],
+  ])("touches %s -> %s (+1/25, any role)", (touches, expected) => {
+    expect(only(C.touches, { touches })).toBe(expected);
+  });
+
+  // ball_recoveries is OUTFIELD-only — gated exactly like interceptions / tackles.
+  it.each<[number, number]>([
+    [4, 0],
+    [5, 1],
+    [10, 2],
+  ])("ball recoveries %s -> %s (+1/5, outfield)", (ballRecoveries, expected) => {
+    expect(only(C.ballRecoveries, { role: "MID", ballRecoveries })).toBe(expected);
+  });
+
+  it("ball recoveries are NOT scored for a GK (the outfield gate)", () => {
+    expect(only(C.ballRecoveries, { role: "GK", ballRecoveries: 10 })).toBe(0);
+  });
+
+  it("all five promoted lines appear in breakdown_json with the correct points", () => {
+    const b = scorePlayerMatch(
+      base({
+        role: "MID",
+        shotsOnTarget: 3, // +1
+        ballRecoveries: 10, // +2
+        bigChancesCreated: 2, // +2
+        crossesAccurate: 8, // +2
+        touches: 50, // +2
+      }),
+    );
+    const byCat = new Map(b.lines.map((l) => [l.category, l.points]));
+    expect(byCat.get(C.shotsOnTarget)).toBe(1);
+    expect(byCat.get(C.ballRecoveries)).toBe(2);
+    expect(byCat.get(C.bigChancesCreated)).toBe(2);
+    expect(byCat.get(C.crossesAccurate)).toBe(2);
+    expect(byCat.get(C.touches)).toBe(2);
+  });
+});
+
 describe("§5 Goalkeeping (role played === GK)", () => {
   it.each<[number, number]>([
     [1, 0],
@@ -514,15 +582,15 @@ describe("§8 Discipline & negatives", () => {
     expect(only(C.ownGoal, { ownGoals })).toBe(expected);
   });
 
-  // recalibrated −1/3 → −1/8 (broad feed turnover stat scales with involvement).
+  // recalibrated −1/8 → −1/10 (feat/scoring-promote-lines; broad feed turnover stat scales with involvement).
   it.each<[number, number]>([
     [0, 0],
-    [7, 0],
-    [8, -1],
-    [15, -1],
-    [16, -2],
-    [24, -3],
-  ])("possession lost %s -> %s (−1/8, the dispossessed remap)", (possessionLost, expected) => {
+    [8, 0], // would be −1 under the old −1/8 — proves the recalibration to −1/10
+    [9, 0],
+    [10, -1],
+    [24, -2],
+    [25, -2],
+  ])("possession lost %s -> %s (−1/10, the dispossessed remap)", (possessionLost, expected) => {
     expect(only(C.possessionLost, { possessionLost })).toBe(expected);
   });
 
@@ -630,8 +698,9 @@ describe("locked amendments (SCORING.md amendment block / Theme A)", () => {
     expect(only(C.penaltyCommitted, { penaltyCommitted: 1 })).toBe(-2);
   });
 
-  it("REMAP: dispossessed is scored as possession_lost at −1/8", () => {
-    expect(only(C.possessionLost, { possessionLost: 16 })).toBe(-2);
+  it("REMAP: dispossessed is scored as possession_lost at −1/10 (recalibrated — no longer −1/8)", () => {
+    expect(only(C.possessionLost, { possessionLost: 25 })).toBe(-2); // −1/10
+    expect(only(C.possessionLost, { possessionLost: 8 })).toBe(0); // would be −1 under the retired −1/8
   });
 });
 

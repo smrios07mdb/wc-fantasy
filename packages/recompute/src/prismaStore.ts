@@ -106,6 +106,11 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
             punches: stat.punches,
             highClaims: stat.highClaims,
             possessionLost: stat.possessionLost,
+            shotsOnTarget: stat.shotsOnTarget,
+            ballRecoveries: stat.ballRecoveries,
+            bigChancesCreated: stat.bigChancesCreated,
+            crossesAccurate: stat.crossesAccurate,
+            touches: stat.touches,
           }
         : null;
 

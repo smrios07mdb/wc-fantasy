@@ -449,9 +449,10 @@ not by hopeful application code:
 
 **Raw feed layer (recompute inputs; upsert-keyed)**
 - `stat_player_match` — PK `(match_id, player_id)`; the promoted `FIFAPlayerMatchStats` columns the
-  scoring model consumes + minutes_played + updated_at. **Every un-promoted feed field is now RETAINED
-  verbatim in `extra` (JSONB)** — populated by `mapStatLine`'s catch-all (see §7); unscored, refreshed
-  on re-poll, available for future scoring lines.
+  scoring model consumes + minutes_played + updated_at. feat/scoring-promote-lines added five more
+  promoted columns (`shots_on_target`, `ball_recoveries`, `big_chances_created`, `crosses_accurate`,
+  `touches`). **The remaining 8 un-promoted feed fields are RETAINED verbatim in `extra` (JSONB)** —
+  populated by `mapStatLine`'s catch-all (see §7 / Appendix A); unscored, refreshed on re-poll.
 - `event_match` — feed event id; incident_type/class, time_minute, added_time, period,
   player_id, assist_player_id, player_in_id, player_out_id, rescinded.
 - `shot_match` — feed shot id; match_id, player_id, shot_type, situation, … (penalty detection).
@@ -645,7 +646,7 @@ directly or derive; six lines force a call (all minor/rare).**
 | Offsides (−1 / 2), player-level | only **team-level** `offsides` exists | **DROP** player-level |
 | Penalty won (+2) | not cleanly attributable from feed | **KEEP via manual entry** (admin surface) |
 | Penalty committed (−2) | not cleanly attributable from feed | **KEEP via manual entry** |
-| Dispossessed (−1 / 3) | no `dispossessed`; feed has `possession_lost` | **REMAP -> "Possession lost"** (broader; gentle −1/3) |
+| Dispossessed (−1 / 3) | no `dispossessed`; feed has `possession_lost` | **REMAP -> "Possession lost"** (broader; recalibrated −1/3 → −1/8 → −1/10) |
 
 ### ⚙️ Confirm-during-Code (not blockers)
 - **`blocked_shots` = defensive blocks — CONFIRMED** (a player blocking an opposing team's shot;
@@ -665,18 +666,25 @@ ladder is calibrated to Sofascore, so **the Sofascore scrape remains the primary
 a required component.** BALLDONTLIE's `rating` serves as the **automatic fallback** (resolver order
 `[manual, scrape, balldontlie]`), which improves resilience over the original "scrape or null."
 
-### 📦 Un-promoted stat fields — RETAINED in `stat_player_match.extra` (not discarded)
-The feed sends ~13 player-stat fields the current ladder does **not** score — `expected_goals`/
-`expected_assists`, `shots_on_target`, `crosses_total`/`crosses_accurate`, `tackles` (total),
-`aerial_duels_won`/`aerial_duels_lost`, `fouls_committed`, `touches`, `ball_recoveries`,
-`big_chances_created`/`big_chances_missed`. These are **no longer dropped on the floor**: `mapStatLine`
-(`packages/ingest`) carries **every own key the feed sends that isn't a promoted column or an identity
-field** into a catch-all `extra` (JSONB), values verbatim, and `upsertStatLine` writes it (refreshed on
-every re-poll, `null` when empty). This is a **CATCH-ALL by design** — a new field a future feed edition
-adds is retained automatically, no code change. It is **purely a data-capture change: the scoring engine
-does not read `extra`, so no scores change and no recompute is required.** (Aerial duels are the likely
-first consumer — a future scoring line reading `extra.aerial_duels_won`; already-completed matches won't
-carry `extra` until they're re-ingested.)
+### 📦 Promoted columns + the un-promoted catch-all (`stat_player_match.extra`)
+**PROMOTED COLUMNS (feat/scoring-promote-lines).** Five fields that previously lived only in `extra`
+now have their own typed nullable columns the recompute adapter reads + §4 scoring lines (see SCORING.md
+§4): `shots_on_target` (+1/3), `ball_recoveries` (+1/5, outfield), `big_chances_created` (+1/1),
+`crosses_accurate` (+1/4), `touches` (+1/25). `mapStatLine` maps each onto a `StatLineRow` column AND
+adds it to `STAT_EXTRA_OMIT` so it no longer lands in `extra`; `upsertStatLine` writes the five in both
+upsert branches. **This IS a scoring change** — a feed re-ingest of completed matches (to populate the
+columns) + a full recompute/standings restate are required (mark stat rows `dirty` → the dirty sweep
+re-derives via the engine; `job:recompute` alone only re-sums stored breakdowns).
+
+**RETAINED in `extra` (the remaining 8 un-promoted fields).** `expected_goals`, `expected_assists`,
+`crosses_total`, `tackles` (total), `aerial_duels_won`, `aerial_duels_lost`, `fouls_committed`,
+`big_chances_missed`. `mapStatLine` carries **every own key the feed sends that isn't a promoted column
+or an identity field** into a catch-all `extra` (JSONB), values verbatim, `null` when empty — a
+**CATCH-ALL by design**, so a field a future feed edition adds is retained automatically, no code change.
+The engine does not read `extra`; those eight stay unscored. **Aerials were considered and rejected** as
+a scoring line: `aerial_duels_won` ⊂ `duels_won` (already scored) — verified read-only against the live
+API (51-row sample: 0 superset violations, non-negative remainders, aerial never present without duels),
+so a separate aerial line would double-count. They remain in `extra` for reference only.
 
 ---
 

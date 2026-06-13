@@ -63,13 +63,20 @@ _(GK assist +4 → +5 in Prompt 29)_
 | Accurate passes | +1 / 15 | all |
 | Accurate long balls | +1 / 2 | all |
 | Was fouled | +1 / 3 | all |
+| Shots on target | +1 / 3 | all |
+| Big chances created | +1 / 1 | all |
+| Accurate crosses | +1 / 4 | all |
+| Touches | +1 / 25 | all |
 | Clearances | +1 / 5 | outfield |
 | Shots blocked | +1 / 2 | outfield |
 | Interceptions | +1 / 3 | outfield |
 | Tackles won | +1 / 3 | outfield |
+| Ball recoveries | +1 / 5 | outfield |
 | ~~Clearance off the line~~ → **dropped** (not in feed) | ~~+2~~ | all |
 
 _(threshold-gated sub-table removed in Prompt 29; dribbles, duels won, accurate passes, and accurate long balls converted to per-N floor-division buckets)_
+
+_(feat/scoring-promote-lines: shots on target, big chances created, accurate crosses, touches, and ball recoveries promoted out of `stat_player_match.extra` into typed columns and given the buckets above — ball recoveries is outfield-only, gated like interceptions/tackles. Aerials were considered and **rejected** — see §8 / Feed availability.)_
 
 ## 5. Goalkeeping — GK / role played
 | Stat | Rate |
@@ -101,7 +108,7 @@ _(threshold-gated sub-table removed in Prompt 29; dribbles, duels won, accurate 
 | Red card (min 0–29 / 30–59 / ≥60) | −4 / −3 / −2 |
 | Own goal | −4 |
 | ~~Offsides~~ → **dropped** (player-level n/a; only team-level exists) | ~~−1 / 2~~ |
-| ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 8 _(was −1/3; recalibrated — possession_lost is BALLDONTLIE's BROAD turnover stat, not Sofascore "dispossessed", so it scales with touches; /8 keeps it a minor nudge)_ |
+| ~~Dispossessed~~ → **Possession lost** (feed-native remap; broader) | −1 / 10 _(was −1/3 then −1/8; recalibrated again in feat/scoring-promote-lines — possession_lost is BALLDONTLIE's BROAD turnover stat, not Sofascore "dispossessed", so it scales with touches; /10 keeps it a minor nudge)_ |
 
 **Card handling (clarification — additive; no suppression).** Each card row scores independently
 and is summed; a yellow is never removed because a later card followed. A player dismissed for a
@@ -130,8 +137,9 @@ field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 de
   native `rating` = automatic fallback (provenance unknown). Resolver `[manual, scrape, balldontlie]`.
 - **✅ Native / direct (BALLDONTLIE):** minutes (§2), goals/assists (§3), key passes, dribbles,
   duels, passing, long balls, was fouled, clearances, shots blocked (defensive — confirmed),
-  interceptions, tackles won (§4), saves inside box, punches + high claims (§5), yellow & red cards
-  with minute (§8).
+  interceptions, tackles won, **shots on target, big chances created, accurate crosses, touches,
+  ball recoveries** (§4 — promoted from `extra` to typed columns in feat/scoring-promote-lines),
+  saves inside box, punches + high claims (§5), yellow & red cards with minute (§8).
 - **🟡 Derived:** save outside box (`saves − saves_inside_box`); penalty saved & penalty missed
   (from `match_shots` + on-pitch keeper); clean sheet & goals conceded (minutes + match score /
   event minutes); second yellow (card events + minute); own goal (`match_events` own-goal class).
@@ -140,10 +148,16 @@ field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 de
 - **❌ Dropped (no feed field; rare / low magnitude):** **clearance off the line (+2)**,
   **successful run-out (+1 each)**, **player-level offsides (−1/2)** (only team-level offsides
   exists; can't attribute to a player).
-- **🟡 Proxy:** **dispossessed (−1/8)** → `possession_lost` (broader than Sofascore "dispossessed";
-  recalibrated −1/3 → −1/8 since it scales with touches, keeping it a minor nudge).
-- **⚠️ Confirm during the GOAT trial:** whether `duels_won` includes aerials (affects the duel
-  bucket); own-goal `incident_class` label; that `match_shots.situation` flags `penalty` reliably.
+- **🟡 Proxy:** **dispossessed (−1/10)** → `possession_lost` (broader than Sofascore "dispossessed";
+  recalibrated −1/3 → −1/8 → −1/10 since it scales with touches, keeping it a minor nudge).
+- **✅ RESOLVED — aerials ⊂ duels (do NOT add an aerial line):** `duels_won` is the TOTAL (ground +
+  aerial); `aerial_duels_won` is a strict subset. Verified read-only against the live API (a 51-row
+  completed-match sample, 13 rows carrying aerial data): **0 superset violations** (`aerial_duels_won`
+  never exceeds `duels_won`), **non-negative remainders** (`duels_won − aerial_duels_won ≥ 0`), and
+  **aerial never present without duels**. A separate aerial line would double-count, so aerials stay
+  **UNSCORED**; `aerial_duels_won` / `aerial_duels_lost` are retained verbatim in `extra` for reference.
+- **⚠️ Confirm during the GOAT trial:** own-goal `incident_class` label; that
+  `match_shots.situation` flags `penalty` reliably.
 
 ---
 

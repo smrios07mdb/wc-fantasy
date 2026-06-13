@@ -40,6 +40,11 @@ function zeroStat(): StatRow {
     punches: 0,
     highClaims: 0,
     possessionLost: 0,
+    shotsOnTarget: 0,
+    ballRecoveries: 0,
+    bigChancesCreated: 0,
+    crossesAccurate: 0,
+    touches: 0,
   };
 }
 

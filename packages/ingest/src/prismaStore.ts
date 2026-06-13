@@ -130,6 +130,11 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
         punches: row.punches,
         highClaims: row.highClaims,
         possessionLost: row.possessionLost,
+        shotsOnTarget: row.shotsOnTarget,
+        ballRecoveries: row.ballRecoveries,
+        bigChancesCreated: row.bigChancesCreated,
+        crossesAccurate: row.crossesAccurate,
+        touches: row.touches,
         // Un-promoted feed fields (mapStatLine catch-all). null → SQL NULL (DbNull); refreshed on
         // re-poll like every other stat column. The dirty-stub CONFLICT path (markStatPlayerDirty,
         // dirty-ONLY) never reaches here, so it can never clobber a previously-written `extra`.

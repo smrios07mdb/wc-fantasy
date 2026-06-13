@@ -33,6 +33,11 @@ export interface StatRow {
   punches: number | null;
   highClaims: number | null;
   possessionLost: number | null;
+  shotsOnTarget: number | null;
+  ballRecoveries: number | null;
+  bigChancesCreated: number | null;
+  crossesAccurate: number | null;
+  touches: number | null;
 }
 
 /** `manual_stat_player_match`: the feed-gap fields the operator tags (penalty won/committed). */
@@ -341,6 +346,11 @@ export function buildScoreInput(b: ScoreInputBundle): ScoreInput {
     interceptions: n(s?.interceptions),
     tacklesWon: n(s?.tacklesWon),
     possessionLost: n(s?.possessionLost),
+    shotsOnTarget: n(s?.shotsOnTarget),
+    ballRecoveries: n(s?.ballRecoveries),
+    bigChancesCreated: n(s?.bigChancesCreated),
+    crossesAccurate: n(s?.crossesAccurate),
+    touches: n(s?.touches),
 
     saves: n(s?.saves),
     savesInsideBox: n(s?.savesInsideBox),

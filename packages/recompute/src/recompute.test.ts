@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scorePlayerMatch } from "@app/scoring";
+import { scorePlayerMatch, SCORE_CATEGORIES } from "@app/scoring";
 import { buildScoreInput, type ScoreInputBundle, type StatRow } from "./adapter";
 import { MemoryStore } from "./memoryStore";
 import {
@@ -34,6 +34,11 @@ function zeroStat(): StatRow {
     punches: 0,
     highClaims: 0,
     possessionLost: 0,
+    shotsOnTarget: 0,
+    ballRecoveries: 0,
+    bigChancesCreated: 0,
+    crossesAccurate: 0,
+    touches: 0,
   };
 }
 
@@ -149,6 +154,44 @@ describe("recomputePlayerMatch — non-participants are never scored (live MD1 i
 
     expect(store.writtenPlayerScore("mexsa", "pickford")).toBeUndefined();
     expect(store.writtenManagerScore("FENIX", "MD1")).toBe(0); // no negative drag
+  });
+});
+
+describe("recompute end-to-end — promoted §4 lines + possession −1/10 reach the manager-period (feat/scoring-promote-lines)", () => {
+  it("a completed fixture's player score shifts exactly as the new lines + −1/10 predict, and the manager-period restates", async () => {
+    const store = new MemoryStore();
+    // A MID this match: appearance +2, shots_on_target 3 → +1, ball_recoveries 10 → +2,
+    // big_chances_created 2 → +2, crosses_accurate 8 → +2, touches 50 → +2, possession_lost 24 → −2
+    // (−2 under the new −1/10; would be −3 under the retired −1/8). Hand-computed total = 9.
+    const b = makeBundle("p1", "MID", {
+      minutesPlayed: 90,
+      shotsOnTarget: 3,
+      ballRecoveries: 10,
+      bigChancesCreated: 2,
+      crossesAccurate: 8,
+      touches: 50,
+      possessionLost: 24,
+    });
+    store.seedPlayerMatch("m1", "p1", b);
+    store.seedManagerLeague("MGR", "L");
+    store.seedPeriod("MD1", { leagueId: "L", kind: "group_md" });
+    store.seedSlot("MGR", "MD1", "p1", true); // a started slot
+    store.seedPlaysIn("p1", "MD1", "m1");
+
+    await sweep(store);
+
+    const score = store.writtenPlayerScore("m1", "p1");
+    expect(score?.total).toBe(9);
+    const byCat = new Map((score?.lines ?? []).map((l) => [l.category, l.points]));
+    expect(byCat.get(SCORE_CATEGORIES.shotsOnTarget)).toBe(1);
+    expect(byCat.get(SCORE_CATEGORIES.ballRecoveries)).toBe(2);
+    expect(byCat.get(SCORE_CATEGORIES.bigChancesCreated)).toBe(2);
+    expect(byCat.get(SCORE_CATEGORIES.crossesAccurate)).toBe(2);
+    expect(byCat.get(SCORE_CATEGORIES.touches)).toBe(2);
+    expect(byCat.get(SCORE_CATEGORIES.possessionLost)).toBe(-2); // −1/10 (NOT −3 ⇒ −1/8 retired)
+
+    // the manager-period rolls the restated player score up (single started player)
+    expect(store.writtenManagerScore("MGR", "MD1")).toBe(9);
   });
 });
 

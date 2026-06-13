@@ -496,3 +496,40 @@ describe("buildPlayerBox — GK categories", () => {
     expect(roleSection?.lines.find((l) => l.category === "clean_sheet")).toBeTruthy();
   });
 });
+
+// ─── promoted §4 categories (feat/scoring-promote-lines) ───────────────────────
+
+describe("buildPlayerBox — promoted §4 categories render with complete CATEGORY_META", () => {
+  it("maps the five new categories into the Accumulators section (no line skipped as unmapped)", () => {
+    const v = buildPlayerBox(
+      makeInput({
+        score: {
+          points: 9,
+          breakdown: {
+            total: 9,
+            lines: [
+              { category: "shots_on_target", points: 1, detail: "3 shots on target ÷ 3" },
+              { category: "ball_recoveries", points: 2, detail: "10 ball recoveries ÷ 5" },
+              { category: "big_chances_created", points: 2, detail: "2 big chances created ÷ 1" },
+              { category: "crosses_accurate", points: 2, detail: "8 accurate crosses ÷ 4" },
+              { category: "touches", points: 2, detail: "50 touches ÷ 25" },
+            ],
+          },
+        },
+      }),
+    );
+    const acc = v.sections.find((s) => s.sectionLabel === "Accumulators");
+    expect(acc).toBeDefined();
+    const byCat = new Map((acc?.lines ?? []).map((l) => [l.category, l]));
+    expect(byCat.get("shots_on_target")).toMatchObject({ tag: "SOT", label: "Shots on target" });
+    expect(byCat.get("ball_recoveries")).toMatchObject({ tag: "REC", label: "Ball recoveries" });
+    expect(byCat.get("big_chances_created")).toMatchObject({
+      tag: "BCC",
+      label: "Big chances created",
+    });
+    expect(byCat.get("crosses_accurate")).toMatchObject({ tag: "CRS", label: "Accurate crosses" });
+    expect(byCat.get("touches")).toMatchObject({ tag: "TCH", label: "Touches" });
+    // every promoted line is mapped (none silently dropped) → the modal renders all five.
+    expect(acc?.lines).toHaveLength(5);
+  });
+});
