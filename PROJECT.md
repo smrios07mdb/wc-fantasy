@@ -322,3 +322,28 @@ Post-deploy visual confirmed on deploy 2026-06-12.
 scoring feed panel / mini-pitch coloring; live score refresh polling.
 
 `fix/lineup-boxscore-tap`, merge HELD for Chat review.
+
+**Vs-the-Field Direction-A reskin (`feat/vsfield-reskin`) — built, gates green, merge HELD.**
+Ports `design/design_handoff_vs_the_field/vsfield2` Direction A ("split cockpit") onto `/vsfield`:
+prominent leaderboard left rail, 2-fact CompareBand (Fact 3 deferred — Theme F, no per-player points in
+the SSR snapshot), dual flag-kit jersey XI pitches (new pure `kitOf.ts`, iso2-keyed via the shared flag
+mapper), net-new `.ma-*` mobile layout (leaderboard-first, local You/Opp toggle), `--kit-outline` global
+token (all five ds.css copies synced). Realtime/loader/gate byte-identical; `VsFieldClient` =
+layout + `effSel` state only. **1891 tests** (baseline 1874); typecheck/lint/format/test/`next build`
+all green. Visual proof: local production build (`next build` + `next start`), desktop 1280 + mobile
+375, dark + light, all 7 plan states (screenshots in `.screenshots-vsfield-reskin/`, untracked).
+Theme-F-safe (test-enforced: no per-player score renders on any token; no `score_player_match` read in
+the loader).
+
+**Horizon (vsfield reskin follow-ups):**
+- **Full WC2026 nation→kit gradient map** — `kitOf.ts` covers 8 nations; all others fall to neutral
+  `var(--surface-4)`. Design in progress via Claude Design.
+- **/lineup jersey introduction** — production lineup has NO jerseys today (PlayerAvatar discs);
+  adopting kits there is a feature build using the now-synced global `--kit-outline`.
+- **AppShell mobile topbar wraps at 375px** — pre-existing global shell issue (visible in the mobile
+  proof shots), separate fix, not vsfield-scoped.
+- **Confirm-to-close (post-deploy):** on live Render `/vsfield`, verify ConnPill = Live and
+  lock-on-play kit dimming render — the local harness cannot authenticate Supabase, so the proof shots
+  show the gated `LOADING` state by design.
+- **ds.css byte-identity now machine-enforced** across all four per-route copies (draft/vsfield/
+  _landing/lineup vs `styles/ds.css`) by the extended appShell test.

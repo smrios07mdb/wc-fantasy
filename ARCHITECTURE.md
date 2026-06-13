@@ -1196,3 +1196,30 @@ period change resets it to null; `PlayerScoreSheet` renders conditionally after 
 - **Scoring feed panel / mini-pitch coloring:** deferred; no scope in Prompt 52.
 - **Live score refresh:** `PlayerScoreSheet` fetches once on open; polling/Realtime update for
   in-progress matches is a follow-up.
+
+## §18 — Vs-the-Field Direction-A reskin (feat/vsfield-reskin)
+
+**Component vocabulary swap (`apps/web/app/vsfield/components.tsx`)** — removed: `FieldTable`,
+`FieldRow`, `H2HDetail`, `XIList`, `XINode`, `StarterStatePill` (+ `H2HResultChip`, absorbed into the
+leaderboard's `da-lb-wld` chip off `h2hVsViewer`). Added: `Leaderboard`/`LbRow` (228px left rail),
+`CompareBand` (Facts 1+2), `XIPanel`/`XIPitch`/`XIToken` (flag-kit jersey pitches), and the mobile tree
+`MaStandings`/`MaYou`/`MaRow`/`MaCompare`/`MaH2H`. Kept: `MatchStrip` (reclassed `.v2-match*`),
+`ConnPill`, `Pos`, `Avatar`, `useScorePulse`, `RecordBadge`, `PitchMini`/`XILegend` (the dot-node
+aggregate pitch), `YouVsField` (reclassed `.v2-agg`), `SeasonTable` (reclassed `.v2-season`).
+
+**New pure module `apps/web/app/vsfield/kitOf.ts`** — ISO2 → CSS-gradient jersey map (8 nations) +
+`kitOf(nation)`; reuses `toIso2`/`isHomeNation` from `src/draft/flag.ts` (no second nation table);
+fallback `var(--surface-4)`. Kits are multi-layer backgrounds — never `background-size: cover`
+(test-guarded).
+
+**Mechanism unchanged:** `liveController.ts` / `snapshotClient.ts` / `realtime.ts` /
+`loadVsField.ts` / `page.tsx` / `layout.tsx` / `packages/vsfield` are byte-identical.
+`VsFieldClient.tsx` changed ONLY in imports, the selection state, and layout JSX — the Realtime block
+(`startVsFieldLive` + `onAuthStateChange` INITIAL_SESSION/TOKEN_REFRESHED resubscribe + `fetchVsField`)
+has zero hunks.
+
+**Client state:** `effSel: string | null` replaces `selected` — `'field'` sentinel (aggregate view) |
+opponent managerId (UUID, collision-free) | null. Desktop resolves null → `'field'` and renders the
+split cockpit (`.da-body`); the mobile tree (`.ma-scroll`) keeps null as the leaderboard-first home and
+is swapped purely by a 760px media query (both trees render; no JS matchMedia, no hydration fork).
+`MaH2H` holds a local You/Opp `useState` for its single-pitch toggle.

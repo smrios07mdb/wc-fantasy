@@ -1923,3 +1923,45 @@ post-launch; until then any modal-style edit must touch both files. The literal 
 `.sl-sm-tracked-head`, `.sl-sm-tracked-row`, `.sl-sm-season`. (The shared copy is a SUBSET — the
 forfeit-section classes `.sl-sm-forfeit` / `.sl-sm-forfeit-msg` and the lineup-token classes
 `.sl-scorepill` / `.sl-forfeit-sheet` stay lineup-only, since vsfield renders neither.)
+## Vs-the-Field Direction-A reskin (feat/vsfield-reskin)
+
+**Decision: Direction A ("split cockpit") is the built direction; Direction B was NOT built.** The
+handoff's `vsfield2/` is the new design (the older `vsfield/` folder is the P11 reference it replaced);
+within it, `directionA.jsx` + `shared.jsx` + `mobile.jsx` are ported and the `.db-*` Direction-B CSS is
+dropped entirely.
+
+**Decision (F1): jersey kits are ISO2-keyed and resolve through the EXISTING flag mapper — no second
+nation table.** `kitOf.ts` rekeys the design's `JERSEY_BG_V2` from FIFA alpha-3 to ISO 3166-1 alpha-2
+and resolves `StarterView.nation` (the `fifa_team.name` join) via the shared `toIso2`
+(`src/draft/flag.ts`). England has no ISO2 code, so home nations resolve by NAME via `isHomeNation`
+first — the exact `<Flag>` precedent; Scotland (no kit in the 8-kit library) and every unmapped nation
+fall back to `var(--surface-4)`, never a broken kit.
+
+**Decision (F2): CompareBand ships Facts 1+2 only; Fact 3 (player-by-player lineup edge) is DEFERRED.**
+Fact 3 needs per-player points, which Theme F deliberately keeps out of the SSR snapshot — no
+`score_player_match` read enters `loadVsField`. The deferral is pinned by a `TODO(F2)` in
+`components.tsx` and test-enforced (no per-player score value renders on any jersey token).
+
+**Decision: LbRow (and every leaderboard/compare row) renders MANAGER identity — initials Avatar, NOT
+PlayerAvatar.** PlayerAvatar's flag badge is player/nation-scoped; managers have no nation. PlayerAvatar
+remains absent from vsfield components (test-enforced).
+
+**Decision: `--kit-outline` is a GLOBAL SHARED design token (vsfield + lineup), defined in
+`styles/ds.css` `:root` (dark `rgba(255,255,255,.82)`) + `[data-theme="light"]`
+(`rgba(20,28,42,.5)`), with ALL FIVE ds.css copies synced byte-identically** (the byte-identity
+invariant is now machine-enforced across all four per-route copies — see the appShell test). It is
+APPLIED only on vsfield in this build; lineup has no jerseys today (PlayerAvatar discs), so lineup kit
+adoption is a deferred feature, not a retrofit.
+
+**Decision: the jersey token class is `.sl-tok-jersey` scoped under `.da-pitch` — NEVER bare
+`.sl-tok`.** The design reuses lineup's `.sl-tok`/`.sl-tok-name` names, but lineup.css already owns
+those with different rules and Next.js route CSS persists across client navigation (both sheets can be
+live at once). Vsfield therefore uses vsfield-unique inner names (`.sl-jersey`, `.sl-jersey-name`,
+`.sl-jersey-state`) under the `.da-pitch` ancestor; on-kit text is rgba white with a dark halo in BOTH
+themes (the turf stays green in light mode — a theme-flipped text token would sink into the kit).
+
+**Decision: the FeedTicker stays a no-op stub.** It needs event-level feed data that is not in
+`VsFieldView`; the stub carries the data-gap TODO. The mobile You/Opp pitch toggle is a LOCAL
+`useState` in `MaH2H` (F3) — pure presentation, not Realtime-coupled. Selection state is `effSel`:
+the `'field'` sentinel | a managerId (UUIDs — no collision); desktop resolves null → `'field'`,
+mobile keeps null as the leaderboard-first home.

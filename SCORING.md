@@ -205,3 +205,8 @@ input: §1–§8 read `score_player_match` (rating, events, stats, shots) gated 
 gate, and forfeits realize through `is_starter` + `voided_at` — `locked_at` appears in neither. A slot reading
 locked-or-movable has **zero** effect on the points the engine computes or stores. The §1–§8 values, the rating
 ladder, position weighting, and the recompute pipeline are all untouched by this fix.
+
+---
+
+*Note (feat/vsfield-reskin): the Vs-the-Field Direction-A reskin is presentation-only — this document
+and the scoring engine are untouched; no scoring change.*
