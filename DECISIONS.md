@@ -1430,12 +1430,17 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
 
 ## Dashboard group phase (Prompt 38) — tournament phase, group modules, STOP seams
 
-- **Tournament phase derived from `fifa_match.status + round`; NO migration.** `round: String?`
-  (null = group-stage game, non-null = knockout round label e.g. "R32"/"QF"/"SF"/"Final") and
-  `kickoffAt` both pre-existed on `fifa_match`. No `ALTER TABLE` required.
-- **`selectTournamentPhase(matches[])` is IO-free and takes only `{status, round}`.** `kickoffAt`
-  is **excluded** from the selector's input — it carries no structural information about tournament
-  phase. `kickoffAt` is used only in the `loadDashboard` loader, solely to populate the
+- **Tournament phase derived from `fifa_match.status` + the linked `period.kind`/`period.label`; NO
+  migration.** `kickoffAt` and the `period` relation both pre-existed on `fifa_match`. No `ALTER TABLE`
+  required. ⚠️ **Corrected by Prompt 44 (dedicated section below):** the original P38 cut claimed
+  "`round` null = group-stage game, non-null = knockout round label". That is **FALSE against the live
+  feed** — `@app/ingest`'s `mapMatchRow` writes `round = round_name ?? String(round_number)`, so group
+  games carry the **matchday number ("1"/"2"/"3", NON-NULL)** in `round`, and a `round !== null` test
+  mis-classifies every group matchday as knockout. The group↔knockout discriminator is `period.kind`
+  (the same correction already recorded under Pool, below).
+- **`selectTournamentPhase(matches[])` is IO-free and takes only `{status, periodKind, periodLabel}`.**
+  `kickoffAt` is **excluded** from the selector's input — it carries no structural information about
+  tournament phase. `kickoffAt` is used only in the `loadDashboard` loader, solely to populate the
   pre-kickoff countdown display. No clock-based structural inference.
 - **Composed with `selectDashboardPhase` via a private `"post-draft"` intermediate.** The exported
   `DashboardPhase` union is the six-member `pre-draft | draft | pre-kickoff | group | playoff |
@@ -1453,6 +1458,26 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   bracket, no playoff-real data, no tournament-complete recap. `modulesFor("playoff")` and
   `modulesFor("complete")` both return `[]`; `PrimaryBanner` shows "Knockouts underway" /
   "Tournament complete" minimal content. Unblocked by a future Guillotine prompt..
+
+## Dashboard/Pool tournament-phase discriminator = `period.kind` (Prompt 44)
+
+- **`selectTournamentPhase` now keys group↔knockout on `period.kind`, NEVER `fifa_match.round`.** The
+  P38 selector decided the split on `round` (`round === null → group`, `round !== null → knockout`).
+  Verified against the live DB this is wrong: the BALLDONTLIE feed populates `round` with the
+  **matchday number** for group games (MD1 rows carry `round = "1"`, `in_progress`/`completed`), so a
+  group matchday fired the knockout branch and the dashboard rendered the **playoff interim during the
+  group stage**; Pool, which reuses the same selector, raised its knockout-bracket skeleton early too.
+- **The fix severs both surfaces from `fifa_match.round` entirely.** `TournamentMatchSummary` is now
+  `{ status, periodKind, periodLabel }`; the Final is detected by **`period.label === "Final"`** (the
+  canonical provisioning-stored label), not a `round` string. `loadDashboard` and `loadPool` both join
+  `fifa_match.periodId → period.kind`/`period.label` and feed the mapped shape; neither loader reads
+  `fifa_match.round` any more (`round` dropped from `loadDashboard`'s select and Pool's `MATCH_SELECT`).
+  `loadDashboard`'s earliest-group-kickoff filter also moved from `round === null` to
+  `period.kind === "group_md"`.
+- **Same `period.kind`-is-the-discriminator learning already locked under Pool (Prompt 40).**
+  `selectTournamentPhase` was the one holdout that still trusted `round`; Prompt 44 closes it.
+  `periodKind === null` (period not yet linked) advances no phase — a kicked-off-but-unseeded match
+  stays `pre-kickoff` rather than being guessed. No migration; pure-selector + two thin loaders + tests.
 
 ## Profile rename / Settings route (Prompt 39)
 

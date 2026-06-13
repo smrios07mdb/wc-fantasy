@@ -803,12 +803,15 @@ and `export const dynamic = "force-dynamic"` are **byte-for-byte unchanged**. `/
 `modulesFor(phase: DashboardPhase)` in `Dashboard.tsx` — adding a seventh member is a compile
 error until handled.
 
-**`selectTournamentPhase(matches: ReadonlyArray<{status, round}>): TournamentPhase`** —
-pure, IO-free. Composition point is `loadDashboard.ts`: when `selectDashboardPhase` returns
-`"post-draft"`, the loader queries `fifa_match` (`status`, `round`, `kickoffAt` — SELECT only,
-no write) and calls `selectTournamentPhase`. The `fifaMatch` table is global (no `league_id`);
-the read is inside the authenticated server loader, gated by `requireManager` upstream in
-`page.tsx`. No RLS bypass, no engine/scoring touch.
+**`selectTournamentPhase(matches: ReadonlyArray<{status, periodKind, periodLabel}>): TournamentPhase`**
+— pure, IO-free. Group↔knockout keys on **`period.kind`** (`group_md` vs `knockout_round`) and the
+Final is detected by **`period.label === "Final"`** — NEVER `fifa_match.round` (the feed labels group
+games with the matchday number, so `round !== null` mis-fires; Prompt 44, DECISIONS → Pool /
+tournament-phase discriminator). Composition point is `loadDashboard.ts`: when `selectDashboardPhase`
+returns `"post-draft"`, the loader queries `fifa_match` (`status`, `kickoffAt`, and the linked
+`period.kind`/`period.label` — SELECT only, no write) and calls `selectTournamentPhase`. The `fifaMatch`
+table is global (no `league_id`); the read is inside the authenticated server loader, gated by
+`requireManager` upstream in `page.tsx`. No RLS bypass, no engine/scoring touch.
 
 **Group phase data path:** when phase is `"group"`, `loadDashboard` calls
 `loadVsField(sessionManagerId)` **READ-ONLY** — reuses the already-built `@app/vsfield` output

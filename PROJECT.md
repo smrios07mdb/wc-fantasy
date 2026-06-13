@@ -380,3 +380,31 @@ operator.)
   `ds.css` byte-identity untouched. **Proof (`verify-page-fit.mjs`) asserts element bounds** — every
   `getBoundingClientRect()` within `[-1, clientWidth+1]` at 320/375/390/414 (8/8), not document
   `scrollWidth` (which the backstop satisfies by clipping); screenshots eyeballed. Merge HELD for Chat.
+
+## Dashboard/Pool tournament-phase discriminator → `period.kind` (Prompt 44 — `fix/dashboard-phase-discriminator`, HOLD for clearance)
+
+- **Bug (verified against the live DB):** `selectTournamentPhase` decided group-vs-knockout on
+  `fifa_match.round` (`round === null → group`, `round !== null → knockout`). The live BALLDONTLIE feed
+  populates `round` with the **matchday number** for group games — MD1 rows carry `round = "1"` with
+  `in_progress`/`completed` status — so the selector's playoff branch fired and the dashboard rendered
+  the **knockout interim while the tournament was still in the group stage**. Pool reuses the same
+  selector, so it raised its knockout-bracket skeleton early too.
+- **Fix:** `selectTournamentPhase` now keys on `period.kind` (`group_md`/`knockout_round`) and detects
+  the Final by `period.label === "Final"`; `TournamentMatchSummary` is now `{ status, periodKind,
+  periodLabel }`. `loadDashboard` + `loadPool` join `fifa_match.periodId → period.kind`/`period.label`
+  and feed the mapped shape — `round` dropped from `loadDashboard`'s select and Pool's `MATCH_SELECT`;
+  neither surface touches `fifa_match.round` any more. `loadDashboard`'s earliest-group-kickoff filter
+  moved from `round === null` to `period.kind === "group_md"`. `periodKind === null` (period not linked)
+  advances no phase. No migration; pure-selector + two thin loaders. This closes the one holdout that
+  still trusted `round` — the rest of the system (locking / recompute / period-close / Pool engine)
+  already keyed on `period.kind` (DECISIONS → Pool).
+- **Tests (delta +4):** rewrote `selectTournamentPhase.test.ts` onto the `period.kind` shape (new `m()`
+  helper; all precedence + exhaustiveness cases re-expressed) and **added** a Prompt-44 live-MD1
+  regression `describe` proving `group_md` in_progress/completed + scheduled knockouts → `"group"` (not
+  `"playoff"`), plus matchday-style-label, lone-scheduled-knockout, and unlinked-period cases.
+  `selectDashboardCompose.test.ts` helper type + cases translated. `dashboard.test.ts` P38
+  source-contract assertions updated (`periodKind === "knockout_round"`, `periodLabel === "Final"`,
+  `period: { select: { kind: true, label: true } }`). `poolContracts.test.ts` green unchanged.
+- **Gates:** `pnpm -w typecheck && pnpm lint && pnpm format:check && pnpm test` all green. **1949 tests
+  passed** (140 files; baseline 1945, +4). Live-deploy proof (group dashboard on `/`, no knockout
+  bracket on `/pool`) gated on deploy; merge HELD for Chat clearance.
