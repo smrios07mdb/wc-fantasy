@@ -40,6 +40,38 @@ describe("MemoryIngestStore raw upserts", () => {
     expect(store.isDirty(1, 2)).toBe(true); // (b) re-dirtied
   });
 
+  it("round-trips `extra` through a stat write, and an event-only dirty re-mark leaves it intact", async () => {
+    // A real stat write carries the un-promoted feed fields into `extra`...
+    const store = new MemoryIngestStore();
+    await store.upsertStatLine(
+      mapStatLine({
+        match_id: 1,
+        player_id: 2,
+        minutes_played: 90,
+        goals: 1,
+        shots_on_target: 3,
+        aerial_duels_won: 5,
+        expected_goals: 0.7,
+      } as never),
+    );
+    expect(store.statLines()[0]?.extra).toEqual({
+      shots_on_target: 3,
+      aerial_duels_won: 5,
+      expected_goals: 0.7,
+    });
+
+    // ...and a later event-only re-mark (the dirty-ONLY no-clobber path) must NOT null it out.
+    store.clearDirty(1, 2);
+    await store.markPlayersDirty(1, [2]);
+    expect(store.statLines()[0]).toMatchObject({ minutesPlayed: 90, goals: 1 });
+    expect(store.statLines()[0]?.extra).toEqual({
+      shots_on_target: 3,
+      aerial_duels_won: 5,
+      expected_goals: 0.7,
+    });
+    expect(store.isDirty(1, 2)).toBe(true);
+  });
+
   it("events/shots/team writes don't dirty by themselves — markPlayersDirty does", async () => {
     const store = new MemoryIngestStore();
     await store.upsertEvent({

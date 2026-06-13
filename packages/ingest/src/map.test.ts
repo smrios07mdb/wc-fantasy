@@ -57,6 +57,92 @@ describe("mapStatLine", () => {
     expect(() => mapStatLine({ match_id: 1 } as never)).toThrow(FeedShapeMismatchError);
     expect(() => mapStatLine({ player_id: 2 } as never)).toThrow(/match_id/);
   });
+
+  it("retains un-promoted feed fields verbatim in `extra` (incl. an unknown forward-compat field)", () => {
+    const row = mapStatLine({
+      match_id: 1,
+      player_id: 2,
+      // identity / separate-path — must NOT land in extra
+      team_id: 7,
+      is_home: true,
+      rating: 7.8,
+      // promoted columns — handled by their own columns, must NOT land in extra
+      goals: 1,
+      possession_lost: 9,
+      // un-promoted feed fields — these ARE the payload extra exists for
+      expected_goals: 0.42,
+      expected_assists: 0.1,
+      shots_on_target: 3,
+      crosses_total: 5,
+      crosses_accurate: 2,
+      tackles: 4,
+      aerial_duels_won: 6,
+      aerial_duels_lost: 1,
+      fouls_committed: 2,
+      touches: 88,
+      ball_recoveries: 7,
+      big_chances_created: 1,
+      big_chances_missed: 0,
+      // a field the feed didn't have when this code was written — must survive untouched
+      teleport_assists: 3,
+    } as never);
+
+    // every un-promoted field is present with its exact value
+    expect(row.extra).toEqual({
+      expected_goals: 0.42,
+      expected_assists: 0.1,
+      shots_on_target: 3,
+      crosses_total: 5,
+      crosses_accurate: 2,
+      tackles: 4,
+      aerial_duels_won: 6,
+      aerial_duels_lost: 1,
+      fouls_committed: 2,
+      touches: 88,
+      ball_recoveries: 7,
+      big_chances_created: 1,
+      big_chances_missed: 0,
+      teleport_assists: 3, // forward-compat: an unknown field is retained
+    });
+    // no promoted column nor identity field leaks into extra
+    for (const leaked of [
+      "match_id",
+      "player_id",
+      "team_id",
+      "is_home",
+      "rating",
+      "goals",
+      "possession_lost",
+    ]) {
+      expect(row.extra).not.toHaveProperty(leaked);
+    }
+  });
+
+  it("keeps an explicit null value but omits keys the feed didn't send", () => {
+    const row = mapStatLine({
+      match_id: 1,
+      player_id: 2,
+      expected_goals: null, // sent, but null → retained as null
+      // shots_on_target absent → must NOT appear as a key
+    } as never);
+    expect(row.extra).toEqual({ expected_goals: null });
+    expect(row.extra).not.toHaveProperty("shots_on_target");
+  });
+
+  it("returns null `extra` when only promoted + identity keys are present", () => {
+    const row = mapStatLine({
+      match_id: 1,
+      player_id: 2,
+      team_id: 7,
+      is_home: false,
+      rating: 6.5,
+      minutes_played: 90,
+      goals: 0,
+      saves: 4,
+      possession_lost: 12,
+    });
+    expect(row.extra).toBeNull();
+  });
 });
 
 describe("mapRating", () => {

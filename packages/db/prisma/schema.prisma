@@ -651,7 +651,9 @@ model StatPlayerMatch {
   punches           Int?
   highClaims        Int?     @map("high_claims")
   possessionLost    Int?     @map("possession_lost")
-  /// Any additional FIFAPlayerMatchStats fields not promoted to columns.
+  /// Un-promoted FIFAPlayerMatchStats fields (xG/xA, shots_on_target, crosses, aerial duels,
+  /// fouls_committed, touches, ball_recoveries, big_chances) retained verbatim by mapStatLine —
+  /// available for future scoring lines; not read by the engine today.
   extra             Json?
   /// Recompute marker: true when this input changed and the score is stale.
   dirty             Boolean  @default(true)

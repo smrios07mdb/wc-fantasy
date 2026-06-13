@@ -98,6 +98,62 @@ export interface StatLineRow {
   punches: number | null;
   highClaims: number | null;
   possessionLost: number | null;
+  /** Un-promoted feed fields, verbatim (see {@link buildStatExtra}). null when none. Unscored. */
+  extra: Record<string, unknown> | null;
+}
+
+/**
+ * Feed keys that already have a home and must NEVER leak into `extra`: every promoted scoring column
+ * (mapped above) plus the identity / separate-path fields (ids handled here; rating via mapRating).
+ */
+const STAT_EXTRA_OMIT: ReadonlySet<string> = new Set([
+  // promoted columns
+  "minutes_played",
+  "goals",
+  "assists",
+  "key_passes",
+  "dribbles_attempted",
+  "dribbles_completed",
+  "duels_won",
+  "duels_lost",
+  "passes_total",
+  "passes_accurate",
+  "long_balls_total",
+  "long_balls_accurate",
+  "was_fouled",
+  "clearances",
+  "interceptions",
+  "tackles_won",
+  "blocked_shots",
+  "saves",
+  "saves_inside_box",
+  "punches",
+  "high_claims",
+  "possession_lost",
+  // identity / separate path
+  "match_id",
+  "player_id",
+  "team_id",
+  "is_home",
+  "rating",
+]);
+
+/**
+ * CATCH-ALL for the un-promoted FIFAPlayerMatchStats fields (xG/xA, shots_on_target, crosses, aerial
+ * duels, fouls_committed, touches, ball_recoveries, big_chances, …). Every own key the feed actually
+ * sent that isn't in {@link STAT_EXTRA_OMIT} is retained VERBATIM — including any field a future feed
+ * edition adds (forward-compat, matching the schema comment). Values are kept as-sent (nulls retained);
+ * only keys the feed didn't send are omitted. Empty result → null.
+ */
+function buildStatExtra(f: FIFAPlayerMatchStats): Record<string, unknown> | null {
+  const extra: Record<string, unknown> = {};
+  for (const key of Object.keys(f)) {
+    if (STAT_EXTRA_OMIT.has(key)) continue;
+    const value = f[key];
+    if (value === undefined) continue; // a key the feed didn't send (keep explicit nulls)
+    extra[key] = value;
+  }
+  return Object.keys(extra).length > 0 ? extra : null;
 }
 
 export function mapStatLine(f: FIFAPlayerMatchStats): StatLineRow {
@@ -127,6 +183,7 @@ export function mapStatLine(f: FIFAPlayerMatchStats): StatLineRow {
     punches: n(f.punches),
     highClaims: n(f.high_claims),
     possessionLost: n(f.possession_lost),
+    extra: buildStatExtra(f),
   };
 }
 

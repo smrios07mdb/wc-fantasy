@@ -448,8 +448,10 @@ not by hopeful application code:
   configurable; default `first_kickoff − lead`) + the idempotency latch (Theme-D amendment).
 
 **Raw feed layer (recompute inputs; upsert-keyed)**
-- `stat_player_match` — PK `(match_id, player_id)`; all `FIFAPlayerMatchStats` fields +
-  minutes_played + updated_at.
+- `stat_player_match` — PK `(match_id, player_id)`; the promoted `FIFAPlayerMatchStats` columns the
+  scoring model consumes + minutes_played + updated_at. **Every un-promoted feed field is now RETAINED
+  verbatim in `extra` (JSONB)** — populated by `mapStatLine`'s catch-all (see §7); unscored, refreshed
+  on re-poll, available for future scoring lines.
 - `event_match` — feed event id; incident_type/class, time_minute, added_time, period,
   player_id, assist_player_id, player_in_id, player_out_id, rescinded.
 - `shot_match` — feed shot id; match_id, player_id, shot_type, situation, … (penalty detection).
@@ -662,6 +664,19 @@ positions). But its **provenance is unknown**, so it is **not** adopted as prima
 ladder is calibrated to Sofascore, so **the Sofascore scrape remains the primary rating source and
 a required component.** BALLDONTLIE's `rating` serves as the **automatic fallback** (resolver order
 `[manual, scrape, balldontlie]`), which improves resilience over the original "scrape or null."
+
+### 📦 Un-promoted stat fields — RETAINED in `stat_player_match.extra` (not discarded)
+The feed sends ~13 player-stat fields the current ladder does **not** score — `expected_goals`/
+`expected_assists`, `shots_on_target`, `crosses_total`/`crosses_accurate`, `tackles` (total),
+`aerial_duels_won`/`aerial_duels_lost`, `fouls_committed`, `touches`, `ball_recoveries`,
+`big_chances_created`/`big_chances_missed`. These are **no longer dropped on the floor**: `mapStatLine`
+(`packages/ingest`) carries **every own key the feed sends that isn't a promoted column or an identity
+field** into a catch-all `extra` (JSONB), values verbatim, and `upsertStatLine` writes it (refreshed on
+every re-poll, `null` when empty). This is a **CATCH-ALL by design** — a new field a future feed edition
+adds is retained automatically, no code change. It is **purely a data-capture change: the scoring engine
+does not read `extra`, so no scores change and no recompute is required.** (Aerial duels are the likely
+first consumer — a future scoring line reading `extra.aerial_duels_won`; already-completed matches won't
+carry `extra` until they're re-ingested.)
 
 ---
 

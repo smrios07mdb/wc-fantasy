@@ -6,7 +6,7 @@
  * store's behavioural tests (idempotency, dirty, locking).
  */
 import type { PrismaClient, MatchStatus, PeriodKind, Position } from "@app/db";
-import { markStatPlayerDirty } from "@app/db";
+import { markStatPlayerDirty, Prisma } from "@app/db";
 import type { IngestStore, SchedulableMatch } from "./store";
 import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
 import { isLockWriteAuthorized } from "./lock";
@@ -130,6 +130,10 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
         punches: row.punches,
         highClaims: row.highClaims,
         possessionLost: row.possessionLost,
+        // Un-promoted feed fields (mapStatLine catch-all). null → SQL NULL (DbNull); refreshed on
+        // re-poll like every other stat column. The dirty-stub CONFLICT path (markStatPlayerDirty,
+        // dirty-ONLY) never reaches here, so it can never clobber a previously-written `extra`.
+        extra: row.extra === null ? Prisma.DbNull : (row.extra as unknown as Prisma.InputJsonValue),
         dirty: true,
       };
       await prisma.statPlayerMatch.upsert({
