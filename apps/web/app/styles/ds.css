@@ -91,6 +91,7 @@
   --ring-focus: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--accent-ring);
 
   --pitch-1: #0E3D2A; --pitch-2: #0B3322; /* formation pitch greens */
+  --kit-outline: rgba(255,255,255,0.82); /* flag-kit jersey outline vs the turf (vsfield now; lineup adoption deferred) */
 }
 
 /* ---- ACCENT DIRECTIONS (position badge colors stay fixed, independent of accent) ---- */
@@ -139,6 +140,7 @@
   --e2: 0 2px 6px rgba(13,20,33,0.08), 0 8px 24px rgba(13,20,33,0.06);
   --e3: 0 12px 40px rgba(13,20,33,0.14), 0 2px 8px rgba(13,20,33,0.08);
   --pitch-1: #1E7A4F; --pitch-2: #17683f;
+  --kit-outline: rgba(20,28,42,0.5);
 }
 
 /* ----------------------------------------------------------------- BASE --- */

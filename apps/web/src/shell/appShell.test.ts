@@ -125,9 +125,11 @@ describe("global surface — collision A resolved (Prompt 20, mandatory)", () =>
     expect(layout).not.toMatch(/<body className="[^"]*(?:bg-slate-50|text-slate-900)/);
   });
 
-  it("keeps the global ds.css byte-identical to the per-route copies (one canonical, no fork)", () => {
+  it("keeps the global ds.css byte-identical to ALL per-route copies (one canonical, no fork)", () => {
     const canonical = readFileSync(resolve(appDir, "styles/ds.css"), "utf8");
-    const perRoute = readFileSync(resolve(appDir, "draft/ds.css"), "utf8");
-    expect(canonical).toBe(perRoute);
+    for (const route of ["draft", "vsfield", "_landing", "lineup"]) {
+      const perRoute = readFileSync(resolve(appDir, `${route}/ds.css`), "utf8");
+      expect(perRoute, `${route}/ds.css must match styles/ds.css byte-for-byte`).toBe(canonical);
+    }
   });
 });
