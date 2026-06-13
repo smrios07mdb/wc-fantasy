@@ -1240,11 +1240,12 @@ full feed names — incl. Côte d'Ivoire with **either apostrophe** (U+0027 `'` 
 Türkiye, South Korea — so no kit-local alias table was needed. Kits are multi-layer backgrounds — never
 `background-size: cover` (test-guarded, incl. CRO).
 
-**Mechanism unchanged:** `liveController.ts` / `snapshotClient.ts` / `realtime.ts` /
-`loadVsField.ts` / `page.tsx` / `layout.tsx` / `packages/vsfield` are byte-identical.
-`VsFieldClient.tsx` changed ONLY in imports, the selection state, and layout JSX — the Realtime block
-(`startVsFieldLive` + `onAuthStateChange` INITIAL_SESSION/TOKEN_REFRESHED resubscribe + `fetchVsField`)
-has zero hunks.
+**Mechanism unchanged:** `liveController.ts` / `snapshotClient.ts` / `realtime.ts` / `page.tsx` /
+`layout.tsx` are byte-identical (the live mechanism). `VsFieldClient.tsx` changed ONLY in imports, the
+selection state, and layout JSX — the Realtime block (`startVsFieldLive` + `onAuthStateChange`
+INITIAL_SESSION/TOKEN_REFRESHED resubscribe + `fetchVsField`) has zero hunks. (As of the ScorePill change
+— `feat/vsfield-scorepill` — `loadVsField.ts` + `packages/vsfield` additionally carry per-player `points`
+in the server-composed snapshot; the live mechanism above is unaffected.)
 
 **Client state:** `effSel: string | null` replaces `selected` — `'field'` sentinel (aggregate view) |
 opponent managerId (UUID, collision-free) | null. Desktop resolves null → `'field'` and renders the
