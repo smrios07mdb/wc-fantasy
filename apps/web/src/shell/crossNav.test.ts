@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { NAV_ITEMS, selectActiveNav } from "./crossNav";
+import {
+  NAV_ITEMS,
+  BOTTOM_TAB_ITEMS,
+  MORE_SHEET_ITEMS,
+  selectActiveNav,
+  selectMobileNavPartition,
+} from "./crossNav";
 
-describe("crossNav config — the shared cross-nav link set (pure, presentational)", () => {
-  it("lists Home plus the authenticated feature screens, in that order", () => {
+describe("crossNav config — shared cross-nav link set (pure, presentational)", () => {
+  it("lists Home plus authenticated feature screens, in order", () => {
     expect(NAV_ITEMS.map((item) => item.id)).toEqual([
       "home",
       "draft",
@@ -27,6 +33,31 @@ describe("crossNav config — the shared cross-nav link set (pure, presentationa
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
     // Prompt 39: Settings seam is now a real route.
     expect(byId.settings).toMatchObject({ href: "/settings", label: "Settings" });
+  });
+});
+
+describe("BOTTOM_TAB_ITEMS — primary mobile bottom bar destinations", () => {
+  it("lists the 4 primary tabs in the specified order", () => {
+    expect(BOTTOM_TAB_ITEMS.map((i) => i.id)).toEqual(["home", "lineup", "vsfield", "pool"]);
+  });
+
+  it("relabels home as Dashboard on the bottom bar (same route, different label)", () => {
+    const home = BOTTOM_TAB_ITEMS.find((i) => i.id === "home")!;
+    expect(home.href).toBe("/");
+    expect(home.label).toBe("Dashboard");
+  });
+});
+
+describe("MORE_SHEET_ITEMS — secondary destinations in the More sheet", () => {
+  it("lists the More sheet items in spec order: Scoring · Waivers · Draft · Settings", () => {
+    expect(MORE_SHEET_ITEMS.map((i) => i.id)).toEqual(["scoring", "waivers", "draft", "settings"]);
+  });
+
+  it("covers the routes NOT in the bottom bar", () => {
+    const bottomIds = new Set(BOTTOM_TAB_ITEMS.map((i) => i.id));
+    for (const item of MORE_SHEET_ITEMS) {
+      expect(bottomIds.has(item.id), `${item.id} should NOT appear in both`).toBe(false);
+    }
   });
 });
 
@@ -60,5 +91,74 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
   it("returns null for paths outside the nav (e.g. /sign-in) and for an empty path", () => {
     expect(selectActiveNav("/sign-in")).toBeNull();
     expect(selectActiveNav("")).toBeNull();
+  });
+});
+
+describe("selectMobileNavPartition — maps active NavId to primary/secondary bucket", () => {
+  it("places bottom-bar routes in bottomActive", () => {
+    expect(selectMobileNavPartition("home")).toMatchObject({
+      bottomActive: "home",
+      moreActive: null,
+      moreHasActive: false,
+    });
+    expect(selectMobileNavPartition("lineup")).toMatchObject({
+      bottomActive: "lineup",
+      moreActive: null,
+      moreHasActive: false,
+    });
+    expect(selectMobileNavPartition("vsfield")).toMatchObject({
+      bottomActive: "vsfield",
+      moreActive: null,
+      moreHasActive: false,
+    });
+    expect(selectMobileNavPartition("pool")).toMatchObject({
+      bottomActive: "pool",
+      moreActive: null,
+      moreHasActive: false,
+    });
+  });
+
+  it("places More-sheet routes in moreActive and sets moreHasActive", () => {
+    expect(selectMobileNavPartition("scoring")).toMatchObject({
+      bottomActive: null,
+      moreActive: "scoring",
+      moreHasActive: true,
+    });
+    expect(selectMobileNavPartition("waivers")).toMatchObject({
+      bottomActive: null,
+      moreActive: "waivers",
+      moreHasActive: true,
+    });
+    expect(selectMobileNavPartition("draft")).toMatchObject({
+      bottomActive: null,
+      moreActive: "draft",
+      moreHasActive: true,
+    });
+    expect(selectMobileNavPartition("settings")).toMatchObject({
+      bottomActive: null,
+      moreActive: "settings",
+      moreHasActive: true,
+    });
+  });
+
+  it("returns all-null when active is null (no route matched)", () => {
+    expect(selectMobileNavPartition(null)).toEqual({
+      bottomActive: null,
+      moreActive: null,
+      moreHasActive: false,
+    });
+  });
+
+  it("every NavId resolves to exactly one of the two buckets (no overlap, no gap)", () => {
+    const allIds = NAV_ITEMS.map((i) => i.id);
+    for (const id of allIds) {
+      const { bottomActive, moreActive, moreHasActive } = selectMobileNavPartition(id);
+      const inBottom = bottomActive !== null;
+      const inMore = moreActive !== null;
+      // exactly one bucket is active
+      expect(inBottom !== inMore, `${id} must be in exactly one bucket`).toBe(true);
+      // moreHasActive flag is consistent with moreActive
+      expect(moreHasActive).toBe(inMore);
+    }
   });
 });
