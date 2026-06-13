@@ -321,3 +321,50 @@
     flex-basis: 260px;
   }
 }
+
+/*
+ * Mobile leaderboard fit (Prompt 41). The default `.dtable` is auto-layout, so a long team name
+ * or an email-address fallback in MANAGER forces the table wider than the phone viewport (the body
+ * `overflow-x:hidden` backstop then CLIPS it). `table-layout: fixed` makes `width: 100%` authoritative:
+ * #/PLAYED/CORRECT/POINTS hold narrow fixed widths and MANAGER takes the remainder + truncates with an
+ * ellipsis (prefer fit-with-ellipsis to horizontal-scrolling a leaderboard). The "YOU" `.row-me` row
+ * inherits the same layout, so it never causes its own scroll.
+ */
+@media (max-width: 480px) {
+  .pl-board {
+    table-layout: fixed;
+    width: 100%;
+  }
+  .pl-board th,
+  .pl-board td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  /* rank `#` */
+  .pl-board th:first-child,
+  .pl-board td:first-child {
+    width: 28px;
+  }
+  /* MANAGER — flexes to the remainder, truncates long names/emails. The ellipsis lives on the
+     cell's child (`<b>`) so the truncating box actually fills the fixed cell width — an inline
+     child would still report its full content geometry past the viewport even when paint-clipped. */
+  .pl-board th:nth-child(2),
+  .pl-board td:nth-child(2) {
+    min-width: 0;
+    overflow: hidden;
+    /* graceful clip of the "MANAGER" header itself at the very narrowest widths (the column is
+       genuinely tight at 320px; PLAYED/CORRECT/POINTS keep priority and stay fully visible) */
+    text-overflow: ellipsis;
+  }
+  .pl-board td:nth-child(2) > * {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* PLAYED / CORRECT / POINTS — narrow, fixed, right-aligned, fully visible */
+  .pl-board th:nth-child(n + 3),
+  .pl-board td:nth-child(n + 3) {
+    width: 62px;
+  }
+}

@@ -114,13 +114,18 @@
 }
 @media (max-width: 820px) {
   .sl-body {
-    grid-template-columns: 1fr;
+    /* minmax(0, 1fr) — NOT bare `1fr` (= minmax(auto, 1fr)). `auto` takes the column's min-content,
+       and the 5-wide MID lane makes that wider than a phone viewport, so the pitch column never
+       shrank to fit and the backstop clipped it. The 0 floor lets the column shrink to the viewport;
+       the pitch (overflow:hidden) + wrapping lanes then reflow inside it. */
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .sl-pitchcol {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0; /* allow the pitch column to shrink below its content's min-content */
 }
 
 /* ── the pitch ─────────────────────────────────────────────────────────── */
@@ -290,6 +295,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0; /* bench rail shrinks below content min-content on narrow viewports */
 }
 .sl-hint {
   color: var(--text-secondary);
@@ -684,4 +690,55 @@
 }
 .sl-savebar-reason.is-error {
   color: var(--loss);
+}
+
+/* ── mobile fit (Prompt 41) ─────────────────────────────────────────────────
+   The pitch column is now viewport-constrained (minmax(0,1fr) above). Here we shrink the screen
+   gutter, pitch padding, lane gap, and player tokens so the full XI shows in formation (a 5-wide
+   MID lane fits one row) and stays tappable, instead of wrapping or being clipped. flex-wrap on
+   `.sl-lane` remains the safety net at the very narrowest widths. Tap targets: a token stays ≥44px
+   tall; the visual disc shrinks but the hit area is preserved by the token's own padding.
+   TODO(confirm): a ~52px token at 320px is the practical floor for a 5-wide lane — a designer may
+   prefer a different compact treatment. */
+@media (max-width: 480px) {
+  .sl-screen {
+    padding: 16px 12px 96px;
+  }
+  .sl-pitch {
+    padding: 12px 8px;
+  }
+  .sl-pitch-lanes {
+    gap: 10px;
+  }
+  .sl-lane {
+    gap: 6px;
+    min-height: 58px;
+  }
+  .sl-tok {
+    width: 62px;
+    padding: 6px 4px;
+  }
+  .sl-tok-ko {
+    font-size: 9px;
+    max-width: 56px;
+  }
+  /* legend wraps rather than widening the page */
+  .sl-legend {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+}
+@media (max-width: 360px) {
+  .sl-screen {
+    padding: 14px 10px 96px;
+  }
+  .sl-lane {
+    gap: 4px;
+  }
+  .sl-tok {
+    width: 52px;
+  }
+  .sl-tok-name {
+    font-size: 11px;
+  }
 }
