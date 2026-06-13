@@ -34,7 +34,12 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { themeColor: "#0A0D12" };
+export const viewport: Viewport = {
+  themeColor: "#0A0D12",
+  // Required for env(safe-area-inset-bottom) to return a non-zero value on iOS — without it
+  // the home indicator's inset reads 0 and the mobile bottom bar overlaps the home swipe area.
+  viewportFit: "cover",
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
