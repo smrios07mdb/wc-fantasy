@@ -354,3 +354,20 @@ operator.)
   show the gated `LOADING` state by design.
 - **ds.css byte-identity now machine-enforced** across all four per-route copies (draft/vsfield/
   _landing/lineup vs `styles/ds.css`) by the extended appShell test.
+
+## Mobile bottom-nav + overflow containment (Prompt 40 — `feat/mobile-bottom-nav`, HOLD for clearance)
+
+- **The top-strip-widens-the-document bug is closed.** Root cause: the 8 top-nav items' intrinsic width
+  set the document scroll width, causing every authenticated page to be wider than the viewport; the whole
+  page slid sideways when the active tab auto-scrolled into view. Fixed by: (1) `.sh-topnav-scroll`
+  scroll container (`overflow-x:auto; min-width:0; flex:1`) + `min-width:0` on `.sh-app`/`.sh-topbar`
+  (real fix); (2) `html, body { overflow-x:hidden; max-width:100% }` in `ds.css` (document backstop);
+  (3) `MoreSheet` `useEffect` calls `scrollIntoView({ inline:'nearest' })` on the active item, which
+  is captured by the scroll container not the document.
+- **Mobile bottom tab bar shipped** (phones < 640 px): Dashboard · Set lineup · Vs the field · Pool ·
+  More. More sheet: Scoring · Waivers · Draft room · Settings · identity · sign-out. Pure CSS 640 px swap
+  — no matchMedia, no hydration fork. Bar clears iOS home indicator via `env(safe-area-inset-bottom)` +
+  `viewport-fit=cover` (real-device confirmation gated on deploy).
+- **Playwright proof:** 75/75 assertions passed at 320/375/390/414 px (phone) + 768 px (desktop) across
+  5 routes. Screenshots in `apps/web/screenshots/`. iOS safe-area/touch-ergonomics gated on real-device
+  deploy pass.

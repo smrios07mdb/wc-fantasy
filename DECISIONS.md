@@ -1086,6 +1086,41 @@ landing hub.
   route-group layout if/when **stateful chrome** ships (avatar menu / bell open-state), so the shell
   persists across feature navigation instead of remounting.
 
+## Mobile nav + overflow containment (Prompt 40)
+
+- **Mobile nav IA — bottom tab bar (phones < 640 px):**
+  Primary tabs left→right: **Dashboard** (`/`) · **Set lineup** (`/lineup`) · **Vs the field**
+  (`/vsfield`) · **Pool** (`/pool`) · **More**. "Dashboard" is the hub `/` relabeled — same route,
+  signals the league-overview intent. More sheet order: **Scoring** · **Waivers** · **Draft room** ·
+  **Settings** · identity line · POST sign-out. Desktop/tablet (≥ 640 px) keeps the top strip
+  unchanged. Both navs rendered in the DOM, swapped by a pure CSS 640 px media query — no `matchMedia`,
+  no JS viewport branching, no hydration fork (§18 vsfield precedent; 640 px is intentionally distinct
+  from vsfield's 760 px layout swap). `MoreSheet.tsx` (`"use client"`) is the only stateful island
+  (open/close + `scrollIntoView` side-effect); the 4 primary tabs are plain server-rendered `<a>` links.
+
+- **No-element-exceeds-viewport-width rule + `ds.css` backstop:** no element may expand
+  `document.documentElement.scrollWidth` past `clientWidth`. Enforced at two layers:
+  (1) **real fix** — `.sh-topnav-scroll { overflow-x:auto; min-width:0; flex:1 }` + `min-width:0` on
+  `.sh-app` and `.sh-topbar` so the scroll container can shrink below the 8 nav items' intrinsic width;
+  (2) **document backstop** (safety net) — `html, body { max-width:100%; overflow-x:hidden }` in the
+  canonical `ds.css` (global + all byte-identical per-route copies). These two layers together close
+  the bug where the top strip's intrinsic width set the document scroll width, causing the whole page
+  to slide sideways when a nav tab was scrolled into view.
+
+- **"Vs the field" is the phase-aware surface that becomes the Guillotine bracket** in knockout/playoff
+  phases. There is **no separate bracket destination in the nav.** The bottom bar stays
+  Dashboard · Set lineup · Vs the field · Pool · More with no reshuffling across phases. Do not add a
+  bracket tab; do not phase-gate the nav.
+
+- **640 px breakpoint is intentionally distinct from vsfield's 760 px.** The 640 px threshold swaps the
+  shell chrome (top strip ↔ bottom bar). The 760 px threshold is internal to the vsfield screen's
+  desktop/phone cockpit layout. They must not be unified.
+
+- **`viewport-fit=cover` (required for safe-area on iOS):** `env(safe-area-inset-bottom)` reads 0 on
+  iOS unless `viewport-fit=cover` is set. The viewport export in `app/layout.tsx` now sets
+  `viewportFit: 'cover'`. Real-device testing of the iOS home-indicator clearance is gated on deploy
+  (Chromium cannot render the home indicator).
+
 ## Sign-in / Join skin (Prompt 21) — `/sign-in` + `/auth/denied` off Tailwind onto ds
 
 - **Architecture decision this prompt advances — `/sign-in` + `/auth/denied` join the ds-only set**

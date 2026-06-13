@@ -48,10 +48,24 @@ set of types.** For a small team that is the single biggest reliability win avai
   installed and **coexist** (not the styling system; teardown is post-sprint). The feature/landing
   routes still carry byte-identical per-route `ds.css` copies that double-load harmlessly. The
   authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield` + `/waivers` + `/scoring` +
-  `/settings`) are wrapped by the **App Shell** top-bar nav (`app/shell/AppShell.tsx`, which absorbed
-  the interim CrossNav); auth/landing routes are
-  not — they carry their own brand chrome (`/sign-in` + `/auth/denied` ds-skinned off Tailwind onto the
-  split-shell `_auth/auth.css` in **Prompt 21**; the marketing landing in Prompt 19). Two reactive
+  `/settings`) are wrapped by the **App Shell** (`app/shell/AppShell.tsx`, which absorbed the interim
+  CrossNav). The shell has a **responsive nav** (Prompt 40):
+  - **≥ 640 px (tablet/desktop):** contained top strip. `.sh-topnav-scroll` (`overflow-x:auto;
+    min-width:0; flex:1`) holds the 8 nav items so they scroll within their own box and never widen
+    the document. `min-width:0` on `.sh-app` / `.sh-topbar` lets flex ancestors shrink below intrinsic
+    child width. Active-tab `scrollIntoView` is handled by the `MoreSheet` client island — it calls
+    `el.scrollIntoView({ inline:'nearest' })` targeting the scroll container, not the document.
+    `html, body { overflow-x:hidden; max-width:100% }` in `ds.css` is the document-level backstop.
+  - **< 640 px (phones):** top strip hidden; fixed bottom bar (`.sh-btmnav`) shows: **Dashboard ·
+    Set lineup · Vs the field · Pool · More**. More opens a slide-up sheet: Scoring · Waivers · Draft
+    room · Settings · identity · POST sign-out. Both navs rendered in DOM; swap is pure CSS at **640px
+    — no `matchMedia`, no hydration fork** (§18 vsfield precedent; 640 px ≠ vsfield's 760 px). Bar
+    clears iOS home indicator via `env(safe-area-inset-bottom)` + `viewport-fit=cover` in
+    `app/layout.tsx`. `MoreSheet.tsx` (`"use client"`) is the only stateful island.
+  - **"Vs the field" is the phase-aware bracket surface.** No separate bracket tab; bottom bar stays
+    Dashboard · Set lineup · Vs the field · Pool · More across all phases (no conditional reshuffling).
+  Auth/landing routes are not shell-wrapped — they carry their own brand chrome (`/sign-in` +
+  `/auth/denied` ds-skinned in **Prompt 21**; the marketing landing in Prompt 19). Two reactive
   surfaces matter: the **live draft room** and the **live "vs the field" screen**;
   everything else is ordinary CRUD.
 - **Backend:** a **modular monolith** — the Next.js app's route handlers serve the web API
