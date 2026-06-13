@@ -13,25 +13,34 @@
  * name as the secondary line"): the `<BrandBadge/>` trophy chip (the Prompt-18 production form of the
  * old `.vf-logo` "W") + the "XI" wordmark + the `WC Fantasy League` placeholder line.
  *
+ * Responsive nav (Prompt 40):
+ *   ≥640px — contained top strip (`.sh-topnav-scroll` scroll box with `min-width:0` ancestors;
+ *             active-tab scroll stays inside the container via the `MoreSheet` client island).
+ *   <640px — fixed bottom tab bar (Dashboard · Set lineup · Vs the field · Pool · More).
+ *   Both navs rendered in the DOM; swap is pure CSS at 640px (no matchMedia, no hydration fork),
+ *   following the §18 vsfield precedent. 640px is intentionally distinct from vsfield's 760px.
+ *
  * SCOPE (deliberately minimal — "boring and reliable", no dead links): the nav lists ONLY the four
  * screens that exist today. The prototype's richer chrome targets screens that aren't built yet, so it
  * is left as flagged seams to add when those ship:
- *   TODO(confirm): the full design IA (My Team · Standings · Free Agents · Waivers · Draft · Playoffs ·
- *     Player Box Score · Notifications · Settings) + the "More" overflow — add nav entries as each route
- *     lands (mirrors the landing's deferred unbuilt-screen links).
  *   TODO(confirm): the persistent bell (→ Notifications) + avatar menu (Profile/Settings) + the slate
  *     commissioner entry — these need their target screens + identity wiring first.
- *   TODO(confirm): the dedicated mobile tab-bar + bottom sheets. For now the top bar wraps responsively
- *     (see shell.css); the design's `MobileTabBar`/`MobileSheet` are a later mobile pass.
  */
 import type { ReactNode } from "react";
 import { BrandBadge } from "@/components/Brand";
-import { NAV_ITEMS, type NavId } from "@/src/shell/crossNav";
+import {
+  NAV_ITEMS,
+  BOTTOM_TAB_ITEMS,
+  MORE_SHEET_ITEMS,
+  selectMobileNavPartition,
+  type NavId,
+} from "@/src/shell/crossNav";
+import { MoreSheet } from "./MoreSheet";
 import "./shell.css";
 
 // The one nav icon set, ported from `shell/components.jsx` `NavIcon` (the design's `home/draft/lineup/
 // field` glyphs), keyed by our NavId. Decorative — labelled by the adjacent text, so aria-hidden.
-function NavIcon({ id }: { id: NavId }) {
+function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
   const glyph: Record<NavId, ReactNode> = {
     home: (
       <>
@@ -91,8 +100,8 @@ function NavIcon({ id }: { id: NavId }) {
   return (
     <svg
       aria-hidden="true"
-      width={18}
-      height={18}
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -114,10 +123,12 @@ export function AppShell({
   signedInAs?: string;
   children: ReactNode;
 }) {
+  const { moreHasActive } = selectMobileNavPartition(active);
+
   return (
     <div className="sh-app sh-app-top">
-      {/* A <header> maps to a `banner` landmark; the /lineup screen renders its own `sl-topbar` header
-          too, so label this one to keep the two landmarks distinguishable (axe landmark-no-duplicate). */}
+      {/* ── Top strip (≥640px) ── A <header> maps to a `banner` landmark; the /lineup screen renders
+          its own `sl-topbar` header too, so label this one to keep the two landmarks distinguishable. */}
       <header className="sh-topbar" aria-label="Global">
         {/* Brand → home (BRAND.md §5: trophy badge + "XI" + league-name secondary line). The badge is
             decorative beside the visible "XI" wordmark: hide it (BrandBadge hardcodes aria-label="XI",
@@ -132,22 +143,28 @@ export function AppShell({
           </span>
         </a>
 
-        <nav className="sh-topnav" aria-label="Primary">
-          {NAV_ITEMS.map((item) => {
-            const isActive = item.id === active;
-            return (
-              <a
-                key={item.id}
-                href={item.href}
-                className={isActive ? "sh-nav-item is-active" : "sh-nav-item"}
-                aria-current={isActive ? "page" : undefined}
-              >
-                <NavIcon id={item.id} />
-                {item.label}
-              </a>
-            );
-          })}
-        </nav>
+        {/* Contained scroll box — never widens its parent (Prompt 40 overflow fix). min-width:0
+            overrides the flex-item default `min-width:auto` so the box can shrink/scroll instead
+            of expanding the document. The active-tab scroll-into-view is handled by MoreSheet's
+            useEffect, which scrolls the [aria-current="page"] item into this container. */}
+        <div className="sh-topnav-scroll">
+          <nav className="sh-topnav" aria-label="Primary">
+            {NAV_ITEMS.map((item) => {
+              const isActive = item.id === active;
+              return (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  className={isActive ? "sh-nav-item is-active" : "sh-nav-item"}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <NavIcon id={item.id} />
+                  {item.label}
+                </a>
+              );
+            })}
+          </nav>
+        </div>
 
         <div className="sh-top-r">
           {signedInAs && (
@@ -165,6 +182,33 @@ export function AppShell({
       </header>
 
       <div className="sh-content">{children}</div>
+
+      {/* ── Mobile bottom bar (<640px) ── Both navs are in the DOM; the 640px CSS media query
+          switches between them — no matchMedia, no hydration fork (§18 precedent). The More
+          button and sheet are the only stateful piece; they live in the MoreSheet client island. */}
+      <nav className="sh-btmnav" aria-label="Primary">
+        {BOTTOM_TAB_ITEMS.map((item) => {
+          const isActive = item.id === active;
+          return (
+            <a
+              key={item.id}
+              href={item.href}
+              className={isActive ? "sh-btnav-item is-active" : "sh-btnav-item"}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <NavIcon id={item.id} size={20} />
+              <span>{item.label}</span>
+            </a>
+          );
+        })}
+        {/* MoreSheet: client island for open/close + scroll-into-view side-effect */}
+        <MoreSheet
+          active={active}
+          moreHasActive={moreHasActive}
+          signedInAs={signedInAs}
+          moreItems={MORE_SHEET_ITEMS}
+        />
+      </nav>
     </div>
   );
 }

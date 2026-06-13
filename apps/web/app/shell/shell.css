@@ -1,38 +1,52 @@
-/* shell.css — the App Shell chrome (Prompt 20), vendored from the canonical design source
-   `design/design_reference/App Shell.html` (the `sh-*` rules, lines ~189-228) + `shell/components.jsx`
-   `GlobalTopbar`. This is the PRODUCTION top-bar variant of the design's GlobalNav: it sits in the
-   same place the interim Prompt-17 CrossNav did (a top strip), so it supersedes CrossNav without
-   reflowing the un-reskinned feature bodies (a 240px sidebar would squeeze them — deferred).
+/* shell.css — App Shell chrome (Prompt 20 + Prompt 40 responsive nav), vendored canonical design
+   source `design/design_reference/App Shell.html` (the `sh-*` rules, lines ~189-228) +
+   `shell/components.jsx` `GlobalTopbar`. PRODUCTION top-bar variant of the design's GlobalNav: sits in
+   same place interim Prompt-17 CrossNav did (a top strip), so it supersedes CrossNav without
+   reflowing un-reskinned feature bodies (a 240px sidebar would squeeze them — deferred).
 
-   Tokens (--surface-*, --hairline, --accent*, --r-*, --fs-*) come from the GLOBAL ds.css. Component
-   helper classes used in the markup (`.btn`, `.display`, `.t-micro`, `.text-tertiary`) are ds.css too.
+   Tokens (--surface-*, --hairline, --accent*, --r-*, --fs-*) come GLOBAL ds.css. Component
+   helper classes used in markup (`.btn`, `.display`, `.t-micro`, `.text-tertiary`) are ds.css too.
 
-   ADAPTATIONS vs the prototype (the design assumed a fit-scaled presenter frame; this runs in normal
-   document flow), each load-bearing:
-     • `.sh-app`     keeps the design's `height:100%` (so a fixed-height parent propagates a DEFINITE
-                     height down the flex chain) PLUS a `min-height:100dvh` floor so the shell fills the
-                     viewport on the natural-scroll screens. This dual model is what lets ONE shell host
-                     BOTH height contracts: `/draft` (`.dr-app{height:100dvh; overflow:hidden}` →
-                     `height:100%` is definite → the board/rail internal-scroll chain resolves, nothing
-                     is clipped) and `/lineup`,`/vsfield`,hub (auto-height parents → `height:100%`
-                     computes to `auto` → the page scrolls naturally). The earlier `min-height:100dvh`-
-                     only port clipped /draft, so the design's `height:100%` is restored.
-     • `.sh-content` keeps the design's `flex:1; min-height:0; overflow-y:auto` (the min-height:0 lets the
-                     flex child shrink so a fixed-height descendant resolves; overflow-y:auto is a no-op
-                     on the natural-scroll screens — their parents have no definite height).
-     • brand secondary line is SHOWN (the prototype's `.sh-topbar .sh-brand-txt span{display:none}` rule
-                     is intentionally omitted) — BRAND.md §5 wants the league name as the topbar's
-                     secondary line; a brain file outranks the prototype.
-     • `.sh-topbar`  gains `flex-wrap` + `row-gap` so the bar reflows on narrow viewports (the prototype
-                     swaps to a separate mobile tab-bar + sheets — a flagged seam, not built here).
-   The bar is intentionally STATIC (not sticky), matching CrossNav's prior behaviour — avoids overlap
-   with any feature-screen sticky header. */
+   ADAPTATIONS vs prototype (the design assumed fit-scaled presenter frame; runs in normal
+   document flow), load-bearing:
+   • `.sh-app` keeps design's `height:100%` (so fixed-height parent propagates DEFINITE
+     height down flex chain) PLUS `min-height:100dvh` floor so shell fills
+     viewport on natural-scroll screens. dual model lets ONE shell host
+     BOTH height contracts: `/draft` (`.dr-app{height:100dvh; overflow:hidden}` →
+     `height:100%` definite → board/rail internal-scroll chain resolves, nothing
+     clipped) `/lineup`,`/vsfield`,hub (auto-height parents → `height:100%`
+     computes `auto` → page scrolls naturally). earlier `min-height:100dvh`-
+     only port clipped /draft, so design's `height:100%` restored.
+   • `.sh-content` keeps design's `flex:1; min-height:0; overflow-y:auto` (the min-height:0 lets
+     flex child shrink so fixed-height descendant resolves; overflow-y:auto no-op on natural-scroll
+     screens — parents have no definite height).
+   • brand secondary line font-size matched to design's `12px / caption` instead of token
+     `--fs-micro` (11px). Minor; matches designer intent.
 
+   OVERFLOW CONTAINMENT (Prompt 40):
+   • `.sh-app` + `.sh-topbar` carry `min-width:0` so they are allowed to shrink below their
+     children's intrinsic widths when placed in a flex/block context.
+   • `.sh-topnav-scroll` is the scroll container for the top strip. `overflow-x:auto` + `min-width:0`
+     contain the 8 nav items so they scroll within the box instead of widening the document.
+   • Active-tab scroll-into-view runs inside `MoreSheet`'s `useEffect` via `scrollIntoView()`, which
+     captures the nearest scrolling ancestor (this container) — never the document.
+
+   MOBILE NAV (Prompt 40 — phone <640px):
+   • The `.sh-topbar` hides and `.sh-btmnav` (fixed bottom bar) shows via a 640px media query.
+     Both are rendered in the DOM; the swap is pure CSS — no matchMedia, no hydration fork
+     (§18 vsfield precedent). 640px is intentionally distinct from vsfield's 760px.
+   • `.sh-btmnav` respects `env(safe-area-inset-bottom)` for the iOS home indicator.
+     Requires `viewport-fit=cover` (set in `app/layout.tsx`) or the env var reads 0 on iOS.
+*/
+
+/* ---- shell root ---- */
 .sh-app {
   background: var(--surface-0);
   color: var(--text-primary);
   height: 100%;
   min-height: 100dvh;
+  /* min-width:0 allows the shell to shrink below child intrinsic width in a flex ancestor */
+  min-width: 0;
 }
 .sh-app-top {
   display: flex;
@@ -46,6 +60,7 @@
   gap: 10px;
   text-decoration: none;
   color: inherit;
+  flex: none;
 }
 .sh-brand-txt {
   display: flex;
@@ -59,7 +74,7 @@
   white-space: nowrap;
 }
 
-/* the top bar */
+/* top bar */
 .sh-topbar {
   display: flex;
   align-items: center;
@@ -70,7 +85,22 @@
   border-bottom: 1px solid var(--hairline);
   background: var(--surface-1);
   flex: none;
+  /* min-width:0 lets the topbar shrink below child intrinsic widths in the column flex parent */
+  min-width: 0;
 }
+
+/* top nav scroll container — contains the 8 nav items so they never widen the document */
+.sh-topnav-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  /* hide scrollbar; interactive scroll-into-view handled by MoreSheet useEffect */
+  scrollbar-width: none;
+}
+.sh-topnav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .sh-topnav {
   display: flex;
   align-items: center;
@@ -111,6 +141,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: none;
 }
 .sh-top-who {
   font-size: var(--fs-caption);
@@ -122,10 +153,161 @@
   font-weight: 600;
 }
 
-/* the screen's content area — design's original flex-scroll model (see ADAPTATIONS note above) */
+/* screen's content area — design's original flex-scroll model (see ADAPTATIONS note above) */
 .sh-content {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* ═══════════════════════════════ MOBILE BOTTOM BAR ═══════════════════════════════ */
+/*
+   Fixed bottom tab bar shown only at <640px. Hidden by default (hidden on desktop).
+   env(safe-area-inset-bottom) clears the iOS home indicator — requires viewport-fit=cover
+   in layout.tsx; without it the env var reads 0 on iOS.
+*/
+.sh-btmnav {
+  /* hidden by default (desktop ≥640px uses the top strip) */
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--surface-1);
+  border-top: 1px solid var(--hairline);
+  /* safe-area pad so the bar doesn't overlap the iOS home indicator */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.sh-btmnav-inner {
+  display: flex;
+  align-items: stretch;
+}
+
+/* shared tab item style — used by both <a> links and the More <button> */
+.sh-btnav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 4px 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.sh-btnav-item svg {
+  flex: none;
+}
+.sh-btnav-item.is-active {
+  color: var(--accent);
+}
+/* More button highlights when the active route lives in the More sheet */
+.sh-more-btn.is-more-active {
+  color: var(--accent);
+}
+
+/* ── More sheet (slide-up dialog) ── */
+.sh-more-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 101;
+  background: rgba(0, 0, 0, 0.48);
+  /* no pointer-events on child sheet so clicks on backdrop dismiss */
+}
+
+.sh-more-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 102;
+  background: var(--surface-1);
+  border-radius: 16px 16px 0 0;
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  flex-direction: column;
+}
+
+.sh-more-sheet-items {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 4px;
+}
+
+.sh-more-item {
+  display: flex;
+  align-items: center;
+  padding: 13px 16px;
+  border-radius: var(--r-md);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sh-more-item:hover,
+.sh-more-item:active {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.sh-more-item.is-active {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+.sh-more-footer {
+  border-top: 1px solid var(--hairline);
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sh-more-identity {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.sh-more-identity b {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.sh-more-signout {
+  align-self: flex-start;
+}
+
+/* ═══════════════════════════════ RESPONSIVE 640px SWAP ═══════════════════════════════ */
+/*
+   Below 640px: hide the top strip, show the bottom bar.
+   Above 640px: top strip visible, bottom bar stays hidden.
+   Both are in the DOM — swap is pure CSS, no matchMedia / hydration fork (§18 precedent).
+   640px is intentionally distinct from vsfield's 760px layout swap.
+*/
+@media (max-width: 639px) {
+  .sh-topbar {
+    display: none;
+  }
+  .sh-btmnav {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+  }
+  /* content clearance: push scrollable content above the fixed bottom bar */
+  .sh-content {
+    padding-bottom: calc(58px + env(safe-area-inset-bottom));
+  }
 }

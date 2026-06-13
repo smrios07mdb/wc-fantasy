@@ -1,11 +1,14 @@
 /**
- * Shared cross-nav config + active-state selector for the three authenticated screens
- * (/draft, /lineup, /vsfield). Presentational only — no auth, no IO. The screens are already gated
- * by `getSessionManager()`; this just lets a signed-in member move directly between them instead of
- * bouncing through the `/` hub (Prompt 16). Kept pure and unit-tested, mirroring `selectLandingView`.
+ * Shared cross-nav config + active-state selectors for the authenticated App Shell.
+ * Presentational only — no auth, no IO. The screens are already gated by `getSessionManager()`;
+ * this lets signed-in members navigate between screens. Kept pure and unit-tested, mirroring
+ * `selectLandingView`.
  *
- * Labels are reused VERBATIM from the Prompt-16 hub (`app/page.tsx` FEATURES) so the strip and the hub
- * name the same screens identically. "Home" links back to that hub.
+ * Labels are reused VERBATIM from the Prompt-16 hub (`app/page.tsx` FEATURES) so the top strip
+ * and the hub name the same screens identically. "Home" links back to the hub.
+ *
+ * Mobile nav (Prompt 40): the bottom tab bar shows 4 primary destinations + More. The 4 primary
+ * ids are in BOTTOM_TAB_ITEMS; the More-sheet ids are in MORE_SHEET_ITEMS.
  */
 export type NavId =
   | "home"
@@ -23,7 +26,7 @@ export interface NavItem {
   readonly label: string;
 }
 
-// Home first (the back-to-hub anchor), then the peer feature screens that exist today.
+// Full list for the top strip (desktop ≥640px). Home first, then feature screens.
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: "home", href: "/", label: "Home" },
   { id: "draft", href: "/draft", label: "Draft room" },
@@ -37,6 +40,25 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Settings profile page (Prompt 39) — profile-name rename + deferred sections.
   { id: "settings", href: "/settings", label: "Settings" },
 ];
+
+// Primary destinations for the mobile bottom bar (<640px). "Home" is relabeled "Dashboard" here
+// to signal it is the league overview hub, not just a back-button. Same route, different label.
+export const BOTTOM_TAB_ITEMS: readonly NavItem[] = [
+  { id: "home", href: "/", label: "Dashboard" },
+  { id: "lineup", href: "/lineup", label: "Set lineup" },
+  { id: "vsfield", href: "/vsfield", label: "Vs the field" },
+  { id: "pool", href: "/pool", label: "Pool" },
+];
+
+// Secondary destinations surfaced in the More bottom sheet, in order (per Prompt 40 spec).
+export const MORE_SHEET_ITEMS: readonly NavItem[] = [
+  { id: "scoring", href: "/scoring", label: "Scoring" },
+  { id: "waivers", href: "/waivers", label: "Waivers" },
+  { id: "draft", href: "/draft", label: "Draft room" },
+  { id: "settings", href: "/settings", label: "Settings" },
+];
+
+const MORE_IDS: ReadonlySet<NavId> = new Set(MORE_SHEET_ITEMS.map((i) => i.id));
 
 /**
  * Map a pathname (from `usePathname()`) to the active nav id, or null when none applies.
@@ -55,4 +77,26 @@ export function selectActiveNav(pathname: string): NavId | null {
     }
   }
   return null;
+}
+
+/**
+ * Given the active NavId (already resolved by `selectActiveNav` or passed explicitly by a layout),
+ * return which bucket it belongs to in the mobile bottom bar:
+ *   - `bottomActive`  — the active id if it is a primary bottom-bar tab, else null
+ *   - `moreActive`    — the active id if it is in the More sheet, else null
+ *   - `moreHasActive` — true when the active screen lives in the More sheet (lights up the More
+ *                        button so the user can tell where they are)
+ */
+export function selectMobileNavPartition(active: NavId | null): {
+  bottomActive: NavId | null;
+  moreActive: NavId | null;
+  moreHasActive: boolean;
+} {
+  if (active === null) return { bottomActive: null, moreActive: null, moreHasActive: false };
+  const moreHasActive = MORE_IDS.has(active);
+  return {
+    bottomActive: moreHasActive ? null : active,
+    moreActive: moreHasActive ? active : null,
+    moreHasActive,
+  };
 }
