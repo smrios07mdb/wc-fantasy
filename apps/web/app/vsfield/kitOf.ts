@@ -38,7 +38,10 @@ export const JERSEY_BG_V2: Readonly<Record<string, string>> = {
   AR: `${dot("#F4B32E", 50, 50, 7)}, ${ht("#75AADB", "#fff", "#75AADB")}`, // Argentina
   MX: vt("#006847", "#fff", "#CE1126"), // Mexico
   FR: vt("#0055A4", "#fff", "#EF4135"), // France
-  HR: ht("#FF0000", "#fff", "#171796"), // Croatia (plain tricolor — checker replacement HELD, see note)
+  // Croatia: conic šahovnica checker dot over the red/white/blue tricolor — verbatim from the
+  // approved handoff. Upgraded from the old plain tricolor specifically to break the NED↔CRO
+  // collision (both were red/white/blue); the test locks CRO ≠ NED.
+  HR: "conic-gradient(from 0deg at 50% 50%,#D81E05 0 25%,#fff 0 50%,#D81E05 0 75%,#fff 0) 50% 30%/22% 22% no-repeat, linear-gradient(180deg,#FF0000 0 33.33%,#fff 33.33% 66.66%,#171796 66.66%)", // Croatia
   US:
     "linear-gradient(#3C3B6E,#3C3B6E) top left/44% 54% no-repeat, " +
     "repeating-linear-gradient(180deg,#B22234 0 7.7%, #fff 7.7% 15.4%)", // USA

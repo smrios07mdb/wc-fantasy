@@ -81,6 +81,15 @@ describe("kitOf — nation → jersey background", () => {
     expect(kitOf("Türkiye")).toBe(JERSEY_BG_V2.TR);
   });
 
+  it("Croatia is the conic checkerboard and is DISTINCT from Netherlands (collision broken)", () => {
+    const cro = kitOf("Croatia");
+    const ned = kitOf("Netherlands");
+    expect(cro).toBe(JERSEY_BG_V2.HR);
+    expect(cro).toContain("conic-gradient"); // šahovnica checker dot — not the old plain tricolor
+    expect(cro).not.toBe(ned); // both were red/white/blue; the checker breaks the tie
+    expect(cro).not.toContain("cover"); // render-contract guard still holds for the new CRO
+  });
+
   it("resolves Côte d'Ivoire with either a straight or a curly apostrophe", () => {
     // fifa_team.name may carry U+0027 (') or U+2019 (’); the shared mapper handles both.
     expect(kitOf("Côte d'Ivoire")).toBe(JERSEY_BG_V2.CI);
