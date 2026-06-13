@@ -1920,13 +1920,26 @@ only — no roster/`managerId` predicate — and `handlePlayerBox` gates on leag
 / 403 not-allowlisted / 403 no-manager) with **no** "not-your-manager" 403. So surfacing opponents'
 breakdowns required **no** RLS, publication, route, or auth change.
 
-**Decision: per-player POINTS stay OUT of the vsfield SSR payload (Theme F preserved) — Option 2,
-modal-only.** `loadVsField` gained ONLY a read-only select-extension (`player.display_name` +
-`player.team.name`) and `StarterView` gained exactly two fields: `name` + `nation`. It does **not** read
-`score_player_match`; the browser still receives only aggregate `StillToCome` counts +
-`score_manager_period` + `standing`. Per-player points are fetched on demand by the box-score modal via
-the existing league-scoped `GET /api/player-box`. This keeps the deliberate Theme-F boundary
-("per-opponent identities/points never reach the browser directly") from widening into a points feed.
+**Decision (Prompt 41, 2026-06-13 — SUPERSEDES the "Option 2, modal-only" decision below): per-player
+points ARE carried in the server-composed vsfield snapshot (path a).** `StarterInput`/`StarterView` gained
+exactly `points: number`; `buildVsField` maps it verbatim (purity preserved — no clock/derivation).
+`loadVsField` (shared by the SSR page + the `GET /api/vsfield` refetch) adds ONE whole-field
+`score_player_match` read for the current period — the SAME owner-bypass source `loadPlayerBox` reads,
+joined via `match.periodId` (~N×11 rows) — and joins `points` per starter, defaulting a starter with no
+scored row (yet-to-play, or live-but-not-yet-appeared) to 0 (pure exported `playerPointsLookup`). **Theme
+F's REAL invariant (the browser's direct read scope) holds:** the read is SERVER-side owner-bypass, so the
+browser still reads ONLY `score_manager_period` + `standing` directly — NO RLS policy, NO publication
+entry, NO migration, NO new endpoint, NO browser-direct `score_player_match` read. The points reach the
+client exclusively inside the snapshot JSON, so the existing change-nudge→`/api/vsfield` refetch updates
+the chip live for free (Realtime payload/subscription unchanged). No privacy delta — the same points are
+already league-readable via the box-score modal (`/api/player-box`). Path (a) was chosen over a batch
+points endpoint (path b) for "boring and reliable." Guarded by `src/vsfield/pointsPath.test.ts` (the
+browser path contains no `score_player_match`; the server loader does).
+
+**Decision (SUPERSEDED by the above; retained for history): per-player POINTS stay OUT of the vsfield SSR
+payload — Option 2, modal-only.** `loadVsField` then carried only `name` + `nation`; per-player points
+were fetched on demand by the box-score modal. The revision changed the *product* decision (what the
+server composes into the payload), NOT the Theme-F boundary (the browser's direct read scope is unchanged).
 
 **Decision: nation on the drill-in comes from the `fifa_team.name` join, NEVER `player.country` (P34).**
 `player.country` is unwritten by ingestion; `loadVsField` resolves `nation` via `player.team.name`,
@@ -1941,10 +1954,14 @@ vsfield layout. The small CSS duplication is a conscious trade-off (zero Set-Lin
 since gates are jsdom and don't cover visual CSS); single-sourcing both copies of the modal CSS is a
 clean follow-up.
 
-**DEFERRED: a per-row `ScorePill` (live/banked points) on the vsfield XI.** It would require either
-widening the Theme-F SSR payload with per-player points or a new batch points endpoint, so it is out of
-scope for the modal-only build. The row instead shows a state pill (Playing / Played / To play); the
-authoritative points live in the modal header.
+**RESOLVED by Prompt 41 (was DEFERRED): the per-player points chip on the vsfield XI ships** — via path
+(a) (widen the server-composed snapshot; NOT a batch endpoint), per the SUPERSEDING decision above. Each
+jersey now carries a points chip in a fixed slot under it, the NUMBER as headline (vsfield-local
+`.sl-jersey-score`, ported from the handoff `vsfield_points/v2.css` `.sl-tok-score` and scoped under
+`.da-pitch` — lineup.css owns `.sl-tok*`). Three states off `StarterView.state`: playing = dark pill + red
+pulsing dot + N PTS · played = the SAME dark pill + N PTS, no dot (the dot is the sole live↔played cue) ·
+yet-to-play = dashed "– TO PLAY", no number; `dimLive` suppresses the dot. Gold-free (neutral pills,
+`--live` dot). The tap-to-open box-score modal is UNCHANGED; still-to-come stays a COUNT (no projection).
 
 Post-deploy visual confirmed on deploy 2026-06-12.
 
@@ -1988,9 +2005,11 @@ no-`background-size:cover` render-contract guard now covers all 30 kits incl. CR
 tests** green.
 
 **Decision (F2): CompareBand ships Facts 1+2 only; Fact 3 (player-by-player lineup edge) is DEFERRED.**
-Fact 3 needs per-player points, which Theme F deliberately keeps out of the SSR snapshot — no
-`score_player_match` read enters `loadVsField`. The deferral is pinned by a `TODO(F2)` in
-`components.tsx` and test-enforced (no per-player score value renders on any jersey token).
+Fact 3 needs per-player points. As of **Prompt 41** that data IS now in the snapshot
+(`StarterView.points` — the loader reads `score_player_match` server-side, path a), so Fact 3 is no longer
+*blocked* on Theme F; building the band-level Fact 3 is a separate scope step (not done this prompt). The
+deferral is pinned by a note in `components.tsx`. (The old "no per-player score renders on any token"
+assertion is itself superseded — the pitch now shows the points chip; see the points-chip decision above.)
 
 **Decision: LbRow (and every leaderboard/compare row) renders MANAGER identity — initials Avatar, NOT
 PlayerAvatar.** PlayerAvatar's flag badge is player/nation-scoped; managers have no nation. PlayerAvatar
