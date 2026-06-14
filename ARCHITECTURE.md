@@ -100,6 +100,7 @@ Two managed vendors. Single region near the league. No multi-region, no Kubernet
                  |  Background Worker: ingestion scheduler                         |
                  |    - schedule sync (hourly)                                     |
                  |    - pre-match lineup pull (at each kickoff)                    |
+                 |    - availability peek (match_lineups ~T-75; badge, not lock)   |
                  |    - LIVE poll loop (~60s while any match in_progress)          |
                  |    - post-match settle poll (until stats + rating land)         |
                  |    - recompute sweeper (dirty (match,player) -> scores -> table)|
@@ -166,7 +167,8 @@ table each tick):
 |---|---|---|---|
 | **Squad sync** | boot + slow (~daily) | `rosters` (season 2026) | bootstrap the **`player` + `fifa_team`** pool the draft and scoring reference — `player.id`/`name`/`position` (`G/D/M/F` → `GK/DEF/MID/FWD`) + national team (`team_id`). The ONLY path that creates `player` rows; every later mode just references them. Squads are static, so it stays off the 60s tick (own slow cadence). |
 | **Schedule sync** | hourly + daily | `matches` | keep kickoff times / statuses / scores current; kickoff times drive FAAB gating, period closes, and entry into "live" mode. |
-| **Pre-match** | at each kickoff | `match_lineups` | confirmed starting XIs -> **lock all starters** (set `locked_at`). |
+| **Availability peek** | ~75 min before each kickoff (`LINEUP_PEEK_LEAD_MS`), re-fires every tick across `[kickoff − lead, kickoff)` until rows land | `match_lineups` | persist the announced XI **and bench** to **`match_lineup_entry`** for the Set Lineup **availability badge** (Starting / Not starting). ORTHOGONAL to the lock: the pure selector `matchesNeedingLineupPeek` drives `peekLineup`, which writes ONLY that table — never `locked_at`, never `lineupPulled`, never a notification. This is the only reason the app holds lineup data *before* kickoff (previously the XI was first seen at kickoff). |
+| **Pre-match** | at each kickoff | `match_lineups` | confirmed starting XIs -> **lock all starters** (set `locked_at`). Still the SOLE owner of the kickoff lock; the T-75 peek above is disjoint (`< kickoff`) and does not touch it. |
 | **Live** | while any match `in_progress` | `match_events` (~60s), plus `player_match_stats` / `match_shots` / `team_match_stats` | **lock each substitute at his entry minute**; cards (w/ minute); goals; own goals; live-updating event points. |
 | **Settle** | after FT until values stabilize | `player_match_stats`, `match_shots`, **rating source** | stats can lag *hours*; the **rating lands near/after FT** -> keep recomputing as values arrive. |
 | **FAAB batch** | per period, at its deadline | (DB only) | clear the league's blind bids ONCE per scoring period, before that period's first kickoff (Theme-D amendment, below). Selects periods whose deadline has passed and that have not cleared, runs the unchanged `@app/faab` `resolveFaabBatch`, latches `period.batch_cleared_at`. Replaced the retired daily cron. |
@@ -457,6 +459,11 @@ not by hopeful application code:
   Movability is now `frozen_at IS NULL AND voided_at IS NULL` (C1 §16); `locked_at` is retired from
   movability but still stamped + read by the IN-direction hindsight backstop.
   Lock-on-play sets it (starter -> kickoff; sub -> entry minute).
+- `match_lineup_entry` — `(match_id, player_id)` UNIQUE, **`is_starter`**. The pre-kickoff official-XI/
+  bench **snapshot** the T-75 **Availability peek** (above) writes; drives the Set Lineup **availability
+  badge** (`loadLineup` joins it; `resolveStarterStatusByPlayer` keys it to the SAME `fifa_match` row as
+  kickoff/opponent). ADDITIVE, starts empty (no backfill), global-read RLS, no Realtime. ORTHOGONAL to
+  `lineup_slot` — it is NEVER a lock and the engine never reads it.
 
 **Periods (Theme C scoring windows)**
 - `period` — id, league_id, kind (`group_md`/`knockout_round`), label (MD1…, R32…),
