@@ -301,6 +301,17 @@ score is recomputable at any time.** This is exactly what the late-settling rati
   — the live 2026-06-11 MD1 incident (whole field dragged negative by a completed Mexico–South Africa
   fixture). The per-match scoring path is the single chokepoint that refuses non-participants
   regardless of how the upstream stub/mis-join arose.
+- **Phase-1 sweep: atomic claim-then-clear (beb1bec).** `RecomputeStore` now exposes
+  `claimDirtyPlayerMatches()` (replaces `listDirtyPlayerMatches()`) — one `updateManyAndReturn` per raw
+  table flips `dirty=true→false` AND returns the claimed keys atomically, closing the read→compute→clear
+  lost-update window. `markPlayerMatchDirty()` replaces `clearRawDirty()` and is called on per-key
+  failure to re-surface poison rows. `RecomputeOptions` gains `onPlayerMatchError`; `SweepResult` gains
+  `playerMatchFailures`. Per-key try/catch ensures a failure re-dirties the key and continues — every
+  claimed key ends with either a fresh score or `dirty=true`, never `dirty=false`-and-stale. The race is
+  dormant while raw-layer writers are serialized in the worker; it becomes load-bearing once the
+  Sofascore scraper writes ratings concurrently. Real-Postgres atomicity validated only by
+  `packages/recompute/src/sweepClaimClear.integration.test.ts` (skipped in CI gate; must run green
+  against a real Postgres before concurrent scraper writes begin).
 
 ### The rating source (resolver)
 **Sofascore is the primary rating source** — the locked ladder is calibrated to it. BALLDONTLIE

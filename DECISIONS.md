@@ -2302,3 +2302,28 @@ This is conflict-safe — `dirty` is a flag-only boolean that never clobbers sta
 the dirty rows via `recomputePlayerMatch`. **Verify AFTER a tick or two plus a page refresh** — an
 immediate read shows pre-sweep/stale state. For a display-only change (the scored line is `+0`),
 totals and standings are byte-identical; only the stored breakdown text changes.
+
+## Recompute sweep Phase-1 — atomic claim-then-clear + failure isolation (beb1bec)
+- Phase-1 now CLAIMS dirty (match,player) keys atomically: `claimDirtyPlayerMatches` runs one
+  `updateManyAndReturn` per raw table (Prisma 6.19.3 / PostgreSQL) flipping `dirty=true→false` AND
+  returning the keys in the same statement — replacing `listDirtyPlayerMatches` (read) + per-unit
+  `clearRawDirty` (clear-last). Clearing BEFORE the recompute read closes the read→compute→clear
+  lost-update: a raw write committing after its row is claimed re-sets `dirty=true` and is reprocessed
+  next sweep, so a committed write is never cleared without being incorporated. `recomputePlayerMatch`
+  no longer clears dirty.
+- Failure isolation: per-key try/catch; on throw the key is re-dirtied (`markPlayerMatchDirty`,
+  replaces `clearRawDirty`), surfaced via `opts.onPlayerMatchError` (worker wires it to the structured
+  logger so a poison row is visible and re-fires every tick), counted in
+  `SweepResult.playerMatchFailures`, and the loop CONTINUES. Every claimed key ends with either a fresh
+  score or `dirty=true` — never `dirty=false`-and-stale.
+- Provenance (honest): surfaced during the Antonee Robinson rating-omission investigation, which was
+  NOT a defect — a 6.5–6.9 rating scores 0 by design and the breakdown merely omitted the 0-point line
+  (fixed separately by `feat/scoring-show-zero-rating-line`). This branch fixed no live incident; it is
+  PREVENTIVE hardening.
+- BINDING GATE: the race is dormant while raw-layer writers are serialized in the worker; it becomes
+  load-bearing once the Sofascore scraper writes ratings CONCURRENTLY (currently stubbed). The
+  real-Postgres atomicity of `updateManyAndReturn` is validated ONLY by
+  `packages/recompute/src/sweepClaimClear.integration.test.ts` (describe.skipIf(!RECOMPUTE_PG_TEST_URL),
+  SKIPPED in the merge gate). REQUIRED before the scraper begins concurrent rating writes: run that
+  integration test GREEN against a real Postgres. Merged dormant on unit-green; the real-DB gate is
+  deferred to when the race goes live, not waived.
