@@ -89,11 +89,19 @@ export function scorePlayerMatch(input: ScoreInput): ScoreBreakdown {
   const isKeeper = role === "GK";
   const isKeeperOrDef = role === "GK" || role === "DEF";
 
-  // §1 Performance rating — only for a player who received a rating (i.e. who played).
+  // §1 Performance rating — ALWAYS shown when the player received a rating (non-null), INCLUDING
+  // the 0-point 6.5–6.9 band. This is the one bucket exempt from `add`'s omit-at-zero rule, so it
+  // pushes directly: a 0-point rating still renders, because omitting it read to users as "un-rated"
+  // (e.g. a 6.8 → 0 player showed no PERFORMANCE RATING section). Display-only — `pts` is unchanged
+  // and a 0-point line adds 0 to `total`, so totals stay byte-identical. A null rating emits nothing.
   if (input.rating !== null) {
     const pts = ratingPoints(input.rating);
     const src = input.ratingSource ? ` (${input.ratingSource})` : "";
-    add(C.rating, pts, `rating ${input.rating}${src} → ${signed(pts)}`);
+    lines.push({
+      category: C.rating,
+      points: pts,
+      detail: `rating ${input.rating}${src} → ${signed(pts)}`,
+    });
   }
 
   // §2 Appearance — driven by minutes (SCORING.md §2: "1–59" ⇒ played ≥ 1 minute).

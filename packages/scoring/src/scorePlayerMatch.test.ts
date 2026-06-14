@@ -137,6 +137,35 @@ describe("§1 Performance rating ladder (only when rating is non-null)", () => {
     const line = b.lines.find((l) => l.category === C.rating);
     expect(line?.detail).toMatch(/scrape/);
   });
+
+  // feat/scoring-show-zero-rating-line: the 6.5–6.9 band scores 0, but the line must STILL render
+  // when a rating is present — omitting it read to users as "un-rated" (e.g. Antonee Robinson at
+  // 6.8 → 0 showed no PERFORMANCE RATING section). Display-only: the 0-point line never moves the
+  // total, and a null rating is still omitted (the existing "emits no rating line" test above).
+  it.each<[number, string]>([
+    [6.5, "rating 6.5 → +0"],
+    [6.9, "rating 6.9 → +0"],
+  ])("emits a 0-point rating line for a %s rating (6.5–6.9 band)", (rating, detail) => {
+    const line = scorePlayerMatch(base({ rating })).lines.find((l) => l.category === C.rating);
+    expect(line).toBeDefined();
+    expect(line?.points).toBe(0);
+    expect(line?.detail).toBe(detail); // existing "+0" formatter, with source omitted when null
+  });
+
+  it("renders the zero-band rating detail with its source in the existing → +0 format", () => {
+    const b = scorePlayerMatch(base({ rating: 6.8, ratingSource: "scrape" }));
+    const line = b.lines.find((l) => l.category === C.rating);
+    expect(line?.detail).toBe("rating 6.8 (scrape) → +0");
+  });
+
+  it("the always-shown zero rating line does NOT change a 6.8 player's total", () => {
+    // A played 6.8 player: appearance +2 (90′) + rating +0. The new 0-point line adds nothing,
+    // so the total is byte-identical to the pre-change behaviour (rating omitted, but worth 0).
+    const b = scorePlayerMatch(base({ minutesPlayed: 90, rating: 6.8, ratingSource: "scrape" }));
+    expect(b.lines.some((l) => l.category === C.rating)).toBe(true); // line now present
+    expect(pointsFor(b, C.rating)).toBe(0); // worth 0
+    expect(b.total).toBe(2); // appearance only — unchanged by the always-shown line
+  });
 });
 
 describe("§2 Appearance (minutes)", () => {
