@@ -7,7 +7,7 @@
  */
 import type { PrismaClient, MatchStatus, PeriodKind, Position } from "@app/db";
 import { markStatPlayerDirty, Prisma } from "@app/db";
-import type { IngestStore, SchedulableMatch } from "./store";
+import type { IngestStore, SchedulableMatch, LineupEntryIn } from "./store";
 import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
 import { isLockWriteAuthorized } from "./lock";
 
@@ -230,6 +230,23 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
       }
     },
 
+    async upsertLineupEntries(matchBdlId, entries): Promise<void> {
+      // Plain table write — no lock, no dirty, no lineupPulled. The match must exist (schedule-sync
+      // upserts fifa_match first); a player the sheet lists that we don't have rostered is skipped
+      // (unresolved ref, same convention as the raw layer's `if (!matchId || !playerId) return`).
+      const matchId = await matchIdFor(matchBdlId);
+      if (!matchId) return;
+      for (const e of entries as readonly LineupEntryIn[]) {
+        const playerId = await playerIdFor(e.playerBdlId);
+        if (!playerId) continue;
+        await prisma.matchLineupEntry.upsert({
+          where: { matchId_playerId: { matchId, playerId } },
+          create: { matchId, playerId, isStarter: e.isStarter },
+          update: { isStarter: e.isStarter },
+        });
+      }
+    },
+
     async lockSlot(matchBdlId, playerBdlId, lockedAt, now, path): Promise<boolean> {
       // Resolve the SOURCE match (the fixture the lock derives from) and the candidate player. A foreign
       // event references a match not in `fifa_match`, or a player not rostered → unknown ref → no stamp.
@@ -317,6 +334,8 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
           kickoffAt: true,
           kickoffLockFallback: true,
           ratings: { where: { source: "balldontlie" }, select: { matchId: true }, take: 1 },
+          // EXISTS a pre-kickoff availability snapshot → the T-75 peek has landed (stops re-firing).
+          lineupEntries: { select: { id: true }, take: 1 },
           _count: { select: { events: true } },
         },
       });
@@ -328,6 +347,7 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
         // Proxy: any event recorded (or a non-scheduled status) means we already pulled this fixture.
         // pre-match is idempotent, so an occasional re-pull is harmless. TODO(confirm): a dedicated flag.
         lineupPulled: r._count.events > 0 || r.status !== "scheduled",
+        lineupPeeked: r.lineupEntries.length > 0,
         kickoffLockFallback: r.kickoffLockFallback,
       }));
     },

@@ -27,7 +27,12 @@
 import type { Position } from "@app/shared";
 import { formatInLeagueTz } from "@app/shared";
 import type { PitchSlot, PitchView, SlotKind } from "../../src/lineup/view";
-import type { LineupPlayer, OpponentInfo, PeriodLineup } from "../../src/lineup/types";
+import type {
+  LineupPlayer,
+  OpponentInfo,
+  PeriodLineup,
+  StarterStatus,
+} from "../../src/lineup/types";
 import { PlayerAvatar } from "../../components/PlayerAvatar";
 import { Flag } from "../draft/Flag";
 import { toIso2 } from "../../src/draft/flag";
@@ -85,6 +90,87 @@ export function OpponentTag({
 
 export function Pos({ position }: { position: Position }) {
   return <span className={`pos pos-${position}`}>{position}</span>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Availability badge (Set Lineup) — design Variation B "corner medallion + kit glow", ported from
+// design/design_handoff_availability_badge/availability/badges.jsx. Answers, per rostered player, "is
+// he in his country's real starting XI for his next match?" — ORTHOGONAL to lock-on-play (kit dim +
+// score line). Two states only; the design's third "TBA" state is intentionally NOT a chip here — a
+// null status renders NO badge (the calm, dominant default until the lineup is announced).
+//
+// Every state carries colour + a distinct icon shape + a word (the design's non-negotiable colorblind
+// rule). The state palette (--sl-av / --sl-av-soft / --sl-av-ink) is set by the host (the token / bench
+// row) via the `availClass` below, so these pieces just consume the inherited CSS vars. The accent is
+// reserved for *you* + primary actions, so this functional badge never uses it.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+const AVAIL: Record<
+  StarterStatus,
+  { word: string; cls: string; icon: "check" | "x"; label: string }
+> = {
+  starting: {
+    word: "Starting",
+    cls: "sl-av-starting",
+    icon: "check",
+    label: "Starting — in his country's real XI",
+  },
+  not_starting: {
+    word: "Out",
+    cls: "sl-av-out",
+    icon: "x",
+    label: "Not starting — benched or out of the matchday squad",
+  },
+};
+
+/** The host className that sets the state palette (or "" for no badge). Applied to the token / bench row. */
+export function availClass(status: StarterStatus | null): string {
+  return status ? AVAIL[status].cls : "";
+}
+
+/** check (Starting) / cross (Not starting) — distinct silhouettes for the colorblind-safe redundancy. */
+function AvailIco({ icon }: { icon: "check" | "x" }) {
+  const p = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  return icon === "check" ? (
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" strokeWidth={2.6} {...p}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" strokeWidth={2.8} {...p}>
+      <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
+    </svg>
+  );
+}
+
+/** Pitch token: the corner medallion (icon only) pinned to the avatar's top-right. */
+export function AvailabilityMedallion({ status }: { status: StarterStatus }) {
+  const a = AVAIL[status];
+  return (
+    <span className="sl-av-medal" role="img" aria-label={a.label} title={a.label}>
+      <AvailIco icon={a.icon} />
+    </span>
+  );
+}
+
+/** Pitch token: the micro word under the token (the design's 9px/800 uppercase label). */
+export function AvailabilityWord({ status }: { status: StarterStatus }) {
+  return <span className="sl-av-word">{AVAIL[status].word}</span>;
+}
+
+/** Bench row: the trailing icon + word tag (the bench treatment's leading chip + word, combined). */
+export function AvailabilityTag({ status }: { status: StarterStatus }) {
+  const a = AVAIL[status];
+  return (
+    <span className="sl-av-tag" role="img" aria-label={a.label} title={a.label}>
+      <AvailIco icon={a.icon} />
+      {a.word}
+    </span>
+  );
 }
 
 function IcoLock() {
@@ -169,6 +255,9 @@ export interface TokenProps {
 
 export function PitchToken({ slot, selected, eligible, timezone, onSelect, onScore }: TokenProps) {
   const { player, movable, slotKind, pointsAtStake } = slot;
+  // Availability is meaningful ONLY while the player is still movable (pre-kickoff). Once he locks by
+  // play, the lock state + score line take over and the badge is dropped (design visibility gate).
+  const avail = movable ? slot.starterStatus : null;
   const isPlayedStarter = slotKind === "played-starter";
   // Locked tokens (kicked off, no appearance yet) now open the score modal on tap.
   const isLocked = slotKind === "locked";
@@ -195,7 +284,7 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
   return (
     <button
       type="button"
-      className={`sl-tok st-${state} ${kindClass}`}
+      className={`sl-tok st-${state} ${kindClass}${avail ? ` ${availClass(avail)}` : ""}`}
       draggable={false}
       aria-disabled={!tappable}
       disabled={!tappable}
@@ -203,14 +292,19 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
       title={title}
     >
       <span className="sl-tok-top">
-        <PlayerAvatar
-          displayName={player.displayName}
-          firstName={player.firstName}
-          lastName={player.lastName}
-          country={player.country}
-          position={player.position}
-          size="sm"
-        />
+        {/* Anchor wraps the avatar so the availability medallion pins to ITS top-right + the state glow
+            follows the avatar silhouette (the design's kit glow, adapted to the circular avatar). */}
+        <span className="sl-av-anchor">
+          <PlayerAvatar
+            displayName={player.displayName}
+            firstName={player.firstName}
+            lastName={player.lastName}
+            country={player.country}
+            position={player.position}
+            size="sm"
+          />
+          {avail && <AvailabilityMedallion status={avail} />}
+        </span>
         {/* Padlock for frozen/locked slots; played starters show a clickable ScorePill instead. */}
         {!movable && !isPlayedStarter && <IcoLock />}
         {isPlayedStarter && pointsAtStake > 0 && (
@@ -218,6 +312,7 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
         )}
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
+      {avail && <AvailabilityWord status={avail} />}
       <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-tok-ko" />
       {slot.kickoffAt && (
         <OpponentTag opponent={slot.opponent} className="sl-tok-opp t-micro text-tertiary" />
@@ -270,12 +365,14 @@ export function Pitch({ view, selected, eligibleIds, timezone, onSelect, onScore
 export function BenchRow({ slot, selected, eligible, timezone, onSelect, onScore }: TokenProps) {
   const { player, movable, slotKind, pointsAtStake } = slot;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
+  // Availability only while movable (pre-kickoff) — the row state class drives the left accent stripe.
+  const avail = movable ? slot.starterStatus : null;
   // Non-movable bench rows now open the score modal; the is-locked class is kept for visual dimming.
   const handleClick = () => (movable ? onSelect(player.id) : onScore(player.id));
   return (
     <button
       type="button"
-      className={`sl-bench-row st-${state} ${movable ? "is-movable" : "is-locked"}`}
+      className={`sl-bench-row st-${state} ${movable ? "is-movable" : "is-locked"}${avail ? ` ${availClass(avail)}` : ""}`}
       draggable={false}
       onClick={handleClick}
     >
@@ -293,6 +390,7 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect, onScore
             {shortName(player)}
           </b>
           <LockTag slotKind={slotKind} mini />
+          {avail && <AvailabilityTag status={avail} />}
           {!movable && (
             <ScorePill
               points={pointsAtStake}

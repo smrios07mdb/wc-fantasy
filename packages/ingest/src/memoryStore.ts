@@ -4,7 +4,7 @@
  * with NO database. Mirrors the production semantics: raw stat/rating writes mark (match,player) dirty;
  * event/shot/team writes do NOT (markPlayersDirty does, as in the Prisma store).
  */
-import type { IngestStore, SchedulableMatch } from "./store";
+import type { IngestStore, SchedulableMatch, LineupEntryIn } from "./store";
 import type { MatchRowIn, StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
 import { isLockWriteAuthorized } from "./lock";
 
@@ -19,6 +19,8 @@ export class MemoryIngestStore implements IngestStore {
   private dirty = new Set<string>();
   private locks = new Map<string, Date>();
   private appeared = new Map<number, Set<number>>(); // matchBdlId → appeared player BDL-ids (score rows)
+  // matchBdlId → (playerBdlId → isStarter): the pre-kickoff availability snapshot (upsertLineupEntries).
+  private lineupEntries = new Map<number, Map<number, boolean>>();
   /** Opt-in lock-gate model (mirrors `fifa_match` status+teams+period for `lockSlot`). When a match's facts
    *  are seeded the gate is enforced EXACTLY as production; an unseeded match exercises lock FLOW only — the
    *  gate's own coverage lives in `isLockWriteAuthorized`'s unit tests + the Prisma store. */
@@ -82,14 +84,20 @@ export class MemoryIngestStore implements IngestStore {
     kickoffMs: number;
     hasRating?: boolean;
     lineupPulled?: boolean;
+    lineupPeeked?: boolean;
     kickoffLockFallback?: boolean;
   }): void {
     this.matches.push({
       hasRating: false,
       lineupPulled: false,
+      lineupPeeked: false,
       kickoffLockFallback: false,
       ...m,
     });
+  }
+  /** Test accessor: the persisted pre-kickoff snapshot for a match (playerBdlId → isStarter). */
+  lineupEntriesFor(matchBdlId: number): Map<number, boolean> | undefined {
+    return this.lineupEntries.get(matchBdlId);
   }
   statLines(): StatLineRow[] {
     return [...this.stats.values()];
@@ -194,6 +202,14 @@ export class MemoryIngestStore implements IngestStore {
     return Promise.resolve();
   }
 
+  // ── IngestStore: availability peek (plain table write; NOT a lock) ──
+  upsertLineupEntries(matchBdlId: number, entries: readonly LineupEntryIn[]): Promise<void> {
+    const m = this.lineupEntries.get(matchBdlId) ?? new Map<number, boolean>();
+    for (const e of entries) m.set(e.playerBdlId, e.isStarter);
+    this.lineupEntries.set(matchBdlId, m);
+    return Promise.resolve();
+  }
+
   // ── IngestStore: locking ──
   lockSlot(m: number, p: number, at: Date, now: Date, _path: string): Promise<boolean> {
     // Temporal now-gate — ALWAYS enforced (the boundary never trusts the caller).
@@ -223,6 +239,13 @@ export class MemoryIngestStore implements IngestStore {
 
   // ── IngestStore: scheduler reads ──
   listSchedulableMatches(): Promise<SchedulableMatch[]> {
-    return Promise.resolve([...this.matches]);
+    // `lineupPeeked` mirrors the Prisma EXISTS: true once any `match_lineup_entry` row exists for the
+    // match (OR a directly-seeded value, for selector-flow tests that don't go through upsert).
+    return Promise.resolve(
+      this.matches.map((m) => ({
+        ...m,
+        lineupPeeked: m.lineupPeeked || (this.lineupEntries.get(m.bdlId)?.size ?? 0) > 0,
+      })),
+    );
   }
 }

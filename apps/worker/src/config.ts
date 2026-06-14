@@ -49,4 +49,8 @@ export const config = {
    *  reproduces that pre-kickoff instant and stays comfortably ahead of the period's earliest match.
    *  TODO(confirm): batch lead — the precise lead is a commissioner knob (per-period override wins). */
   faabBatchLeadMs: intEnv("FAAB_BATCH_LEAD_MIN", DEFAULT_FAAB_BATCH_LEAD_MIN) * 60_000,
+  /** Lead time before kickoff to pull `match_lineups` for the Set Lineup availability badge (the T-75
+   *  peek). National-team sheets publish ~75 min out; the selector re-fires each tick across
+   *  [kickoff - this, kickoff) until the snapshot lands. ORTHOGONAL to the kickoff lock path. Default 75m. */
+  lineupPeekLeadMs: intEnv("LINEUP_PEEK_LEAD_MS", 75 * 60_000),
 } as const;

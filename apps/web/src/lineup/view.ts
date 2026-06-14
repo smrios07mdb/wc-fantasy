@@ -13,7 +13,7 @@ import {
   type LineupValidation,
 } from "@app/lineup";
 import { POSITIONS, type Position } from "@app/shared";
-import type { LineupPlayer, OpponentInfo, PeriodLineup, PeriodLock } from "./types";
+import type { LineupPlayer, OpponentInfo, PeriodLineup, PeriodLock, StarterStatus } from "./types";
 
 export interface PitchSlot {
   player: LineupPlayer;
@@ -28,6 +28,9 @@ export interface PitchSlot {
   /** Opponent fixture for this player's period: team name + nation (for flag) + home/away. Null when
    *  the player's team has no fixture this period or the opponent side is TBD (knockout not decided). */
   opponent: OpponentInfo | null;
+  /** Pre-kickoff availability badge state ("starting" / "not_starting"), or null when the lineup hasn't
+   *  been announced for his match yet (no badge). Resolved against the SAME fixture as kickoff/opponent. */
+  starterStatus: StarterStatus | null;
 }
 
 export interface PitchView {
@@ -107,6 +110,10 @@ export interface PeriodMatch {
   homeTeamName?: string | null;
   /** Away team display name (fifa_team.name) — for the opponent label when the player is home. */
   awayTeamName?: string | null;
+  /** This fixture's pre-kickoff official-lineup snapshot (the `match_lineup_entry` rows): playerId →
+   *  is_starter. Absent/empty ⇒ the lineup hasn't been peeked yet (no entries) → players resolve to a
+   *  null badge. A NON-empty map ⇒ the match was peeked, so a player absent from it resolves "not_starting". */
+  starterByPlayer?: Record<string, boolean>;
 }
 
 /**
@@ -183,6 +190,50 @@ export function resolveOpponentByPlayer(
   return out;
 }
 
+/**
+ * Resolve each squad player's pre-kickoff availability for the period being viewed: player.teamId → the
+ * period fixture his team plays in → that fixture's official-lineup snapshot (`starterByPlayer`). Uses
+ * the SAME earliest-kickoff tie-break as `kickoffByTeam`, so kickoff, opponent, and starter-status always
+ * reference the SAME `fifa_match` row and can never diverge. Returns, per player:
+ *   - the resolved match has entries AND he is a starter (`is_starter:true`)        → "starting"
+ *   - the resolved match has entries AND he is NOT (an `is_starter:false` row OR absent) → "not_starting"
+ *   - no fixture for his team this period, or the match has NO entries (not announced)   → null (no badge)
+ *
+ * The "match has entries" signal is the non-emptiness of `starterByPlayer` — the peek only writes when the
+ * sheet is up (≥1 entry), so a populated map ⇔ the lineup was announced. This makes the resolver robust
+ * whether the feed lists the full squad or only the XI (an absent bench player still resolves
+ * "not_starting" once the match has any entry).
+ */
+export function resolveStarterStatusByPlayer(
+  squad: readonly { id: string; teamId: string | null }[],
+  matches: readonly PeriodMatch[],
+): Record<string, StarterStatus | null> {
+  // Each team → its earliest-kickoff fixture this period, carrying THAT fixture's lineup snapshot (the
+  // identical tie-break `kickoffByTeam` uses, so the row matches kickoff/opponent exactly).
+  const byTeam = new Map<string, { kickoffAt: string; starterByPlayer: Record<string, boolean> }>();
+  for (const m of matches) {
+    const snapshot = m.starterByPlayer ?? {};
+    for (const teamId of [m.homeTeamId, m.awayTeamId]) {
+      if (!teamId) continue;
+      const existing = byTeam.get(teamId);
+      if (existing === undefined || m.kickoffAt < existing.kickoffAt) {
+        byTeam.set(teamId, { kickoffAt: m.kickoffAt, starterByPlayer: snapshot });
+      }
+    }
+  }
+  const out: Record<string, StarterStatus | null> = {};
+  for (const p of squad) {
+    const match = p.teamId ? byTeam.get(p.teamId) : undefined;
+    // No fixture, or the match has no entries yet (lineup not announced) → no badge.
+    if (!match || Object.keys(match.starterByPlayer).length === 0) {
+      out[p.id] = null;
+      continue;
+    }
+    out[p.id] = match.starterByPlayer[p.id] === true ? "starting" : "not_starting";
+  }
+  return out;
+}
+
 export function positionOf(squad: readonly LineupPlayer[], playerId: string): Position | undefined {
   return squad.find((p) => p.id === playerId)?.position;
 }
@@ -203,6 +254,7 @@ export function buildPitch(squad: readonly LineupPlayer[], period: PeriodLineup)
       pointsAtStake: period.slotMeta[p.id]?.pointsAtStake ?? 0,
       kickoffAt: period.kickoffByPlayer[p.id] ?? null,
       opponent: period.opponentByPlayer[p.id] ?? null,
+      starterStatus: period.starterStatusByPlayer?.[p.id] ?? null,
     };
     if (inXI) {
       lanes[p.position].push(slot);

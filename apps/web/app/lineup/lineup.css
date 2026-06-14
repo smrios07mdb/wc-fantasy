@@ -455,6 +455,104 @@
   border-color: color-mix(in srgb, var(--loss) 28%, transparent);
 }
 
+/* ── Availability badge — pre-kickoff Starting / Not starting (design Variation B) ─────────────────
+   Shown ONLY while the player is movable (pre-kickoff); on lock the kit dim + score line take over.
+   Two states; "lineup not announced" renders NO badge. Colour + icon + word on every state
+   (colorblind-safe). The host token / bench row sets the palette via .sl-av-starting / .sl-av-out;
+   the pieces below consume the inherited CSS vars. All colour via ds tokens (no literal hex); the
+   accent is reserved for *you* + primary actions, so this functional badge never uses it. */
+.sl-av-starting {
+  --sl-av: var(--win);
+  --sl-av-soft: var(--win-soft);
+  --sl-av-ink: var(--surface-0); /* near-black glyph on the green medallion (design's dark glyph) */
+}
+.sl-av-out {
+  --sl-av: var(--loss);
+  --sl-av-soft: var(--loss-soft);
+  --sl-av-ink: var(--text-primary); /* near-white glyph on the red medallion (design's light glyph) */
+}
+
+/* Pitch: anchor wrapping the avatar — the medallion's positioning context + the state glow target. */
+.sl-av-anchor {
+  position: relative;
+  display: inline-flex;
+}
+/* Kit glow, adapted to the circular avatar: a faint state-coloured drop-shadow that reads at a glance
+   across a full XI even before the medallion is parsed. drop-shadow follows the avatar silhouette. */
+.sl-tok.sl-av-starting .sl-av-anchor,
+.sl-tok.sl-av-out .sl-av-anchor {
+  filter: drop-shadow(0 0 1px var(--sl-av))
+    drop-shadow(0 0 5px color-mix(in srgb, var(--sl-av) 70%, transparent));
+}
+/* Pitch: corner medallion pinned to the avatar's top-right (design: 19px circle, dark/white glyph). */
+.sl-av-medal {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sl-av);
+  color: var(--sl-av-ink);
+  box-shadow:
+    0 0 0 2px var(--surface-2),
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.sl-av-medal svg {
+  width: 12px;
+  height: 12px;
+}
+/* Pitch: the micro word under the token (design: 9px / 800 / uppercase). */
+.sl-av-word {
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sl-av);
+}
+
+/* Bench: trailing icon + word tag (the bench treatment's leading chip + trailing word, combined). */
+.sl-av-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--sl-av-soft);
+  color: var(--sl-av);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.sl-av-tag svg {
+  width: 11px;
+  height: 11px;
+}
+/* Bench: left accent stripe (design's ::before bar). Needs the row as the positioning context. */
+.sl-bench-row {
+  position: relative;
+}
+.sl-bench-row.sl-av-starting::before,
+.sl-bench-row.sl-av-out::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 9px 0 0 9px;
+  background: var(--sl-av);
+}
+
 /* ── C2: danger button (Bench & forfeit) ───────────────────────────────── */
 .btn-danger {
   background: var(--loss);

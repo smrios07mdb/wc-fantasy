@@ -17,7 +17,19 @@ export interface SchedulableMatch {
   kickoffMs: number;
   hasRating: boolean;
   lineupPulled: boolean;
+  /** Whether a `match_lineup_entry` already exists for this match — drives the T-75 availability peek's
+   *  ONCE-per-match firing (the `ModeMatch.lineupPeeked` proxy). Independent of `lineupPulled`. OPTIONAL
+   *  so existing `SchedulableMatch` fixtures (e.g. lockSweep.test) stay byte-untouched; the stores always
+   *  populate it (the Prisma EXISTS / the memory derivation). */
+  lineupPeeked?: boolean;
   kickoffLockFallback: boolean;
+}
+
+/** One mapped pre-kickoff lineup row for `upsertLineupEntries` (availability badge). BDL-keyed like
+ *  every feed row; `isStarter` separates the real XI from the bench. Carries no lock/score concern. */
+export interface LineupEntryIn {
+  playerBdlId: number;
+  isStarter: boolean;
 }
 
 export interface IngestStore {
@@ -49,6 +61,16 @@ export interface IngestStore {
   /** Re-dirty each affected player for a match-level write (events/shots/team have no dirty col) by
    *  flipping `stat_player_match.dirty` — the channel `sweep`'s `claimDirtyPlayerMatches` actually reads. */
   markPlayersDirty(matchBdlId: number, playerBdlIds: readonly number[]): Promise<void>;
+
+  // ── availability peek (pre-kickoff lineup snapshot; NOT a lock) ──
+  /**
+   * Persist the pre-kickoff official-lineup snapshot for a match (the Set Lineup availability badge).
+   * Resolves BDL ids → internal UUIDs and upserts each row keyed by `UNIQUE(match_id, player_id)`;
+   * idempotent re-pull. This is a PLAIN table write — it routes NOWHERE near the lock-write boundary
+   * (`lockSlot`), sets no `lineupPulled`, and marks nothing dirty (the engine never reads this table).
+   * Players the feed lists that we don't have rostered are skipped (unresolved ref), like the raw layer.
+   */
+  upsertLineupEntries(matchBdlId: number, entries: readonly LineupEntryIn[]): Promise<void>;
 
   // ── locking ──
   /**

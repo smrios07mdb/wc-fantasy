@@ -318,6 +318,7 @@ model Player {
   manualStatLines ManualStatPlayerMatch[]
   scoreLines      ScorePlayerMatch[]
   shots           ShotMatch[]
+  lineupEntries   MatchLineupEntry[]
 
   // match events (four distinct roles a player can hold on one event)
   eventsAsPlayer EventMatch[] @relation("EventPlayer")
@@ -391,6 +392,7 @@ model FifaMatch {
   manualStats ManualStatPlayerMatch[]
   scores      ScorePlayerMatch[]
   poolPicks   PoolPick[]
+  lineupEntries MatchLineupEntry[]
 
   @@index([kickoffAt])
   @@index([status])
@@ -888,6 +890,31 @@ model PoolPick {
   @@index([leagueId, matchId])
   @@index([matchId])
   @@map("pool_pick")
+}
+
+/// Pre-kickoff official-lineup snapshot for the Set Lineup availability badge (Prompt — availability
+/// badge). Populated by the worker's T-75 `peekLineup` sweep (NOT the kickoff lock path): it pulls
+/// `match_lineups` ~75 min before kickoff and writes one row per (match, player) seen on the national-
+/// team sheet, `is_starter` distinguishing the real XI from the bench. This table is ORTHOGONAL to
+/// lock-on-play — it writes NO `lineup_slot.locked_at` and sets no lineupPulled; the kickoff lock path
+/// is byte-untouched. Additive, starts empty (no backfill). Global-read RLS (lineup data is non-
+/// sensitive reference, NOT league-scoped) + NO Realtime publication: the Set Lineup screen reads it via
+/// `loadLineup`'s server fetch and renders each rostered player's Starting / Not starting badge; the
+/// ABSENCE of any row for a player's match = lineup not announced = no badge.
+model MatchLineupEntry {
+  id        String   @id @default(uuid())
+  matchId   String   @map("match_id")
+  playerId  String   @map("player_id")
+  isStarter Boolean  @map("is_starter")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  match  FifaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId], map: "match_lineup_entry_match_player_uq")
+  @@index([matchId])
+  @@map("match_lineup_entry")
 }
 
 // ────────────────────────────────────────────────────────────────────────────

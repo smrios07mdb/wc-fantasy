@@ -3,6 +3,7 @@ import {
   decideMatchModes,
   pollerSilentMatches,
   anyMatchInLiveWindow,
+  matchesNeedingLineupPeek,
   type ModeMatch,
 } from "./mode";
 
@@ -129,5 +130,74 @@ describe("anyMatchInLiveWindow", () => {
       kickoffMs: T("2026-06-12T18:00:00Z"),
     };
     expect(anyMatchInLiveWindow([m], now, PRE, POST)).toBe(false);
+  });
+});
+
+describe("matchesNeedingLineupPeek (T-75 availability peek)", () => {
+  const LEAD = 75 * 60_000;
+  const kickoff = T("2026-06-10T18:00:00Z");
+  const scheduled = (over: Partial<ModeMatch> = {}): ModeMatch => ({
+    ...base,
+    bdlId: 40,
+    status: "scheduled",
+    kickoffMs: kickoff,
+    ...over,
+  });
+
+  it("fires for a scheduled, un-peeked match inside [kickoff - lead, kickoff)", () => {
+    // 60 min before kickoff — well inside the 75-min window.
+    expect(matchesNeedingLineupPeek([scheduled()], new Date("2026-06-10T17:00:00Z"), LEAD)).toEqual(
+      [40],
+    );
+  });
+
+  it("fires at the exact lower bound (kickoff - lead is inclusive)", () => {
+    expect(matchesNeedingLineupPeek([scheduled()], new Date("2026-06-10T16:45:00Z"), LEAD)).toEqual(
+      [40],
+    );
+  });
+
+  it("does NOT fire before the lead window opens", () => {
+    // 90 min before kickoff — earlier than the 75-min lead.
+    expect(matchesNeedingLineupPeek([scheduled()], new Date("2026-06-10T16:30:00Z"), LEAD)).toEqual(
+      [],
+    );
+  });
+
+  it("does NOT fire AT kickoff or after (that is pre_match's job, the kickoff lock path)", () => {
+    expect(matchesNeedingLineupPeek([scheduled()], new Date("2026-06-10T18:00:00Z"), LEAD)).toEqual(
+      [],
+    );
+    expect(matchesNeedingLineupPeek([scheduled()], new Date("2026-06-10T18:05:00Z"), LEAD)).toEqual(
+      [],
+    );
+  });
+
+  it("does NOT fire once the match has been peeked", () => {
+    expect(
+      matchesNeedingLineupPeek(
+        [scheduled({ lineupPeeked: true })],
+        new Date("2026-06-10T17:00:00Z"),
+        LEAD,
+      ),
+    ).toEqual([]);
+  });
+
+  it("does NOT fire for a non-scheduled match (in_progress / completed)", () => {
+    const now = new Date("2026-06-10T17:00:00Z");
+    expect(matchesNeedingLineupPeek([scheduled({ status: "in_progress" })], now, LEAD)).toEqual([]);
+    expect(matchesNeedingLineupPeek([scheduled({ status: "completed" })], now, LEAD)).toEqual([]);
+  });
+
+  it("GUARD: the peek window and the pre_match (lock) arm are disjoint — neither perturbs the other", () => {
+    const m = scheduled();
+    // During the peek window (before kickoff): the peek fires; decideMatchModes emits NO pre_match.
+    const preKickoff = new Date("2026-06-10T17:00:00Z");
+    expect(matchesNeedingLineupPeek([m], preKickoff, LEAD)).toEqual([40]);
+    expect(decideMatchModes([m], preKickoff)).toEqual([]);
+    // At kickoff: the kickoff lock path (pre_match) fires; the peek does NOT.
+    const atKickoff = new Date("2026-06-10T18:00:00Z");
+    expect(decideMatchModes([m], atKickoff)).toEqual([{ bdlId: 40, mode: "pre_match" }]);
+    expect(matchesNeedingLineupPeek([m], atKickoff, LEAD)).toEqual([]);
   });
 });

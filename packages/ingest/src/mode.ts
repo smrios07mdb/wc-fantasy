@@ -13,6 +13,12 @@ export interface ModeMatch {
   hasRating: boolean;
   /** Whether the pre-match lineup pull already ran (so pre_match fires ONCE). */
   lineupPulled: boolean;
+  /** Whether the pre-KICKOFF availability peek already landed rows (so the T-75 peek stops re-firing).
+   *  True once a `match_lineup_entry` exists for the match. ORTHOGONAL to `lineupPulled` (kickoff lock):
+   *  the peek writes only the availability snapshot, never a lock. OPTIONAL so the existing
+   *  scheduler-mode fixtures stay byte-untouched; an absent value ⇒ not peeked (the peek re-fires).
+   *  Production always populates it (the stores derive it from the EXISTS). */
+  lineupPeeked?: boolean;
 }
 
 export interface MatchAction {
@@ -80,6 +86,33 @@ export function pollerSilentMatches(
     if (m.status !== "in_progress") continue;
     const last = lastLivePollByMatch.get(m.bdlId);
     if (last === undefined || t - last > graceMs) out.push({ bdlId: m.bdlId, mode: "live" });
+  }
+  return out;
+}
+
+/**
+ * Availability-peek selector (Set Lineup badge). Returns the bdlIds of SCHEDULED matches whose kickoff
+ * sits in the pre-kickoff window `[kickoff - leadMs, kickoff)` and that have NOT yet been peeked
+ * (`!lineupPeeked`). National-team sheets publish ~75 min out, so the worker pulls `match_lineups` here
+ * to persist a Starting / Not-starting snapshot BEFORE kickoff — independent of `decideMatchModes`'
+ * `pre_match` arm, which fires only at/after kickoff and is the kickoff LOCK path.
+ *
+ * This is deliberately a SEPARATE pure fn (alongside `anyMatchInLiveWindow` / `pollerSilentMatches`): it
+ * emits NO `pre_match` / `live` / `settle` / lock action — just the ids to peek. It re-fires every tick
+ * across the window until entries land (then `lineupPeeked` flips true and it stops), and never fires
+ * at/after kickoff (the lower bound is strict `< kickoff`, leaving the at-kickoff XI pull to `pre_match`).
+ */
+export function matchesNeedingLineupPeek(
+  matches: readonly ModeMatch[],
+  now: Date,
+  leadMs: number,
+): number[] {
+  const t = now.getTime();
+  const out: number[] = [];
+  for (const m of matches) {
+    if (m.status !== "scheduled") continue;
+    if (m.lineupPeeked) continue;
+    if (m.kickoffMs - leadMs <= t && t < m.kickoffMs) out.push(m.bdlId);
   }
   return out;
 }

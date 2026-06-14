@@ -12,6 +12,7 @@ import {
   defaultStarterIds,
   resolveKickoffByPlayer,
   resolveOpponentByPlayer,
+  resolveStarterStatusByPlayer,
 } from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup, SetLineupState, SlotMeta } from "../../src/lineup/types";
 
@@ -70,7 +71,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
 
   const periodIds = periodRows.map((p) => p.id);
   const squadIds = squad.map((p) => p.id);
-  const [slotRows, matchRows, scoreRows] = await Promise.all([
+  const [slotRows, matchRows, scoreRows, lineupEntryRows] = await Promise.all([
     periodIds.length
       ? prisma.lineupSlot.findMany({
           where: { managerId: sessionManagerId, periodId: { in: periodIds } },
@@ -91,6 +92,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       ? prisma.fifaMatch.findMany({
           where: { periodId: { in: periodIds } },
           select: {
+            id: true,
             periodId: true,
             homeTeamId: true,
             awayTeamId: true,
@@ -109,7 +111,25 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
           select: { playerId: true, points: true, match: { select: { periodId: true } } },
         })
       : Promise.resolve([]),
+    // The pre-kickoff availability snapshot for this period's fixtures (the worker's T-75 peek). ALL
+    // entries (both teams, XI + bench) — so "match has entries" is judged on the whole sheet, not just
+    // the squad's players. Drives each player's Starting / Not starting badge; no rows → no badge.
+    periodIds.length
+      ? prisma.matchLineupEntry.findMany({
+          where: { match: { periodId: { in: periodIds } } },
+          select: { matchId: true, playerId: true, isStarter: true },
+        })
+      : Promise.resolve([]),
   ]);
+
+  // matchId → { playerId → is_starter }: the per-fixture snapshot the resolver keys on. A populated map
+  // for a match ⇔ its lineup has been announced (the peek writes nothing on an empty sheet).
+  const entriesByMatch = new Map<string, Record<string, boolean>>();
+  for (const e of lineupEntryRows) {
+    const m = entriesByMatch.get(e.matchId) ?? {};
+    m[e.playerId] = e.isStarter;
+    entriesByMatch.set(e.matchId, m);
+  }
 
   const unorderedPeriods: PeriodLineup[] = periodRows.map((p) => {
     const slots = slotRows.filter((s) => s.periodId === p.id);
@@ -145,6 +165,8 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
         kickoffAt: m.kickoffAt.toISOString(),
         homeTeamName: m.homeTeam?.name ?? null,
         awayTeamName: m.awayTeam?.name ?? null,
+        // This fixture's official-lineup snapshot (or undefined when not yet peeked) — drives the badge.
+        starterByPlayer: entriesByMatch.get(m.id),
       }));
     return {
       periodId: p.id,
@@ -165,6 +187,9 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       // Per-player opponent = the OTHER side of the same match row. Null for TBD/unplaying teams.
       // Resolved from the same periodMatches array — kickoff and opponent always reference the same row.
       opponentByPlayer: resolveOpponentByPlayer(squadTeams, periodMatches),
+      // Per-player availability badge state, resolved against the SAME fixture row (same earliest-kickoff
+      // tie-break) as kickoff/opponent above. null = lineup not announced for his match → no badge.
+      starterStatusByPlayer: resolveStarterStatusByPlayer(squadTeams, periodMatches),
     };
   });
 

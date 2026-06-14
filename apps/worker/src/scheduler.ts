@@ -15,11 +15,13 @@ import {
   decideMatchModes,
   pollerSilentMatches,
   anyMatchInLiveWindow,
+  matchesNeedingLineupPeek,
   ingestSchedule,
   ingestRosters,
   ingestLineups,
   ingestLive,
   ingestSettle,
+  peekLineup,
   sweepCompletedMatchLocks,
   type ModeMatch,
   type MatchCtx,
@@ -52,6 +54,9 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
 
   const lastLivePoll = new Map<number, number>();
   const pulledLineups = new Set<number>();
+  // In-process guard for the T-75 availability peek (mirrors `pulledLineups`): once a peek lands rows,
+  // skip re-peeking before the next DB read reflects them. ORTHOGONAL to the kickoff lock path.
+  const peekedLineups = new Set<number>();
   let ticks = 0;
   let running = false;
   let stopped = false;
@@ -80,6 +85,7 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
         kickoffMs: r.kickoffMs,
         hasRating: r.hasRating,
         lineupPulled: r.lineupPulled || pulledLineups.has(r.bdlId),
+        lineupPeeked: r.lineupPeeked || peekedLineups.has(r.bdlId),
       });
 
       let rows = await ingestStore.listSchedulableMatches();
@@ -185,6 +191,25 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
             mode: action.mode,
             message: (err as Error).message,
           });
+        }
+      }
+
+      // Pre-kickoff availability peek (Set Lineup badge): for each SCHEDULED fixture inside its T-75
+      // window whose snapshot hasn't landed, pull `match_lineups` and persist the starter/bench entries.
+      // ORTHOGONAL to the kickoff lock — `peekLineup` writes only `match_lineup_entry`, never a lock and
+      // never `lineupPulled`. Each peek is isolated in its own try/catch so a peek failure can't starve
+      // live/settle/recompute (the per-action convention); a non-empty pull marks the in-process guard.
+      for (const bdlId of matchesNeedingLineupPeek(matches, now, config.lineupPeekLeadMs)) {
+        const ctx = ctxByBdl.get(bdlId);
+        if (!ctx) continue;
+        try {
+          const stored = await peekLineup(feed, ingestStore, ctx);
+          if (stored > 0) {
+            peekedLineups.add(bdlId);
+            log.info("lineup.peek.stored", { matchBdlId: bdlId, count: stored });
+          }
+        } catch (err) {
+          log.error("lineup.peek.error", { matchBdlId: bdlId, message: (err as Error).message });
         }
       }
 

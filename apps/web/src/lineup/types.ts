@@ -33,6 +33,16 @@ export interface PeriodLock {
 }
 
 /**
+ * A rostered player's pre-kickoff availability for his next fixture — the Set Lineup badge state,
+ * derived from the worker's T-75 `match_lineup_entry` snapshot:
+ *   "starting"     — confirmed in his country's real starting XI
+ *   "not_starting" — benched, or left out of the matchday squad (the actionable state)
+ * The resolver returns `StarterStatus | null`; `null` means the lineup hasn't been announced for his
+ * match yet → render NO badge (the calm, dominant default for most of the week — there is no "TBA" chip).
+ */
+export type StarterStatus = "starting" | "not_starting";
+
+/**
  * Per-slot forfeit-model metadata for ONE squad player in a period — the C1 read contract the
  * destructive-confirm UI (C2) consumes. C1 does NOT render any of this (no new destructive affordance):
  * the live client still drives drag/movability off {@link PeriodLineup.locks} (unchanged), so adding these
@@ -70,6 +80,11 @@ export interface PeriodLineup {
   /** Opponent for each player's match in this period; null when the player's team has no fixture or the
    *  opponent side is TBD (knockout round not yet determined). The UI renders null as "TBD". */
   opponentByPlayer: Record<string, OpponentInfo | null>;
+  /** Each squad player's pre-kickoff availability badge state for this period's fixture, from the T-75
+   *  `match_lineup_entry` snapshot (resolved against the SAME fifa_match row as kickoff/opponent). null =
+   *  lineup not announced for his match → no badge. Optional so existing fixtures stay valid; buildPitch
+   *  defaults a missing entry to null (no badge). */
+  starterStatusByPlayer?: Record<string, StarterStatus | null>;
 }
 
 export interface SetLineupState {

@@ -11,5 +11,6 @@ export * from "./lock";
 export * from "./mode";
 export * from "./store";
 export * from "./ingest";
+export * from "./lineupPeek";
 export * from "./lockSweep";
 export { MemoryIngestStore } from "./memoryStore";

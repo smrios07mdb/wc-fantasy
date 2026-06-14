@@ -197,3 +197,34 @@ describe("MemoryIngestStore raw upserts", () => {
     expect(await store.resolvePeriodId(null)).toBeNull();
   });
 });
+
+describe("MemoryIngestStore availability peek (match_lineup_entry)", () => {
+  it("listSchedulableMatches reports lineupPeeked false until an entry exists, then true", async () => {
+    const store = new MemoryIngestStore();
+    store.seedSchedulable({
+      bdlId: 70,
+      status: "scheduled",
+      kickoffMs: new Date("2026-06-10T18:00:00Z").getTime(),
+    });
+    let rows = await store.listSchedulableMatches();
+    expect(rows.find((r) => r.bdlId === 70)?.lineupPeeked).toBe(false);
+
+    await store.upsertLineupEntries(70, [{ playerBdlId: 1, isStarter: true }]);
+    rows = await store.listSchedulableMatches();
+    expect(rows.find((r) => r.bdlId === 70)?.lineupPeeked).toBe(true);
+  });
+
+  it("upsertLineupEntries is keyed by (match, player) — a re-pull overwrites in place, no dupe", async () => {
+    const store = new MemoryIngestStore();
+    await store.upsertLineupEntries(70, [
+      { playerBdlId: 1, isStarter: false },
+      { playerBdlId: 2, isStarter: true },
+    ]);
+    expect(store.lineupEntriesFor(70)?.size).toBe(2);
+
+    await store.upsertLineupEntries(70, [{ playerBdlId: 1, isStarter: true }]); // same (70, 1)
+    expect(store.lineupEntriesFor(70)?.size).toBe(2); // still 2 — no dupe row
+    expect(store.lineupEntriesFor(70)?.get(1)).toBe(true); // overwritten
+    expect(store.lineupEntriesFor(70)?.get(2)).toBe(true); // untouched
+  });
+});

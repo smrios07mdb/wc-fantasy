@@ -11,6 +11,7 @@ import {
   kickoffByTeam,
   resolveKickoffByPlayer,
   resolveOpponentByPlayer,
+  resolveStarterStatusByPlayer,
 } from "./view";
 import type { LineupPlayer, PeriodLineup } from "./types";
 
@@ -253,5 +254,86 @@ describe("resolveOpponentByPlayer — P53 opponent fixture per squad player", ()
     const tbd = [{ homeTeamId: null, awayTeamId: null, kickoffAt: "2026-07-01T18:00:00.000Z" }];
     const out = resolveOpponentByPlayer([{ id: "p-x", teamId: "ESP" }], tbd);
     expect(out["p-x"]).toBeNull();
+  });
+});
+
+describe("resolveStarterStatusByPlayer — pre-kickoff availability badge per squad player", () => {
+  // A peeked fixture: ESP vs FRA, lineup announced — p1 starts, p2 benched (an is_starter:false row).
+  const peeked = [
+    {
+      homeTeamId: "ESP",
+      awayTeamId: "FRA",
+      kickoffAt: "2026-06-14T18:00:00.000Z",
+      starterByPlayer: { p1: true, p2: false },
+    },
+  ];
+
+  it("starting — the match has entries and the player is a starter", () => {
+    expect(resolveStarterStatusByPlayer([{ id: "p1", teamId: "ESP" }], peeked)["p1"]).toBe(
+      "starting",
+    );
+  });
+
+  it("not_starting — via an is_starter:false row", () => {
+    expect(resolveStarterStatusByPlayer([{ id: "p2", teamId: "ESP" }], peeked)["p2"]).toBe(
+      "not_starting",
+    );
+  });
+
+  it("not_starting — via a player ABSENT from a populated match (XI-only feed)", () => {
+    // p3 plays for FRA (a participant in the peeked match) but isn't in the snapshot → not in the XI.
+    expect(resolveStarterStatusByPlayer([{ id: "p3", teamId: "FRA" }], peeked)["p3"]).toBe(
+      "not_starting",
+    );
+  });
+
+  it("null (no badge) — the match has NO entries yet, or an empty snapshot (lineup not announced)", () => {
+    const notPeeked = [
+      { homeTeamId: "ESP", awayTeamId: "FRA", kickoffAt: "2026-06-14T18:00:00.000Z" },
+    ];
+    expect(resolveStarterStatusByPlayer([{ id: "p1", teamId: "ESP" }], notPeeked)["p1"]).toBeNull();
+    const empty = [
+      {
+        homeTeamId: "ESP",
+        awayTeamId: "FRA",
+        kickoffAt: "2026-06-14T18:00:00.000Z",
+        starterByPlayer: {},
+      },
+    ];
+    expect(resolveStarterStatusByPlayer([{ id: "p1", teamId: "ESP" }], empty)["p1"]).toBeNull();
+  });
+
+  it("null — the player's team has no fixture this period (or no linked team)", () => {
+    expect(resolveStarterStatusByPlayer([{ id: "p1", teamId: "GER" }], peeked)["p1"]).toBeNull();
+    expect(resolveStarterStatusByPlayer([{ id: "p1", teamId: null }], peeked)["p1"]).toBeNull();
+  });
+
+  it("references the SAME fifa_match row as kickoff & opponent (earliest-kickoff tie-break)", () => {
+    // ESP plays TWICE this period; the EARLIER fixture is the binding lock/sub deadline AND the one
+    // kickoff/opponent resolve to — starter-status must read that SAME (earlier) fixture's snapshot.
+    const two = [
+      {
+        homeTeamId: "ESP",
+        awayTeamId: "FRA",
+        kickoffAt: "2026-06-14T15:00:00.000Z", // EARLIER
+        homeTeamName: "Spain",
+        awayTeamName: "France",
+        starterByPlayer: { p1: true }, // started the early game
+      },
+      {
+        homeTeamId: "ESP",
+        awayTeamId: "ITA",
+        kickoffAt: "2026-06-14T21:00:00.000Z", // later
+        homeTeamName: "Spain",
+        awayTeamName: "Italy",
+        starterByPlayer: { p1: false }, // would be benched in the late game
+      },
+    ];
+    const squad = [{ id: "p1", teamId: "ESP" }];
+    // kickoff + opponent both resolve to the EARLY fixture …
+    expect(resolveKickoffByPlayer(squad, two)["p1"]).toBe("2026-06-14T15:00:00.000Z");
+    expect(resolveOpponentByPlayer(squad, two)["p1"]?.opponentName).toBe("France");
+    // … so starter-status MUST too: "starting" (early fixture), NOT "not_starting" (the late one).
+    expect(resolveStarterStatusByPlayer(squad, two)["p1"]).toBe("starting");
   });
 });
