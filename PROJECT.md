@@ -437,5 +437,21 @@ a completed >24h match appears in the bottom Completed `<details>`.
 the existing player-box call on sheet open. The card is live on **/vsfield** (both own and opponents'
 players) and **/lineup** (own XI, via the existing score-pill tap); the shared `PlayerScoreSheet` in
 `apps/web/components/` is unchanged in interface — only the tab strip and Stats body were added.
-**Next:** Free Agents / Waivers card integration is the next player-card workstream — deferred from
-P54, blocked on the open-the-card-vs-add-the-player interaction design (its own thread).
+**Next:** Free Agents / Waivers card integration — SHIPPED in Prompt 56 (below); the
+open-the-card-vs-add-the-player interaction is resolved as a dedicated trailing control.
+
+### 2026-06-14 — FA / Waivers player card (feat/fa-player-card, merge HELD)
+The tabbed Points | Stats player card now opens on `/waivers` (the surface the tabbed-card prompt
+deferred). A dedicated trailing `.wv-comp-fa-info` control on each free-agent picker row opens a
+VIEW-ONLY `FaPlayerCardSheet` on the design's standalone `.pc-scrim`/`.pc-sheet` chrome: Points = a
+real-data overview (Season points + Acquisition cutoff; no fabricated "projected"), Stats = the shared
+`PlayerStatsTab` body (eager fetch, quiet error). The row's select-for-acquisition tap is unchanged;
+acquisition stays on the existing right-panel select→submit. Shared `FaPickRow` de-dups the picker row
+across `BidComposer` + `FreeAgentPanel`; `PlayerStatsTab` + `usePlayerTournamentStats` extracted so
+`PlayerScoreSheet` and the new card share one Stats body. New styles in `waivers.css` only; ds.css +
+schema untouched; no migration; no scoring/recompute/ingestion change. +18 tests (2005). Gates:
+typecheck/lint/format/test + `pnpm --filter @app/web build` (`/waivers` ƒ 8.21 kB) exit 0. **Live-Render
+screenshot on `/waivers` owed before merge:** the trailing control opens the tabbed card; Points shows
+real season/cutoff data; Stats shows position tiles + completed-match log (correct opponents/flags/
+scorelines — a `duels`-bearing line may read `—`/0 on live WC2026 data, expected); the
+select→drop→submit acquisition still works unchanged.

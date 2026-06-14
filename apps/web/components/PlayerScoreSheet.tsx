@@ -23,10 +23,7 @@ import type { PlayerBoxView, SectionView, ScoreLineView } from "@app/player-box"
 import type { Position } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
 import { toIso2 } from "@/src/draft/flag";
-import type {
-  PlayerTournamentStats,
-  PlayerTournamentGame,
-} from "@/src/playerTournamentStats/buildPlayerTournamentStats";
+import { usePlayerTournamentStats, PlayerStatsTab } from "./PlayerStatsTab";
 
 /** Position badge (ds.css `.pos-*`). Inlined so this shared modal has no route-local dependency. */
 function Pos({ position }: { position: Position }) {
@@ -61,10 +58,11 @@ export function PlayerScoreSheet({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // Stats tab — tournament-to-date game log (keyed by player only; period-independent).
-  const [stats, setStats] = useState<PlayerTournamentStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [statsError, setStatsError] = useState(false);
+  // Stats tab — tournament-to-date game log (keyed by player only; period-independent). The fetch +
+  // render now live in the shared `usePlayerTournamentStats` hook + `<PlayerStatsTab/>` (Prompt 56),
+  // reused verbatim by the standalone Free Agents / Waivers card. EAGER on mount: switching to Stats
+  // is instant and it never blocks/affects the Points tab.
+  const { stats, loading: statsLoading, error: statsError } = usePlayerTournamentStats(playerId);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,32 +88,6 @@ export function PlayerScoreSheet({
       cancelled = true;
     };
   }, [periodId, playerId]);
-
-  // EAGER + PARALLEL: the tournament-stats fetch fires on open alongside the player-box fetch (not
-  // lazily on Stats-tab activation), so switching to Stats is instant. It never blocks Points.
-  useEffect(() => {
-    let cancelled = false;
-    setStatsLoading(true);
-    setStatsError(false);
-    setStats(null);
-    fetch(`/api/player-tournament-stats?playerId=${encodeURIComponent(playerId)}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data: PlayerTournamentStats) => {
-        if (!cancelled) {
-          setStats(data);
-          setStatsLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setStatsError(true);
-          setStatsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [playerId]);
 
   return (
     <div className="sl-forfeit-overlay" role="presentation" onClick={onClose}>
@@ -164,7 +136,7 @@ export function PlayerScoreSheet({
             {forfeitProps && <ForfeitSection forfeitProps={forfeitProps} />}
           </>
         ) : (
-          <StatsTab loading={statsLoading} error={statsError} stats={stats} />
+          <PlayerStatsTab loading={statsLoading} error={statsError} stats={stats} />
         )}
       </div>
     </div>
@@ -304,107 +276,6 @@ function ForfeitSection({ forfeitProps }: { forfeitProps: ForfeitProps }) {
       <button type="button" className="btn btn-danger btn-sm" onClick={forfeitProps.onForfeit}>
         Bench &amp; forfeit
       </button>
-    </div>
-  );
-}
-
-/**
- * The Stats tab body — position-aware tiles + tournament game log, in the design's `.pc-*` markup.
- * Degrades quietly (a quiet inline message) while loading or on a fetch error; it never throws and
- * never affects the Points tab.
- */
-function StatsTab({
-  loading,
-  error,
-  stats,
-}: {
-  loading: boolean;
-  error: boolean;
-  stats: PlayerTournamentStats | null;
-}) {
-  if (loading) {
-    return (
-      <div className="pc-stats">
-        <div className="pc-foot" style={{ margin: "2px 0 0" }}>
-          Loading stats…
-        </div>
-      </div>
-    );
-  }
-  if (error || !stats) {
-    return (
-      <div className="pc-stats">
-        <div className="pc-foot" style={{ margin: "2px 0 0" }}>
-          Couldn&apos;t load stats.
-        </div>
-      </div>
-    );
-  }
-
-  const { tiles, games } = stats;
-  return (
-    <div className="pc-stats">
-      <div className="pc-tiles">
-        {tiles.map((tile) => (
-          <div key={tile.key} className={"pc-tile" + (tile.key === "points" ? " pc-tile-pts" : "")}>
-            <b className="mono">{tile.value}</b>
-            <span>{tile.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="pc-loghead t-label">Completed matches · this matchday is live in Points</div>
-      <div className="pc-log">
-        {games.length === 0 ? (
-          <div className="pc-foot" style={{ margin: "2px 0 0" }}>
-            No completed matches yet.
-          </div>
-        ) : (
-          games.map((game, i) => <GameRow key={i} game={game} />)
-        )}
-      </div>
-      <div className="pc-foot">Tournament to date</div>
-    </div>
-  );
-}
-
-/** One completed-match row in the Stats game log. A null line cell renders "—"; a genuine 0 is
- *  omitted (the design's compact statline), so unknown data is never shown as a misleading zero. */
-function GameRow({ game }: { game: PlayerTournamentGame }) {
-  const iso2 = game.opponentIso2;
-  const ptsClass = "pc-lpts mono" + (game.points < 0 ? " is-neg" : "");
-  return (
-    <div className="pc-lrow">
-      <div className="pc-lrow-top">
-        <span className="pc-md mono">{game.periodLabel}</span>
-        <span className="pc-opp">
-          <span className="pc-vs">{game.isHome ? "vs" : "@"}</span>
-          {iso2 && <Flag code={iso2} label={game.opponentTeamName} />}
-          <b>{game.opponentTeamName}</b>
-        </span>
-        {game.result && <span className={"wld wld-" + game.result}>{game.result}</span>}
-        {game.scoreline && <span className="pc-score mono">{game.scoreline}</span>}
-        <span className={ptsClass}>
-          {game.points >= 0 ? "+" : ""}
-          {game.points}
-        </span>
-      </div>
-      <div className="pc-statline">
-        <span className="pc-min mono">{game.minutes === null ? "—" : `${game.minutes}'`}</span>
-        {game.lines.map((line) =>
-          line.value === null ? (
-            <span className="pc-stat" key={line.key}>
-              <b className="mono">—</b>
-              {line.label}
-            </span>
-          ) : line.value !== 0 ? (
-            <span className="pc-stat" key={line.key}>
-              <b className="mono">{line.value}</b>
-              {line.label}
-            </span>
-          ) : null,
-        )}
-      </div>
     </div>
   );
 }

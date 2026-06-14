@@ -1349,6 +1349,26 @@ The tournament-stats loader applies this gate at the query level. The regression
 gate is present in the query call args — a mocked `findMany` cannot filter rows, so asserting only
 on the result would never catch a silently dropped gate.
 
-**Seam — Free Agents / Waivers card:** the `GET /api/player-tournament-stats` endpoint is ready to
-wire into the waivers/FA player sheet when that surface is built. The interaction design for
-opening a player card vs. triggering an add is its own thread.
+**Seam — Free Agents / Waivers card:** REALIZED in Prompt 56 (see below) — the standalone
+`FaPlayerCardSheet` consumes `GET /api/player-tournament-stats` via the extracted shared body, and the
+open-vs-add interaction is resolved as a dedicated trailing control separate from the add path.
+
+## Period-less Stats body — one source for two player cards (Prompt 56)
+
+`apps/web/components/PlayerStatsTab.tsx` now holds the single, period-less tournament Stats body,
+extracted out of `PlayerScoreSheet`:
+
+- `usePlayerTournamentStats(playerId)` — the eager `GET /api/player-tournament-stats` fetch (keyed by
+  player only, period-independent), returning `{ stats, loading, error }`. Fires on mount; a failure
+  degrades to `error` (never throws).
+- `<PlayerStatsTab/>` — position-aware tiles + game log (`.pc-*` markup), purely presentational over
+  those three values (`GameRow` moved with it).
+
+Both were lifted verbatim; `PlayerScoreSheet` now CONSUMES them, and its Points half (`periodId`, the
+`/api/player-box` `useEffect`, `BreakdownBody`, `ForfeitSection`, the `.sl-scoremodal` chrome) is
+byte-identical in behaviour (its existing tests pass unedited). The new standalone `FaPlayerCardSheet`
+(waivers) consumes the SAME hook + body, so the period-less `/api/player-tournament-stats` reuse the
+builder was designed for is now realized across BOTH cards. The period-BOUND Points read
+(`/api/player-box`) stays exclusive to `PlayerScoreSheet` (vsfield + lineup have a live period); the
+waivers card's Points tab is a real-`WvPlayer`-data overview instead. `FaPickRow` (in waivers
+`components.tsx`) is the shared free-agent picker row consumed by `BidComposer` + `FreeAgentPanel`.

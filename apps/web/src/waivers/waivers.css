@@ -644,6 +644,38 @@
   gap: 1px;
   min-width: 0;
 }
+/* Prompt 56: the FA picker row = the unchanged select button + a sibling card-open control. The wrap
+   is the flex child of .wv-comp-list; the select button flexes, the info control is a fixed trailer. */
+.wv-comp-fa-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.wv-comp-fa-wrap .wv-comp-fa {
+  flex: 1;
+  min-width: 0;
+}
+.wv-comp-fa-info {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.wv-comp-fa-info:hover {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+/* The view-only player card mounts at the .wv-app root and can be opened from inside the bid composer
+   modal (.wv-scrim, z-index 90). Lift the shared .pc-scrim above it WITHIN the waivers app only — a
+   route-scoped override, leaving the global ds.css token untouched. */
+.wv-app .pc-scrim {
+  z-index: 95;
+}
 .wv-comp-config {
   display: flex;
   flex-direction: column;

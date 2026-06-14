@@ -2239,3 +2239,36 @@ does not produce pool-wide stubs; the backfill that triggered this is no longer 
 
 **Open item:** root-cause the offending backfill write path. Low priority — the incident is not
 recurring and had no standings impact; the query-level gate is the durable fix.
+
+## FA / Waivers player card — open vs. add (Prompt 56 — feat/fa-player-card)
+
+The tabbed Points | Stats player card (the shared `PlayerScoreSheet`, live on vsfield + lineup)
+explicitly deferred the standalone Free Agents / Waivers surface "to a later prompt"; this lands it.
+Resolutions:
+
+- **Dedicated trailing open control; the select tap is UNCHANGED.** A picker row's primary tap still
+  binds to select-for-acquisition (`setSelected`). The card opens from a SIBLING `.wv-comp-fa-info`
+  button (`stopPropagation` so the open tap never also selects) — never nested in the select `<button>`.
+  The extracted shared `FaPickRow` wraps the byte-identical select button + the trailer; both pickers
+  (`BidComposer`, `FreeAgentPanel`) consume it, so the acquisition path is provably untouched.
+- **The standalone card is VIEW-ONLY.** Our acquisition is the existing right-panel select→submit, so —
+  unlike the design's `FaPlayerCard` (which carries an in-card acquire CTA) — `FaPlayerCardSheet` has NO
+  acquire/add/drop/mutation. It is purely informational; the design's open-vs-acquire split is adapted,
+  not copied.
+- **It uses the design's standalone `.pc-scrim`/`.pc-sheet` chrome, NOT the shared sheet's
+  `.sl-scoremodal`.** The shared `PlayerScoreSheet` Points tab is hard-wired to a per-period
+  `/api/player-box` read; the waivers surface has no live period, so it gets its own chrome whose Points
+  tab is a light per-surface OVERVIEW (the way the design itself factors the card).
+- **Points overview = real `WvPlayer` fields only; the design's "Projected next" is DROPPED.** Two honest
+  rows — Season points (`seasonPoints`, renders `—` when null) + Acquisition (`CutoffTag` off
+  `kickoffAt`; "No upcoming fixture" when null). `WvPlayer` has no `proj` field, so we do not fabricate
+  one (same posture as the tabbed-card prompt dropping the synthetic game-log). No opponent/fixture row —
+  `WvPlayer` carries no opponent. The Points tab is intentionally light here; the Stats tab is the
+  substance.
+- **z-index:** the card can be opened from inside the bid-composer modal (`.wv-scrim`, z 90); a
+  route-scoped `.wv-app .pc-scrim { z-index: 95 }` in `waivers.css` lifts it above — the global ds.css
+  `.pc-scrim` token (z 80) is left untouched.
+
+New styles in `waivers.css` only; ds.css + schema untouched; no migration; no scoring/recompute/
+ingestion change. Gates green (typecheck/lint/format/test 2005 + `@app/web` build, `/waivers` ƒ 8.21 kB).
+**Live-Render screenshot on `/waivers` owed before merge.**

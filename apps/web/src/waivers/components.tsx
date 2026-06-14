@@ -76,6 +76,23 @@ function IconEdit() {
     </svg>
   );
 }
+function IconInfo() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <circle cx="12" cy="7.5" r="0.7" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 export { Sealed, Refund };
 
 // ── atoms ──────────────────────────────────────────────────────────────────────
@@ -125,6 +142,57 @@ export function CutoffTag({ player, now }: { player: WvPlayer; now: Date }) {
   const urgent = ms <= 18 * 60000;
   return (
     <span className={"wv-cutoff" + (urgent ? " is-urgent" : "")}>{fmtCountdown(ms)} to cutoff</span>
+  );
+}
+
+// ── free-agent picker row ────────────────────────────────────────────────────────
+/**
+ * One row in the free-agent picker (shared by `BidComposer` + `FreeAgentPanel`, whose `wv-comp-fa`
+ * markup was byte-identical). The select path is UNCHANGED: the `<button className="wv-comp-fa">` keeps
+ * its exact markup + `onSelect` handler. A dedicated SIBLING control (`.wv-comp-fa-info`) opens the
+ * view-only player card via `onOpen` — its `stopPropagation` keeps the open tap from also selecting the
+ * player for acquisition (Prompt 56's open-vs-add resolution).
+ */
+export function FaPickRow({
+  player,
+  selected,
+  onSelect,
+  onOpen,
+}: {
+  player: WvPlayer;
+  selected: boolean;
+  onSelect: (player: WvPlayer) => void;
+  onOpen: (player: WvPlayer) => void;
+}) {
+  return (
+    <div className="wv-comp-fa-wrap">
+      <button
+        className={"wv-comp-fa" + (selected ? " is-sel" : "")}
+        onClick={() => onSelect(player)}
+      >
+        <KitChip player={player} sm />
+        <NationFlag nation={player.nation} />
+        <div className="wv-comp-fa-id">
+          <b className="wv-name">{player.shortName}</b>
+          <span className="t-micro text-tertiary">
+            {player.teamName ?? player.nation ?? ""} ·{" "}
+            {player.seasonPoints === null ? "—" : `${player.seasonPoints} pts`}
+          </span>
+        </div>
+        <Pos p={player.position} />
+      </button>
+      <button
+        className="wv-comp-fa-info"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen(player);
+        }}
+        aria-label="View player card"
+        title="View player card"
+      >
+        <IconInfo />
+      </button>
+    </div>
   );
 }
 

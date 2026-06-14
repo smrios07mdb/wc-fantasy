@@ -11,11 +11,12 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { WaiversView, WvClaim } from "./types";
+import type { WaiversView, WvClaim, WvPlayer } from "./types";
 import { computeBudget, isClaimVoid, sortClaims } from "./waiversLogic";
 import { BatchBar, ClaimRow, FaabBar, Refund, ResultsBatch, WaiverOrderRail } from "./components";
 import { BidComposer, type BidPayload } from "./BidComposer";
 import { FreeAgentPanel, type FaGrantPayload } from "./FreeAgentPanel";
+import { FaPlayerCardSheet } from "./FaPlayerCardSheet";
 import "./waivers.css";
 
 const FAAB_ALLOTMENT = 100; // the $100 budget — the FAAB bar's track denominator (design/CLAUDE.md §2).
@@ -49,6 +50,9 @@ export function WaiversClient({ view }: { view: WaiversView }) {
   const router = useRouter();
   const [tab, setTab] = useState<"claims" | "results">("claims");
   const [composer, setComposer] = useState<ComposerState>({ open: false, editClaim: null });
+  // The view-only player card (Prompt 56): opened from a picker row's dedicated info control. Purely
+  // informational — separate from the composer's acquisition selection, which it never touches.
+  const [cardPlayer, setCardPlayer] = useState<WvPlayer | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -233,6 +237,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
                 submitting={submitting}
                 errorMessage={faError}
                 onGrant={handleGrant}
+                onOpen={setCardPlayer}
               />
             )}
 
@@ -348,7 +353,12 @@ export function WaiversClient({ view }: { view: WaiversView }) {
           errorMessage={composerError}
           onClose={closeComposer}
           onSubmit={handleSubmit}
+          onOpen={setCardPlayer}
         />
+      )}
+
+      {cardPlayer && (
+        <FaPlayerCardSheet player={cardPlayer} now={now} onClose={() => setCardPlayer(null)} />
       )}
     </div>
   );

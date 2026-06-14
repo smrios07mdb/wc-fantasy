@@ -20,7 +20,7 @@ import { useState } from "react";
 import { SQUAD_SIZE, type Position } from "@app/shared";
 import type { WvClaim, WvPlayer } from "./types";
 import { claimableFreeAgents, droppableRoster, freeAgentNations } from "./waiversLogic";
-import { CutoffTag, KitChip, NationFlag, Pos } from "./components";
+import { CutoffTag, FaPickRow, KitChip, NationFlag, Pos } from "./components";
 import { NationFilter } from "@/components/NationFilter";
 
 const POS_FILTERS: ReadonlyArray<"ALL" | Position> = ["ALL", "GK", "DEF", "MID", "FWD"];
@@ -41,6 +41,7 @@ export function FreeAgentPanel({
   submitting,
   errorMessage,
   onGrant,
+  onOpen,
 }: {
   /** false in the locked phase → browse only, "Add" disabled. */
   enabled: boolean;
@@ -52,6 +53,8 @@ export function FreeAgentPanel({
   submitting: boolean;
   errorMessage: string | null;
   onGrant: (payload: FaGrantPayload) => void;
+  /** Opens the view-only player card for a row (sibling control — never selects for acquisition). */
+  onOpen: (player: WvPlayer) => void;
 }) {
   const [selected, setSelected] = useState<WvPlayer | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
@@ -105,22 +108,13 @@ export function FreeAgentPanel({
               <div className="wv-comp-empty t-sm text-tertiary">No free agents match.</div>
             )}
             {fas.slice(0, 40).map((p) => (
-              <button
+              <FaPickRow
                 key={p.id}
-                className={"wv-comp-fa" + (selected?.id === p.id ? " is-sel" : "")}
-                onClick={() => setSelected(p)}
-              >
-                <KitChip player={p} sm />
-                <NationFlag nation={p.nation} />
-                <div className="wv-comp-fa-id">
-                  <b className="wv-name">{p.shortName}</b>
-                  <span className="t-micro text-tertiary">
-                    {p.teamName ?? p.nation ?? ""} ·{" "}
-                    {p.seasonPoints === null ? "—" : `${p.seasonPoints} pts`}
-                  </span>
-                </div>
-                <Pos p={p.position} />
-              </button>
+                player={p}
+                selected={selected?.id === p.id}
+                onSelect={setSelected}
+                onOpen={onOpen}
+              />
             ))}
           </div>
         </div>
