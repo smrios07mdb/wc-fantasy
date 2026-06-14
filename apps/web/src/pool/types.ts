@@ -74,6 +74,8 @@ export interface PoolPicksView {
   readonly bracket: readonly PoolBracketRound[];
   /** Fixtures whose period isn't linked yet (periodKind null) — shown honestly, never guessed into a phase. */
   readonly unscheduled: readonly PoolFixture[];
+  /** Completed group matches ≥24h past kickoff — pulled out of their matchday into a bottom archive (kickoff-desc). */
+  readonly completed: readonly PoolFixture[];
 }
 
 /** One leaderboard row (ranked points desc → name). All league members appear (non-pickers at 0/0/0). */

@@ -28,7 +28,8 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
     expect(byId.vsfield).toMatchObject({ href: "/vsfield", label: "Vs the field" });
     expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
     // Prompt 42 / feat/pool-nav: the pick'em pool seam is now a real nav entry.
-    expect(byId.pool).toMatchObject({ href: "/pool", label: "Pool" });
+    // Prompt 45: user-facing label renamed to "Quiniela" (the id/href/key stay "pool").
+    expect(byId.pool).toMatchObject({ href: "/pool", label: "Quiniela" });
     expect(byId.scoring).toMatchObject({ href: "/scoring", label: "Scoring" });
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
     // Prompt 39: Settings seam is now a real route.

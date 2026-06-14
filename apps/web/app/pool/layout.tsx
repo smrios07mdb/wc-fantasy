@@ -8,8 +8,13 @@
  * Prompt-17 cross-nav pattern. The Prompt-42 escape-hatch cast (added while the notifications branch
  * was in flight) is gone, so the Pool tab highlights when this route is active.
  */
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
+
+// User-facing page title (Prompt 45 copy rename): the browser tab reads "XI · Quiniela" (root template).
+// Display copy only — the route path, NavId key, and identifiers are unchanged.
+export const metadata: Metadata = { title: "Quiniela" };
 
 export default function PoolLayout({ children }: { children: ReactNode }) {
   return (

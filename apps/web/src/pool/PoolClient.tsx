@@ -99,16 +99,16 @@ export function PoolClient({ view }: { view: PoolView }) {
     };
   }, [tab, router]);
 
-  // Deterministic kickoff formatter (explicit locale + UTC ⇒ identical SSR + client output, no mismatch).
+  // Deterministic kickoff formatter (explicit locale + fixed ET zone ⇒ identical SSR + client output, no mismatch).
   const fmtKickoff = useMemo(() => {
     const fmt = new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
-      timeZone: "UTC",
+      timeZone: "America/New_York",
     });
-    return (iso: string) => `${fmt.format(new Date(iso))} UTC`;
+    return (iso: string) => `${fmt.format(new Date(iso))} ET`;
   }, []);
 
   async function handlePick(matchId: string, prediction: PoolPrediction) {
@@ -148,13 +148,13 @@ export function PoolClient({ view }: { view: PoolView }) {
     />
   );
 
-  const { matchdays, bracket, unscheduled } = view.picks;
+  const { matchdays, bracket, unscheduled, completed } = view.picks;
   const hasAnyFixture =
     matchdays.length > 0 || bracket.some((r) => r.fixtures.length > 0) || unscheduled.length > 0;
 
   return (
     <div className="pl-app">
-      <div className="pl-tabs" role="tablist" aria-label="Pool">
+      <div className="pl-tabs" role="tablist" aria-label="Quiniela">
         <button
           role="tab"
           aria-selected={tab === "picks"}
@@ -235,6 +235,16 @@ export function PoolClient({ view }: { view: PoolView }) {
               </header>
               <div className="pl-md-list">{unscheduled.map((f) => renderFixture(f, false))}</div>
             </section>
+          )}
+
+          {completed.length > 0 && (
+            <details className="pl-md pl-completed">
+              <summary className="pl-md-head">
+                <span className="t-label">Completed</span>
+                <span className="t-micro text-tertiary">{completed.length} matches</span>
+              </summary>
+              <div className="pl-md-list">{completed.map((f) => renderFixture(f, false))}</div>
+            </details>
           )}
         </div>
       ) : (

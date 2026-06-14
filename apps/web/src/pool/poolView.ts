@@ -41,6 +41,19 @@ function byKickoff(a: PoolFixture, b: PoolFixture): number {
   return cmpStr(a.kickoffAt, b.kickoffAt) || cmpStr(a.matchId, b.matchId);
 }
 
+/** Kickoff-descending sort (most recent first) — the Completed archive ordering. */
+function byKickoffDesc(a: PoolFixture, b: PoolFixture): number {
+  return -byKickoff(a, b);
+}
+
+/** A completed group match drops to the Completed bucket once its kickoff is ≥24h in the past. */
+const ARCHIVE_AFTER_MS = 24 * 60 * 60 * 1000;
+function isArchived(f: PoolFixture, now: Date): boolean {
+  return (
+    f.status === "completed" && now.getTime() - new Date(f.kickoffAt).getTime() >= ARCHIVE_AFTER_MS
+  );
+}
+
 /** A pick is locked once kickoff arrives or the match leaves `scheduled` (server time authoritative). */
 export function isFixtureLocked(fixture: PoolFixture, now: Date): boolean {
   return isPickLocked({ status: fixture.status, kickoffAt: new Date(fixture.kickoffAt) }, now);
@@ -53,8 +66,16 @@ export function isFixtureLocked(fixture: PoolFixture, now: Date): boolean {
 export function selectPoolPicksView(
   fixtures: readonly PoolFixture[],
   phase: TournamentPhase,
+  now: Date,
 ): PoolPicksView {
-  const groupFixtures = fixtures.filter((f) => f.periodKind === "group_md");
+  // Completed group matches ≥24h old leave their matchday and collect in one bottom archive, so the
+  // Picks tab stops accumulating a scroll-tail of finished group fixtures as the tournament advances.
+  const allGroupFixtures = fixtures.filter((f) => f.periodKind === "group_md");
+  const groupFixtures = allGroupFixtures.filter((f) => !isArchived(f, now));
+  const completed = allGroupFixtures
+    .filter((f) => isArchived(f, now))
+    .slice()
+    .sort(byKickoffDesc);
   const knockoutFixtures = fixtures.filter((f) => f.periodKind === "knockout_round");
   const unscheduled = fixtures
     .filter((f) => f.periodKind === null)
@@ -62,6 +83,7 @@ export function selectPoolPicksView(
     .sort(byKickoff);
 
   // ── group → matchday sections, keyed by period label, sorted by label then kickoff ──
+  // (archived fixtures already removed above; a matchday left empty after filtering is dropped) ──
   const byLabel = new Map<string, PoolFixture[]>();
   for (const f of groupFixtures) {
     const label = f.periodLabel ?? "—";
@@ -98,7 +120,7 @@ export function selectPoolPicksView(
     }
   }
 
-  return { matchdays, bracket, unscheduled };
+  return { matchdays, bracket, unscheduled, completed };
 }
 
 /**

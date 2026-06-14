@@ -34,7 +34,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "vsfield", href: "/vsfield", label: "Vs the field" },
   { id: "waivers", href: "/waivers", label: "Waivers" },
   // Match pick'em pool (Prompt 42) — grouped with the gameplay screens, ahead of the reference pages.
-  { id: "pool", href: "/pool", label: "Pool" },
+  // User-facing label is "Quiniela" (Prompt 45 copy rename); the NavId/route/id key stay "pool".
+  { id: "pool", href: "/pool", label: "Quiniela" },
   // Scoring rules reference (Prompt 28) — a static, always-available in-app reference page.
   { id: "scoring", href: "/scoring", label: "Scoring" },
   // Settings profile page (Prompt 39) — profile-name rename + deferred sections.
@@ -47,7 +48,7 @@ export const BOTTOM_TAB_ITEMS: readonly NavItem[] = [
   { id: "home", href: "/", label: "Dashboard" },
   { id: "lineup", href: "/lineup", label: "Set lineup" },
   { id: "vsfield", href: "/vsfield", label: "Vs the field" },
-  { id: "pool", href: "/pool", label: "Pool" },
+  { id: "pool", href: "/pool", label: "Quiniela" },
 ];
 
 // Secondary destinations surfaced in the More bottom sheet, in order (per Prompt 40 spec).

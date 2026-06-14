@@ -19,6 +19,10 @@ import type { PoolFixture } from "./types";
 // ─── factories ───────────────────────────────────────────────────────────────────────────
 
 const ISO = "2026-06-20T18:00:00.000Z";
+// Default `now` for the picks-view tests: the factory's fixtures are `scheduled` by default, so the
+// ≥24h Completed-archive cutoff never fires for them regardless of this instant. Archive-specific
+// cases below pass their own `now`.
+const NOW = new Date(ISO);
 
 function fx(over: Partial<PoolFixture> & { matchId: string }): PoolFixture {
   return {
@@ -73,6 +77,7 @@ describe("selectPoolPicksView — group phase", () => {
         fx({ matchId: "c", periodKind: "group_md", periodLabel: "MD1" }),
       ],
       "group",
+      NOW,
     );
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD1", "MD2"]);
     expect(view.matchdays[0]!.fixtures.map((f) => f.matchId).sort()).toEqual(["a", "c"]);
@@ -83,6 +88,7 @@ describe("selectPoolPicksView — group phase", () => {
     const view = selectPoolPicksView(
       [fx({ matchId: "a", periodKind: "group_md", periodLabel: "MD1" })],
       "group",
+      NOW,
     );
     expect(view.bracket).toEqual([]);
   });
@@ -91,6 +97,7 @@ describe("selectPoolPicksView — group phase", () => {
     const view = selectPoolPicksView(
       [fx({ matchId: "a", periodKind: "group_md", periodLabel: "MD1" })],
       "pre-kickoff",
+      NOW,
     );
     expect(view.bracket).toEqual([]);
   });
@@ -101,6 +108,7 @@ describe("selectPoolPicksView — knockout phase", () => {
     const view = selectPoolPicksView(
       [fx({ matchId: "k1", periodKind: "knockout_round", periodLabel: "R32" })],
       "playoff",
+      NOW,
     );
     expect(view.bracket.map((r) => r.label)).toEqual([...KNOCKOUT_ROUND_ORDER]);
   });
@@ -113,13 +121,14 @@ describe("selectPoolPicksView — knockout phase", () => {
         fx({ matchId: "qf", periodKind: "knockout_round", periodLabel: "QF" }),
       ],
       "playoff",
+      NOW,
     );
     const byLabel = Object.fromEntries(view.bracket.map((r) => [r.label, r.fixtures.length]));
     expect(byLabel).toEqual({ R32: 2, R16: 0, QF: 1, SF: 0, Final: 0 });
   });
 
   it("never fabricates matchups — empty future rounds are present but fixture-less", () => {
-    const view = selectPoolPicksView([], "complete");
+    const view = selectPoolPicksView([], "complete", NOW);
     expect(view.bracket.map((r) => r.label)).toEqual([...KNOCKOUT_ROUND_ORDER]);
     expect(view.bracket.every((r) => r.fixtures.length === 0)).toBe(true);
   });
@@ -131,6 +140,7 @@ describe("selectPoolPicksView — knockout phase", () => {
         fx({ matchId: "k", periodKind: "knockout_round", periodLabel: "R16" }),
       ],
       "playoff",
+      NOW,
     );
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD3"]);
     expect(view.bracket.find((r) => r.label === "R16")?.fixtures.map((f) => f.matchId)).toEqual([
@@ -141,9 +151,163 @@ describe("selectPoolPicksView — knockout phase", () => {
 
 describe("selectPoolPicksView — unscheduled (period not yet linked)", () => {
   it("buckets fixtures with a null periodKind into 'unscheduled' (never guessed into a phase)", () => {
-    const view = selectPoolPicksView([fx({ matchId: "u", periodKind: null })], "group");
+    const view = selectPoolPicksView([fx({ matchId: "u", periodKind: null })], "group", NOW);
     expect(view.unscheduled.map((f) => f.matchId)).toEqual(["u"]);
     expect(view.matchdays).toEqual([]);
+  });
+});
+
+// ─── selectPoolPicksView — Completed archive (≥24h-old completed group matches) ─────────────
+
+describe("selectPoolPicksView — Completed archive", () => {
+  // Reference instant; fixtures are dated relative to it so the ≥24h cutoff is exercised precisely.
+  const archNow = new Date("2026-06-22T18:00:00.000Z");
+  const h = (n: number) => 60 * 60 * 1000 * n;
+  const at = (msBeforeNow: number) => new Date(archNow.getTime() - msBeforeNow).toISOString();
+
+  it("moves a completed group match ≥24h past kickoff into `completed`, out of every matchday", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "old",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }), // 48h ago
+        fx({
+          matchId: "live",
+          periodKind: "group_md",
+          periodLabel: "MD2",
+          status: "scheduled",
+          kickoffAt: at(-h(2)),
+        }), // future
+      ],
+      "group",
+      archNow,
+    );
+    expect(view.completed.map((f) => f.matchId)).toEqual(["old"]);
+    // "old" is in no matchday; only the active MD2 section survives.
+    expect(view.matchdays.map((s) => s.label)).toEqual(["MD2"]);
+    expect(view.matchdays.flatMap((s) => s.fixtures.map((f) => f.matchId))).toEqual(["live"]);
+  });
+
+  it("keeps a completed match <24h past kickoff in its matchday (not yet archived)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "recent",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(12)),
+        }),
+      ], // 12h ago
+      "group",
+      archNow,
+    );
+    expect(view.completed).toEqual([]);
+    expect(view.matchdays.map((s) => s.label)).toEqual(["MD1"]);
+    expect(view.matchdays[0]!.fixtures.map((f) => f.matchId)).toEqual(["recent"]);
+  });
+
+  it("archives a completed match at exactly the ≥24h boundary (inclusive)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "edge",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(24)),
+        }),
+      ], // exactly 24h ago
+      "group",
+      archNow,
+    );
+    expect(view.completed.map((f) => f.matchId)).toEqual(["edge"]);
+    expect(view.matchdays).toEqual([]);
+  });
+
+  it("never archives a non-completed match, however old (scheduled / in_progress stay in their matchday)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "sched",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "scheduled",
+          kickoffAt: at(h(72)),
+        }),
+        fx({
+          matchId: "live",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "in_progress",
+          kickoffAt: at(h(72)),
+        }),
+      ],
+      "group",
+      archNow,
+    );
+    expect(view.completed).toEqual([]);
+    expect(view.matchdays[0]!.fixtures.map((f) => f.matchId).sort()).toEqual(["live", "sched"]);
+  });
+
+  it("drops a matchday section entirely when all its fixtures archive", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "a",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }),
+        fx({
+          matchId: "b",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(30)),
+        }),
+      ],
+      "group",
+      archNow,
+    );
+    expect(view.matchdays).toEqual([]); // MD1 emptied → dropped, not an empty section
+    expect(view.completed.map((f) => f.matchId).sort()).toEqual(["a", "b"]);
+  });
+
+  it("sorts `completed` by kickoff descending (most recent first)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "older",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(72)),
+        }),
+        fx({
+          matchId: "newer",
+          periodKind: "group_md",
+          periodLabel: "MD2",
+          status: "completed",
+          kickoffAt: at(h(30)),
+        }),
+        fx({
+          matchId: "mid",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }),
+      ],
+      "group",
+      archNow,
+    );
+    expect(view.completed.map((f) => f.matchId)).toEqual(["newer", "mid", "older"]);
   });
 });
 

@@ -118,6 +118,8 @@ describe("flattenPickFixtures — every real fixture across the Picks-tab struct
         { label: "R16", fixtures: [] }, // honest TBD round — no fixtures
       ],
       unscheduled: [fx("u1", at(5))],
+      // Archived completed matches are not part of the reveal-clock flatten (they are ≥24h past kickoff).
+      completed: [fx("c1", at(-10))],
     };
     expect(
       flattenPickFixtures(picks)
@@ -127,7 +129,7 @@ describe("flattenPickFixtures — every real fixture across the Picks-tab struct
   });
 
   it("returns an empty list when there are no fixtures anywhere", () => {
-    const picks: PoolPicksView = { matchdays: [], bracket: [], unscheduled: [] };
+    const picks: PoolPicksView = { matchdays: [], bracket: [], unscheduled: [], completed: [] };
     expect(flattenPickFixtures(picks)).toEqual([]);
   });
 });

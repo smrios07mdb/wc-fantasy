@@ -153,7 +153,8 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
   return {
     managerId: viewerManagerId,
     phase,
-    picks: selectPoolPicksView(fixtures, phase),
+    // `now` (the same instant used for the reveal read above) drives the ≥24h Completed-archive cutoff.
+    picks: selectPoolPicksView(fixtures, phase, now),
     leaderboard: buildPoolLeaderboardView(
       allPicks,
       leaderboardMatches,
