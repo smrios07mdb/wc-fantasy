@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { CompareBand, XIPanel } from "./components";
+import { CompareBand, XIPanel, MaH2H } from "./components";
 import type { FieldEntry, StarterView } from "@app/vsfield";
 
 afterEach(cleanup);
@@ -151,6 +151,31 @@ describe("XIPanel — jersey-pitch drill-in (points chip + tap-to-open box-score
     render(<XIPanel entry={ME} onOpenPlayer={() => {}} dimLive={false} />);
     expect(screen.queryByText(/forfeit/i)).toBeNull();
     expect(screen.queryByText(/bench/i)).toBeNull();
+  });
+});
+
+describe("MaH2H — mobile matchup opens on the OPPONENT's XI (opp-first toggle)", () => {
+  const FIELD = [ME, OPP];
+
+  it("mounts on the opponent's side: opp segment is-on and opp's starters fill the pitch", () => {
+    render(
+      <MaH2H field={FIELD} oppId="opp" onBack={() => {}} onOpenPlayer={() => {}} dimLive={false} />,
+    );
+    const active = document.querySelector(".ma-sideseg button.is-on") as HTMLElement;
+    expect(active.textContent).toContain("Rival");
+    // the opponent's XI is the one rendered on the pitch …
+    expect(screen.getByText("Opp Played")).toBeTruthy();
+    // … and the viewer's own starters are NOT (one tap away on the You segment).
+    expect(screen.queryByText("My Played")).toBeNull();
+  });
+
+  it("tapping the You segment switches to the viewer's XI", () => {
+    render(
+      <MaH2H field={FIELD} oppId="opp" onBack={() => {}} onOpenPlayer={() => {}} dimLive={false} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^You/ }));
+    expect(screen.getByText("My Played")).toBeTruthy();
+    expect(screen.queryByText("Opp Played")).toBeNull();
   });
 });
 

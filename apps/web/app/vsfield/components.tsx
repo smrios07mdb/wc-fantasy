@@ -950,7 +950,10 @@ export function MaH2H({
   onOpenPlayer: (playerId: string) => void;
   dimLive: boolean;
 }) {
-  const [side, setSide] = useState<"me" | "opp">("me");
+  // Open on the OPPONENT's XI: you tapped this row to scout them, so their team
+  // leads; your own side is one tap away on the segment below. (Mobile only —
+  // desktop da-teams2 keeps You-left.)
+  const [side, setSide] = useState<"me" | "opp">("opp");
   const me = field.find((e) => e.isMe);
   const opp = field.find((e) => e.managerId === oppId);
   if (!me || !opp || opp.isMe) return null;
@@ -964,17 +967,17 @@ export function MaH2H({
       <div className="ma-sideseg">
         <button
           type="button"
-          className={side === "me" ? "is-on" : ""}
-          onClick={() => setSide("me")}
-        >
-          You <span className="ma-seg-pts">{me.points}</span>
-        </button>
-        <button
-          type="button"
           className={side === "opp" ? "is-on" : ""}
           onClick={() => setSide("opp")}
         >
           {opp.displayName} <span className="ma-seg-pts">{opp.points}</span>
+        </button>
+        <button
+          type="button"
+          className={side === "me" ? "is-on" : ""}
+          onClick={() => setSide("me")}
+        >
+          You <span className="ma-seg-pts">{me.points}</span>
         </button>
       </div>
       <div className="ma-pitchwrap">
