@@ -26,14 +26,13 @@ export async function peekLineup(
   ctx: MatchCtx,
 ): Promise<number> {
   const res = await feed.matchLineups({ matchId: ctx.bdlId });
-  const entries: LineupEntryIn[] = [];
-  for (const lineup of res.data) {
-    // Map EVERY entry — starters AND bench. `is_starter` is what the badge later resolves on; an absent
-    // bench (XI-only feed) still resolves correctly downstream (match-has-entries ⇒ not-a-starter = out).
-    for (const e of lineup.entries) {
-      entries.push({ playerBdlId: e.player_id, isStarter: e.is_starter });
-    }
-  }
+  // The feed is a FLAT list of one row per player (starters AND bench); each `data` element IS an entry,
+  // with the player id nested at `row.player.id`. `is_starter` is what the badge later resolves on; an
+  // absent bench (XI-only feed) still resolves correctly downstream (match-has-entries ⇒ not-a-starter = out).
+  const entries: LineupEntryIn[] = res.data.map((row) => ({
+    playerBdlId: row.player.id,
+    isStarter: row.is_starter,
+  }));
   if (entries.length === 0) return 0;
   await store.upsertLineupEntries(ctx.bdlId, entries);
   return entries.length;

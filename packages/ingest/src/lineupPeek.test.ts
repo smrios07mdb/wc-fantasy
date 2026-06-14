@@ -33,15 +33,11 @@ describe("peekLineup (T-75 availability snapshot)", () => {
     const feed = fakeFeed({
       matchLineups: () =>
         Promise.resolve({
+          // FLAT shape (verified live GOAT): one row per player, id nested at `player.id`.
           data: [
-            {
-              match_id: 50,
-              entries: [
-                { player_id: 1, is_starter: true },
-                { player_id: 2, is_starter: true },
-                { player_id: 3, is_starter: false }, // a bench entry — must be persisted too
-              ],
-            },
+            { match_id: 50, player: { id: 1 }, is_starter: true },
+            { match_id: 50, player: { id: 2 }, is_starter: true },
+            { match_id: 50, player: { id: 3 }, is_starter: false }, // a bench row — persisted too
           ],
           meta: {},
         }),
@@ -76,7 +72,7 @@ describe("peekLineup (T-75 availability snapshot)", () => {
     const feed = fakeFeed({
       matchLineups: () =>
         Promise.resolve({
-          data: [{ match_id: 50, entries: [{ player_id: 9, is_starter: starter }] }],
+          data: [{ match_id: 50, player: { id: 9 }, is_starter: starter }],
           meta: {},
         }),
     });

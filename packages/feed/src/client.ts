@@ -9,7 +9,7 @@ import type {
   Paginated,
   CursorMeta,
   FIFAMatch,
-  FIFAMatchLineup,
+  FIFAMatchLineupEntry,
   FIFAMatchEvent,
   FIFAPlayerMatchStats,
   FIFATeamMatchStats,
@@ -127,7 +127,7 @@ export function buildClient(config: FeedClientConfig): FeedClient {
   return {
     matches: (p?: MatchListParams) =>
       getAll<FIFAMatch>(b, "matches", snakeParams({ ...(p ?? {}) })),
-    matchLineups: (p: MatchScopedParams) => matchScoped<FIFAMatchLineup>("match_lineups", p),
+    matchLineups: (p: MatchScopedParams) => matchScoped<FIFAMatchLineupEntry>("match_lineups", p),
     matchEvents: (p: MatchScopedParams) => matchScoped<FIFAMatchEvent>("match_events", p),
     playerMatchStats: (p: MatchScopedParams) =>
       matchScoped<FIFAPlayerMatchStats>("player_match_stats", p),

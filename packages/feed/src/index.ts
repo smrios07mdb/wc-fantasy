@@ -6,7 +6,7 @@
 import type {
   Paginated,
   FIFAMatch,
-  FIFAMatchLineup,
+  FIFAMatchLineupEntry,
   FIFAMatchEvent,
   FIFAPlayerMatchStats,
   FIFATeamMatchStats,
@@ -29,7 +29,7 @@ export * from "./rateLimiter";
 /** The polling surface, one method per endpoint we consume. */
 export interface FeedClient {
   matches(params?: MatchListParams): Promise<Paginated<FIFAMatch>>;
-  matchLineups(params: MatchScopedParams): Promise<Paginated<FIFAMatchLineup>>;
+  matchLineups(params: MatchScopedParams): Promise<Paginated<FIFAMatchLineupEntry>>;
   matchEvents(params: MatchScopedParams): Promise<Paginated<FIFAMatchEvent>>;
   playerMatchStats(params: MatchScopedParams): Promise<Paginated<FIFAPlayerMatchStats>>;
   teamMatchStats(params: MatchScopedParams): Promise<Paginated<FIFATeamMatchStats>>;

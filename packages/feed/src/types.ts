@@ -90,17 +90,32 @@ export interface FIFAMatch {
   [key: string]: unknown;
 }
 
-export interface FIFAMatchLineupEntry {
-  player_id: number;
-  team_id?: number | null;
+/**
+ * Nested player object on a `match_lineups` row. The id space matches `/rosters` (`player.id`), which
+ * `upsertLineupEntries` resolves to internal ids. Same `player.id` nesting trap as {@link FIFAMatchEvent}.
+ */
+export interface FIFAMatchLineupPlayer {
+  id: number;
+  name?: string;
+  short_name?: string;
   position?: string | null;
-  is_starter: boolean;
-  shirt_number?: number | null;
+  jersey_number?: string | null;
   [key: string]: unknown;
 }
-export interface FIFAMatchLineup {
+/**
+ * VERIFIED live GOAT `match_lineups` shape: a FLAT list of ONE row per player (NOT a per-match object
+ * with an `entries` array). Bench players appear as their own rows with `is_starter: false`. `match_id`
+ * is top-level (satisfies `matchScoped`); the player id is nested at `player.id` (NOT `player_id`).
+ */
+export interface FIFAMatchLineupEntry {
   match_id: number;
-  entries: FIFAMatchLineupEntry[];
+  team_id?: number | null;
+  player: FIFAMatchLineupPlayer;
+  is_starter: boolean;
+  is_substitute?: boolean;
+  shirt_number?: number | null;
+  position?: string | null;
+  formation?: string | null;
   [key: string]: unknown;
 }
 

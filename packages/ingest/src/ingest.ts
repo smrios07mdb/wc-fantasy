@@ -119,18 +119,18 @@ export async function ingestLineups(
   ctx: MatchCtx,
 ): Promise<LineupsResult> {
   const res = await feed.matchLineups({ matchId: ctx.bdlId });
+  // FLAT feed: each `data` row IS one player's entry (player id nested at `row.player.id`); one pass, no
+  // inner loop. Bench players (is_starter:false) are excluded from the official-XI starter ids.
+  const entries: LineupAppearance[] = res.data.map((row) => ({
+    playerBdlId: row.player.id,
+    isStarter: row.is_starter,
+  }));
   const officialStarterBdlIds: number[] = [];
-  for (const lineup of res.data) {
-    const entries: LineupAppearance[] = lineup.entries.map((e) => ({
-      playerBdlId: e.player_id,
-      isStarter: e.is_starter,
-    }));
-    for (const e of entries) {
-      if (e.isStarter) officialStarterBdlIds.push(e.playerBdlId);
-    }
-    for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt, ctx.now)) {
-      await store.lockSlot(ctx.bdlId, lock.playerBdlId, lock.lockedAt, ctx.now, "xi-pull");
-    }
+  for (const e of entries) {
+    if (e.isStarter) officialStarterBdlIds.push(e.playerBdlId);
+  }
+  for (const lock of lockInstantsFromLineup(entries, ctx.kickoffAt, ctx.now)) {
+    await store.lockSlot(ctx.bdlId, lock.playerBdlId, lock.lockedAt, ctx.now, "xi-pull");
   }
   return { officialStarterBdlIds };
 }

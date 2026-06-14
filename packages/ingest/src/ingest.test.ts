@@ -72,15 +72,11 @@ describe("ingestLineups (pre-match)", () => {
     const feed = fakeFeed({
       matchLineups: () =>
         Promise.resolve({
+          // FLAT shape (verified live GOAT): one row per player, id nested at `player.id`.
           data: [
-            {
-              match_id: 50,
-              entries: [
-                { player_id: 1, is_starter: true },
-                { player_id: 2, is_starter: true },
-                { player_id: 3, is_starter: false },
-              ],
-            },
+            { match_id: 50, player: { id: 1 }, is_starter: true },
+            { match_id: 50, player: { id: 2 }, is_starter: true },
+            { match_id: 50, player: { id: 3 }, is_starter: false },
           ],
           meta: {},
         }),
@@ -106,7 +102,7 @@ describe("ingestLineups (pre-match)", () => {
     const feed = fakeFeed({
       matchLineups: () =>
         Promise.resolve({
-          data: [{ match_id: 50, entries: [{ player_id: 1, is_starter: true }] }],
+          data: [{ match_id: 50, player: { id: 1 }, is_starter: true }],
           meta: {},
         }),
     });
