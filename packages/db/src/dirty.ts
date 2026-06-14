@@ -1,6 +1,6 @@
 /**
  * The `stat_player_match.dirty` re-dirty helper — ONE home for the no-clobber invariant shared by
- * @app/ingest (05a) and packages/scrape (05b). `sweep` Phase 1 (`listDirtyPlayerMatches`) reads the raw
+ * @app/ingest (05a) and packages/scrape (05b). `sweep` Phase 1 (`claimDirtyPlayerMatches`) reads the raw
  * `dirty` BOOLEAN, so a match-level write (an event, or a scrape rating) re-dirties the player through
  * it. INSERT writes an all-null stub (a player with no stat row yet — the adapter tolerates it); CONFLICT
  * touches ONLY the flag (`STAT_DIRTY_UPDATE`), so a late write never nulls out stats that already landed.

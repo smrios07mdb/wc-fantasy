@@ -15,6 +15,13 @@ import type { ManagerPeriodRef, PlayerMatchRef, RecomputeStore } from "./store";
 export interface RecomputeOptions {
   /** Commissioner override: permit restating a FROZEN period (DECISIONS → Theme C). Default false. */
   allowFrozen?: boolean;
+  /**
+   * Optional sink for a Phase-1 recompute that throws. `sweep` catches per (match, player), re-dirties the
+   * key for retry, and invokes this so the failure is VISIBLE at the IO boundary (the worker wires it to
+   * its logger) — the pure orchestration itself stays logger-free. Invoked once with the original error,
+   * and again if the defensive re-dirty itself throws.
+   */
+  onPlayerMatchError?: (ref: PlayerMatchRef, error: unknown) => void;
 }
 
 export interface PlayerMatchResult extends PlayerMatchRef {
@@ -29,6 +36,9 @@ export interface ManagerPeriodResult extends ManagerPeriodRef {
 
 export interface SweepResult {
   playerMatches: number;
+  /** Phase-1 (match, player) recomputes that THREW and were re-dirtied for retry (never left
+   *  dirty=false-and-stale). A persistently-poison row re-counts here every tick until it is fixed. */
+  playerMatchFailures: number;
   managerPeriods: number;
   /** Manager-periods left unprocessed because their period is frozen (no override). */
   skippedFrozen: number;
@@ -37,15 +47,17 @@ export interface SweepResult {
 }
 
 /**
- * Recompute one `score_player_match`: gather rows → adapter → engine → upsert, then mark the
- * affected (manager, period) pairs dirty and clear this input's dirty flag (last). Returns null if
- * the (match, player) has no input rows.
+ * Recompute one `score_player_match`: gather rows → adapter → engine → upsert, then mark the affected
+ * (manager, period) pairs dirty. Returns null if the (match, player) has no input rows. The raw `dirty`
+ * flags are NOT cleared here — `sweep`'s Phase 1 already CLAIMED them (cleared-and-captured) before this
+ * read, which is what closes the read→compute→clear lost-update race. A write that lands after the claim
+ * re-dirties the row and is reprocessed next sweep, so this unit stays safe to re-run.
  *
  * PARTICIPANT GATE (live MD1 incident): only players who ACTUALLY appeared in the match are scored.
  * A non-participant — cross-team contamination from a bad player↔match join, or an all-null dirty
- * stub from `markStatPlayerDirty` — gets NO row: we DELETE any pre-existing bogus row, re-enqueue the
- * manager-periods that referenced it (so the rollup restates without the phantom points), and clear
- * dirty. This is the single chokepoint that keeps a stored mis-join from ever becoming a score.
+ * stub from `markStatPlayerDirty` — gets NO row: we DELETE any pre-existing bogus row and re-enqueue the
+ * manager-periods that referenced it (so the rollup restates without the phantom points). This is the
+ * single chokepoint that keeps a stored mis-join from ever becoming a score.
  */
 export async function recomputePlayerMatch(
   store: RecomputeStore,
@@ -60,8 +72,7 @@ export async function recomputePlayerMatch(
     for (const ref of await store.getAffectedManagerPeriods(matchId, playerId)) {
       await store.enqueueManagerPeriodDirty(ref); // restate rollups that summed the phantom row
     }
-    await store.clearRawDirty(matchId, playerId); // last: keeps re-runs safe
-    return null;
+    return null; // dirty already cleared by the Phase 1 claim
   }
 
   const breakdown = scorePlayerMatch(buildScoreInput(bundle));
@@ -70,7 +81,6 @@ export async function recomputePlayerMatch(
   for (const ref of await store.getAffectedManagerPeriods(matchId, playerId)) {
     await store.enqueueManagerPeriodDirty(ref);
   }
-  await store.clearRawDirty(matchId, playerId); // last: keeps re-runs safe
 
   return { matchId, playerId, points: breakdown.total };
 }
@@ -142,13 +152,36 @@ export async function sweep(
   store: RecomputeStore,
   opts: RecomputeOptions = {},
 ): Promise<SweepResult> {
-  // Phase 1 — player-match: recompute every dirty (match, player), enqueueing manager-period markers.
-  const dirtyPlayerMatches = await store.listDirtyPlayerMatches();
+  // Phase 1 — player-match: atomically CLAIM every dirty (match, player) — flip dirty→clean AND capture
+  // the keys in one statement per raw table — then recompute each, enqueueing manager-period markers.
+  // Clearing BEFORE the read closes the TOCTOU lost-update: a raw write committing after its row is
+  // claimed re-dirties it and is reprocessed next sweep, so it is never cleared without being incorporated.
+  //
+  // FAILURE ISOLATION: because the claim already cleared each key's dirty flag, a recompute that THROWS
+  // would otherwise leave that key dirty=false-and-stale with no retry (permanent for a settled match) AND,
+  // in a bare loop, abort every key after it. So we catch per key, re-dirty it for the next sweep, surface
+  // the error (opts.onPlayerMatchError), count it, and CONTINUE — guaranteeing every claimed key ends with
+  // either a fresh score or dirty=true.
+  const dirtyPlayerMatches = await store.claimDirtyPlayerMatches();
+  let playerMatchFailures = 0;
   for (const pm of dirtyPlayerMatches) {
-    await recomputePlayerMatch(store, pm.matchId, pm.playerId);
+    try {
+      await recomputePlayerMatch(store, pm.matchId, pm.playerId);
+    } catch (error) {
+      playerMatchFailures++;
+      opts.onPlayerMatchError?.(pm, error);
+      try {
+        await store.markPlayerMatchDirty(pm.matchId, pm.playerId); // re-dirty → reclaimed next sweep
+      } catch (reMarkError) {
+        // The re-dirty itself failed (e.g. DB down). Surface it, but still don't abort the other keys.
+        opts.onPlayerMatchError?.(pm, reMarkError);
+      }
+    }
   }
 
-  // Phase 2 — manager-period: drain the markers, honoring the frozen gate; mark standing dirty.
+  // Phase 2 — manager-period: drain the markers, honoring the frozen gate; mark standing dirty. (Phases 2
+  // and 3 are clear-ON-SUCCESS — the marker is processed AFTER the recompute — so a throw leaves the marker
+  // unprocessed and it simply retries next tick. They carry no claim-then-clear lost-on-failure exposure.)
   const candidates = await store.listDirtyManagerPeriods();
   let managerPeriods = 0;
   let skippedFrozen = 0;
@@ -170,6 +203,7 @@ export async function sweep(
 
   return {
     playerMatches: dirtyPlayerMatches.length,
+    playerMatchFailures,
     managerPeriods,
     skippedFrozen,
     standings: standingLeagues.length,

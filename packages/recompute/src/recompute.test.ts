@@ -9,6 +9,7 @@ import {
   sweep,
 } from "./recompute";
 import { computeStandings, type PeriodScores } from "./standing";
+import type { PlayerMatchRef } from "./store";
 
 function zeroStat(): StatRow {
   return {
@@ -79,7 +80,9 @@ describe("recomputePlayerMatch", () => {
 
     expect(result?.points).toBe(expected.total);
     expect(store.writtenPlayerScore("m1", "p1")).toEqual(expected);
-    expect(store.isRawDirty("m1", "p1")).toBe(false); // dirty cleared last
+    // Clearing now belongs to the Phase 1 claim (sweep), NOT to recomputePlayerMatch: a bare recompute
+    // leaves the flag set, which is what lets a write landing mid-sweep be reprocessed on the next tick.
+    expect(store.isRawDirty("m1", "p1")).toBe(true);
   });
 
   it("returns null when the (match, player) has no input rows", async () => {
@@ -123,7 +126,7 @@ describe("recomputePlayerMatch — non-participants are never scored (live MD1 i
     };
   }
 
-  it("writes NO score, DELETES any bogus row, restates the rollup, and clears dirty", async () => {
+  it("writes NO score, DELETES any bogus row, and restates the rollup (the claim owns dirty)", async () => {
     const store = new MemoryStore();
     store.seedPlayerMatch("mexsa", "pickford", nonParticipant()); // dirty by default
     store.seedManagerLeague("FENIX", "L");
@@ -137,7 +140,8 @@ describe("recomputePlayerMatch — non-participants are never scored (live MD1 i
 
     expect(result).toBeNull(); // not a participant → not scored
     expect(store.writtenPlayerScore("mexsa", "pickford")).toBeUndefined(); // bogus row removed
-    expect(store.isRawDirty("mexsa", "pickford")).toBe(false); // dirty cleared last (idempotent)
+    // recomputePlayerMatch no longer clears dirty — the Phase 1 claim does; a bare call leaves it set.
+    expect(store.isRawDirty("mexsa", "pickford")).toBe(true);
     expect(store.pendingManagerPeriods()).toEqual([{ managerId: "FENIX", periodId: "MD1" }]);
   });
 
@@ -262,7 +266,13 @@ describe("dirty-flag propagation + idempotency", () => {
     expect(store.pendingManagerPeriods()).toEqual([]);
 
     const second = await sweep(store);
-    expect(second).toEqual({ playerMatches: 0, managerPeriods: 0, skippedFrozen: 0, standings: 0 });
+    expect(second).toEqual({
+      playerMatches: 0,
+      playerMatchFailures: 0,
+      managerPeriods: 0,
+      skippedFrozen: 0,
+      standings: 0,
+    });
     expect(store.standingMarkers()).toEqual([]); // still clean — nothing re-marked
   });
 
@@ -280,6 +290,98 @@ describe("dirty-flag propagation + idempotency", () => {
     expect(r.playerMatches).toBe(1);
     expect(store.writtenPlayerScore("m1", "dirtyP")).toBeDefined();
     expect(store.writtenPlayerScore("m1", "cleanP")).toBeUndefined();
+  });
+});
+
+describe("claimDirtyPlayerMatches — atomic claim semantics (the lost-update fix)", () => {
+  it("returns exactly the previously-dirty keys, leaves them clean, and re-dirtying re-exposes them", async () => {
+    const store = new MemoryStore();
+    store.seedPlayerMatch("m1", "p1", makeBundle("p1", "MID", { minutesPlayed: 90 }), {
+      dirty: true,
+    });
+    store.seedPlayerMatch("m2", "p2", makeBundle("p2", "MID", { minutesPlayed: 90 }), {
+      dirty: true,
+    });
+    store.seedPlayerMatch("m3", "p3", makeBundle("p3", "MID", { minutesPlayed: 90 }), {
+      dirty: false,
+    });
+
+    const claimed = await store.claimDirtyPlayerMatches();
+    expect(claimed).toHaveLength(2); // only the dirty ones; the clean m3/p3 is never claimed
+    expect(claimed).toContainEqual({ matchId: "m1", playerId: "p1" });
+    expect(claimed).toContainEqual({ matchId: "m2", playerId: "p2" });
+    expect(store.isRawDirty("m1", "p1")).toBe(false); // claim flipped the flag in the same step
+    expect(store.isRawDirty("m2", "p2")).toBe(false);
+
+    // Idempotent: a second claim with nothing newly dirtied returns nothing.
+    expect(await store.claimDirtyPlayerMatches()).toEqual([]);
+
+    // A raw write that lands AFTER the claim re-dirties the row → the next claim returns it (reprocessed,
+    // never lost). This is the in-memory mirror of the read→clear race the real-Postgres test proves.
+    store.markRawDirty("m1", "p1");
+    expect(await store.claimDirtyPlayerMatches()).toEqual([{ matchId: "m1", playerId: "p1" }]);
+    expect(store.isRawDirty("m1", "p1")).toBe(false);
+  });
+});
+
+/** A MemoryStore whose `getPlayerMatchInput` throws for one player the first `failsLeft` times — exercises
+ *  the sweep's Phase-1 failure isolation (re-dirty on throw, no orphaning) without a database. */
+class PoisonMemoryStore extends MemoryStore {
+  constructor(
+    private readonly poisonPlayerId: string,
+    private failsLeft = 1,
+  ) {
+    super();
+  }
+  override getPlayerMatchInput(matchId: string, playerId: string) {
+    if (playerId === this.poisonPlayerId && this.failsLeft > 0) {
+      this.failsLeft -= 1;
+      return Promise.reject(new Error(`forced recompute failure for ${playerId}`));
+    }
+    return super.getPlayerMatchInput(matchId, playerId);
+  }
+}
+
+describe("sweep Phase 1 failure isolation (re-dirty on throw, no orphaning)", () => {
+  it("re-dirties the failed key, processes every sibling, and a follow-up sweep folds it in", async () => {
+    const store = new PoisonMemoryStore("p2"); // p2 throws once; p1 (before) and p3 (after) must survive
+    const errors: PlayerMatchRef[] = [];
+    store.seedPlayerMatch("m1", "p1", makeBundle("p1", "MID", { minutesPlayed: 90 }), {
+      dirty: true,
+    });
+    store.seedPlayerMatch("m1", "p2", makeBundle("p2", "MID", { minutesPlayed: 90 }), {
+      dirty: true,
+    });
+    store.seedPlayerMatch("m1", "p3", makeBundle("p3", "MID", { minutesPlayed: 90 }), {
+      dirty: true,
+    });
+
+    const first = await sweep(store, {
+      onPlayerMatchError: (ref) => {
+        errors.push(ref);
+      },
+    });
+
+    expect(first.playerMatches).toBe(3); // all three claimed
+    expect(first.playerMatchFailures).toBe(1); // exactly one threw
+    expect(errors).toEqual([{ matchId: "m1", playerId: "p2" }]); // surfaced for logging
+
+    // The siblings BEFORE and AFTER the poison were both processed — the old bare loop aborted at p2,
+    // orphaning p3 (and leaving it dirty=false-and-stale from the claim).
+    expect(store.writtenPlayerScore("m1", "p1")).toBeDefined();
+    expect(store.writtenPlayerScore("m1", "p3")).toBeDefined();
+    expect(store.isRawDirty("m1", "p1")).toBe(false);
+    expect(store.isRawDirty("m1", "p3")).toBe(false);
+
+    // THE INVARIANT for the failed key: dirty=true for retry, never dirty=false-and-stale.
+    expect(store.isRawDirty("m1", "p2")).toBe(true);
+    expect(store.writtenPlayerScore("m1", "p2")).toBeUndefined();
+
+    // Follow-up sweep (poison exhausted): the re-dirtied key is reclaimed and scored.
+    const second = await sweep(store);
+    expect(second.playerMatchFailures).toBe(0);
+    expect(store.writtenPlayerScore("m1", "p2")).toBeDefined();
+    expect(store.isRawDirty("m1", "p2")).toBe(false);
   });
 });
 
@@ -384,7 +486,13 @@ describe("standing phase of sweep — end-to-end chain", () => {
     expect(store.standingMarkers()).toEqual([]); // markers cleared last
 
     const second = await sweep(store);
-    expect(second).toEqual({ playerMatches: 0, managerPeriods: 0, skippedFrozen: 0, standings: 0 });
+    expect(second).toEqual({
+      playerMatches: 0,
+      playerMatchFailures: 0,
+      managerPeriods: 0,
+      skippedFrozen: 0,
+      standings: 0,
+    });
   });
 
   it("standings derived from a FROZEN period don't shift when a late correction is attempted", async () => {

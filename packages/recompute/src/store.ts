@@ -53,8 +53,11 @@ export interface RecomputeStore {
   /** Remove the `score_player_match` row for (match, player) — used to evict a NON-participant's row
    *  (the live MD1 incident). A no-op when no row exists, so it is idempotent. */
   deleteScorePlayerMatch(matchId: string, playerId: string): Promise<void>;
-  /** Clear the raw `dirty` flags for (match, player) — called LAST so a crash mid-unit re-runs safely. */
-  clearRawDirty(matchId: string, playerId: string): Promise<void>;
+  /** Re-dirty a (match, player) so the next sweep reclaims it. Called by `sweep` when a Phase-1 recompute
+   *  THROWS — the claim already cleared the flag, so without this the key would be stale with no retry.
+   *  Sets `dirty=true` on whichever raw rows exist (the claim only flipped the flag; the rows remain), so
+   *  it never spawns a stub. Over-dirtying is always safe (a redundant recompute), never lossy. */
+  markPlayerMatchDirty(matchId: string, playerId: string): Promise<void>;
   /** The (manager, period) pairs whose score depends on this (match, player). */
   getAffectedManagerPeriods(matchId: string, playerId: string): Promise<ManagerPeriodRef[]>;
   /** Mark a (manager, period) dirty (deduped: no duplicate unprocessed marker). */
@@ -85,8 +88,16 @@ export interface RecomputeStore {
   clearStandingDirty(leagueId: string): Promise<void>;
 
   // ── sweeper queues ──
-  /** Distinct (match, player) with any dirty raw input. */
-  listDirtyPlayerMatches(): Promise<PlayerMatchRef[]>;
+  /**
+   * Atomically CLAIM every (match, player) with a dirty raw input: in ONE statement per raw table, flip
+   * `dirty=true → false` AND capture the affected keys, then union + dedup. This REPLACES the old
+   * `listDirtyPlayerMatches` + per-unit `clearRawDirty` pair. Clearing happens BEFORE the recompute read,
+   * which closes the read→compute→clear lost-update race: a raw write that commits AFTER its row is claimed
+   * re-sets `dirty=true` and is reprocessed on the next sweep, so a committed write is never cleared
+   * without being incorporated. A redundant idempotent recompute is acceptable; a frozen-pre-write score
+   * is not. (See `sweep` Phase 1.)
+   */
+  claimDirtyPlayerMatches(): Promise<PlayerMatchRef[]>;
   /** Unprocessed (manager, period) dirty markers. */
   listDirtyManagerPeriods(): Promise<ManagerPeriodRef[]>;
   /** Mark a (manager, period) marker processed — called LAST in its unit. */

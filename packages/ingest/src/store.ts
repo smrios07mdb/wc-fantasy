@@ -47,7 +47,7 @@ export interface IngestStore {
   upsertShot(row: ShotRowIn): Promise<void>;
   upsertTeamStat(row: TeamStatRowIn): Promise<void>;
   /** Re-dirty each affected player for a match-level write (events/shots/team have no dirty col) by
-   *  flipping `stat_player_match.dirty` — the channel `sweep`'s `listDirtyPlayerMatches` actually reads. */
+   *  flipping `stat_player_match.dirty` — the channel `sweep`'s `claimDirtyPlayerMatches` actually reads. */
   markPlayersDirty(matchBdlId: number, playerBdlIds: readonly number[]): Promise<void>;
 
   // ── locking ──

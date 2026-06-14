@@ -190,6 +190,11 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
 
       const result = await runRecomputeSweep();
       log.debug("scheduler.swept", { ...result });
+      // Aggregate signal: per-key errors are logged by runRecomputeSweep's onPlayerMatchError; this is the
+      // one-line "N player-matches failed and were re-dirtied for retry this tick" alert for monitoring.
+      if (result.playerMatchFailures > 0) {
+        log.warn("recompute.player_match.failures", { count: result.playerMatchFailures });
+      }
 
       // Per-period FAAB batch (Theme D "per-matchday acquisition window" amendment): clear every period
       // whose blind-bid deadline has passed and that has not yet cleared — once each, via the unchanged

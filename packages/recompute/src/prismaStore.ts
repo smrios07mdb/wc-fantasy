@@ -173,12 +173,16 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
       await prisma.scorePlayerMatch.deleteMany({ where: { matchId, playerId } });
     },
 
-    async clearRawDirty(matchId, playerId): Promise<void> {
-      const where = { matchId, playerId, dirty: true };
+    async markPlayerMatchDirty(matchId, playerId): Promise<void> {
+      // Re-dirty for retry after a failed recompute (the inverse of the old per-unit clear): set dirty=true
+      // on whichever raw rows exist for this (match, player). The Phase-1 claim only flipped the flag, so
+      // the rows are still present — no stub is created. updateMany is a no-op on a missing table, and
+      // over-dirtying merely schedules a redundant (idempotent) recompute, so this can never lose a write.
+      const where = { matchId, playerId };
       await Promise.all([
-        prisma.statPlayerMatch.updateMany({ where, data: { dirty: false } }),
-        prisma.ratingPlayerMatch.updateMany({ where, data: { dirty: false } }),
-        prisma.manualStatPlayerMatch.updateMany({ where, data: { dirty: false } }),
+        prisma.statPlayerMatch.updateMany({ where, data: { dirty: true } }),
+        prisma.ratingPlayerMatch.updateMany({ where, data: { dirty: true } }),
+        prisma.manualStatPlayerMatch.updateMany({ where, data: { dirty: true } }),
       ]);
     },
 
@@ -344,12 +348,30 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
       });
     },
 
-    async listDirtyPlayerMatches(): Promise<PlayerMatchRef[]> {
-      const sel = { where: { dirty: true }, select: { matchId: true, playerId: true } } as const;
+    async claimDirtyPlayerMatches(): Promise<PlayerMatchRef[]> {
+      // Atomic claim-then-clear: one `UPDATE … SET dirty=false WHERE dirty=true RETURNING match_id,
+      // player_id` per raw table (Prisma 6.19.3 `updateManyAndReturn`, PostgreSQL). Flipping the flag in
+      // the SAME statement that captures the keys is what makes the claim atomic — a concurrent raw write
+      // either commits before the claim (seen, returned, then folded in by the recompute read) or after it
+      // (re-sets dirty=true and is reprocessed next sweep); it can never be cleared without being
+      // incorporated. `rating_player_match` is keyed by (match, player, source), so a (match, player) can
+      // come back on several rows — the union + dedup collapses them to one recompute key.
       const [s, r, m] = await Promise.all([
-        prisma.statPlayerMatch.findMany(sel),
-        prisma.ratingPlayerMatch.findMany(sel),
-        prisma.manualStatPlayerMatch.findMany(sel),
+        prisma.statPlayerMatch.updateManyAndReturn({
+          where: { dirty: true },
+          data: { dirty: false },
+          select: { matchId: true, playerId: true },
+        }),
+        prisma.ratingPlayerMatch.updateManyAndReturn({
+          where: { dirty: true },
+          data: { dirty: false },
+          select: { matchId: true, playerId: true },
+        }),
+        prisma.manualStatPlayerMatch.updateManyAndReturn({
+          where: { dirty: true },
+          data: { dirty: false },
+          select: { matchId: true, playerId: true },
+        }),
       ]);
       const seen = new Set<string>();
       const out: PlayerMatchRef[] = [];
