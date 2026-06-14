@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-accent="cobalt" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XI · Availability Badge — exploration</title>
+<link rel="icon" type="image/png" sizes="32x32" href="logo/icons/favicon-32.png">
+<link rel="manifest" href="logo/icons/site.webmanifest">
+<meta name="theme-color" content="#0A0D12">
+<link rel="stylesheet" href="ds/ds.css">
+<style>
+  html,body{ height:100%; margin:0; }
+  /* gold-free retunes carried from the live surfaces */
+  :root{ --pos-gk:#5E6E8C; --kit-outline:rgba(255,255,255,.72); }
+  [data-theme="light"]{ --kit-outline:rgba(15,23,38,.5); }
+  .pos-GK{ color:var(--text-primary); }
+
+  /* ============================================================ ARTBOARD SHELLS */
+  .av-board{ box-sizing:border-box; width:100%; height:100%; background:var(--surface-0);
+    border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:14px; overflow:hidden; }
+  .av-board.is-light{ background:#EEF1F6; }
+  .av-cap{ font:700 11px/1.3 var(--font-sans); letter-spacing:.07em; text-transform:uppercase; color:var(--text-tertiary); }
+  .av-sub{ font:400 12px/1.45 var(--font-sans); color:var(--text-secondary); text-wrap:pretty; }
+
+  /* pitch patch */
+  .av-pitch{ flex:1; min-height:0; border-radius:12px; border:1px solid var(--hairline-strong);
+    background:repeating-linear-gradient(180deg, color-mix(in srgb,var(--pitch-1) 78%, #000) 0 46px, color-mix(in srgb,var(--pitch-2) 88%, #000) 46px 92px);
+    box-shadow:inset 0 0 60px rgba(0,0,0,.28);
+    display:flex; align-items:center; justify-content:space-around; gap:6px; padding:18px 8px; }
+  /* full-pitch density layout */
+  .av-pitch-full{ flex-direction:column; align-items:stretch; justify-content:space-between; gap:4px; padding:14px 6px; min-height:560px; }
+  .av-lane{ flex:1; display:flex; align-items:center; justify-content:space-around; gap:2px; }
+  .av-pitch-full .av-tok{ width:96px; gap:5px; }
+  .av-pitch-full .av-jersey{ width:46px; height:46px; }
+  .av-benchhead{ margin-top:2px; }
+
+  /* bench card */
+  .av-benchcard{ background:var(--surface-1); border:1px solid var(--hairline); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:8px; }
+  .is-light .av-benchcard{ background:#fff; border-color:rgba(13,20,33,.10); }
+
+  /* ============================================================ TOKEN (shared) */
+  .av-tok{ display:flex; flex-direction:column; align-items:center; gap:6px; width:108px; position:relative; }
+  .av-kitwrap{ position:relative; display:grid; place-items:center; }
+  .av-jersey{ width:52px; height:52px; background:var(--surface-4);
+    clip-path:polygon(27% 0,73% 0,100% 15%,84% 33%,84% 100%,16% 100%,16% 33%,0 15%);
+    box-shadow:inset 0 -7px 12px rgba(0,0,0,.16), inset 0 4px 7px rgba(255,255,255,.12);
+    filter:drop-shadow(2px 0 0 var(--kit-outline)) drop-shadow(-2px 0 0 var(--kit-outline)) drop-shadow(0 2px 0 var(--kit-outline)) drop-shadow(0 -2px 0 var(--kit-outline)) drop-shadow(0 3px 5px rgba(0,0,0,.5)); }
+  .av-name{ font:700 12px/1.1 var(--font-sans); color:#fff; max-width:104px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow:0 0 2px rgba(0,0,0,.9),0 1px 1px rgba(0,0,0,.95),1px 0 1px rgba(0,0,0,.9),-1px 0 1px rgba(0,0,0,.9),0 -1px 1px rgba(0,0,0,.9); }
+  .av-meta{ font:600 10px/1.1 var(--font-mono); color:rgba(255,255,255,.82); letter-spacing:-.01em; white-space:nowrap;
+    text-shadow:0 0 2px rgba(0,0,0,.9),0 1px 1px rgba(0,0,0,.95); }
+  .av-meta .o{ color:rgba(255,255,255,.62); }
+
+  /* ============================================================ BENCH ROW (shared) */
+  .av-bench{ display:flex; align-items:center; gap:9px; padding:9px 11px; border-radius:8px; background:var(--surface-2); border:1px solid var(--hairline); position:relative; overflow:hidden; }
+  .is-light .av-bench{ background:#F3F5F9; border-color:rgba(13,20,33,.08); }
+  .av-bflag{ width:22px; height:15px; border-radius:2px; flex:none; box-shadow:0 0 0 1px rgba(0,0,0,.25) inset; }
+  .av-bname{ font:600 13px/1.2 var(--font-sans); color:var(--text-primary); flex:0 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .av-bmeta{ font:600 11px/1 var(--font-mono); color:var(--text-tertiary); flex:none; white-space:nowrap; }
+  .av-bspacer{ flex:1; }
+
+  /* small flag chip on light & dark */
+  .flag.av-bflag{ background:var(--surface-3); }
+
+  /* ============================================================ ICONS */
+  .av-ico{ display:inline-flex; }
+  .av-ico svg{ display:block; }
+
+  /* legend wrapper */
+  .av-legend{ display:flex; flex-direction:column; gap:11px; }
+  .av-lgrow{ display:flex; align-items:center; gap:11px; }
+  .av-lgtext{ font:400 12px/1.35 var(--font-sans); color:var(--text-secondary); }
+  .av-lgtext b{ color:var(--text-primary); font-weight:700; }
+
+  /* ===========================================================================
+     VARIATION A — STATUS PILL (label-forward, reuses the .pill vocabulary)
+     =========================================================================== */
+  .avA-pill{ display:inline-flex; align-items:center; gap:5px; height:21px; padding:0 9px; border-radius:999px;
+    font:800 10px/1 var(--font-sans); letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+  .avA-pill svg{ width:11px; height:11px; }
+  .avA-pill.s-starting{ background:var(--win-soft); color:var(--win); }
+  .avA-pill.s-out{ background:var(--loss-soft); color:var(--loss); box-shadow:0 0 0 1px color-mix(in srgb,var(--loss) 38%, transparent) inset; }
+  .avA-pill.s-tba{ background:var(--locked-soft); color:var(--locked); }
+  /* on-pitch pill gets a dark backing so the soft fill reads over green */
+  .av-pitch .avA-pill{ background:rgba(7,11,17,.62); box-shadow:0 0 0 1px rgba(255,255,255,.12) inset; }
+  .av-pitch .avA-pill.s-starting{ color:#5BE0A0; }
+  .av-pitch .avA-pill.s-out{ color:#FF8A8A; }
+  .av-pitch .avA-pill.s-tba{ color:#AEB9CC; }
+
+  /* ===========================================================================
+     VARIATION B — CORNER MEDALLION + KIT GLOW (minimal / iconographic)
+     =========================================================================== */
+  .avB-kit.glow-starting{ filter:drop-shadow(0 0 1px var(--win)) drop-shadow(0 0 5px color-mix(in srgb,var(--win) 80%, transparent)); }
+  .avB-kit.glow-out{ filter:drop-shadow(0 0 1px var(--loss)) drop-shadow(0 0 6px color-mix(in srgb,var(--loss) 85%, transparent)); }
+  .avB-kit.glow-tba{ filter:drop-shadow(0 0 1px var(--locked)) drop-shadow(0 0 4px color-mix(in srgb,var(--locked) 60%, transparent)); }
+  .avB-medal{ position:absolute; top:-5px; right:14px; width:19px; height:19px; border-radius:50%; display:grid; place-items:center;
+    box-shadow:0 0 0 2px var(--surface-0), 0 1px 3px rgba(0,0,0,.5); z-index:3; color:#04140E; }
+  .av-pitch .avB-medal{ box-shadow:0 0 0 2px color-mix(in srgb,var(--pitch-2) 90%, #000), 0 1px 3px rgba(0,0,0,.55); }
+  .avB-medal svg{ width:12px; height:12px; }
+  .avB-medal.s-starting{ background:var(--win); }
+  .avB-medal.s-out{ background:var(--loss); color:#fff; }
+  .avB-medal.s-tba{ background:var(--locked); color:#fff; }
+  .avB-word{ font:800 9px/1 var(--font-sans); letter-spacing:.07em; text-transform:uppercase; }
+  .avB-word.s-starting{ color:#5BE0A0; } .avB-word.s-out{ color:#FF8A8A; } .avB-word.s-tba{ color:#AEB9CC; }
+  .av-benchcard .avB-word.s-starting{ color:var(--win); } .av-benchcard .avB-word.s-out{ color:var(--loss); } .av-benchcard .avB-word.s-tba{ color:var(--locked); }
+
+  /* bench leading icon chip + left accent stripe */
+  .avB-bench::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:3px; }
+  .avB-bench.s-starting::before{ background:var(--win); }
+  .avB-bench.s-out::before{ background:var(--loss); }
+  .avB-bench.s-tba::before{ background:var(--locked); }
+  .avB-chip{ width:22px; height:22px; border-radius:6px; display:grid; place-items:center; flex:none; color:#04140E; }
+  .avB-chip svg{ width:13px; height:13px; }
+  .avB-chip.s-starting{ background:var(--win-soft); color:var(--win); }
+  .avB-chip.s-out{ background:var(--loss-soft); color:var(--loss); }
+  .avB-chip.s-tba{ background:var(--locked-soft); color:var(--locked); }
+
+  /* ===========================================================================
+     VARIATION C — AVAILABILITY BAR (color + TEXTURE, grayscale-safe)
+     =========================================================================== */
+  .avC-wrap{ display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .avC-bar{ width:62px; height:7px; border-radius:3px; }
+  .avC-bar.s-starting{ background:var(--win); }
+  .avC-bar.s-out{ background:repeating-linear-gradient(115deg, var(--loss) 0 3px, color-mix(in srgb,var(--loss) 30%, #000) 3px 6px); }
+  .avC-bar.s-tba{ background:transparent; border:1.5px dashed var(--locked); height:7px; }
+  .avC-lab{ font:800 8.5px/1 var(--font-sans); letter-spacing:.09em; text-transform:uppercase; }
+  .avC-lab.s-starting{ color:#5BE0A0; } .avC-lab.s-out{ color:#FF8A8A; } .avC-lab.s-tba{ color:#AEB9CC; }
+  .av-benchcard .avC-lab.s-starting{ color:var(--win); } .av-benchcard .avC-lab.s-out{ color:var(--loss); } .av-benchcard .avC-lab.s-tba{ color:var(--locked); }
+  /* bench vertical textured swatch */
+  .avC-swatch{ width:8px; height:30px; border-radius:3px; flex:none; }
+  .avC-swatch.s-starting{ background:var(--win); }
+  .avC-swatch.s-out{ background:repeating-linear-gradient(135deg, var(--loss) 0 3px, color-mix(in srgb,var(--loss) 30%, #000) 3px 6px); }
+  .avC-swatch.s-tba{ background:transparent; border:1.5px dashed var(--locked); }
+
+  /* post-it intro */
+  .av-intro{ font-family:var(--font-sans); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <rect width="100" height="100" fill="#11151C"/>
+    <circle cx="34" cy="50" r="11" fill="#2FBF71"/>
+    <circle cx="66" cy="50" r="11" fill="#E5484D"/>
+    <circle cx="50" cy="74" r="11" fill="#7E8DA8"/>
+    <path d="M29 50l4 4 7-8" stroke="#04140E" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</template>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="availability/badges.jsx"></script>
+<script type="text/babel">
+const { useEffect } = React;
+
+function App(){
+  return (
+    <DesignCanvas>
+      <DCSection id="full" title="At full strength — how busy does it get?" subtitle="The whole XI + bench under a realistic mid-week mix: mostly calm TBA, a few confirmed, one actionable Out. Compare the three treatments at density.">
+        <DCArtboard id="f-a" label="A · pill" width={660} height={900}><FullSquad variant="A"/></DCArtboard>
+        <DCArtboard id="f-b" label="B · medallion" width={660} height={900}><FullSquad variant="B"/></DCArtboard>
+        <DCArtboard id="f-c" label="C · bar" width={660} height={900}><FullSquad variant="C"/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="A" title="A · Status pill" subtitle="Label-forward — reuses the app's .pill vocabulary. Most explicit, reads at distance, one extra line.">
+        <DCArtboard id="a-pitch" label="On the pitch" width={560} height={300}><PitchBoard variant="A"/></DCArtboard>
+        <DCArtboard id="a-bench" label="On the bench" width={560} height={300}><BenchBoard variant="A"/></DCArtboard>
+        <DCArtboard id="a-legend" label="Legend" width={360} height={300}><LegendBoard variant="A"/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="B" title="B · Corner medallion + kit glow" subtitle="Iconographic — a state-colored glyph in the token corner and a faint kit glow. Most compact; zero extra token height.">
+        <DCArtboard id="b-pitch" label="On the pitch" width={560} height={300}><PitchBoard variant="B"/></DCArtboard>
+        <DCArtboard id="b-bench" label="On the bench" width={560} height={300}><BenchBoard variant="B"/></DCArtboard>
+        <DCArtboard id="b-legend" label="Legend" width={360} height={300}><LegendBoard variant="B"/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="C" title="C · Availability bar" subtitle="Color + texture — solid / hatched / dashed. The redundant pattern survives full grayscale, the hardest colorblind case.">
+        <DCArtboard id="c-pitch" label="On the pitch" width={560} height={300}><PitchBoard variant="C"/></DCArtboard>
+        <DCArtboard id="c-bench" label="On the bench" width={560} height={300}><BenchBoard variant="C"/></DCArtboard>
+        <DCArtboard id="c-legend" label="Legend" width={360} height={300}><LegendBoard variant="C"/></DCArtboard>
+      </DCSection>
+
+      <DCSection id="L" title="Light theme check" subtitle="Same tokens map cleanly through the light tokens — functional colors hold, never gold.">
+        <DCArtboard id="l-a" label="A · pill" width={300} height={260}><LightBoard variant="A"/></DCArtboard>
+        <DCArtboard id="l-b" label="B · medallion" width={300} height={260}><LightBoard variant="B"/></DCArtboard>
+        <DCArtboard id="l-c" label="C · bar" width={300} height={260}><LightBoard variant="C"/></DCArtboard>
+      </DCSection>
+
+      <DCPostIt id="note" x={40} y={-150} text={"Three availability states — orthogonal to lock-on-play.\n\n✓ Starting (win green) · ✕ Not starting (loss red, the actionable one) · ⏱ TBA (steel, the calm default).\n\nEvery state = colour + distinct icon shape + word, never hue alone."}/>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
