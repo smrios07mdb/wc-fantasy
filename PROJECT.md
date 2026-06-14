@@ -467,3 +467,19 @@ presentation — no loader/engine/RLS/endpoint change; points already in the sna
 `/vsfield` ƒ next build all green. **Screenshot proof not capturable in the headless worktree** (route is
 auth-gated ƒ; needs a Supabase session + seeded mixed-state fixtures) — behavioral proof via the RTL
 mount instead; live screenshot owed before merge.
+
+### 2026-06-14 — Feed match-scoped pagination fix (feat/feed-match-ids, merge HELD)
+The five match-scoped feed helpers (`matchLineups`/`matchEvents`/`playerMatchStats`/`teamMatchStats`/
+`matchShots`) now filter **server-side** via the bracketed `match_ids[]=<id>` array param at `per_page=100`,
+so a single fixture resolves in **one page** instead of walking the entire tournament dataset (~1,800 req /
+~3 min per single-match peek that monopolized the rate budget and stalled live polling via the re-entrancy
+guard). Root cause: the GOAT FIFA **paginated** endpoints silently ignore the scalar `match_id` we sent (it
+is recognized only on the non-paginated `/odds/player_props`) → the server returned an unfiltered firehose —
+also the deeper cause of the 2026-06-12 cross-match lock leak. `matchScoped` reuses the same `toQuery` array
+path rosters uses for `team_ids[]`/`player_ids[]`; the client-side `match_id` re-filter is **retained** as
+belt-and-suspenders; `playerProps` (scalar `match_id`, the one endpoint that honours it) +
+`FIFAMatchLineupEntry`/`res.data` mapping (c9e8990) untouched. +7 tests (2041 passed | 3 skipped, 150 files)
+asserting `match_ids[]=<id>` (not a bare `match_id=`) + `per_page=100` per helper, the belt-and-suspenders
+cross-fixture drop, and a rosters array-scoping regression. Gates: `pnpm -w typecheck` / `pnpm lint` /
+`pnpm format:check` / `pnpm test` all exit 0. Two commits (fix+tests `38a3a56`; brain files `[skip render]`).
+Merge HELD pending clearance.

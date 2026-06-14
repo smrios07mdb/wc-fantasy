@@ -202,8 +202,11 @@ feed/mapping bugs. **The `now` gate is ONLY a temporal boundary** (never stamp b
 explicitly NOT an identity/scoping guard; the earlier "self-guarding against a wrong match" claim was
 falsified by the recurrence (foreign-fixture sub instants are legitimately past). Two **outer defences** feed
 the boundary: `ingestLive`/`ingestSettle` drop any feed row whose own `match_id ≠ ctx.bdlId` (logs
-`ingest.{live,settle}.foreign_skipped`), and the feed client re-filters every match-scoped response by
-`match_id`. `lockSlot` logs `lock.slot.stamped` / `lock.slot.refused` (with reason) per attempt so the next
+`ingest.{live,settle}.foreign_skipped`), and the feed client now scopes every match-scoped pull
+**server-side** via the bracketed `match_ids[]=<id>` array param at `per_page=100` (single-page
+resolution; the scalar `match_id` is silently ignored by the GOAT FIFA paginated endpoints, which is the
+deeper cause of the firehose — `feat/feed-match-ids`), **retaining** the client-side `match_id` re-filter
+as belt-and-suspenders. `lockSlot` logs `lock.slot.stamped` / `lock.slot.refused` (with reason) per attempt so the next
 incident is diagnosable from Render logs in minutes. **Self-heal:** migration `20260612220000` lets
 `enforce_lineup_lock()` permit `locked_at → NULL` **only while the lock-source fixture is `scheduled`** (a
 premature stamp, player/role/is_starter unchanged), so the all-periods cleanup

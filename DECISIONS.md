@@ -2344,3 +2344,29 @@ totals and standings are byte-identical; only the stored breakdown text changes.
   call-sites). Self-view-only; the opponent H2H compare and loader/engine/RLS are untouched.
 - `MaYou` is the compact standings-list hero and never carried a pitch — unchanged; the mobile self
   *detail* view is `YouVsField` under `.ma-scroll`, so the swap already covers phones.
+
+## Match-scoped feed queries scope server-side via `match_ids[]`, not the ignored scalar `match_id` (feat/feed-match-ids)
+- DECISION: the five paginated match-scoped helpers (`matchLineups`/`matchEvents`/`playerMatchStats`/
+  `teamMatchStats`/`matchShots`) now send the **bracketed array** filter `match_ids[]=<id>` at
+  `per_page=100`, so a single fixture resolves in **one page**. Confirmed against the official GOAT
+  OpenAPI (`www.balldontlie.io/openapi/fifa.yml`): the FIFA WC **paginated** endpoints honour the
+  `match_ids[]` array filter; the **scalar `match_id` is NOT a recognized filter on them** — it is valid
+  only on the non-paginated `/odds/player_props` (a different endpoint). A scalar `match_id` sent to a
+  paginated endpoint is **silently ignored**, so the server returns the **unfiltered tournament firehose**.
+- ROOT CAUSE this closes: every match-scoped pull previously sent the ignored scalar, so `getAll` walked
+  the **entire tournament dataset** (~1,800 req / ~3 min per single-match peek), monopolizing the rate
+  budget and stalling live polling via the re-entrancy guard. It is also the **deeper** cause of the
+  2026-06-12 cross-match lock leak above: "the server `match_id` filter is not reliably honoured" was
+  really "the scalar is ignored → the response was never scoped at all", which is exactly why substitution
+  events for OTHER fixtures arrived. `match_ids[]` scopes at the source.
+- HOW: `matchScoped` builds its own params `{ cursor, per_page: p.perPage ?? 100, match_ids: [p.matchId] }`
+  and passes them through the SAME `toQuery` array path rosters uses for `team_ids[]`/`player_ids[]`
+  (`toQuery` emits `${k}[]` per array item). `playerProps` is UNCHANGED — it still scopes via the scalar
+  `match_id` through the now-props-only `scoped()` helper (the one endpoint that honours it).
+  `FIFAMatchLineupEntry` + the `res.data` mapping (c9e8990) are byte-untouched.
+- RETAINED: the client-side `r.match_id === p.matchId` re-filter in `matchScoped` stays as
+  **belt-and-suspenders** — a firehose response can never reach ingest even if server scoping ever
+  regresses (defence in depth after the 2026-06-12 leak).
+- KEY LEARNING: **GOAT FIFA paginated endpoints honour bracketed ARRAY filters
+  (`match_ids[]`/`team_ids[]`/`player_ids[]`); SCALAR id params are silently ignored → full-dataset scan.**
+  When adding a new filtered pull, use the array param and assert the built query string carries the `[]`.
