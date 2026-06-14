@@ -40,6 +40,14 @@ given sufficient stat granularity. See DECISIONS.md → Data source, and the per
 | 8.5–9.0 | +4 |
 | 9.0–10 | +5 |
 
+> **Always render the rating line when a rating is present — even at 0 points.** The 6.5–7.0
+> band scores 0, but the breakdown still emits the rating line (`rating <value> (<source>) → +0`)
+> whenever the resolved rating is non-null. Omitting the 0-point line read to users as a *missing*
+> rating — a 6.8-rated player showed no PERFORMANCE RATING section and looked un-rated. This is
+> display-only: the rating line is the one bucket exempt from the "omit a 0-point line" rule; no
+> point value, band boundary, or total changes (a 0-point line adds 0). A **null** rating (the
+> player received none) still emits no line, per principle 5.
+
 ## 2. Appearance — all
 | Minutes | Points |
 |---|---|
