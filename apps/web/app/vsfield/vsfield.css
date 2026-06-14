@@ -736,128 +736,6 @@
   font-weight: 800;
 }
 
-/* ───────────────────────────── formation pitch (dot nodes, aggregate) ───────────────────────────── */
-.vf-pitch {
-  position: relative;
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--pitch-2) 26%, var(--surface-1)),
-    color-mix(in srgb, var(--pitch-2) 13%, var(--surface-1))
-  );
-}
-/* Pitch markings — a faint centre circle + a halfway line so the surface reads as a pitch, not a bare
-   gradient (mirrors the Prompt-23 /lineup pitch-markings fix). Lines are barely-there white (no gold).
-   The halfway line runs perpendicular to the lanes, so it differs by orientation. */
-.vf-pitch::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 20%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 50%;
-  pointer-events: none;
-}
-.vf-pitch-v {
-  flex-direction: column;
-}
-.vf-pitch-h {
-  flex-direction: row;
-}
-.vf-pitch-v::before {
-  content: "";
-  position: absolute;
-  left: 10%;
-  right: 10%;
-  top: 50%;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.05);
-}
-.vf-pitch-h::before {
-  content: "";
-  position: absolute;
-  top: 12%;
-  bottom: 12%;
-  left: 50%;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.05);
-}
-.vf-lane {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: space-evenly;
-  min-width: 0;
-}
-.vf-pitch-v .vf-lane {
-  flex-direction: row;
-}
-.vf-pitch-h .vf-lane {
-  flex-direction: column;
-}
-.vf-node {
-  border-radius: 50%;
-  flex: none;
-}
-.vf-node.s-played {
-  background: var(--node-played);
-}
-.vf-node.s-live {
-  background: var(--live);
-  box-shadow: 0 0 0 3px var(--live-soft);
-}
-.vf-node.s-ytp {
-  background: transparent;
-  border: 1.5px solid var(--text-tertiary);
-}
-.vf-pitch-hero {
-  width: 100%;
-  height: 168px;
-  padding: 16px 20px;
-}
-.vf-pitch-hero .vf-node {
-  width: 14px;
-  height: 14px;
-}
-.vf-pitch-hero .vf-node.s-live {
-  animation: vfnodepulse 2.6s var(--ease-standard) infinite;
-}
-@keyframes vfnodepulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 3px var(--live-soft);
-  }
-  50% {
-    box-shadow: 0 0 0 6px transparent;
-  }
-}
-
-/* legend */
-.vf-legend2 {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-top: 13px;
-}
-.vf-l2 {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: var(--fs-caption);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.vf-l2 .vf-node {
-  width: 9px;
-  height: 9px;
-}
-
 /* live dot */
 .vf-livedot {
   width: 6px;
@@ -981,6 +859,20 @@
   display: flex;
   gap: 16px;
   align-items: stretch;
+}
+/* The lone self-view jersey pitch (reuses the H2H `.da-pitch`, which is built for the two-up compare).
+   Here it stands alone beside the still-to-come/playing/played side column, so wrap it in a rounded,
+   clipped frame (the role `.da-xi` plays in H2H) and relax `.da-pitch`'s 400px two-up min-height. */
+.v2-agg-xi {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.v2-agg-xi .da-pitch {
+  min-height: 320px;
 }
 .v2-agg-pside {
   display: flex;
@@ -1143,6 +1035,16 @@
   }
   .vf-top-right {
     margin-left: auto;
+  }
+  /* Self-view pitch on phones: stack the jersey pitch above the count column (full width beats a
+     cramped side-by-side at 375px), and lay the counts out as a row beneath it. */
+  .v2-agg-pitchsec {
+    flex-direction: column;
+  }
+  .v2-agg-pside {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-around;
   }
 }
 

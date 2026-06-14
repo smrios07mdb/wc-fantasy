@@ -8,8 +8,11 @@
  *   Set-Lineup-style flag-kit jersey pitches; kit backgrounds from kitOf.ts) · CompareBand ←
  *   shared.jsx (Facts 1+2 only — see the TODO(F2) inside) · YouVsField ← shared.jsx `.v2-agg` ·
  *   SeasonTable ← shared.jsx `.v2-season` · MatchStrip ← mobile.jsx/v2.css `.v2-match` · MaYou/MaRow/
- *   MaCompare/MaH2H ← mobile.jsx (the net-new phone layout) · Pos/Avatar/ConnPill/PitchMini/XILegend/
- *   RecordBadge/useScorePulse kept from the prior port.
+ *   MaCompare/MaH2H ← mobile.jsx (the net-new phone layout) · Pos/Avatar/ConnPill/
+ *   RecordBadge/useScorePulse kept from the prior port. (PitchMini/XILegend — the abstract dot-node
+ *   self pitch + dot legend — were removed once YouVsField adopted the detailed jersey XIPitch.
+ *   YouVsField is the self/field detail view on BOTH desktop and mobile, so the swap covers phones too;
+ *   MaYou is only the compact standings-list hero and never carried a pitch.)
  *
  * CLASS-NAMESPACE NOTE: the design reuses /lineup's `.sl-tok`/`.sl-tok-name` names for the jersey
  * tokens, but Next.js route CSS persists across client navigation, so both stylesheets can be live at
@@ -100,54 +103,6 @@ const NODE_CLASS: Record<StarterState, string> = {
 };
 
 const PITCH_LANES_V: Position[] = ["FWD", "MID", "DEF", "GK"];
-const PITCH_LANES_H: Position[] = ["GK", "DEF", "MID", "FWD"];
-
-/** The XI shown as its formation shape; each starter is a node lit by its live state. */
-export function PitchMini({
-  starters,
-  orient = "v",
-  className = "",
-}: {
-  starters: StarterView[];
-  orient?: "v" | "h";
-  className?: string;
-}) {
-  const byPos: Record<Position, StarterState[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-  for (const s of starters) byPos[s.role].push(s.state);
-  const lanes = orient === "v" ? PITCH_LANES_V : PITCH_LANES_H;
-  return (
-    <div className={"vf-pitch vf-pitch-" + orient + (className ? " " + className : "")}>
-      {lanes.map((pos) =>
-        byPos[pos].length > 0 ? (
-          <div className="vf-lane" key={pos}>
-            {byPos[pos].map((st, i) => (
-              <span key={i} className={"vf-node " + NODE_CLASS[st]} />
-            ))}
-          </div>
-        ) : null,
-      )}
-    </div>
-  );
-}
-
-export function XILegend({ counts }: { counts: StillToCome }) {
-  return (
-    <div className="vf-legend2">
-      <span className="vf-l2">
-        <span className="vf-node s-live" />
-        {counts.playing} Playing
-      </span>
-      <span className="vf-l2">
-        <span className="vf-node s-played" />
-        {counts.played} Played
-      </span>
-      <span className="vf-l2">
-        <span className="vf-node s-ytp" />
-        {stillToCome(counts)} To play
-      </span>
-    </div>
-  );
-}
 
 export function RecordBadge({ rec }: { rec: ProvisionalRecord }) {
   const games = rec.w + rec.l + rec.d;
@@ -570,7 +525,17 @@ export function CompareBand({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
 /* ─────────────────────────────── you vs the field (aggregate) ─────────────────────────────── */
 
 /** The "you vs the field" aggregate — running score, rank, provisional record, still-to-come, swing. */
-export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; periodLabel: string }) {
+export function YouVsField({
+  field,
+  periodLabel,
+  onOpenPlayer,
+  dimLive,
+}: {
+  field: FieldEntry[];
+  periodLabel: string;
+  onOpenPlayer: (playerId: string) => void;
+  dimLive: boolean;
+}) {
   const me = field.find((e) => e.isMe);
   const pulse = useScorePulse(me?.points ?? 0);
   if (!me) return null;
@@ -606,7 +571,9 @@ export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; period
 
       <div className="v2-agg-sec">
         <div className="v2-agg-pitchsec">
-          <PitchMini starters={me.starters} orient="v" className="vf-pitch-hero" />
+          <div className="v2-agg-xi">
+            <XIPitch starters={me.starters} onOpenPlayer={onOpenPlayer} dimLive={dimLive} />
+          </div>
           <div className="v2-agg-pside">
             <div className="v2-ps">
               <span className="v2-ps-num">{stillToCome(me.counts)}</span>
@@ -622,7 +589,6 @@ export function YouVsField({ field, periodLabel }: { field: FieldEntry[]; period
             </div>
           </div>
         </div>
-        <XILegend counts={me.counts} />
         <p className="t-caption text-tertiary" style={{ margin: "10px 0 0" }}>
           {stillToCome(me.counts) > 0 ? (
             <>

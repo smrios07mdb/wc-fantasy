@@ -194,7 +194,12 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
                     </p>
                   </>
                 ) : (
-                  <YouVsField field={view.field} periodLabel={periodLabel} />
+                  <YouVsField
+                    field={view.field}
+                    periodLabel={periodLabel}
+                    onOpenPlayer={setBoxPlayer}
+                    dimLive={dimLive}
+                  />
                 )}
               </div>
             </div>
@@ -213,7 +218,12 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
                 >
                   ‹ Standings
                 </button>
-                <YouVsField field={view.field} periodLabel={periodLabel} />
+                <YouVsField
+                  field={view.field}
+                  periodLabel={periodLabel}
+                  onOpenPlayer={setBoxPlayer}
+                  dimLive={dimLive}
+                />
               </>
             ) : (
               <MaH2H
