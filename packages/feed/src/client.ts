@@ -49,7 +49,8 @@ function toQuery(params: Record<string, unknown>): string {
   return s ? `?${s}` : "";
 }
 
-/** snake_case the camelCase request params; drop the internal `matchId` (re-added as `match_id`). */
+/** snake_case the camelCase request params; drop the internal `matchId` (the caller re-adds it — as a
+ * scalar `match_id` for /odds/player_props, or as the `match_ids[]` array for the paginated helpers). */
 function snakeParams(p: ListParams & Record<string, unknown>): Record<string, unknown> {
   const { perPage, cursor, matchId: _matchId, ...rest } = p;
   return { ...rest, cursor, per_page: perPage };
@@ -109,19 +110,29 @@ export function buildClient(config: FeedClientConfig): FeedClient {
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
     }),
   };
+  // `/odds/player_props` is NON-paginated and is the one GOAT FIFA endpoint that honours the SCALAR
+  // `match_id` filter — so `playerProps` scopes through here. The paginated match-scoped helpers must NOT
+  // reuse this path: they IGNORE scalar `match_id` and require the `match_ids[]` array (see `matchScoped`).
   const scoped = (p: MatchScopedParams): Record<string, unknown> => ({
     ...snakeParams({ ...p }),
     match_id: p.matchId,
   });
-  // Defence in depth (2026-06-12 cross-match lock leak): the server `match_id` filter is NOT reliably
-  // honoured — a single scoped pull can return rows belonging to OTHER fixtures. Re-filter client-side so a
-  // firehose response can never reach the ingest layer. (The ingest foreign-event guard + lockSlot's
-  // team/status gate are the inner defences; this stops the contamination at the wire.)
+  // Scope server-side via `match_ids[]` (the bracketed array form `toQuery` emits, exactly as rosters does
+  // for `team_ids[]`/`player_ids[]`) — the ONLY match filter the GOAT FIFA PAGINATED endpoints honour. The
+  // scalar `match_id` we sent before is silently ignored by them (valid only on the non-paginated
+  // /odds/player_props), so every peek fell back to a full-tournament scan (~1,800 req / ~3 min) that
+  // starved live polling. `per_page: 100` collapses a single fixture to one page. Belt-and-suspenders
+  // (2026-06-12 cross-match lock leak): re-filter client-side on `match_id` so a firehose response can
+  // never reach the ingest layer even if server-side scoping ever regresses.
   const matchScoped = async <T extends { match_id: number }>(
     endpoint: string,
     p: MatchScopedParams,
   ): Promise<Paginated<T>> => {
-    const res = await getAll<T>(b, endpoint, scoped(p));
+    const res = await getAll<T>(b, endpoint, {
+      cursor: p.cursor,
+      per_page: p.perPage ?? 100,
+      match_ids: [p.matchId],
+    });
     return { data: res.data.filter((r) => r.match_id === p.matchId), meta: res.meta };
   };
   return {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createBalldontlieClient } from "./index";
+import { createBalldontlieClient, type FeedClient } from "./index";
 import type { FetchLike } from "./http";
 
 const json = (body: unknown) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
@@ -35,8 +35,72 @@ describe("createBalldontlieClient", () => {
     expect(res.data.map((e) => e.id)).toEqual([10, 20]); // both pages, in order
     expect(urls).toHaveLength(2);
     expect(urls[0]).toContain("match_events");
-    expect(urls[0]).toContain("match_id=7");
+    const firstUrl = decodeURIComponent(urls[0] ?? "");
+    expect(firstUrl).toContain("match_ids[]=7"); // server-side array scope
+    expect(firstUrl).not.toContain("match_id="); // the ignored scalar is gone
     expect(urls[1]).toContain("cursor=2");
+  });
+
+  // Every PAGINATED match-scoped helper must scope server-side with the bracketed `match_ids[]` array — the
+  // ONLY match filter the GOAT FIFA paginated endpoints honour. The scalar `match_id` is silently ignored on
+  // them (valid only on /odds/player_props), which previously forced a full-tournament scan per peek.
+  const matchScopedCalls: ReadonlyArray<
+    [endpoint: string, call: (c: FeedClient) => Promise<unknown>]
+  > = [
+    ["match_lineups", (c) => c.matchLineups({ matchId: 7 })],
+    ["match_events", (c) => c.matchEvents({ matchId: 7 })],
+    ["player_match_stats", (c) => c.playerMatchStats({ matchId: 7 })],
+    ["team_match_stats", (c) => c.teamMatchStats({ matchId: 7 })],
+    ["match_shots", (c) => c.matchShots({ matchId: 7 })],
+  ];
+  for (const [endpoint, call] of matchScopedCalls) {
+    it(`${endpoint}: scopes via match_ids[] (not a bare match_id) at per_page=100`, async () => {
+      let seenUrl = "";
+      const transport: FetchLike = (url) => {
+        seenUrl = url;
+        return Promise.resolve(json({ data: [], meta: {} }));
+      };
+      const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+      await call(client);
+      const q = decodeURIComponent(seenUrl);
+      expect(seenUrl).toContain(`/fifa/worldcup/v1/${endpoint}`);
+      expect(q).toContain("match_ids[]=7"); // the bracket form (NOT `match_ids=7`, NOT `match_ids[0]=7`)
+      expect(q).not.toContain("match_id="); // scalar `match_id` is ignored by these endpoints → must be gone
+      expect(q).toContain("per_page=100"); // one fixture resolves in a single page
+    });
+  }
+
+  it("drops cross-fixture rows the server may still return (belt-and-suspenders client filter)", async () => {
+    // Even with `match_ids[]` scoping the wire is re-filtered on match_id, so a contaminated firehose
+    // response can never reach ingest (defence in depth after the 2026-06-12 cross-match lock leak).
+    const transport: FetchLike = () =>
+      Promise.resolve(
+        json({
+          data: [
+            { id: 1, match_id: 7, incident_type: "goal" },
+            { id: 2, match_id: 999, incident_type: "goal" }, // foreign fixture — must be dropped
+          ],
+          meta: {},
+        }),
+      );
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    const res = await client.matchEvents({ matchId: 7 });
+    expect(res.data.map((e) => e.match_id)).toEqual([7]);
+  });
+
+  it("rosters still emits team_ids[] / player_ids[] (array scoping unchanged)", async () => {
+    let seenUrl = "";
+    const transport: FetchLike = (url) => {
+      seenUrl = url;
+      return Promise.resolve(json({ data: [], meta: {} }));
+    };
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    await client.rosters({ teamIds: [3, 5], playerIds: [9] });
+    const q = decodeURIComponent(seenUrl);
+    expect(q).toContain("team_ids[]=3");
+    expect(q).toContain("team_ids[]=5");
+    expect(q).toContain("player_ids[]=9");
+    expect(q).toContain("seasons[]=2026"); // default season still applied
   });
 
   it("sends the API key as the Authorization header", async () => {
