@@ -176,6 +176,16 @@ table each tick):
 Live latency is a few minutes on the feed itself, so polling faster than ~60s is wasted — a sub
 who enters becomes lockable within a couple of minutes, which is fine.
 
+**`match_lineups` is a FLAT list of one row per player (verified live GOAT; fix `fix/lineup-feed-shape`).**
+Each `data` element IS an entry — a top-level `match_id` + `is_starter`, with the player id nested at
+`row.player.id` (NOT `player_id`; same nesting trap as `match_events`). Bench players are their own rows
+(`is_starter: false`). There is **no** per-match `{ entries: [...] }` wrapper — the old `FIFAMatchLineup`
+type was a never-validated assumption, so both consumers (`peekLineup` and `ingestLineups`) threw
+`lineup.entries is not iterable` on live data (the recurring `lineup.peek.error` log). For a window this
+**silently disabled** the T-75 availability peek, the **kickoff XI-lock**, and the `player_not_starting`
+notification's `officialStarterBdlIds` — masked only by the appearance-reconciliation backstop. Both now
+map `res.data` directly by `row.player.id` / `row.is_starter`; the lock-write boundary was byte-untouched.
+
 **Lock write path — the single `lockSlot` boundary + its categorical gate (2026-06-11 / 2026-06-12
 premature-lock fixes).** Lock instants are proposed by the pure primitives `lockInstantsFromLineup` /
 `lockInstantFromSub` / `lockInstantsFromAppearances` (`packages/ingest/src/lock.ts`); **every** writer —
