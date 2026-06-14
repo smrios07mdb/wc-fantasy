@@ -427,3 +427,15 @@ nothing when empty). +6 archive unit cases. Gates: typecheck/lint/format/test (1
 web build` (`/pool` ƒ 5.81 kB) all exit 0. **Merged to `main` @ `122b893`.** **Live-deploy smoke to
 confirm:** Quiniela label (nav + mobile bar + browser tab), kickoff text reads "ET" at the right offset,
 a completed >24h match appears in the bottom Completed `<details>`.
+
+**Prompts 54 + 55 — Tabbed player card (Points | Stats), COMPLETE ✅.** The shared
+`PlayerScoreSheet` gained a segmented **Points | Stats** tab strip (`.pc-seg*` from the
+2026-06-13 `ds.css` design batch). The Points tab re-houses the existing `breakdown_json` breakdown
+(unchanged scoring path). The Stats tab shows a position-aware tournament-stats tile grid
+(`PC_TILEKEYS`/`PC_LINEKEYS` from the design) fetched from a new player-scoped
+`GET /api/player-tournament-stats?playerId=` endpoint. Stats are fetched **eager + parallel** with
+the existing player-box call on sheet open. The card is live on **/vsfield** (both own and opponents'
+players) and **/lineup** (own XI, via the existing score-pill tap); the shared `PlayerScoreSheet` in
+`apps/web/components/` is unchanged in interface — only the tab strip and Stats body were added.
+**Next:** Free Agents / Waivers card integration is the next player-card workstream — deferred from
+P54, blocked on the open-the-card-vs-add-the-player interaction design (its own thread).

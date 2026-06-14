@@ -1298,3 +1298,57 @@ opponent managerId (UUID, collision-free) | null. Desktop resolves null → `'fi
 split cockpit (`.da-body`); the mobile tree (`.ma-scroll`) keeps null as the leaderboard-first home and
 is swapped purely by a 760px media query (both trees render; no JS matchMedia, no hydration fork).
 `MaH2H` holds a local You/Opp `useState` for its single-pitch toggle.
+
+## §19 — Tabbed player card: Points | Stats (Prompts 54 + 55)
+
+The shared `PlayerScoreSheet` (`apps/web/components/`) now carries a segmented **Points | Stats**
+tab strip (`.pc-seg*`) from the 2026-06-13 `ds.css` design batch. The tab strip and Stats body are
+the only additions; the Points breakdown and the component's interface (`{ periodId, playerId, onClose,
+forfeitProps? }`) are unchanged.
+
+### Tournament-stats data path (Prompt 54)
+
+A new **player-scoped** aggregate endpoint collects per-match stats across the tournament:
+
+```
+loader: loadPlayerTournamentStats(playerId)
+  → pure builder: buildPlayerTournamentStats(rows)   // IO-free; testable
+    → adapter: toTournamentRows()                     // maps DB rows → typed tiles/lines
+endpoint: GET /api/player-tournament-stats?playerId=
+```
+
+**Why player-scoped (no `periodId`):** the Stats tab aggregates the whole tournament, so the endpoint
+has no period dimension. This also makes it reusable on period-less surfaces (Free Agents / Waivers)
+without a separate endpoint.
+
+**Eager + parallel fetch on sheet open.** The Stats data is fetched concurrently with the existing
+`GET /api/player-box` Points fetch the moment the sheet opens — the client fires both in parallel
+and renders whichever tab the user selects from already-resolved data (no lazy tab-trigger fetch).
+
+**Position-aware tile/line set.** The Stats body renders `PC_TILEKEYS` / `PC_LINEKEYS` per the
+2026-06-13 design (tile = large hero stat, line = compact row); the set is position-specific (e.g.
+a GK card shows saves/clean sheets; a FWD card shows goals/shots). The design is authoritative;
+the tile selection is fixed by the design constants, not run-time logic.
+
+**Country/flags:** resolved from `fifa_team.name` through `player.team` (the P34 / P46 pattern),
+never `player.country` (which is never written by ingestion — see §4 `player.country` note).
+
+### INVARIANT (Prompt 55) — participation gate on tournament-stats aggregation
+
+Any consumer of `stat_player_match` that aggregates a player's matches across the tournament **MUST**
+gate on team participation:
+
+```sql
+WHERE match.status = 'completed'
+  AND (match.homeTeamId = player.teamId OR match.awayTeamId = player.teamId)
+```
+
+**Why:** `stat_player_match` can carry non-participant stub rows (see the 2026-06-13 phantom-row
+incident in DECISIONS). Without the gate, a foreign-match stub row inflates the tournament aggregate.
+The tournament-stats loader applies this gate at the query level. The regression guard asserts the
+gate is present in the query call args — a mocked `findMany` cannot filter rows, so asserting only
+on the result would never catch a silently dropped gate.
+
+**Seam — Free Agents / Waivers card:** the `GET /api/player-tournament-stats` endpoint is ready to
+wire into the waivers/FA player sheet when that surface is built. The interaction design for
+opening a player card vs. triggering an add is its own thread.

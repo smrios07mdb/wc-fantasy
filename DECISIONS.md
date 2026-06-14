@@ -2177,3 +2177,65 @@ themes (the turf stays green in light mode — a theme-flipped text token would 
 `useState` in `MaH2H` (F3) — pure presentation, not Realtime-coupled. Selection state is `effSel`:
 the `'field'` sentinel | a managerId (UUIDs — no collision); desktop resolves null → `'field'`,
 mobile keeps null as the leaderboard-first home.
+
+## Tabbed player card: Points | Stats (Prompts 54 + 55, 2026-06-13)
+
+### Data delivery: player-scoped endpoint, eager-parallel fetch (Prompt 54)
+
+**Decision: tournament stats are served from a dedicated player-scoped endpoint (`GET
+/api/player-tournament-stats?playerId=`), NOT bundled into the period-scoped `player-box` endpoint
+and NOT fetched lazily on tab select.**
+
+- *Data scope = endpoint scope.* The Stats tab aggregates all of a player's completed tournament
+  matches; adding a `periodId` dimension would force the waivers/FA surface (which has no period
+  context) to invent one. A period-less endpoint is the honest contract.
+- *Reusability.* The same endpoint is wired into the Free Agents / Waivers card when that surface
+  is built — no new endpoint needed.
+- *Eager + parallel fetch keeps both tabs hot.* The client fires both `player-box` and
+  `player-tournament-stats` concurrently when the sheet opens. Either tab is instantly renderable;
+  no spinner on tab switch.
+
+### Tile set: position-aware per the 2026-06-13 design (Prompt 54)
+
+**Decision: the Stats tile/line set is position-specific, sourced from the design's `PC_TILEKEYS` /
+`PC_LINEKEYS` constants — not a fixed five tiles for all positions.**
+
+The design is authoritative. GK, DEF, MID, FWD each surface a different hero-stat grid because
+the position-relevant scoring contributions differ. The constants are consumed directly; no run-time
+tile-selection logic is built outside what the design specifies.
+
+### Participation gate on tournament-stats aggregation (Prompt 55)
+
+**Decision: the tournament-stats query MUST gate on team participation at the query level.**
+
+Without the gate, stub `stat_player_match` rows for non-participant players (see the phantom-row
+incident below) inflate the aggregate. The query-level gate is:
+
+```
+match.status = 'completed' AND (match.homeTeamId = teamId OR match.awayTeamId = teamId)
+```
+
+The regression guard asserts the gate is present on the `findMany` call args. Asserting on the
+result would be invisible to a mocked DB (a mock cannot filter rows); asserting on the args fails
+the test immediately if the WHERE clause is dropped.
+
+### Phantom-row incident (2026-06-13 ~19:50 UTC) — tracked, NON-URGENT
+
+A one-off ingest/backfill wrote `stat_player_match` stubs (all stats null) for every rostered player
+for exactly two completed MD1 matches — **South Korea–Czechia (bdlId 376)** and **Canada–Bosnia &
+Herzegovina (bdlId 415)**, 791 rows total.
+
+**Scoring impact: ZERO.** `score_player_match` had 0 phantom rows and 0 non-zero points for those
+players — the participant gate in `recomputePlayerMatch` held. The standings are correct.
+
+**Not recurring.** Every completed match ingested after the incident is clean (the live ingest path
+does not produce pool-wide stubs; the backfill that triggered this is no longer running).
+
+**Remediation:**
+- **(a) Query-level participation gate** — shipped in Prompt 55; prevents phantom rows from
+  surfacing in the Stats tab aggregate.
+- **(b) One-time operator DELETE** of the 791 stub rows — Sergio to run; low-urgency since they
+  have no scoring or UI impact today, but they will appear in the Stats tab if not deleted.
+
+**Open item:** root-cause the offending backfill write path. Low priority — the incident is not
+recurring and had no standings impact; the query-level gate is the durable fix.
