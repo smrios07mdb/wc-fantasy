@@ -31,10 +31,26 @@ export async function loadPlayerTournamentStats(
   });
   if (!player) return null;
 
+  // Resolve the player's national team once — it both orients home/away AND gates the read below.
+  const teamId = player.teamId;
+
   const [statRows, scoreRows] = await Promise.all([
-    // Completed matches the player actually appeared in (has a stat_player_match row).
+    // Completed matches the player actually appeared in (has a stat_player_match row), AND that the
+    // player's TEAM actually played in. The team gate is defense-in-depth: a WC player belongs to
+    // exactly one national team and can only appear in that team's matches, so it never hides
+    // legitimate data — but it rejects phantom stub stat_player_match rows written for matches the
+    // player's team isn't on (the one-off 06-13 backfill incident). Null team (shouldn't happen)
+    // → `{ in: [] }` yields zero matches without throwing.
     prisma.statPlayerMatch.findMany({
-      where: { playerId, match: { status: "completed" } },
+      where: {
+        playerId,
+        match: {
+          status: "completed",
+          ...(teamId
+            ? { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] }
+            : { id: { in: [] } }),
+        },
+      },
       select: {
         matchId: true,
         minutesPlayed: true,
@@ -70,7 +86,7 @@ export async function loadPlayerTournamentStats(
   const pointsByMatch = new Map(scoreRows.map((s) => [s.matchId, s.points]));
 
   const rows = toTournamentRows({
-    playerTeamId: player.teamId,
+    playerTeamId: teamId,
     statRows,
     pointsByMatch,
   });
