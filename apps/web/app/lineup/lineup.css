@@ -318,8 +318,8 @@
 .sl-bench-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
+  gap: 10px;
+  padding: 9px 11px;
   border-radius: 9px;
   overflow: visible; /* same Safari/WebKit button-clip fix as .sl-tok */
   background: var(--surface-2);
@@ -328,22 +328,51 @@
   cursor: pointer;
   text-align: left;
 }
-.sl-bench-name {
-  flex: 1;
+.sl-bench-main {
+  /* stacked column: line1 = name + pills, line2 = kickoff + opponent */
+  flex: 1 1 auto;
   min-width: 0;
-  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sl-bench-line1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sl-bench-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sl-bench-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
 .sl-bench-ko {
-  /* the bench player's kickoff / lock deadline — the rail has room for the full league-tz string */
+  /* the bench player's kickoff / lock deadline */
   flex: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   color: var(--text-secondary);
+}
+.sl-bench-opp {
+  /* OpponentTag root on line 2 — ellipsize the whole "vs OPP" run on overflow */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sl-bench-row.is-movable:hover {
   border-color: var(--accent);

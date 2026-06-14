@@ -287,22 +287,28 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect, onScore
         position={player.position}
         size="sm"
       />
-      <span className={`sl-bench-name${slotKind === "voided" ? " is-voided" : ""}`}>
-        {shortName(player)}
+      <span className="sl-bench-main">
+        <span className="sl-bench-line1">
+          <b className={`sl-bench-name${slotKind === "voided" ? " is-voided" : ""}`}>
+            {shortName(player)}
+          </b>
+          <LockTag slotKind={slotKind} mini />
+          {!movable && (
+            <ScorePill
+              points={pointsAtStake}
+              playerId={player.id}
+              isLive={slotKind === "locked"}
+              onOpen={onScore}
+            />
+          )}
+        </span>
+        {slot.kickoffAt && (
+          <span className="sl-bench-sub">
+            <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-bench-ko" />
+            <OpponentTag opponent={slot.opponent} className="sl-bench-opp t-micro text-tertiary" />
+          </span>
+        )}
       </span>
-      <KickoffTag kickoffAt={slot.kickoffAt} timezone={timezone} className="sl-bench-ko" />
-      {slot.kickoffAt && (
-        <OpponentTag opponent={slot.opponent} className="sl-bench-opp t-micro text-tertiary" />
-      )}
-      <LockTag slotKind={slotKind} mini />
-      {!movable && (
-        <ScorePill
-          points={pointsAtStake}
-          playerId={player.id}
-          isLive={slotKind === "locked"}
-          onOpen={onScore}
-        />
-      )}
     </button>
   );
 }
