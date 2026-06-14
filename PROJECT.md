@@ -408,3 +408,22 @@ operator.)
 - **Gates:** `pnpm -w typecheck && pnpm lint && pnpm format:check && pnpm test` all green. **1949 tests
   passed** (140 files; baseline 1945, +4). Live-deploy proof (group dashboard on `/`, no knockout
   bracket on `/pool`) gated on deploy; merge HELD for Chat clearance.
+
+**Prompt 45 — Quiniela polish (rename + ET kickoff times + Completed archive), COMPLETE ✅** (1955
+tests). Three display/sort changes on the `/pool` surface; no engine/RLS/schema/migration/API-contract
+change. **(1) "Pool" → "Quiniela" (display copy only):** the `NAV_ITEMS` + `BOTTOM_TAB_ITEMS` pool
+labels (desktop strip + mobile bottom bar), the Picks `tablist` `aria-label`, and a new
+`app/pool/layout.tsx` `metadata.title` ("XI · Quiniela"); route `/pool`, `NavId` value `"pool"`,
+`pl-*` classes, `pool.css`, `@app/pool`, `/api/pool/pick`, `pool_pick`, and all identifiers untouched.
+**(2) ET kickoff times:** the deterministic `PoolClient.tsx` formatter switches `timeZone:
+"UTC"`→`"America/New_York"` and the suffix `" UTC"`→`" ET"` (correct EDT offset through the
+tournament); the explicit fixed zone preserves SSR≡client output (no hydration mismatch). **(3)
+Completed archive:** `selectPoolPicksView(fixtures, phase, now)` partitions `group_md` fixtures — a
+completed match whose kickoff is ≥24h past (`ARCHIVE_AFTER_MS`) leaves its matchday and collects in a
+new `PoolPicksView.completed` bucket (kickoff-desc), emptied matchdays dropped; `bracket`/`unscheduled`
+unchanged. `loadPool` threads the same server `now` used by the reveal read. `PoolClient` renders
+`completed` as a collapsed native `<details>` titled "Completed" at the bottom of the Picks tab (SSR-safe;
+nothing when empty). +6 archive unit cases. Gates: typecheck/lint/format/test (1955) + `pnpm --filter
+web build` (`/pool` ƒ 5.81 kB) all exit 0. **Merged to `main` @ `122b893`.** **Live-deploy smoke to
+confirm:** Quiniela label (nav + mobile bar + browser tab), kickoff text reads "ET" at the right offset,
+a completed >24h match appears in the bottom Completed `<details>`.

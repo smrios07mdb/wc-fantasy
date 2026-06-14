@@ -1655,6 +1655,30 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   but the gated loader result (`fixture.others`); no raw pick payload from any source. The **dormant P40
   `supabase_realtime` publication entry is left in place** (out of scope to remove).
 
+## Quiniela polish (Prompt 45) — pool display rename, ET schedule, Completed archive
+
+- **"Pool" → "Quiniela" is a DISPLAY-COPY rename only.** Four user-read strings changed (desktop nav
+  label, mobile bottom-bar label, Picks `tablist` `aria-label`, page `metadata.title`); the route
+  `/pool`, the `NavId` value `"pool"` (only its label changed), `pl-*`/`pool.css`, `@app/pool`,
+  `/api/pool/pick`, and `pool_pick` keep their names — renaming any would break links/PWA/nav/RLS for
+  zero gain. The mobile bottom-bar label was renamed alongside the desktop one (not literally named in
+  the prompt) because it is equally user-read; a split would have been inconsistent.
+- **Kickoff times render in Eastern via `America/New_York`, labelled "ET" — NOT a hardcoded "EST"/offset.**
+  The tournament is Jun–Jul 2026 = EDT (UTC−4); a literal "EST"/−5 would be an hour wrong all event. The
+  IANA zone auto-resolves EDT now / EST in winter; "ET" sidesteps the EDT-vs-EST label confusion. The
+  `Intl.DateTimeFormat` keeps an **explicit fixed `timeZone`** (not the machine's local zone) — that is
+  what guarantees identical SSR + client output, the property the formatter was built for, which survives
+  the zone swap.
+- **A completed match older than a day sinks to a Completed bucket — kickoff-based proxy, group stage
+  only.** `fifa_match` has no completion timestamp, so "completed for more than a day" is approximated as
+  `status === "completed" && now − kickoffAt ≥ 24h` (`ARCHIVE_AFTER_MS`, one named constant). Matches end
+  ~2h after kickoff, so this keeps a game visible until ~22h after FT (slightly conservative). Scoped to
+  `group_md` matchday lists (the only surface that grows a scroll-tail as the tournament advances); the
+  knockout bracket is a fixed frame and `unscheduled` is a defensive bucket — both left alone. Emptied
+  matchdays are dropped (no bare MD header). The bucket sorts kickoff-desc and renders as a collapsed
+  native `<details>` (no client JS). The archive `now` is the **same server instant** `loadPool` feeds
+  the reveal read, so a match can't be 'revealed but un-archived' from a split clock.
+
 ## Notifications — Web Push transport + preference model (Prompt 41a; 41b wires triggers)
 
 - **Channel = Web Push over the PWA. NO new vendor.** Notifications ship as browser Web Push (a service
