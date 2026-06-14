@@ -390,3 +390,54 @@ button { font-family: inherit; }
    The real fix is in shell.css (min-width:0 + topnav-scroll container); this is the document-level
    fallback. Applied here so it covers ALL routes regardless of which CSS file loads. */
 html, body { max-width: 100%; overflow-x: hidden; }
+
+/* ============================================================ SHARED player card (Points / Stats tabs)
+   .pc-seg + Stats body classes are reused inside EVERY surface's player sheet (vf-psheet, sl-scoremodal,
+   and the standalone .pc-sheet). The standalone .pc-* chrome backs Free Agents / Waivers. */
+
+/* tab strip — segmented Points | Stats */
+.pc-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-md); padding: 3px; margin: 2px 0 12px; }
+.pc-seg-btn { appearance: none; border: 0; background: transparent; color: var(--text-secondary); font-family: var(--font-sans); font-weight: var(--fw-semibold); font-size: var(--fs-sm); padding: 7px 10px; border-radius: var(--r-sm); cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); }
+.pc-seg-btn:hover { color: var(--text-primary); }
+.pc-seg-btn.is-active { background: var(--surface-4); color: var(--text-primary); box-shadow: var(--e1); }
+
+/* Stats body */
+.pc-stats { display: block; }
+.pc-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px; }
+.pc-tile { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px; background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-md); text-align: center; }
+.pc-tile b { font-family: var(--font-display); font-weight: 800; font-size: 20px; line-height: 1; }
+.pc-tile span { font-size: 9.5px; line-height: 1.15; font-weight: var(--fw-bold); letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-tertiary); }
+.pc-tile-pts { background: var(--surface-4); border-color: var(--hairline-strong); }
+
+.pc-loghead { margin: 4px 0 8px; }
+.pc-log { display: flex; flex-direction: column; gap: 7px; }
+.pc-lrow { background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-md); padding: 9px 11px; }
+.pc-lrow-top { display: flex; align-items: center; gap: 9px; }
+.pc-md { font-size: var(--fs-micro); font-weight: var(--fw-bold); color: var(--text-tertiary); flex: none; width: 30px; }
+.pc-opp { display: inline-flex; align-items: center; gap: 5px; min-width: 0; flex: 1; font-size: var(--fs-sm); }
+.pc-opp .flag { width: 17px; height: 12px; }
+.pc-vs { font-size: var(--fs-micro); color: var(--text-tertiary); font-weight: var(--fw-semibold); }
+.pc-score { font-size: var(--fs-caption); color: var(--text-secondary); flex: none; }
+.pc-lpts { font-size: var(--fs-body); font-weight: var(--fw-bold); color: var(--win); flex: none; min-width: 30px; text-align: right; }
+.pc-lpts.is-neg { color: var(--loss); }
+.pc-statline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 7px; }
+.pc-min { font-size: var(--fs-micro); color: var(--text-tertiary); font-weight: var(--fw-bold); }
+.pc-stat { display: inline-flex; align-items: baseline; gap: 3px; font-size: var(--fs-micro); color: var(--text-secondary); background: var(--surface-3); border-radius: var(--r-sm); padding: 2px 6px; }
+.pc-stat b { font-size: var(--fs-caption); color: var(--text-primary); }
+.pc-foot { margin-top: 12px; font-size: var(--fs-micro); color: var(--text-tertiary); }
+
+/* standalone card chrome (Free Agents / Waivers) — fixed, centered over the scaled stage */
+.pc-scrim { position: fixed; inset: 0; z-index: 80; background: var(--overlay); display: grid; place-items: center; padding: 22px; }
+.pc-sheet { position: relative; width: 392px; max-width: 92vw; max-height: 88vh; overflow-y: auto; background: var(--surface-1); border: 1px solid var(--hairline-strong); border-radius: var(--r-xl); box-shadow: var(--e3); padding: 16px; }
+.pc-x { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: var(--r-sm); border: 1px solid var(--hairline); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+.pc-x:hover { background: var(--surface-3); color: var(--text-primary); }
+.pc-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; padding-right: 32px; }
+.pc-headid { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.pc-headid b { font-size: var(--fs-body-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-headtotal { font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1; flex: none; }
+.pc-headtotal small { font-size: 12px; font-weight: 700; color: var(--text-tertiary); margin-left: 3px; }
+.pc-headmatch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-caption); color: var(--text-secondary); margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--hairline); }
+.pc-headmatch .flag { width: 16px; height: 11px; }
+.pc-ovr { display: flex; flex-direction: column; gap: 9px; }
+.pc-ovr-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--fs-sm); }
+.pc-ovr-row .t-label { margin: 0; }

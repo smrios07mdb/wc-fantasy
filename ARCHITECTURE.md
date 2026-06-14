@@ -46,8 +46,18 @@ set of types.** For a small team that is the single biggest reliability win avai
   imported **after** `globals.css` so it wins cascade ties; canonical copy at `app/styles/ds.css`,
   with the global dark `body` surface now in effect). Tailwind / `globals.css` / Preflight remain
   installed and **coexist** (not the styling system; teardown is post-sprint). The feature/landing
-  routes still carry byte-identical per-route `ds.css` copies that double-load harmlessly. The
-  authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield` + `/waivers` + `/scoring` +
+  routes still carry byte-identical per-route `ds.css` copies that double-load harmlessly.
+  **Shared player-card surface `.pc-*` (Prompt 53 — 2026-06-13 design batch, additive):** the design
+  system now carries a shared player-sheet vocabulary — the segmented **Points | Stats** tab strip
+  (`.pc-seg*`), the Stats body (`.pc-stats`/`.pc-tiles`/`.pc-tile*`/`.pc-log*`/`.pc-lrow*`/`.pc-statline`/
+  `.pc-stat*`), and the standalone sheet chrome (`.pc-scrim`/`.pc-sheet`/`.pc-x`/`.pc-head*`/`.pc-ovr*`).
+  Consumed by **every** player sheet (vf-psheet, sl-scoremodal) and the standalone Free Agents / Waivers
+  sheets; references EXISTING tokens only (no new variables). Appended byte-for-byte to canonical
+  `styles/ds.css` + the four per-route copies (all five stay byte-identical; `appShell.test.ts`). The
+  same 2026-06-13 export's deletions were rejected as omissions (`--kit-outline`, the P46 PlayerAvatar/
+  `.flag-emoji` block, the P40 overflow backstop — all live dependencies); `playerCardTokens.test.ts`
+  guards both the `.pc-*` presence and those survivors. Dormant until a screen renders it.
+  The authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield` + `/waivers` + `/scoring` +
   `/settings`) are wrapped by the **App Shell** (`app/shell/AppShell.tsx`, which absorbed the interim
   CrossNav). The shell has a **responsive nav** (Prompt 40):
   - **≥ 640 px (tablet/desktop):** contained top strip. `.sh-topnav-scroll` (`overflow-x:auto;

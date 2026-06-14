@@ -1086,6 +1086,35 @@ landing hub.
   route-group layout if/when **stateful chrome** ships (avatar menu / bell open-state), so the shell
   persists across feature navigation instead of remounting.
 
+## Shared player-card `.pc-*` tokens (Prompt 53 — 2026-06-13 design batch reconciled ADDITIVELY)
+
+- **The 2026-06-13 `ds/ds.css` export was reconciled ADDITIVELY, not adopted wholesale.** Diffed
+  against canonical `apps/web/app/styles/ds.css` the export diverged both ways (+50 / −30). Only the
+  **net-new shared player-card block (`.pc-*`)** was adopted; the export's deletions were **rejected as
+  omissions** (see below). No existing selector or token VALUE changed — this is a pure addition, no re-skin.
+- **`.pc-*` promoted to the design system.** The block is the shared player-sheet vocabulary: the
+  segmented **Points | Stats** tab strip (`.pc-seg`, `.pc-seg-btn`), the Stats body (`.pc-stats`,
+  `.pc-tiles`/`.pc-tile*`, `.pc-log*`/`.pc-lrow*`, `.pc-statline`, `.pc-stat*`, `.pc-foot`), and the
+  standalone sheet chrome (`.pc-scrim`, `.pc-sheet`, `.pc-x`, `.pc-head*`, `.pc-ovr*`). It is intended to
+  be reused inside **every** player sheet (vf-psheet, sl-scoremodal) and the standalone Free Agents /
+  Waivers sheets. It **references EXISTING tokens only** (`--surface-*`, `--hairline*`, `--win`, `--loss`,
+  `--text-*`, `--font-display/-sans`, `--r-*`, `--fs-*`, `--fw-*`, `--e1/-3`, `--overlay`, `--dur-fast`) —
+  each was confirmed present in canonical; the block defines **no new CSS custom property**.
+- **Appended byte-for-byte to the canonical + all four per-route copies** (`draft`/`lineup`/`vsfield`/
+  `_landing`), after the P40 backstop. All five stay byte-identical (`appShell.test.ts` enforces this).
+- **Export's drops REJECTED as omissions (no design intent, no replacement, live dependencies):**
+  `--kit-outline` (dark + light — vsfield kit rendering, `vsFieldSkin.test.ts`), the **P46 PlayerAvatar +
+  `.flag-emoji`** block (`.player-avatar.pos-*`, `.pa-flag*`, `.flag-emoji*` — app-wide; `flagWiring.test.ts`
+  + `playerAvatarWiring.test.ts`), and the **P40 backstop** `html, body { max-width:100%; overflow-x:hidden }`.
+  Nothing in the new screens replaces them, so the omissions read as export drift, not intent.
+- **New wiring guard:** `apps/web/src/shell/playerCardTokens.test.ts` (mirrors `flagWiring.test.ts`) asserts
+  the canonical contains the `.pc-*` classes (incl. `.pc-seg`/`.pc-sheet`/`.pc-tiles`) AND that the three
+  rejected-omission blocks survive — so a future wholesale re-export can't silently drop either side.
+- **CSS-discipline exception (no rendered surface change).** `.pc-*` are dormant until a screen consumes
+  them, so green gates + byte-identity + the new wiring test are sufficient clearance; live-Render visual
+  proof transfers to the first screen that renders `.pc-*`. **Branch `feat/ds-player-card-tokens`, off
+  main, isolated worktree; merge HELD.**
+
 ## Mobile nav + overflow containment (Prompt 40)
 
 - **Mobile nav IA — bottom tab bar (phones < 640 px):**
