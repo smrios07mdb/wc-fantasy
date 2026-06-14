@@ -1301,8 +1301,23 @@ period change resets it to null; `PlayerScoreSheet` renders conditionally after 
 leaderboard's `da-lb-wld` chip off `h2hVsViewer`). Added: `Leaderboard`/`LbRow` (228px left rail),
 `CompareBand` (Facts 1+2), `XIPanel`/`XIPitch`/`XIToken` (flag-kit jersey pitches), and the mobile tree
 `MaStandings`/`MaYou`/`MaRow`/`MaCompare`/`MaH2H`. Kept: `MatchStrip` (reclassed `.v2-match*`),
-`ConnPill`, `Pos`, `Avatar`, `useScorePulse`, `RecordBadge`, `PitchMini`/`XILegend` (the dot-node
-aggregate pitch), `YouVsField` (reclassed `.v2-agg`), `SeasonTable` (reclassed `.v2-season`).
+`ConnPill`, `Pos`, `Avatar`, `useScorePulse`, `RecordBadge`, `YouVsField` (reclassed `.v2-agg`),
+`SeasonTable` (reclassed `.v2-season`).
+
+**Self/field cockpit detail XI (feat/vsfield-self-xi).** `YouVsField` (the `.v2-agg` self/field view,
+rendered when `effSel` resolves to `field`/self on BOTH the desktop `.da-body` and the mobile
+`.ma-scroll`) now renders the viewer's **own detailed jersey XI** via the same `XIPitch`/`XIToken` the
+H2H compare draws — fed with the viewer's own `StarterView[]` (`me.starters`). Per-player points chips
+and tap-to-box-score come from the existing token; `YouVsField` gained `onOpenPlayer`/`dimLive` props and
+both `VsFieldClient` call-sites pass `setBoxPlayer` (the already-wired `PlayerScoreSheet` open handler —
+no new modal/fetch/endpoint). The lone self pitch is wrapped in `.v2-agg-xi` (rounded/clipped frame, the
+role `.da-xi` plays in the two-up H2H) beside the preserved still-to-come/playing/played `.v2-agg-pside`
+column; on phones `.v2-agg-pitchsec` stacks (pitch over a horizontal count row). This **replaced** the
+abstract dot-node `PitchMini` + `XILegend` hero pitch, which were removed (zero remaining call-sites)
+along with their dead `.vf-pitch*`/`.vf-node`/`.vf-legend2` CSS. Pure presentation: no loader/engine/RLS
+change; per-player `points` already ship in the server-composed snapshot (Prompt 41 / path a),
+`pointsPath.test.ts` stays green, H2H compare untouched. `MaYou` (the compact standings-list hero) never
+carried a pitch and is unchanged.
 
 **New pure module `apps/web/app/vsfield/kitOf.ts`** — ISO2 → CSS-gradient jersey map (**30 nations**:
 8 original + 22 from the approved jersey-gradients handoff) + `kitOf(nation)`; reuses

@@ -454,4 +454,16 @@ typecheck/lint/format/test + `pnpm --filter @app/web build` (`/waivers` ƒ 8.21 
 screenshot on `/waivers` owed before merge:** the trailing control opens the tabbed card; Points shows
 real season/cutoff data; Stats shows position tiles + completed-match log (correct opponents/flags/
 scorelines — a `duels`-bearing line may read `—`/0 on live WC2026 data, expected); the
-select→drop→submit acquisition still works unchanged.
+select→drop→submit acquisition still works unchanged. · **vsfield self/field detail XI
+(`feat/vsfield-self-xi`), COMPLETE — merge HELD.** The self/field cockpit (`YouVsField`, rendered when
+`effSel` resolves to field/self on both desktop `.da-body` and mobile `.ma-scroll`) now renders the
+viewer's **own detailed jersey XI** (the existing `XIPitch`/`XIToken`, fed with `me.starters`) in place
+of the abstract dot-node `PitchMini` + `XILegend` hero pitch — per-player points chips + tap-to-open
+`PlayerScoreSheet` reuse the already-wired `setBoxPlayer` (threaded via new `onOpenPlayer`/`dimLive`
+props on both call-sites). Still-to-come/playing/played side column preserved; new `.v2-agg-xi` frame +
+mobile stacking; `PitchMini`/`XILegend` + dead `.vf-pitch*` CSS removed (zero call-sites). Pure
+presentation — no loader/engine/RLS/endpoint change; points already in the snapshot (Prompt 41),
+`pointsPath.test.ts` green, H2H untouched. +5 RTL tests (2034, 150 files); typecheck/lint/format/test +
+`/vsfield` ƒ next build all green. **Screenshot proof not capturable in the headless worktree** (route is
+auth-gated ƒ; needs a Supabase session + seeded mixed-state fixtures) — behavioral proof via the RTL
+mount instead; live screenshot owed before merge.

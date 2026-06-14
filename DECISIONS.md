@@ -2327,3 +2327,20 @@ totals and standings are byte-identical; only the stored breakdown text changes.
   SKIPPED in the merge gate). REQUIRED before the scraper begins concurrent rating writes: run that
   integration test GREEN against a real Postgres. Merged dormant on unit-green; the real-DB gate is
   deferred to when the race goes live, not waived.
+
+## vsfield self/field cockpit shows the viewer's OWN detailed jersey XI (feat/vsfield-self-xi)
+- DECISION: the self/field view (`YouVsField`, shown when `effSel` resolves to field/self) renders the
+  viewer's **own detailed jersey XI** — the same `XIPitch`/`XIToken` the H2H compare draws, fed with the
+  viewer's own `StarterView[]` — replacing the abstract dot-node `PitchMini` + `XILegend` hero pitch.
+- WHY now (not a reopening): per-player `points` for the current period already ship in the
+  server-composed snapshot (Prompt 41 / path a) and `PlayerScoreSheet` is already wired on /vsfield, so
+  showing the viewer's own per-player points is strictly LESS sensitive than the opponents' points the
+  H2H already renders. Theme-F boundary unchanged: no browser-side `score_player_match` read,
+  `pointsPath.test.ts` stays green.
+- HOW: pure presentation/reuse — `YouVsField` gained `onOpenPlayer`/`dimLive` props; both `VsFieldClient`
+  call-sites pass the already-wired `setBoxPlayer` (no new modal/fetch/endpoint). The still-to-come /
+  playing / played side-count column is kept; the lone self pitch is framed by `.v2-agg-xi` and stacks on
+  phones. `PitchMini`/`XILegend` + dead `.vf-pitch*`/`.vf-node`/`.vf-legend2` CSS removed (zero
+  call-sites). Self-view-only; the opponent H2H compare and loader/engine/RLS are untouched.
+- `MaYou` is the compact standings-list hero and never carried a pitch — unchanged; the mobile self
+  *detail* view is `YouVsField` under `.ma-scroll`, so the swap already covers phones.
