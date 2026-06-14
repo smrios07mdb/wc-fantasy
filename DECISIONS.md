@@ -2272,3 +2272,33 @@ Resolutions:
 New styles in `waivers.css` only; ds.css + schema untouched; no migration; no scoring/recompute/
 ingestion change. Gates green (typecheck/lint/format/test 2005 + `@app/web` build, `/waivers` ƒ 8.21 kB).
 **Live-Render screenshot on `/waivers` owed before merge.**
+
+## `[skip render]` is evaluated against the PUSH's tip commit (zero-rating-line thread, 2026-06-14)
+
+Render decides whether to skip a deploy by inspecting the **tip commit of the push**, not each commit
+in it. A docs commit carrying `[skip render]` pushed on top of a code commit therefore suppresses the
+code deploy for the **whole push**. Observed this thread: the push of engine `788a312` + docs tip
+`21ced34` (`[skip render]`) was skipped wholesale, leaving the goals-conceded/rating engine change
+merged-but-not-live.
+
+**Rule:** never let a `[skip render]` commit be the tip of a push that also contains code. Either push
+code-bearing commits without a skip-render tip, or push docs-only `[skip render]` commits in a
+separate push. **Recovery:** a manual "Deploy latest commit" in the Render dashboard overrides the
+skip and ships the merged-but-unbuilt tip.
+
+## Post-deploy remediation for a `scorePlayerMatch`/breakdown change is RE-DIRTY → SWEEP, not `job:recompute`
+
+`job:recompute` (`forcedRestate`) restates **only rollups** (`recomputeManagerPeriod` +
+`recomputeStanding`); it never re-runs `scorePlayerMatch`, so it does **not** rewrite
+`score_player_match.breakdown_json`. To regenerate stored breakdowns from current inputs after an
+engine-rule change, mark the affected rows dirty:
+
+```sql
+UPDATE stat_player_match SET dirty = true;  -- scope to affected (match, player) rows
+```
+
+This is conflict-safe — `dirty` is a flag-only boolean that never clobbers stats
+(`packages/db/src/dirty.ts`). The scheduler then sweeps (`runRecomputeSweep`, ~60s tick) and drains
+the dirty rows via `recomputePlayerMatch`. **Verify AFTER a tick or two plus a page refresh** — an
+immediate read shows pre-sweep/stale state. For a display-only change (the scored line is `+0`),
+totals and standings are byte-identical; only the stored breakdown text changes.
