@@ -118,8 +118,17 @@ export interface WaiversView {
    */
   readonly batchWindow: WvBatchWindow | null;
   readonly timezone: string;
-  /** True only when the league is in a playoff phase — gates the FAAB-reset banner. */
+  /** True only when the league is in a playoff phase — gates the FAAB-reset banner + the release panel. */
   readonly isPlayoffPhase: boolean;
+  /** The phase squad cap (15 group / 9 playoff) — view-driven (NOT hardcoded), drives the X/N display
+   *  + the release panel's over-cap mount. */
+  readonly rosterCap: number;
+  /** D4 (trim-down): false ONLY for a playoff non-participant — hides the bid/FA/release affordances. */
+  readonly isParticipant: boolean;
+  /** ISO of the league-wide R32 first kickoff — the CONSERVATIVE forfeit bound (the earliest possible
+   *  per-player lock; a survivor's own earliest kickoff may be later). Null when not in the playoff phase.
+   *  Shown as a STATIC timestamp in the release panel (no countdown). */
+  readonly playoffForfeitDeadlineIso: string | null;
   /** Server render time (ISO) — seeds the client's live clock so SSR + hydration agree (no mismatch). */
   readonly nowIso: string;
 }

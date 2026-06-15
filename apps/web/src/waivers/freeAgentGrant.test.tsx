@@ -83,6 +83,9 @@ function view(over: Partial<WaiversView> = {}): WaiversView {
     batchWindow: FA_WINDOW,
     timezone: "UTC",
     isPlayoffPhase: false,
+    rosterCap: 15,
+    isParticipant: true,
+    playoffForfeitDeadlineIso: null,
     nowIso: "2026-06-11T17:30:00.000Z",
     ...over,
   };

@@ -17,6 +17,7 @@ import { BatchBar, ClaimRow, FaabBar, Refund, ResultsBatch, WaiverOrderRail } fr
 import { BidComposer, type BidPayload } from "./BidComposer";
 import { FreeAgentPanel, type FaGrantPayload } from "./FreeAgentPanel";
 import { FaPlayerCardSheet } from "./FaPlayerCardSheet";
+import { ReleasePanel } from "./ReleasePanel";
 import "./waivers.css";
 
 const FAAB_ALLOTMENT = 100; // the $100 budget — the FAAB bar's track denominator (design/CLAUDE.md §2).
@@ -37,6 +38,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   "fa-conflict": "Someone just grabbed that player — pick another free agent.",
   "fa-window-closed": "Free agency isn’t open for this player right now.",
   "fa-not-eligible": "That player isn’t an open free agent this period.",
+  // playoff trim-down release (DECISIONS §D)
+  "not-participant": "You’re not in the playoff field — waiver moves are closed for you.",
+  "release-not-allowed": "Releasing players is only available in the playoff phase.",
+  "release-nothing": "Pick at least one player to release.",
+  "release-not-owned": "You can only release players you own.",
+  "release-locked": "That player has played this round and can’t be released yet.",
+  "release-below-floor": "That would leave too few players to field a lineup — keep at least 7.",
+  "release-unfillable": "The players left can’t field a legal XI — confirm to release anyway.",
   bid_not_pending: "This claim was already processed.",
   bid_not_found: "That claim no longer exists.",
   not_your_manager: "You can only manage your own claims.",
@@ -58,6 +67,12 @@ export function WaiversClient({ view }: { view: WaiversView }) {
   const [listError, setListError] = useState<string | null>(null);
   const [faError, setFaError] = useState<string | null>(null);
   const [busyBidId, setBusyBidId] = useState<string | null>(null);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  // D4 (trim-down): a playoff non-participant may not acquire OR release. Group phase ⇒ everyone can act.
+  const canAct = !view.isPlayoffPhase || view.isParticipant;
+  const overCap = view.roster.length > view.rosterCap;
 
   // The current period's acquisition phase drives the tab's acquisition surface (the SAME state the
   // BatchBar shows): sealed-bid → the sealed claim form (below); free-agency → instant $0 FA pickups;
@@ -179,6 +194,25 @@ export function WaiversClient({ view }: { view: WaiversView }) {
     else setFaError(friendly(data));
   }
 
+  // Drop-only playoff release (the 9-cap net-shed). Same fetch→router.refresh shape; the panel re-submits
+  // with `confirmedUnfillable` after a `release-unfillable` 409 (the server confirm gate).
+  async function handleRelease(dropIds: string[], confirmedUnfillable: boolean) {
+    setReleasing(true);
+    setReleaseError(null);
+    const res = await fetch("/api/faab/release", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ managerId: view.managerId, dropIds, confirmedUnfillable }),
+    });
+    const data = (await res.json().catch(() => null)) as {
+      error?: string;
+      message?: string;
+    } | null;
+    setReleasing(false);
+    if (res.ok) router.refresh();
+    else setReleaseError(friendly(data));
+  }
+
   return (
     <div className="wv-app">
       <div className="wv-tabs" role="tablist" aria-label="Waivers">
@@ -211,6 +245,29 @@ export function WaiversClient({ view }: { view: WaiversView }) {
         </div>
       )}
 
+      {view.isPlayoffPhase && !view.isParticipant && (
+        <div className="wv-resetbanner">
+          <span>
+            <b>You&rsquo;re not in the playoff field.</b> Waiver moves are closed for you.
+          </span>
+        </div>
+      )}
+
+      {view.isPlayoffPhase && view.isParticipant && overCap && (
+        <ReleasePanel
+          roster={view.roster}
+          lockedPlayerIds={view.lockedPlayerIds}
+          rosterCap={view.rosterCap}
+          forfeitDeadlineIso={view.playoffForfeitDeadlineIso}
+          batchWindow={view.batchWindow}
+          timezone={view.timezone}
+          submitting={releasing}
+          errorMessage={releaseError}
+          onRelease={handleRelease}
+          onOpen={setCardPlayer}
+        />
+      )}
+
       {tab === "claims" ? (
         <div className="wv-claims-page">
           <div className="wv-claims-main">
@@ -226,7 +283,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
               </div>
             )}
 
-            {faMode && (
+            {canAct && faMode && (
               <FreeAgentPanel
                 enabled={phase === "free-agency"}
                 freeAgents={view.freeAgents}
@@ -243,7 +300,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
 
             <div className="wv-claims-head">
               <span className="t-label">Pending claims · {view.claims.length}</span>
-              {!faMode && (
+              {canAct && !faMode && (
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={() => {
@@ -266,7 +323,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
                     ? "Free agency is open — add an unclaimed player instantly above."
                     : "Place a sealed FAAB bid on a free agent — it processes at the next batch."}
                 </span>
-                {!faMode && (
+                {canAct && !faMode && (
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={() => setComposer({ open: true, editClaim: null })}

@@ -10,9 +10,9 @@
  */
 import { prisma } from "@app/db";
 import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
-import { listFaIneligiblePlayerIds } from "@app/faab/prisma";
+import { listFaIneligiblePlayerIds, loadIsPlayoffParticipant } from "@app/faab/prisma";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
-import { selectCurrentPeriod, type Position } from "@app/shared";
+import { rosterCapForLeagueStatus, selectCurrentPeriod, type Position } from "@app/shared";
 import { buildBatchWindowView } from "@/src/waivers/waiversLogic";
 import type {
   WaiversView,
@@ -264,6 +264,22 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       isMe: m.id === viewerManagerId,
     }));
 
+  // The phase squad cap (15 group / 9 playoff) is VIEW-DRIVEN (no hardcoded 15 in the client). D4
+  // participation gates the affordances; outside the playoff phase everyone participates.
+  const leagueStatus = league?.status ?? "draft";
+  const isPlayoffPhase = leagueStatus === "playoff";
+  const isParticipant = await loadIsPlayoffParticipant(prisma, {
+    leagueStatus,
+    leagueId,
+    managerId: viewerManagerId,
+  });
+  // The forfeit bound = the current (R32) period's first kickoff, league-wide — the CONSERVATIVE earliest
+  // possible per-player lock. A survivor's own earliest kickoff may be later, but this is the safe display.
+  const playoffForfeitDeadlineIso =
+    isPlayoffPhase && currentPeriodRow?.matches[0]?.kickoffAt
+      ? currentPeriodRow.matches[0].kickoffAt.toISOString()
+      : null;
+
   return {
     managerId: viewerManagerId,
     faabBudget: manager.faabBudget,
@@ -275,7 +291,10 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     waiverOrder,
     batchWindow,
     timezone: league?.timezone ?? "UTC",
-    isPlayoffPhase: league?.status === "playoff",
+    isPlayoffPhase,
+    rosterCap: rosterCapForLeagueStatus(leagueStatus),
+    isParticipant,
+    playoffForfeitDeadlineIso,
     nowIso: now.toISOString(),
   };
 }
