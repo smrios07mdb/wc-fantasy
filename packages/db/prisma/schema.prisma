@@ -100,6 +100,14 @@ enum StandingScope {
   overall
 }
 
+/// A playoff-field manager's guillotine survival state (Theme C group→playoff transition). `alive` while
+/// still in; `eliminated` once cut in a knockout round; `champion` for the lone survivor after the Final.
+enum PlayoffEntryStatus {
+  alive
+  eliminated
+  champion
+}
+
 enum RecomputeScope {
   // NOTE: `player_match` was retired (Prompt 05a follow-up) — it had no consumer. Player-match
   // dirtiness is the raw `dirty` BOOLEAN on stat/rating/manual; these markers cover manager_period + standing.
@@ -135,15 +143,16 @@ model League {
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  managers    Manager[]
-  periods     Period[]
-  draft       Draft?
-  faabBatches FaabBatch[]
-  faabBids    FaabBid[]
-  rosters     RosterPlayer[]
-  standings   Standing[]
-  allowlist   AllowlistEmail[]
-  poolPicks   PoolPick[]
+  managers       Manager[]
+  periods        Period[]
+  draft          Draft?
+  faabBatches    FaabBatch[]
+  faabBids       FaabBid[]
+  rosters        RosterPlayer[]
+  standings      Standing[]
+  allowlist      AllowlistEmail[]
+  poolPicks      PoolPick[]
+  playoffEntries PlayoffEntry[]
 
   @@map("league")
 }
@@ -176,8 +185,8 @@ model Manager {
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  league              League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  user                AppUser?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  league              League                  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user                AppUser?                @relation(fields: [userId], references: [id], onDelete: SetNull)
   rosters             RosterPlayer[]
   lineupSlots         LineupSlot[]
   draftPicks          DraftPick[]
@@ -189,7 +198,8 @@ model Manager {
   pushSubscriptions   PushSubscription[]
   notificationPref    NotificationPreference?
   notificationsSent   NotificationSent[]
-  currentDraftPointer Draft[]              @relation("DraftCurrentManager")
+  playoffEntries      PlayoffEntry[]
+  currentDraftPointer Draft[]                 @relation("DraftCurrentManager")
 
   @@unique([leagueId, userId])
   @@unique([leagueId, draftSlot])
@@ -384,14 +394,14 @@ model FifaMatch {
   homeTeam FifaTeam?  @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull)
   awayTeam FifaTeam?  @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull)
 
-  playerStats StatPlayerMatch[]
-  teamStats   StatTeamMatch[]
-  events      EventMatch[]
-  shots       ShotMatch[]
-  ratings     RatingPlayerMatch[]
-  manualStats ManualStatPlayerMatch[]
-  scores      ScorePlayerMatch[]
-  poolPicks   PoolPick[]
+  playerStats   StatPlayerMatch[]
+  teamStats     StatTeamMatch[]
+  events        EventMatch[]
+  shots         ShotMatch[]
+  ratings       RatingPlayerMatch[]
+  manualStats   ManualStatPlayerMatch[]
+  scores        ScorePlayerMatch[]
+  poolPicks     PoolPick[]
   lineupEntries MatchLineupEntry[]
 
   @@index([kickoffAt])
@@ -472,28 +482,28 @@ model LineupSlot {
 // ────────────────────────────────────────────────────────────────────────────
 
 model Period {
-  id        String       @id @default(uuid())
-  leagueId  String       @map("league_id")
-  kind      PeriodKind
+  id             String       @id @default(uuid())
+  leagueId       String       @map("league_id")
+  kind           PeriodKind
   /// Display label: MD1…, R32… .
-  label     String
-  opensAt   DateTime?    @map("opens_at") @db.Timestamptz(6)
-  closesAt  DateTime?    @map("closes_at") @db.Timestamptz(6)
+  label          String
+  opensAt        DateTime?    @map("opens_at") @db.Timestamptz(6)
+  closesAt       DateTime?    @map("closes_at") @db.Timestamptz(6)
   /// Knockout rounds only: how many managers are eliminated this round (≈2 tapering to 1).
-  cutCount  Int?         @map("cut_count")
+  cutCount       Int?         @map("cut_count")
   /// INVARIANT 5: set ~result_freeze_hours after the wave's last FT. After this, restatement is
   /// commissioner-only — the recompute sweeper gates on this column (logic is a later prompt).
-  frozenAt  DateTime?    @map("frozen_at") @db.Timestamptz(6)
+  frozenAt       DateTime?    @map("frozen_at") @db.Timestamptz(6)
   /// Theme-D "per-matchday acquisition window" amendment: the per-period blind-bid FAAB batch deadline
   /// (UTC). NULL = use the computed default `first_kickoff − FAAB_BATCH_LEAD_MIN`. Commissioner-
   /// configurable per period; must sit before the period's first kickoff. Replaced the daily cron.
-  waiverBatchAt  DateTime? @map("waiver_batch_at") @db.Timestamptz(6)
+  waiverBatchAt  DateTime?    @map("waiver_batch_at") @db.Timestamptz(6)
   /// Idempotency latch for the per-period FAAB batch: stamped (= now) when this period's batch has run.
   /// The worker tick selects periods with this NULL whose deadline has passed → re-ticks are no-ops.
-  batchClearedAt DateTime? @map("batch_cleared_at") @db.Timestamptz(6)
-  status    PeriodStatus @default(pending)
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  batchClearedAt DateTime?    @map("batch_cleared_at") @db.Timestamptz(6)
+  status         PeriodStatus @default(pending)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   league      League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   lineupSlots LineupSlot[]
@@ -838,6 +848,35 @@ model Standing {
   @@unique([leagueId, managerId, scope])
   @@index([leagueId, scope])
   @@map("standing")
+}
+
+/// Per-manager guillotine SURVIVAL STATE for the playoffs (Theme C group→playoff transition). One row is
+/// written for each top-N field manager AT the transition (seed carried verbatim from the group standings,
+/// status `alive`). The later per-round prompt (Phase 2) flips `status` → `eliminated` (stamping
+/// `eliminated_round` + `eliminated_at`) as `selectGuillotineCuts` cuts each round, and → `champion` for
+/// the lone survivor after the Final. Non-advancers get NO row (they are simply not in the field). The
+/// theater screen (Phase 4) reads this. Server-written only (the transition job / the per-round job, both
+/// as the table owner) — RLS is league-scoped SELECT with default-deny writes.
+model PlayoffEntry {
+  id              String             @id @default(uuid())
+  leagueId        String             @map("league_id")
+  managerId       String             @map("manager_id")
+  /// Group-stage seed (1 = best), carried verbatim — playoff seeds ARE the group seeds (no re-seed).
+  seed            Int
+  status          PlayoffEntryStatus @default(alive)
+  /// The knockout round this manager was cut in (R32…Final); NULL while alive / for the champion.
+  eliminatedRound String?            @map("eliminated_round")
+  /// When the elimination was applied (UTC); NULL while alive / for the champion.
+  eliminatedAt    DateTime?          @map("eliminated_at") @db.Timestamptz(6)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  league  League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, managerId])
+  @@index([leagueId, status])
+  @@map("playoff_entry")
 }
 
 // ────────────────────────────────────────────────────────────────────────────
