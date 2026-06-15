@@ -19,7 +19,7 @@
  */
 import type { PrismaClient } from "@app/db";
 import { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "@app/lineup/prisma";
-import type { Position } from "@app/shared";
+import { rosterCapForLeagueStatus, type Position } from "@app/shared";
 import type { BidInput, ManagerState } from "./resolve";
 import type {
   BatchContext,
@@ -92,7 +92,7 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
     async loadBatchContext(leagueId): Promise<BatchContext | null> {
       const league = await prisma.league.findUnique({
         where: { id: leagueId },
-        select: { id: true },
+        select: { id: true, status: true },
       });
       if (!league) return null;
 
@@ -180,7 +180,13 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
         amount: b.amount,
       }));
 
-      return { leagueId, managers, bids, ownedByLeague };
+      return {
+        leagueId,
+        managers,
+        bids,
+        ownedByLeague,
+        rosterCap: rosterCapForLeagueStatus(league.status),
+      };
     },
 
     async commitBatch({
@@ -286,7 +292,7 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
     async loadManagerBidContext(managerId): Promise<ManagerBidContext | null> {
       const manager = await prisma.manager.findUnique({
         where: { id: managerId },
-        select: { leagueId: true, faabBudget: true },
+        select: { leagueId: true, faabBudget: true, league: { select: { status: true } } },
       });
       if (!manager) return null;
 
@@ -312,6 +318,7 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
         faabBudget: manager.faabBudget,
         counts,
         squadSize: mineRows.length,
+        rosterCap: rosterCapForLeagueStatus(manager.league.status),
         ownedByManager,
         ownedByLeague: new Set(leagueRows.map((r) => r.playerId)),
       };
@@ -510,7 +517,7 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
     async loadManagerFaContext(managerId): Promise<FaGrantContext | null> {
       const manager = await prisma.manager.findUnique({
         where: { id: managerId },
-        select: { leagueId: true },
+        select: { leagueId: true, league: { select: { status: true } } },
       });
       if (!manager) return null;
       const mine = await prisma.rosterPlayer.findMany({
@@ -523,7 +530,13 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
         counts[r.player.position] += 1;
         ownedByManager.add(r.playerId);
       }
-      return { leagueId: manager.leagueId, counts, squadSize: mine.length, ownedByManager };
+      return {
+        leagueId: manager.leagueId,
+        counts,
+        squadSize: mine.length,
+        rosterCap: rosterCapForLeagueStatus(manager.league.status),
+        ownedByManager,
+      };
     },
 
     async getFaTargetFacts(leagueId, playerId): Promise<FaTargetFacts | null> {

@@ -12,10 +12,11 @@
  *     cutoff is the league-wide period first kickoff (NOT the player's own kickoff) — the amendment
  *     supersedes the per-player-kickoff deadline. The IO layer resolves `acquisitionCutoffAt`.
  *  4. the drop ≠ the add; the drop is owned by this manager; a drop is REQUIRED once the squad is full.
- *  5. the add/drop keeps the roster within the 15-man cap (the per-position 2/5/5/3 cap was lifted —
- *     Prompt 44 extended to FAAB; lineup/formation legality is a separate rule in @app/lineup).
+ *  5. the add/drop keeps the roster within the phase roster cap (15 group / 9 playoff; the per-position
+ *     2/5/5/3 cap was lifted — Prompt 44 extended to FAAB; lineup/formation legality is a separate
+ *     rule in @app/lineup). The cap is injected (`ctx.rosterCap`) so this validator stays phase-agnostic.
  */
-import { POSITIONS, SQUAD_SIZE, type Position } from "@app/shared";
+import { POSITIONS, type Position } from "@app/shared";
 import type { PositionCounts } from "./resolve";
 import type { AcquisitionWindow } from "./window";
 import {
@@ -53,8 +54,11 @@ export interface BidValidationContext {
   pendingTotal: number;
   /** The manager's active per-position roster counts. */
   counts: PositionCounts;
-  /** The manager's active squad size (≥ SQUAD_SIZE ⇒ full ⇒ a drop is required). */
+  /** The manager's active squad size (≥ `rosterCap` ⇒ full ⇒ a drop is required). */
   squadSize: number;
+  /** The squad roster cap for the league's current phase (15 group / 9 playoff). Resolved by the IO
+   *  layer from `league.status` (`rosterCapForLeagueStatus`) so this validator stays phase-agnostic. */
+  rosterCap: number;
   /** Players actively owned by THIS manager (validates the drop). */
   ownedByManager: ReadonlySet<string>;
   /** Players actively owned by ANY manager in the league (validates the add availability). */
@@ -107,6 +111,9 @@ export interface FaGrantValidationContext {
   faEligible: boolean;
   counts: PositionCounts;
   squadSize: number;
+  /** The squad roster cap for the league's current phase (15 group / 9 playoff). See
+   *  {@link BidValidationContext.rosterCap}. */
+  rosterCap: number;
   ownedByManager: ReadonlySet<string>;
   dropLocked: boolean;
 }
@@ -116,7 +123,7 @@ export interface FaGrantValidationContext {
  *  1. window: the add target's period must be in its free-agency phase (post-batch, pre-first-kickoff).
  *  2. eligibility: the target must be an open FA per the batch-clear snapshot (not live-unowned).
  *  3+4. the SAME drop + roster rules as a bid (shared `checkDropAndRoster`): drop ≠ add, drop owned,
- *       drop not locked-by-play, drop required when full, and the 15-man cap.
+ *       drop not locked-by-play, drop required when full, and the phase roster cap (15 group / 9 playoff).
  * No amount/budget check ($0 is always affordable) and no waiver-order concern (instant FA is bids-free).
  */
 export function validateFaGrant(
@@ -146,6 +153,7 @@ function checkDropAndRoster(
   ctx: {
     counts: PositionCounts;
     squadSize: number;
+    rosterCap: number;
     ownedByManager: ReadonlySet<string>;
     dropLocked: boolean;
   },
@@ -156,18 +164,18 @@ function checkDropAndRoster(
     if (!ctx.ownedByManager.has(add.playerDropId)) return dropNotOwned(add.playerDropId);
     // A drop that has played this matchday (locked-on-play) can't be dropped until the matchday ends.
     if (ctx.dropLocked) return dropLocked(add.playerDropId);
-  } else if (ctx.squadSize >= SQUAD_SIZE) {
+  } else if (ctx.squadSize >= ctx.rosterCap) {
     return dropRequired();
   }
 
-  // roster legality: the drop frees a slot, the add fills one; only the 15-man TOTAL is capped — the
-  // per-position 2/5/5/3 cap was lifted (Prompt 44 extended to FAAB). Per-position legality is a
-  // separate matchday rule in @app/lineup (FORMATION_BOUNDS), unaffected by this.
+  // roster legality: the drop frees a slot, the add fills one; only the TOTAL is capped at the phase
+  // cap (15 group / 9 playoff — the per-position 2/5/5/3 cap was lifted, Prompt 44 extended to FAAB).
+  // Per-position legality is a separate matchday rule in @app/lineup (FORMATION_BOUNDS), unaffected here.
   const after: Record<Position, number> = { ...ctx.counts };
   if (add.playerDropId !== null && add.dropPosition !== null) after[add.dropPosition] -= 1;
   after[add.addPosition] += 1;
   const total = POSITIONS.reduce((sum, p) => sum + after[p], 0);
-  if (total > SQUAD_SIZE) return rosterIllegal(add.addPosition);
+  if (total > ctx.rosterCap) return rosterIllegal(add.addPosition, ctx.rosterCap);
 
   return null;
 }

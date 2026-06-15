@@ -8,7 +8,7 @@
  * NOT exported from the package root used by production — it lives here only for the controller tests
  * (the same arrangement as @app/draft's MemoryDraftStore).
  */
-import type { Position } from "@app/shared";
+import { SQUAD_SIZE, type Position } from "@app/shared";
 import type { BidInput, ManagerState } from "./resolve";
 import type {
   BatchContext,
@@ -42,12 +42,15 @@ interface MemManager {
 export interface MemorySeed {
   leagueId: string;
   managers: ManagerState[];
+  /** The league's phase squad cap (15 group / 9 playoff). Defaults to the group cap. */
+  rosterCap?: number;
 }
 
 export class MemoryFaabBatchStore implements FaabBatchStore {
   private readonly leagueId: string;
   private readonly managers: Map<string, MemManager>;
   private readonly bids: MemBid[] = [];
+  private readonly rosterCap: number;
   readonly batches: { id: string; runAt: Date }[] = [];
   /** Periods this store has already cleared — the in-memory mirror of `period.batch_cleared_at IS NULL`
    *  conditional claim (the once-only entry gate). */
@@ -55,6 +58,7 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
 
   constructor(seed: MemorySeed) {
     this.leagueId = seed.leagueId;
+    this.rosterCap = seed.rosterCap ?? SQUAD_SIZE;
     this.managers = new Map(
       seed.managers.map((m) => [
         m.managerId,
@@ -90,6 +94,7 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
         .filter((b) => b.status === "pending")
         .map(({ status: _s, batchId: _b, ...bid }) => bid),
       ownedByLeague: owned,
+      rosterCap: this.rosterCap,
     };
   }
 
@@ -169,6 +174,8 @@ interface MemBidManager {
   faabBudget: number;
   counts: Record<Position, number>;
   squadSize: number;
+  /** The league's phase squad cap (15 group / 9 playoff). Defaults to the group cap. */
+  rosterCap?: number;
   owned: Set<string>;
 }
 
@@ -210,6 +217,7 @@ export class MemoryFaabBidStore implements FaabBidStore {
       faabBudget: m.faabBudget,
       counts: { ...m.counts },
       squadSize: m.squadSize,
+      rosterCap: m.rosterCap ?? SQUAD_SIZE,
       ownedByManager: new Set(m.owned),
       ownedByLeague: new Set(this.leagueOwned),
     };
@@ -299,6 +307,8 @@ interface MemFaManager {
   faabBudget: number;
   counts: Record<Position, number>;
   squadSize: number;
+  /** The league's phase squad cap (15 group / 9 playoff). Defaults to the group cap. */
+  rosterCap?: number;
   owned: Set<string>;
 }
 
@@ -345,6 +355,7 @@ export class MemoryFaGrantStore implements FaGrantStore {
       leagueId: m.leagueId,
       counts: { ...m.counts },
       squadSize: m.squadSize,
+      rosterCap: m.rosterCap ?? SQUAD_SIZE,
       ownedByManager: new Set(m.owned),
     };
   }

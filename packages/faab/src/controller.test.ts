@@ -141,6 +141,7 @@ describe("runFaabBatch — orchestration + idempotency", () => {
       managers: ctx!.managers,
       bids: ctx!.bids,
       ownedByLeague: ctx!.ownedByLeague,
+      rosterCap: ctx!.rosterCap,
     });
 
     const firstBatch = await s.commitBatch({

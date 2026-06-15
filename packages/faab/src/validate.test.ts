@@ -26,6 +26,7 @@ function ctx(over: Partial<BidValidationContext> = {}): BidValidationContext {
     pendingTotal: 0,
     counts: FULL,
     squadSize: 15,
+    rosterCap: 15, // group phase by default; playoff cases override to 9
     ownedByManager: new Set(["DROP"]),
     ownedByLeague: new Set(["DROP"]),
     acquisitionCutoffAt: new Date("2026-06-10T15:00:00Z"), // the period's first kickoff (upcoming)
@@ -170,6 +171,7 @@ function faCtx(over: Partial<FaGrantValidationContext> = {}): FaGrantValidationC
     faEligible: true,
     counts: FULL,
     squadSize: 15,
+    rosterCap: 15, // group phase by default; playoff cases override to 9
     ownedByManager: new Set(["DROP"]),
     dropLocked: false,
     ...over,
@@ -245,5 +247,57 @@ describe("validateFaGrant", () => {
   it("allows GK-for-MID on a full squad now the per-position cap is lifted (Prompt 44 → @app/faab)", () => {
     // Same lift on the $0 FA path: GK 2→3 was over the old cap; now only the 15-man total gates it.
     expect(validateFaGrant(faSub({ addPosition: "GK", dropPosition: "MID" }), faCtx())).toBeNull();
+  });
+});
+
+// The squad cap drops 15 → 9 at the group→playoff transition (DECISIONS.md → Theme C/D). The cap is
+// INJECTED (`rosterCap`); the IO layer resolves it from `league.status`. These cases pin BOTH entry points.
+const PLAYOFF_NINE: PositionCounts = { GK: 1, DEF: 3, MID: 3, FWD: 2 }; // sums to the 9-man playoff cap
+
+describe("roster cap is mode-aware (15 group / 9 playoff)", () => {
+  it("bid: blocks an add for an untrimmed 15-man squad carried into the playoff (cap 9)", () => {
+    // The trim-miss enforcement: at cap 9 a 15-man roster's add/drop nets 15 > 9 → roster-illegal, so a
+    // manager who has not yet trimmed cannot acquire (Theme C: "blocked from FAAB adds until trimmed").
+    const e = validateBidSubmission(sub(), ctx({ rosterCap: 9 })); // FULL = 15 actives
+    expect(e).toMatchObject({ code: "roster-illegal", cap: 9 });
+  });
+
+  it("bid: a full 9-man playoff squad must name a drop", () => {
+    const e = validateBidSubmission(
+      sub({ playerDropId: null, dropPosition: null }),
+      ctx({ counts: PLAYOFF_NINE, squadSize: 9, rosterCap: 9 }),
+    );
+    expect(e?.code).toBe("drop-required");
+  });
+
+  it("bid: a legal add/drop on a 9-man playoff squad passes", () => {
+    expect(
+      validateBidSubmission(sub(), ctx({ counts: PLAYOFF_NINE, squadSize: 9, rosterCap: 9 })),
+    ).toBeNull();
+  });
+
+  it("bid: the group cap (15) still admits a swap a 9-cap would block (regression)", () => {
+    // Same 9-man squad + a no-drop add: rejected at cap 9 (drop-required) but fine while cap is 15.
+    expect(
+      validateBidSubmission(
+        sub({ playerDropId: null, dropPosition: null }),
+        ctx({ counts: PLAYOFF_NINE, squadSize: 9, rosterCap: 15 }),
+      ),
+    ).toBeNull();
+  });
+
+  it("FA grant: shares the playoff cap — a full 9-man squad must name a drop", () => {
+    const e = validateFaGrant(
+      faSub({ playerDropId: null, dropPosition: null }),
+      faCtx({ counts: PLAYOFF_NINE, squadSize: 9, rosterCap: 9 }),
+    );
+    expect(e?.code).toBe("drop-required");
+  });
+
+  it("FA grant: blocks an untrimmed 15-man squad at the playoff cap", () => {
+    expect(validateFaGrant(faSub(), faCtx({ rosterCap: 9 }))).toMatchObject({
+      code: "roster-illegal",
+      cap: 9,
+    });
   });
 });

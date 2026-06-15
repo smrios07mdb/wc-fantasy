@@ -24,7 +24,7 @@
  * `faab_bid` has NO `priority` column today, so honoring it at all needs a migration first — until
  * then there is nothing to thread through here.
  */
-import { POSITIONS, SQUAD_SIZE, type Position } from "@app/shared";
+import { POSITIONS, type Position } from "@app/shared";
 
 export type PositionCounts = Readonly<Record<Position, number>>;
 
@@ -35,8 +35,8 @@ export interface ManagerState {
   faabBudget: number;
   /** Rolling waiver order (1 = highest priority); null = unseeded (sorts last, never wins a tie). */
   waiverOrderPosition: number | null;
-  /** Active per-position roster counts (used to derive the 15-man total; the per-position 2/5/5/3 cap
-   *  was lifted — Prompt 44 extended to FAAB). */
+  /** Active per-position roster counts (used to derive the squad total vs the phase cap; the
+   *  per-position 2/5/5/3 cap was lifted — Prompt 44 extended to FAAB). */
   counts: PositionCounts;
   /** Active player ids owned by this manager (validates that a named drop is still owned). */
   ownedPlayerIds: readonly string[];
@@ -65,6 +65,10 @@ export interface ResolveBatchInput {
   bids: readonly BidInput[];
   /** Active league-wide ownership at batch start — an add target already owned can never be won. */
   ownedByLeague: ReadonlySet<string>;
+  /** The squad roster cap for the league's current phase (15 group / 9 playoff). Resolved by the IO
+   *  layer from `league.status` (`rosterCapForLeagueStatus`); the award legality re-checks it per award
+   *  so the batch can never push a manager over the cap by stacking no-drop wins. */
+  rosterCap: number;
 }
 
 /** Why a bid lost (it neither won nor was voided). */
@@ -73,7 +77,7 @@ export type LostReason =
   | "lost-tiebreak" // equal top bid, lost on waiver order
   | "add-unavailable" // add target already owned league-wide (not actually on the wire)
   | "budget-exhausted" // remaining budget < amount when this bid came up
-  | "roster-illegal" // the add/drop would exceed the 15-man squad cap (per-position cap lifted — Prompt 44)
+  | "roster-illegal" // the add/drop would exceed the phase squad cap (15 group / 9 playoff; per-position lifted)
   | "drop-invalid"; // the named drop is no longer owned by this manager
 
 export type BidResolution =
@@ -125,7 +129,7 @@ interface WorkingManager {
 const HUGE = Number.MAX_SAFE_INTEGER;
 
 export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
-  const { now, managers, bids, ownedByLeague } = inputArg;
+  const { now, managers, bids, ownedByLeague, rosterCap } = inputArg;
 
   const resolutions: BidResolution[] = [];
   const resolved = new Set<string>();
@@ -200,7 +204,7 @@ export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
     // (5/7) Award only if the winner's claim is STILL legal against its updated state; else skip it
     // (mark lost) and re-loop so the player can fall to the next-best bid.
     const wm = work.get(winner.managerId)!;
-    const legality = claimLegality(winner, wm);
+    const legality = claimLegality(winner, wm, rosterCap);
     if (!legality.ok) {
       resolutions.push({
         bidId: winner.bidId,
@@ -288,10 +292,11 @@ function winnerForPlayer(
 
 /** Is a winning bid still applicable against the manager's CURRENT (already-updated) state? Encodes
  *  step 5's "still legal" = remaining budget ≥ amount, the named drop still owned AND not locked by
- *  play, and the add/drop keeps the roster within the 15-man cap (with no drop). */
+ *  play, and the add/drop keeps the roster within the phase cap (`rosterCap`: 15 group / 9 playoff). */
 function claimLegality(
   bid: BidInput,
   wm: WorkingManager,
+  rosterCap: number,
 ): { ok: true } | { ok: false; reason: LostReason } {
   if (bid.amount > wm.budget) return { ok: false, reason: "budget-exhausted" };
 
@@ -305,13 +310,14 @@ function claimLegality(
     return { ok: false, reason: "drop-invalid" };
   }
 
-  // Roster after the swap: the drop frees a slot, the add fills one; only the 15-man TOTAL is capped —
-  // the per-position 2/5/5/3 cap was lifted (Prompt 44 extended to FAAB).
+  // Roster after the swap: the drop frees a slot, the add fills one; only the TOTAL is capped at the
+  // phase cap (15 group / 9 playoff — the per-position 2/5/5/3 cap was lifted, Prompt 44 extended to
+  // FAAB). Re-checked per award so stacked no-drop wins can't push a playoff manager past 9.
   const after: Record<Position, number> = { ...wm.counts };
   if (bid.playerDropId !== null && bid.dropPosition !== null) after[bid.dropPosition] -= 1;
   after[bid.addPosition] += 1;
   const total = POSITIONS.reduce((sum, p) => sum + after[p], 0);
-  if (total > SQUAD_SIZE) return { ok: false, reason: "roster-illegal" };
+  if (total > rosterCap) return { ok: false, reason: "roster-illegal" };
 
   return { ok: true };
 }

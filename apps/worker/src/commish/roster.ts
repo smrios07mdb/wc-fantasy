@@ -144,6 +144,9 @@ export async function runRosterOverride(
       faEligible: true,
       counts: ctx.counts,
       squadSize: ctx.squadSize,
+      // KEEP the phase roster cap (15 group / 9 playoff) even on a commissioner override — the bypass
+      // neutralizes only the window/snapshot/drop-lock gates, never the squad cap.
+      rosterCap: ctx.rosterCap,
       ownedByManager: ctx.ownedByManager,
       dropLocked: false,
     },

@@ -80,12 +80,13 @@ export interface DropLockedError {
   playerDropId: string;
 }
 
-/** The add/drop would exceed the 15-man squad cap (the per-position 2/5/5/3 cap was lifted — Prompt 44
- *  extended to FAAB). `position` is the add's position, carried for context. */
+/** The add/drop would exceed the phase squad cap (15 group / 9 playoff; the per-position 2/5/5/3 cap was
+ *  lifted — Prompt 44 extended to FAAB). `position` is the add's position, `cap` the limit hit. */
 export interface RosterIllegalError {
   code: "roster-illegal";
   message: string;
   position: Position;
+  cap: number;
 }
 
 export type FaabBidError =
@@ -196,11 +197,12 @@ export function dropLocked(playerDropId: string): DropLockedError {
   };
 }
 
-export function rosterIllegal(position: Position): RosterIllegalError {
+export function rosterIllegal(position: Position, cap: number): RosterIllegalError {
   return {
     code: "roster-illegal",
-    message: "this add/drop would exceed your 15-man squad limit",
+    message: `this add/drop would exceed your ${cap}-man squad limit`,
     position,
+    cap,
   };
 }
 

@@ -28,6 +28,8 @@ export interface BatchContext {
   bids: BidInput[];
   /** Players actively owned by ANY manager at batch start. */
   ownedByLeague: ReadonlySet<string>;
+  /** The squad roster cap for the league's phase (15 group / 9 playoff), from `league.status`. */
+  rosterCap: number;
 }
 
 export interface CommitBatchInput {
@@ -59,6 +61,8 @@ export interface ManagerBidContext {
   faabBudget: number;
   counts: Readonly<Record<Position, number>>;
   squadSize: number;
+  /** The squad roster cap for the league's phase (15 group / 9 playoff), from `league.status`. */
+  rosterCap: number;
   ownedByManager: ReadonlySet<string>;
   ownedByLeague: ReadonlySet<string>;
 }
@@ -121,6 +125,8 @@ export interface FaGrantContext {
   leagueId: string;
   counts: Readonly<Record<Position, number>>;
   squadSize: number;
+  /** The squad roster cap for the league's phase (15 group / 9 playoff), from `league.status`. */
+  rosterCap: number;
   ownedByManager: ReadonlySet<string>;
 }
 

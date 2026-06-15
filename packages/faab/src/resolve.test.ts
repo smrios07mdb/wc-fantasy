@@ -61,7 +61,7 @@ function bid(
 function input(
   managers: ManagerState[],
   bids: BidInput[],
-  extra: { now?: Date; ownedByLeague?: string[] } = {},
+  extra: { now?: Date; ownedByLeague?: string[]; rosterCap?: number } = {},
 ): ResolveBatchInput {
   // Each manager owns its own default drop target so a MID-for-MID swap is always legal.
   const owned = new Set(extra.ownedByLeague ?? []);
@@ -71,6 +71,7 @@ function input(
     managers,
     bids,
     ownedByLeague: owned,
+    rosterCap: extra.rosterCap ?? 15, // group cap by default; playoff cases pass 9
   };
 }
 
@@ -399,5 +400,44 @@ describe("resolveFaabBatch — a locked-lineup drop is skipped (drop-invalid)", 
     expect(resolutionFor(out, "b").outcome).toBe("won");
     // A's drop never happened → no debit for A.
     expect(out.budgetDeltas).toEqual([{ managerId: "B", spent: 10, newBudget: 90 }]);
+  });
+});
+
+describe("playoff phase — the injected squad cap (rosterCap) drops 15 → 9", () => {
+  const EIGHT: PositionCounts = { GK: 1, DEF: 3, MID: 3, FWD: 1 }; // 8 actives — room for exactly ONE add
+
+  it("awards only ONE of two stacked no-drop wins (the second would push 9 → 10 > cap 9)", () => {
+    // Submission validates each no-drop bid independently (8 < 9, both pass), so the BATCH is the only
+    // place the CUMULATIVE over-cap is caught — hence the resolver must be mode-aware too, not just the
+    // submission validator. P1 (id asc) resolves first → won; P2 then finds the squad at 9 → roster-illegal.
+    const a = mgr("A", 1, { counts: EIGHT });
+    const out = resolveFaabBatch(
+      input(
+        [a],
+        [
+          bid("A", "P1", 10, { drop: null, id: "a1" }),
+          bid("A", "P2", 10, { drop: null, id: "a2" }),
+        ],
+        { rosterCap: 9 },
+      ),
+    );
+    expect(resolutionFor(out, "a1").outcome).toBe("won");
+    const second = resolutionFor(out, "a2");
+    expect(second.outcome).toBe("lost");
+    if (second.outcome === "lost") expect(second.reason).toBe("roster-illegal");
+  });
+
+  it("the SAME two no-drop bids both clear under the group cap (15) — regression", () => {
+    const a = mgr("A", 1, { counts: EIGHT });
+    const out = resolveFaabBatch(
+      input(
+        [a],
+        [
+          bid("A", "P1", 10, { drop: null, id: "a1" }),
+          bid("A", "P2", 10, { drop: null, id: "a2" }),
+        ],
+      ),
+    );
+    expect(wonBids(out)).toHaveLength(2);
   });
 });

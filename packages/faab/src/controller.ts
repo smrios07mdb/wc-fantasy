@@ -48,6 +48,7 @@ export async function runFaabBatch(
     managers: ctx.managers,
     bids: ctx.bids,
     ownedByLeague: ctx.ownedByLeague,
+    rosterCap: ctx.rosterCap,
   });
 
   // commitBatch claims the period (conditional, IS NULL) as the FIRST step of the apply transaction;

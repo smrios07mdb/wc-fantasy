@@ -82,6 +82,7 @@ export async function handleFaGrant(deps: FaGrantDeps, body: FaGrantBody): Promi
       faEligible: addFacts.faEligible,
       counts: ctx.counts,
       squadSize: ctx.squadSize,
+      rosterCap: ctx.rosterCap,
       ownedByManager: ctx.ownedByManager,
       dropLocked,
     },
