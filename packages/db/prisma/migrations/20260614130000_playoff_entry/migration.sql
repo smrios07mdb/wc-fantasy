@@ -12,8 +12,9 @@
 -- therefore blocks every browser write. Like the earlier RLS migrations this uses ENABLE (not FORCE) RLS,
 -- so the owner role is UNAFFECTED; RLS bites only the JWT-scoped anon/authenticated roles.
 --
--- Portable: runs on a plain Postgres (the DoD fresh-Postgres) AND on Supabase. No Realtime publication
--- entry — the screen polls / refreshes; there is no postgres_changes subscription on this table.
+-- Portable: runs on a plain Postgres (the DoD fresh-Postgres) AND on Supabase. The table is added to the
+-- `supabase_realtime` publication here (atomic with the table) so the later theater screen's live-
+-- elimination subscription delivers events — a publication-less table silently broadcasts nothing.
 
 -- ── (1) DDL ───────────────────────────────────────────────────────────────────────────────────────
 -- CreateEnum
@@ -93,6 +94,24 @@ CREATE POLICY "playoff_entry_select_league_member" ON "playoff_entry"
         AND m."user_id" = (auth.uid())::text
     )
   );
+
+-- ── (2b) Realtime publication ─────────────────────────────────────────────────────────────────────
+-- postgres_changes only broadcast for tables in the `supabase_realtime` publication. The Phase-4 theater
+-- screen subscribes to live eliminations on `playoff_entry`; adding it here (vs leaving it to the
+-- dashboard) keeps "table + policy + publication" one atomic unit. Guarded: the publication does not
+-- exist on plain-Postgres (skip), and a table already in it is skipped (idempotent).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND schemaname = 'public'
+        AND tablename = 'playoff_entry'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.playoff_entry;
+    END IF;
+  END IF;
+END $$;
 
 -- ── (3) Self-test (Theme F): cross-league SELECT isolation + default-deny writes ──────────────────
 -- Runs during `prisma migrate deploy` (vitest never executes SQL). Asserts the EFFECTIVE policy logic by
