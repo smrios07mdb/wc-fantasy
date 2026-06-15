@@ -18,6 +18,7 @@
     "@app/notify": "workspace:*",
     "@app/player-box": "workspace:*",
     "@app/pool": "workspace:*",
+    "@app/recompute": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
     "@app/vsfield": "workspace:*",

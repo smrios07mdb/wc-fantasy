@@ -93,6 +93,9 @@ importers:
       '@app/pool':
         specifier: workspace:*
         version: link:../../packages/pool
+      '@app/recompute':
+        specifier: workspace:*
+        version: link:../../packages/recompute
       '@app/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
