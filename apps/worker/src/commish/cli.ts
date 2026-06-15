@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { prisma } from "@app/db";
 import { createPrismaFaGrantStore } from "@app/faab/prisma";
+import { DEFAULT_FAAB_BATCH_LEAD_MIN } from "@app/faab";
 import { createPrismaLineupStore } from "@app/lineup/prisma";
 import {
   isCommissionerActor,
@@ -32,6 +33,8 @@ import {
 } from "./core";
 import { runRosterOverride, type RosterResult } from "./roster";
 import { runLineupOverride, type LineupResult } from "./lineup";
+import { runPlayoffTransition, type TransitionResult } from "./transition";
+import { createPrismaPlayoffTransitionStore } from "./transitionStore";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolvePath(here, "../../../..");
@@ -336,6 +339,102 @@ function reportLineup(res: LineupResult, apply: boolean): void {
   }
 }
 
+// ── group→playoff transition (Theme C/D) ─────────────────────────────────────────────
+//   pnpm --filter @app/worker commish:transition \
+//     --as smrios07@gmail.com --field 8 \
+//     --reason "group stage complete; collapsing into the guillotine ladder" [--apply]
+// DRY-RUN by default: prints the seeded field + per-round cut schedule + release/trim plan. --apply runs
+// the IRREVERSIBLE transition in one transaction (idempotent — a second --apply is a no-op).
+async function transitionCmd(argv: string[]): Promise<void> {
+  const { flags, bools } = parseFlags(argv);
+  const asEmail = reqFlag(flags, "as");
+  const fieldRaw = reqFlag(flags, "field");
+  const reason = reqFlag(flags, "reason");
+  const apply = bools.has("apply");
+  const now = new Date();
+
+  const fieldSize = Number(fieldRaw);
+  if (!Number.isInteger(fieldSize) || fieldSize <= 0) {
+    die(
+      `--field must be a positive integer (the playoff field size, e.g. 8 or 10), got "${fieldRaw}"`,
+    );
+  }
+
+  const actor = await resolveActor(asEmail);
+  if (!isCommissionerActor(actor)) die(`${asEmail} is not the commissioner — transition refused`);
+
+  const leagueId = await leagueIdForActor(asEmail);
+  const nameOf = new Map((await loadTeams(leagueId)).map((t) => [t.managerId, t.displayName]));
+  // The FAAB batch lead (same as the worker config) feeds the trim-deadline derivation. Read here (after
+  // dotenv has loaded) rather than importing the worker config module (which evaluates env at import).
+  const leadMs = (Number(process.env.FAAB_BATCH_LEAD_MIN) || DEFAULT_FAAB_BATCH_LEAD_MIN) * 60_000;
+
+  const res = await runPlayoffTransition(
+    {
+      now,
+      leadMs,
+      store: createPrismaPlayoffTransitionStore(prisma),
+      log: (l) => console.log(l),
+    },
+    { actor, leagueId, fieldSize, reason, apply },
+  );
+  reportTransition(res, apply, nameOf);
+}
+
+function reportTransition(
+  res: TransitionResult,
+  apply: boolean,
+  nameOf: Map<string, string>,
+): void {
+  const name = (id: string): string => nameOf.get(id) ?? id;
+  if ("plan" in res && res.plan) {
+    const p = res.plan;
+    console.log("── commish:transition plan ─────────────────────────");
+    console.log(`  league:       ${p.leagueId}`);
+    console.log(`  field size:   ${p.fieldSize}  (${p.released.length} non-advancer(s) released)`);
+    console.log(`  status flip:  group → playoff`);
+    console.log("  field (seed → manager):");
+    for (const f of p.field)
+      console.log(`     ${String(f.seed).padStart(2)}  ${name(f.managerId)}`);
+    console.log("  cut schedule (round → cut_count):");
+    for (const c of p.cutSchedule) console.log(`     ${c.round.padEnd(5)} ${c.cutCount}`);
+    console.log(`  released to FAAB pool (${p.released.length}):`);
+    for (const r of p.released) console.log(`     ${r.displayName}  (${r.releasedCount} players)`);
+    console.log(
+      `  budget reset: ${p.budgetResetManagerIds.length} advancer(s) → $${p.budgetResetTo}`,
+    );
+    console.log("  waiver order (carried forward, eliminated removed, no re-seed):");
+    for (const w of p.waiverOrder) {
+      console.log(`     ${String(w.position).padStart(2)}  ${name(w.managerId)}`);
+    }
+    console.log(
+      `  trim:         15 → ${p.trimCap} by ${
+        p.trimDeadlineAt
+          ? `${p.trimDeadlineAt.toISOString()} (first playoff batch)`
+          : "the first playoff batch (R32 fixtures not yet synced — deadline derived then)"
+      }`,
+    );
+    console.log("────────────────────────────────────────────────────");
+  }
+  switch (res.status) {
+    case "planned":
+      console.log(
+        apply
+          ? "(nothing applied)"
+          : "DRY-RUN — re-run with --apply to execute the IRREVERSIBLE transition.",
+      );
+      break;
+    case "applied":
+      console.log("✓ transition applied.");
+      break;
+    case "skipped":
+      console.log(`↷ skipped — ${res.reason}`);
+      break;
+    default:
+      die(res.reason);
+  }
+}
+
 // ── entry ────────────────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -347,9 +446,15 @@ async function main(): Promise<void> {
     case "lineup":
       await lineupCmd(rest);
       break;
+    case "transition":
+      await transitionCmd(rest);
+      break;
     default:
       console.error(
-        "Usage: commish <roster|lineup> --as <email> --team <label> --reason <text> [--apply]",
+        "Usage:\n" +
+          "  commish roster --as <email> --team <label> --add <player> --reason <text> [--apply]\n" +
+          "  commish lineup --as <email> --team <label> --period <label> --starters <csv> --reason <text> [--apply]\n" +
+          "  commish transition --as <email> --field <n> --reason <text> [--apply]",
       );
       process.exit(1);
   }

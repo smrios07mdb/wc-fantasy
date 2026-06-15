@@ -9,6 +9,7 @@
     "provision": "tsx src/provision/cli.ts",
     "commish:roster": "tsx src/commish/cli.ts roster",
     "commish:lineup": "tsx src/commish/cli.ts lineup",
+    "commish:transition": "tsx src/commish/cli.ts transition",
     "job:period-close": "tsx src/jobs/periodClose.ts",
     "job:recompute": "tsx src/jobs/recompute.ts",
     "job:rosters": "tsx src/jobs/syncRosters.ts",
