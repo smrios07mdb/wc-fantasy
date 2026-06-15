@@ -368,6 +368,9 @@ edit any not-yet-locked player. NOT multiple competing entries (that's best-ball
 doesn't fit a private H2H league).
 
 ### Playoff reduced roster (guillotine)
+
+> ✅ IMPLEMENTED — see the **Group→playoff transition + playoff lineup mode** block below.
+
 - **Hard roster cap ≈ 9 = 7 starters + 2 bench.** Cuts flow into the FAAB pool (fuels the
   reinforcement churn). Bench is positional-flexible.
 - **Starting shape 1 GK + 6 outfield, small variations allowed:** min 2 DEF / min 2 MID /
@@ -481,6 +484,9 @@ an open question.
   8→6→4→3→2→1). The exact field size + cut schedule is **fixed once at the group→playoff transition**
   when the final manager count is known; the *derivation rule* is locked. (A 6-field with one cut
   per round, 6→5→4→3→2→1, remains a valid special case.)
+
+> ✅ IMPLEMENTED — see the **Group→playoff transition + playoff lineup mode** block below.
+
 - **Draft:** **snake** order; **per-pick timer = a league config** (`draft_pick_seconds`,
   commissioner-set, adjustable pre-draft — no hard-coded number); **autopick on expiry** = the
   highest-ranked still-available player from the manager's **pre-set queue**, falling back to
@@ -618,6 +624,9 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   needs standings, at MD1 or at the playoff transition.
 
 #### Playoff reinforcement (load-bearing — the attrition mechanism)
+
+> ✅ IMPLEMENTED — see the **Group→playoff transition + playoff lineup mode** block below.
+
 No bespoke machine: **reinforcement is the same daily FAAB cycle, run on the playoff field** with
 the reset $100 + the carried-forward rolling waiver order (eliminated managers removed). Two attrition streams feed it — (a) each guillotined
 manager's freed ~9-player roster, and (b) every survivor's own roster decaying as WC teams are
@@ -2370,3 +2379,57 @@ totals and standings are byte-identical; only the stored breakdown text changes.
 - KEY LEARNING: **GOAT FIFA paginated endpoints honour bracketed ARRAY filters
   (`match_ids[]`/`team_ids[]`/`player_ids[]`); SCALAR id params are silently ignored → full-dataset scan.**
   When adding a new filtered pull, use the array param and assert the built query string carries the `[]`.
+
+## Group→playoff transition + playoff lineup mode (Phases 1+3, merged) COMPLETE ✅
+
+**Commits:** `feat/playoff-transition` 87a7e1a→b7dc9d3 (7 commits) + `feat/playoff-lineup-mode` 706351d + 3952e62; ff-merged to `main`. 2115 tests ✓.
+
+### Survival state — `playoff_entry` table
+
+Dedicated `playoff_entry` table (chosen over columns-on-manager): `(id, league_id, manager_id, seed, status, eliminated_round, eliminated_at, created_at, updated_at)`, `@@unique([league_id, manager_id])`, `@@index([league_id, status])`, FKs `ON DELETE CASCADE`. Enum `PlayoffEntryStatus = alive | eliminated | champion` (row existence = field membership; `eliminated_*` NULL while alive/champion). **Row exists only for advancers** — non-advancers have no row. RLS mirrors `standing`/`pool_pick`: league-scoped authenticated SELECT, no write policies (server-only); Phase 2 flips `status`, Phase 4 reads it. Added to the `supabase_realtime` publication (guarded `ADD-TABLE` idiom) so Phase 4's subscription isn't silently empty (Theme F trap). Migration verified on throwaway PG under a uuid-returning `auth.uid()` (sub::uuid cast), RLS self-tests green, drift-clean.
+
+### `knockout_round` PeriodKind + validator anchor
+
+`knockout_round` is a pre-existing `PeriodKind` value (not added/migrated). Both the lineup validator and the transition anchor on the string literal `"knockout_round"` checked against the `PeriodKind` type — a value rename breaks at compile time, closing the silent-switch class. (`KNOCKOUT_PERIOD_KIND` is **not** a separate named export; the check reads `period.kind === "knockout_round"` typed as `PeriodKind`.)
+
+### Cut-schedule rule (canonical, now implemented)
+
+Distribute `field − 1` eliminations across the 5 WC knockout rounds (R32→R16→QF→SF→Final), **front-loaded** (non-increasing), each ≥ 1. Deterministic: `base = ⌊(field−1)/5⌋`, remainder `r = (field−1) mod 5`; the first `r` rounds cut `base + 1`, the rest cut `base`. Because `field ≥ 6 ⇒ base ≥ 1`, every round cuts at least one. Pure `cutScheduleFor` in `packages/recompute/src/transition.ts`, exhaustively tested fields 6–40. **Locked examples:** 6→{1,1,1,1,1}, 8→{2,2,1,1,1}, 10→{2,2,2,2,1}, 12→{3,2,2,2,2}. **This supersedes the design handoff's illustrative 6-round cut-schedule preset** — that preset is retired; the derivation rule above is the single source of truth. (Theme C's existing field-size sequences already match this rule.)
+
+### The transition job (`commish:transition`)
+
+`commish:transition --as <email> --field <n> --reason <text> [--apply]` (dry-run default; `--apply` is the boolean flag). Dry-run prints: field + seeds, cut schedule, release/trim plan, and a `standings: FINAL ✓ / ⚠ NOT FINAL` line — mutates nothing. `--apply` runs ONE `$transaction`:
+
+0. Conditional `league.status` `group→playoff` claim; 0 rows ⇒ abort (idempotent, belt-and-suspenders with the orchestrator skip).
+1. Write `cut_count` onto the 5 knockout periods (upsert by `(league, label)` — they pre-exist from provisioning).
+2. One `alive` `playoff_entry` per top-N seeded manager.
+3. Release non-advancers' active rosters → FAAB pool (`droppedAt = now`).
+4. Reset every advancer's FAAB to a fresh $100.
+5. Two-phase waiver carry-forward (NULL everyone first, then assign survivors `1..K` — respects the non-deferrable unique; eliminated managers end NULL; no re-seed, surviving relative order preserved).
+
+**D6 precondition:** `--apply` refuses while any `group_md` period is unfrozen (`frozen_at IS NULL`), with an explicit `--allow-incomplete-standings` override (irreversible-op guard). **Upsert-label pin:** `validateConfig` requires knockout labels to equal `KNOCKOUT_ROUNDS` exactly — a config-drift label fails loud at provision time, not silently at the irreversible transition.
+
+### FAAB roster-cap split — `league.status` NOT `period.kind`
+
+The squad cap (15 group / 9 playoff) is a **league-phase property**, resolved by `rosterCapForLeagueStatus(league.status)` (lives in `@app/shared/src/constants.ts`), threaded to the validators as a plain number (validators stay phase-agnostic). This is a deliberate split from the lineup mode's per-period `period.kind` axis — both axes coincide in practice (playoff phase ⟺ knockout periods). **Enforced at BOTH sites:**
+- Submission validator (`validateBidSubmission` / `validateFaGrant` in `@app/faab`)
+- Batch resolver (`resolveFaabBatch` in `@app/faab/resolve.ts`) — the batch site is a correctness necessity, not scope creep: submission can't catch cumulative awards (a manager at 8 stacking two no-drop bids → 10 > 9).
+
+Group cap byte-unchanged.
+
+### Playoff lineup mode
+
+`validateLineup` branches on `period.kind === "knockout_round"` → enforces `PLAYOFF_ROSTER` (cap ≤9, 7 starters = 1 GK + 6 outfield). Position bounds are derived from `PLAYOFF_ROSTER` mins (each pos max = 6 − the other two mins), so the only complete 6-outfield shapes are exactly `FORMATIONS_PO` (2-2-2 / 2-3-1 / 3-2-1) — `FORMATIONS_PO` is not a stored constant; it *emerges* from the derived `playoffBounds()` calculation. A drift-guard test pins "complete shapes satisfying the derived bounds == FORMATIONS_PO." Group mode byte-unchanged; forfeit / lock-on-play reused, not forked.
+
+**UI:** period-driven switch (`loadLineup` reads `period.kind` → seeds via `formationSetForKind`; `SetLineupClient` derives the offer-set; `LockHero` shows "Playoff XI · 7 starters" vs "Starting XI · 11"). `kind` is required on `PeriodLineup` (`apps/web/src/lineup/types.ts`); the package validator's `PeriodWindow.kind` stays optional (back-compat).
+
+### ⚠️ CUT-TIMING INVARIANT (D5)
+
+The 9-cap is a **GATE, not a DRIVER.** It blocks operating over 9; it does not pull a 15-man advancer down to 9, and the derived trim "deadline" (= the first R32 FAAB batch; no schema column) ≠ the R32 lineup lock. A survivor who never voluntarily trims is **blocked from setting an R32 lineup → forfeits** (by design — trimming is the roster decision). Safe only with: (a) a clear at-lineup-attempt signal (Phase 3's `playoff-roster-cap` error), (b) runway before R32, (c) a commish force-trim backstop (not yet built).
+
+### ⚠️ OPEN for the trim-down phase (next)
+
+- (i) **No manager-facing net-shed drop** — all roster mutation is the FAAB add+drop-swap; `FreeAgentPanel` requires a selected add and `resolve.ts` treats the drop as a swap, so a 15-man survivor cannot reach 9 with today's tools → the trim-down phase's core deliverable is a manager-facing release-to-9 flow.
+- (ii) **Commish force-trim missing** — `commish:roster` requires `--add`, no drop-only path.
+- (iii) **Non-advancers not yet blocked from playoff FAAB** — no `playoff_entry` check in the FAAB validators (D4); must be added once playoff waivers open.
+- (iv) **Trim window structure undecided** — R32 pre-lock window vs its own period + its FAAB batch.

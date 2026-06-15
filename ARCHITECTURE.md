@@ -502,6 +502,16 @@ not by hopeful application code:
 - `period.waiver_batch_at` / `period.batch_cleared_at` — the per-period batch deadline (commissioner-
   configurable; default `first_kickoff − lead`) + the idempotency latch (Theme-D amendment).
 
+**Playoffs (survival state)**
+- `playoff_entry` — `id`, `league_id`, `manager_id`, `seed` (group-stage seed, carried verbatim — no
+  re-seeding), `status` (`alive`/`eliminated`/`champion`), `eliminated_round` (nullable KnockoutRound
+  string), `eliminated_at` (nullable timestamptz). `@@unique([league_id, manager_id])`,
+  `@@index([league_id, status])`, FKs `ON DELETE CASCADE`. **Row existence = field membership** — non-
+  advancers have no row. Phase 2 (guillotine round-loop) flips `status → eliminated`, Phase 4 (theater
+  screen) reads it. **RLS:** league-scoped authenticated SELECT (mirrors `standing`/`pool_pick`); no
+  write policies (server-only). **Publication:** added to `supabase_realtime` (guarded `ADD-TABLE` idiom
+  in migration) so Phase 4's subscription is not silently empty (the Theme F Realtime-publication trap).
+
 **Raw feed layer (recompute inputs; upsert-keyed)**
 - `stat_player_match` — PK `(match_id, player_id)`; the promoted `FIFAPlayerMatchStats` columns the
   scoring model consumes + minutes_played + updated_at. feat/scoring-promote-lines added five more
@@ -783,6 +793,10 @@ infrastructure to enforce them already lives in this doc:
   corrections do **not** auto-restate a frozen period — **commissioner-only** override (recompute
   still works; it's just gated). Before the freeze, recompute runs normally.
 - **Trades** -> none (out of brief; possible later theme).
+- **Group→playoff transition is now BUILT** (`feat/playoff-transition`, 87a7e1a→b7dc9d3): `commish:transition`
+  CLI + the 6-step `$transaction` (status claim → `cut_count` writes → `playoff_entry` rows → roster
+  release → FAAB reset → waiver carry-forward); pure `cutScheduleFor` + `selectPlayoffField` +
+  `carryForwardWaiverOrder` in `packages/recompute/src/transition.ts`. See **§20** for the full wiring.
 
 ---
 
@@ -1418,3 +1432,48 @@ builder was designed for is now realized across BOTH cards. The period-BOUND Poi
 (`/api/player-box`) stays exclusive to `PlayerScoreSheet` (vsfield + lineup have a live period); the
 waivers card's Points tab is a real-`WvPlayer`-data overview instead. `FaPickRow` (in waivers
 `components.tsx`) is the shared free-agent picker row consumed by `BidComposer` + `FreeAgentPanel`.
+
+## §20 — Group→playoff transition + playoff lineup mode
+
+**Shipped:** `feat/playoff-transition` (87a7e1a→b7dc9d3, 7 commits) + `feat/playoff-lineup-mode` (706351d + 3952e62), ff-merged to `main`. 2115 tests ✓. See also **DECISIONS.md → Group→playoff transition + playoff lineup mode**.
+
+### Transactional transition + idempotency
+
+`commish:transition --apply` runs ONE `$transaction` (six steps, in order):
+
+0. Conditional `league.status` `group→playoff` claim — 0 rows aborts idempotently (belt-and-suspenders with the orchestrator skip).
+1. Write `cut_count` onto the 5 knockout periods (upsert by `(league_id, label)` — they pre-exist from provisioning; `KNOCKOUT_ROUNDS` is the label contract, validated by `validateConfig` at provision time so a drift fails loud, not silently at the irreversible step).
+2. Write one `alive` `playoff_entry` per top-N seeded manager.
+3. Release non-advancers' active roster players to the FAAB pool (`droppedAt = now`).
+4. Reset every advancer's FAAB budget to a fresh $100.
+5. Two-phase waiver carry-forward: NULL all `waiver_order_position` values first, then write survivors `1..K` preserving their live relative order (the non-deferrable `@@unique([league_id, waiver_order_position])` is satisfied at every checkpoint via the temp-range disjoint write; eliminated managers end NULL).
+
+**D6 pre-condition guard:** `--apply` refuses while any `group_md` period has `frozen_at IS NULL` (results not final). Override: `--allow-incomplete-standings` (irreversible-op escape hatch, not a default). Dry-run (default) prints field + seeds, cut schedule, release/trim plan, and the `standings: FINAL ✓ / ⚠ NOT FINAL` line without touching state.
+
+Pure derivation in `packages/recompute/src/transition.ts`: `cutScheduleFor(fieldSize)` (front-loaded ⌊÷5⌋ + remainder distribution; field ≥ 6), `selectPlayoffField(standings, fieldSize)`, `carryForwardWaiverOrder(current, survivingManagerIds)`.
+
+### `league.status`-vs-`period.kind` cap split
+
+| Axis | Value | Resolver | Enforced at |
+|---|---|---|---|
+| Ownership (squad) cap | 15 group / 9 playoff | `rosterCapForLeagueStatus(league.status)` in `@app/shared` | FAAB submission validator + FAAB batch resolver |
+| Lineup mode (starting shape) | group vs knockout | `period.kind === "knockout_round"` in `@app/lineup` | `validateLineup` only |
+
+Both axes coincide in practice (playoff phase ⟺ knockout periods) but are distinct code paths by design — the validators stay phase-agnostic; the IO layer threads the correct scalar in. **The batch-resolver enforcement is a correctness necessity** (submission can't catch cumulative awards across two concurrent no-drop bids from a manager already at 8).
+
+### `PLAYOFF_ROSTER` + `FORMATIONS_PO`
+
+`PLAYOFF_ROSTER` in `@app/shared/src/constants.ts`: `{ cap: 9, starters: 7, bench: 2, startingOutfield: 6, bounds: { GK: {min:1, max:1}, DEF: {min:2}, MID: {min:2}, FWD: {min:1} } }`. `rosterCapForLeagueStatus` is the single consumer in both FAAB validators.
+
+`FORMATIONS_PO` (2-2-2 / 2-3-1 / 3-2-1) is **not a stored constant** — it *emerges* from `playoffBounds()` which derives each pos-max as `startingOutfield − (other two mins)`. A drift-guard test in `packages/lineup` pins that "the set of complete shapes satisfying the derived bounds == FORMATIONS_PO."
+
+### Cut-timing invariant (D5)
+
+The 9-cap is a **gate, not a driver** — it blocks; it does not trim. A 15-man advancer who never drops is blocked from setting their R32 lineup and forfeits (by design — trimming is the roster decision). Requires: (a) a clear `playoff-roster-cap` error at lineup-attempt time, (b) runway before R32, (c) a commish force-trim backstop. See DECISIONS.md → ⚠️ CUT-TIMING INVARIANT.
+
+### Open seams (trim-down phase, next)
+
+- **Manager-facing release-to-9 drop flow** — no net-shed drop today; FAAB add+drop-swap only (`FreeAgentPanel` requires a selected add; `resolve.ts` treats drop as a swap).
+- **Commish force-trim CLI** — `commish:roster` requires `--add`; drop-only path missing.
+- **Non-advancer playoff FAAB gate** — no `playoff_entry` check in FAAB validators; must block non-advancers once playoff waivers open.
+- **Trim window structure** — R32 pre-lock window vs its own `period` row + FAAB batch timing is undecided.
