@@ -1479,3 +1479,63 @@ The drop-only path that pulls a survivor 15 → ≤9 inside R32's pre-lock windo
 - **D4 non-advancer gate (defense-in-depth).** `isPlayoffParticipant` (`status==='alive'` playoff_entry, or always true outside playoff — INERT in group) on the bid/FA validation contexts + a `notParticipant` rule; the resolver voids non-participant bids via `participantManagerIds`; `WaiversView.isParticipant` hides the affordances. IO single-sources the flag in `@app/faab/prisma`'s `loadIsPlayoffParticipant`.
 - **Web surface.** `POST /api/faab/release` → the unit-tested `handleRelease` (identity gate → D4 + playoff-phase gates → `validateRelease` → `releaseRoster`; `release-unfillable` returns `needsConfirm` for a confirm-and-resubmit). `loadWaivers` threads the VIEW-DRIVEN `rosterCap` (was hardcoded 15), `isParticipant`, and the static `playoffForfeitDeadlineIso`. `ReleasePanel` mounts only for an over-cap playoff participant.
 - **`commish:trim` backstop (`apps/worker`).** `runTrimOverride` reuses the SAME `releaseRoster(..., {allowLocked})` (no new store port, no release logic in the CLI): commissioner gate + reason + playoff-phase gate; `--drop`/`--keep` (keep ⇒ complement); the unfillable warning surfaces in the dry-run plan and is auto-confirmed on `--apply`; `--allow-locked-slot` → the GUC. `--report` lists survivors over cap (never auto-cuts). `AuditRecord.command` widened to `"trim"` (+ a `released` field).
+
+## §21 — Playoff per-round cut application (`commish:advance`) + the `loadPlayoffs` read contract
+
+**Shipped (merge HELD):** `feat/playoff-round-application` (commits A→B→C→brain). The WRITE step of the guillotine ladder — applying each knockout round's cut. Runs AFTER §20's transition; reuses the untouched pure `selectGuillotineCuts`. **No DB migration** (the only schema-adjacent change is widening the `AuditRecord.command` TS union with `"advance"`). See also **DECISIONS.md → Playoff per-round cut application**.
+
+### Layering (where it sits)
+
+```
+@app/recompute (pure)            apps/worker/src/commish (IO at the edges)
+  guillotine.selectGuillotineCuts ─┐
+  playoffRound.resolveRoundCut  ───┼──→ advance.runRoundAdvance ──→ advanceStore.PlayoffAdvanceStore
+    (glue; never reimplements      │      (orchestrator: guards,       ├─ createPrismaPlayoffAdvanceStore
+     the selector)                 │       dry-run, audit)             └─ MemoryPlayoffAdvanceStore (tests)
+  standing.ManagerPeriodPoints  ───┘                                  cli.ts `advance` subcommand (parse + render)
+```
+
+- **`resolveRoundCut` (`packages/recompute/src/playoffRound.ts`, pure).** Glue above `selectGuillotineCuts`: `{ determined | needsCommissioner | invalid-tiebreak }`. `championAfterCut(aliveIds, eliminated)` = the lone-survivor predicate. `--break-tie` adjudication re-invokes the selector with the named managers' cumulative totals sunk below all (and spared tied managers' raised above) ⇒ recovers `(determined cuts) ∪ (named)` without duplicating the boundary math.
+- **`PlayoffAdvanceStore` (`advanceStore.ts`).** `loadRoundContext(leagueId, roundLabel)` assembles the knockout `period` (`cut_count`/`frozen_at`), the `alive` field with each manager's round score (`score_manager_period` for that period, 0 where absent) + **cumulative tournament total** (Σ `score_manager_period.points` over ALL the league's periods via the period relation — on the fly, no stored column), plus `alreadyCut` (≥1 entry stamped `eliminated_round == roundLabel`) and `uncutPriorRounds` (the ordering guard). `applyRoundCut` flips `alive → eliminated` (+ `eliminated_round`/`eliminated_at`) and the lone survivor `alive → champion` in ONE `$transaction`, idempotent via a conditional `alive → eliminated` claim (0 rows ⇒ already cut). Pinned end-to-end by a gated real-Postgres suite (`advanceStore.integration.test.ts`, `PLAYOFF_PG_TEST_URL`).
+- **`runRoundAdvance` (`advance.ts`, orchestrator).** Dry-run default; guards = commissioner gate, required reason, real round label, frozen precondition (`--allow-incomplete` override), ordering guard, champion/schedule sanity checks. A residual tie is surfaced in the dry-run and refused on `--apply` unless a valid `--break-tie`. One audit line per applied cut + the champion flip.
+- **`cli.ts` `advance` subcommand.** Parse + name-resolution (`--break-tie` takes team labels, resolved like `--team`) + Prisma store wiring + plan rendering. No resolution/application logic.
+
+### `loadPlayoffs` READ CONTRACT — for the NEXT (UI) thread (DEFINE only; loader NOT built here)
+
+The view-model the playoff UI loader will assemble, drawn from `design/design_reference/playoffs/data.jsx` `buildGuillotine`. **This thread DEFINES the contract; the loader + screens are the next thread.** Shape:
+
+```
+PlayoffsView {
+  totalRounds: number                 // KNOCKOUT_ROUNDS.length (5)
+  currentRoundIdx: number             // the live (or next) round's index
+  seeds: { managerId, seed, gW, gL, gPts }[]   // the seeded field (from final group standings)
+  seedOf: Record<managerId, seed>
+  rounds: PlayoffRoundView[]          // one per knockout round, R32→Final
+  aliveNow: number                    // alive count entering the current round
+  survivesNow: number                 // survivors after the current round's cut
+  me: { managerId, rank, points, safe|zone } | null   // the viewer's standing in the live round
+  reducedLineup: <viewer's 7-man playoff XI reference, from @app/lineup>
+  reinforcement: <FAAB reset-$100 + carried-waiver state, from @app/faab>
+}
+
+PlayoffRoundView {
+  idx: number
+  round: KnockoutRound                // "R32" | … | "Final"
+  status: "past" | "live" | "future"
+  fieldCount: number                  // alive entering this round
+  cutCount: number                    // period.cut_count
+  survives: number                    // fieldCount − cutCount
+  ranked: RankedRow[] | null          // null for "future"
+  survivors: managerId[] | null
+  eliminatedIds: managerId[] | null
+}
+
+RankedRow { managerId, seed, points, rank, state: "safe" | "zone" | "eliminated" }
+  // past  → state ∈ {safe, eliminated} read from playoff_entry (status / eliminated_round)
+  // live  → state ∈ {safe, zone};  "zone" = provisional cut, computed by running the SAME pure
+  //         selectGuillotineCuts on the in-progress round scores (so the displayed blade == the
+  //         eventual cut). A live boundary tie surfaces as "zone" for the whole tied set.
+  // future→ ranked is null (skeleton: only cutCount/survives known)
+```
+
+**Sources by round status:** `past` rounds read straight from `playoff_entry` (`status`, `eliminated_round`) + the frozen `score_manager_period`; the `live` round is DERIVED (provisional) from in-progress scores via `selectGuillotineCuts`; `future` rounds are skeletons (cut counts from `period.cut_count`, no ranking). The provisional cut line for the `live` round is the same selector this thread applies at freeze, so the UI's "facing the blade" set is consistent with the eventual write. The viewer's reduced-lineup reference and the FAAB reinforcement state reuse the existing `@app/lineup` / `@app/faab` reads.
