@@ -24,8 +24,10 @@
 import {
   FORMATION_BOUNDS,
   STARTING_XI_SIZE,
+  PLAYOFF_ROSTER,
   POSITIONS,
   type Position,
+  type PeriodKind,
   type PeriodStatus,
 } from "@app/shared";
 import {
@@ -36,6 +38,7 @@ import {
   playedPlayerStarted,
   voidedPlayerStarted,
   forfeitRequiresConfirm,
+  playoffRosterCap,
   wrongPeriod,
 } from "./errors";
 
@@ -67,11 +70,58 @@ export interface PeriodWindow {
   id: string;
   status: PeriodStatus;
   closesAt: Date | null;
+  /**
+   * The scoring window's kind (ARCHITECTURE.md §4). It selects the roster MODE: a `knockout_round`
+   * period is a guillotine playoff window (the reduced 7+2 roster, PLAYOFF_ROSTER + FORMATIONS_PO);
+   * anything else (or omitted, for back-compat) is the full 11-man group window. Mode is DERIVED here
+   * from the injected period data — never a global toggle — so the validator stays pure + testable.
+   */
+  kind?: PeriodKind;
 }
 
 export type LineupValidation = { ok: true } | { ok: false; error: LineupError };
 
 const fail = (error: LineupError): LineupValidation => ({ ok: false, error });
+
+/** The per-mode legality rules: the XI size, the optional roster cap, and the per-position bounds. */
+interface ModeRules {
+  /** Exactly this many distinct starters (group 11, playoff 7 = 1 GK + 6 outfield). */
+  xiSize: number;
+  /** Max active squad size, or null when the validator doesn't cap the squad (group: bounded elsewhere). */
+  rosterCap: number | null;
+  /** Per-position starter bounds — group `FORMATION_BOUNDS`, playoff derived from `PLAYOFF_ROSTER`. */
+  bounds: Record<Position, { min: number; max: number }>;
+}
+
+/**
+ * The playoff per-position bounds, DERIVED from PLAYOFF_ROSTER (not a second source of truth). The
+ * shared constant pins the mins (GK 1, DEF 2, MID 2, FWD 1) + exactly 6 outfield; the implied max for
+ * an outfield lane is `6 − (the other two mins)`. With those bounds the only complete shapes are
+ * exactly FORMATIONS_PO — 2-2-2 / 2-3-1 / 3-2-1 — so "formation ∈ FORMATIONS_PO" emerges, no extra
+ * constant needed.
+ */
+function playoffBounds(): Record<Position, { min: number; max: number }> {
+  const b = PLAYOFF_ROSTER.bounds;
+  const of = PLAYOFF_ROSTER.startingOutfield; // 6
+  return {
+    GK: { min: b.GK.min, max: b.GK.max },
+    DEF: { min: b.DEF.min, max: of - b.MID.min - b.FWD.min },
+    MID: { min: b.MID.min, max: of - b.DEF.min - b.FWD.min },
+    FWD: { min: b.FWD.min, max: of - b.DEF.min - b.MID.min },
+  };
+}
+
+/** Resolve the mode rules from the period kind. Knockout → playoff; everything else → group. */
+function modeRules(kind: PeriodKind | undefined): ModeRules {
+  if (kind === "knockout_round") {
+    return {
+      xiSize: PLAYOFF_ROSTER.starters,
+      rosterCap: PLAYOFF_ROSTER.cap,
+      bounds: playoffBounds(),
+    };
+  }
+  return { xiSize: STARTING_XI_SIZE, rosterCap: null, bounds: FORMATION_BOUNDS };
+}
 
 /**
  * Validate a proposed starting XI for `squad` in `period` at `now`.
@@ -93,10 +143,20 @@ export function validateLineup(
   now: Date,
   forfeitConfirmed: ReadonlySet<string> = new Set(),
 ): LineupValidation {
+  // Mode is derived from the period kind (knockout_round → playoff reduced roster; else group). All the
+  // size/cap/bound numbers below come from this one resolution — the only branch over the group rules.
+  const rules = modeRules(period.kind);
+
   // (1) Edit window — a closed wave, or a window whose clock has passed, accepts no edits at all.
   if (period.status === "closed") return fail(wrongPeriod("closed", period.status));
   if (period.closesAt !== null && now.getTime() >= period.closesAt.getTime()) {
     return fail(wrongPeriod("window-closed", period.status));
+  }
+
+  // (1b) Roster cap (playoff only) — the guillotine squad is capped at PLAYOFF_ROSTER.cap (9 = 7+2).
+  //      Group mode leaves the squad uncapped here (it's bounded by draft/FAAB, not this validator).
+  if (rules.rosterCap !== null && squad.length > rules.rosterCap) {
+    return fail(playoffRosterCap(squad.length, rules.rosterCap));
   }
 
   const positionOf = new Map(squad.map((p) => [p.playerId, p.position]));
@@ -107,9 +167,9 @@ export function validateLineup(
     if (!positionOf.has(id)) return fail(notYourPlayer(id));
   }
 
-  // (3) XI size — exactly 11 DISTINCT starters (a duplicate id collapses the set below 11).
-  if (starters.size !== STARTING_XI_SIZE) {
-    return fail(incompleteXi(starters.size, STARTING_XI_SIZE));
+  // (3) XI size — exactly `rules.xiSize` DISTINCT starters (group 11, playoff 7).
+  if (starters.size !== rules.xiSize) {
+    return fail(incompleteXi(starters.size, rules.xiSize));
   }
 
   // (4) Play-state rules (the forfeit model) — directional, one-way. Evaluated per slot against the
@@ -127,11 +187,13 @@ export function validateLineup(
     }
   }
 
-  // (5) Formation bounds — per-position counts among the starters (Theme B → FORMATION_BOUNDS).
+  // (5) Formation bounds — per-position counts among the starters (Theme B). The bound set is the
+  //     mode's: group FORMATION_BOUNDS, or the PLAYOFF_ROSTER-derived playoff bounds (whose only
+  //     complete shapes are FORMATIONS_PO).
   const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
   for (const id of proposedXI) counts[positionOf.get(id)!] += 1;
   for (const position of POSITIONS) {
-    const bound = FORMATION_BOUNDS[position];
+    const bound = rules.bounds[position];
     const n = counts[position];
     if (n < bound.min || n > bound.max) return fail(illegalFormation(position, n, bound));
   }

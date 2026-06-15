@@ -251,6 +251,162 @@ describe("validateLineup — precedence", () => {
   });
 });
 
+// ── Playoff mode (knockout_round) ──────────────────────────────────────────────
+// The reduced guillotine roster (DECISIONS.md Theme B → PLAYOFF_ROSTER): cap 9 = 7 starters + 2 bench,
+// 1 GK + 6 outfield, min 2 DEF / 2 MID / 1 FWD. With exactly 6 outfield + those mins, the ONLY legal
+// shapes are FORMATIONS_PO: 2-2-2 / 2-3-1 / 3-2-1. Mode derives from `period.kind === "knockout_round"`.
+const PO_SQUAD: SquadPlayer[] = [
+  { playerId: "gk1", position: "GK" },
+  { playerId: "d1", position: "DEF" },
+  { playerId: "d2", position: "DEF" },
+  { playerId: "d3", position: "DEF" },
+  { playerId: "m1", position: "MID" },
+  { playerId: "m2", position: "MID" },
+  { playerId: "m3", position: "MID" },
+  { playerId: "f1", position: "FWD" },
+  { playerId: "f2", position: "FWD" },
+]; // 9 men: 1 GK / 3 DEF / 3 MID / 2 FWD
+
+// A knockout window, open for edits.
+const KO: PeriodWindow = {
+  id: "r32",
+  status: "open",
+  closesAt: new Date("2026-06-12T18:00:00.000Z"),
+  kind: "knockout_round",
+};
+
+// The three legal playoff shapes (each 7 starters = 1 GK + 6 outfield).
+const XI_PO_231 = ["gk1", "d1", "d2", "m1", "m2", "m3", "f1"]; // 2-3-1
+const XI_PO_321 = ["gk1", "d1", "d2", "d3", "m1", "m2", "f1"]; // 3-2-1
+const XI_PO_222 = ["gk1", "d1", "d2", "m1", "m2", "f1", "f2"]; // 2-2-2
+
+describe("validateLineup — playoff mode (knockout_round)", () => {
+  it("accepts the three FORMATIONS_PO shapes (2-3-1 / 3-2-1 / 2-2-2)", () => {
+    ok(validateLineup(PO_SQUAD, XI_PO_231, NO_SLOTS, KO, NOW));
+    ok(validateLineup(PO_SQUAD, XI_PO_321, NO_SLOTS, KO, NOW));
+    ok(validateLineup(PO_SQUAD, XI_PO_222, NO_SLOTS, KO, NOW));
+  });
+
+  it("accepts a squad exactly at the cap (9 men) — the at-cap boundary passes (cap is `>`, not `>=`)", () => {
+    expect(PO_SQUAD).toHaveLength(9); // pin the boundary the accept cases above ride on
+    ok(validateLineup(PO_SQUAD, XI_PO_231, NO_SLOTS, KO, NOW));
+  });
+
+  it("rejects a roster over the cap of 9 (>2 bench: 10 men ⇒ 3 reserves)", () => {
+    const tenMan: SquadPlayer[] = [...PO_SQUAD, { playerId: "d4", position: "DEF" }];
+    const r = validateLineup(tenMan, XI_PO_231, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("playoff-roster-cap");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "playoff-roster-cap", have: 10, cap: 9 });
+  });
+
+  it("reports the roster cap BEFORE the XI size (cap is step 1b, size is step 3)", () => {
+    const tenMan: SquadPlayer[] = [...PO_SQUAD, { playerId: "d4", position: "DEF" }];
+    const eight = [...XI_PO_231, "f2"]; // over-cap squad AND a wrong-size (8) XI → cap wins
+    expect(code(validateLineup(tenMan, eight, NO_SLOTS, KO, NOW))).toBe("playoff-roster-cap");
+  });
+
+  it("rejects more than 7 starters (incomplete-xi, need 7 not 11)", () => {
+    const eight = [...XI_PO_231, "f2"]; // 8 selected
+    const r = validateLineup(PO_SQUAD, eight, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("incomplete-xi");
+    if (!r.ok) expect(r.error).toMatchObject({ have: 8, need: 7 });
+  });
+
+  it("rejects fewer than 7 starters", () => {
+    const r = validateLineup(PO_SQUAD, XI_PO_231.slice(0, 6), NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("incomplete-xi");
+    if (!r.ok) expect(r.error).toMatchObject({ have: 6, need: 7 });
+  });
+
+  it("rejects < 2 DEF", () => {
+    const xi = ["gk1", "d1", "m1", "m2", "m3", "f1", "f2"]; // 1-3-2: DEF 1 < 2
+    const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "DEF" });
+  });
+
+  it("rejects < 2 MID", () => {
+    const xi = ["gk1", "d1", "d2", "d3", "m1", "f1", "f2"]; // 3-1-2: MID 1 < 2
+    const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "MID" });
+  });
+
+  it("rejects < 1 FWD", () => {
+    const xi = ["gk1", "d1", "d2", "d3", "m1", "m2", "m3"]; // 3-3-0: FWD 0 < 1
+    const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "FWD" });
+  });
+
+  it("rejects 0 GK (< exactly 1)", () => {
+    const xi = ["d1", "d2", "d3", "m1", "m2", "m3", "f1"]; // 0 GK + 6 outfield... +f1 = 7, 0 GK
+    const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "GK" });
+  });
+
+  it("rejects 2 GK (> exactly 1) — synthetic 2-GK squad", () => {
+    const twoGk: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "gk2", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "d2", position: "DEF" },
+      { playerId: "m1", position: "MID" },
+      { playerId: "m2", position: "MID" },
+      { playerId: "m3", position: "MID" },
+      { playerId: "f1", position: "FWD" },
+      { playerId: "f2", position: "FWD" },
+    ]; // 9 men, 2 GK
+    const xi = ["gk1", "gk2", "d1", "d2", "m1", "m2", "f1"]; // 2 GK + 2 DEF + 2 MID + 1 FWD = 7
+    const r = validateLineup(twoGk, xi, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "GK" });
+  });
+
+  it("keeps the forfeit model in playoff mode: benching a played starter needs a confirm", () => {
+    const slots = [played("d1", /*isStarter*/ true)]; // d1 played
+    const xi = ["gk1", "d2", "d3", "m1", "m2", "m3", "f1"]; // 2-3-1, d1 benched, no confirm
+    expect(code(validateLineup(PO_SQUAD, xi, slots, KO, NOW))).toBe("forfeit-requires-confirm");
+    // …and ACCEPTS it once explicitly confirmed.
+    ok(validateLineup(PO_SQUAD, xi, slots, KO, NOW, new Set(["d1"])));
+  });
+
+  it("keeps the one-way door in playoff mode: a voided player can't be re-started even with a confirm", () => {
+    const slots = [played("d3", /*isStarter*/ false, /*voided*/ true)];
+    const xi = ["gk1", "d1", "d3", "m1", "m2", "m3", "f1"]; // d3 back in
+    expect(code(validateLineup(PO_SQUAD, xi, slots, KO, NOW, new Set(["d3"])))).toBe(
+      "voided-player-started",
+    );
+  });
+
+  it("checks the window first in playoff mode too (a closed knockout beats a formation error)", () => {
+    const closed: PeriodWindow = {
+      id: "r32",
+      status: "closed",
+      closesAt: null,
+      kind: "knockout_round",
+    };
+    const illegal = ["gk1", "d1", "m1", "m2", "m3", "f1", "f2"]; // 1 DEF
+    expect(code(validateLineup(PO_SQUAD, illegal, NO_SLOTS, closed, NOW))).toBe("wrong-period");
+  });
+});
+
+describe("validateLineup — group mode is unchanged by the playoff branch", () => {
+  it("an explicit group_md period keeps the 11-man XI + FORMATION_BOUNDS", () => {
+    const groupPeriod: PeriodWindow = { ...OPEN, kind: "group_md" };
+    ok(validateLineup(SQUAD, XI_442, NO_SLOTS, groupPeriod, NOW));
+    // 7 starters would be a complete playoff XI but is INCOMPLETE in group mode (needs 11).
+    expect(code(validateLineup(SQUAD, XI_442.slice(0, 7), NO_SLOTS, groupPeriod, NOW))).toBe(
+      "incomplete-xi",
+    );
+  });
+
+  it("no kind given ⇒ group mode (back-compat default)", () => {
+    ok(validateLineup(SQUAD, XI_442, NO_SLOTS, OPEN, NOW));
+  });
+});
+
 describe("validateLineup — purity", () => {
   it("is a pure function of its inputs (same args → same result, no throw on the clock)", () => {
     const a = validateLineup(SQUAD, XI_442, NO_SLOTS, OPEN, NOW);
