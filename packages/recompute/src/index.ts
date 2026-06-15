@@ -10,6 +10,7 @@ export * from "./adapter";
 export * from "./store";
 export * from "./standing";
 export * from "./guillotine";
+export * from "./playoffRound";
 export * from "./transition";
 export * from "./recompute";
 export * from "./freeze";
