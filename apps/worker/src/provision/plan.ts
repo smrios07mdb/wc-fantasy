@@ -5,7 +5,7 @@
  * REVERSE draft order, §4), and the `allowlist_email` set. No IO, no clock, no env — the runner
  * (cli.ts) applies this against the real DB. Defaults come from `LEAGUE_SEED_DEFAULTS` (single source).
  */
-import { LEAGUE_SEED_DEFAULTS, type PeriodKind } from "@app/shared";
+import { KNOCKOUT_ROUNDS, LEAGUE_SEED_DEFAULTS, type PeriodKind } from "@app/shared";
 
 export interface ProvisionLeague {
   name: string;
@@ -112,6 +112,22 @@ export function validateConfig(config: ProvisionConfig): string[] {
   const labels = [...config.groupMatchdays, ...config.knockoutRounds.map((k) => k.label)];
   if (new Set(labels).size !== labels.length) {
     errors.push("period labels (matchdays + knockout rounds) must be unique");
+  }
+
+  // Knockout labels must be EXACTLY the 5 canonical WC rounds (@app/shared KNOCKOUT_ROUNDS). The
+  // group→playoff transition writes the derived cut_counts by upserting on these labels, so any drift
+  // here would silently CREATE parallel knockout periods instead of updating the provisioned ones —
+  // fail loud at provision time rather than misfire at the (irreversible) transition.
+  const knockoutLabels = config.knockoutRounds.map((k) => k.label);
+  const canonical = new Set<string>(KNOCKOUT_ROUNDS);
+  const distinctKnockout = new Set(knockoutLabels);
+  if (
+    distinctKnockout.size !== KNOCKOUT_ROUNDS.length ||
+    [...distinctKnockout].some((l) => !canonical.has(l))
+  ) {
+    errors.push(
+      `knockout round labels must be exactly the ${KNOCKOUT_ROUNDS.length} WC rounds ${[...KNOCKOUT_ROUNDS].join(", ")} (got: ${knockoutLabels.join(", ") || "none"})`,
+    );
   }
 
   return errors;

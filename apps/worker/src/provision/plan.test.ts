@@ -73,6 +73,33 @@ describe("validateConfig", () => {
     });
     expect(validateConfig(dup)).toContainEqual(expect.stringMatching(/email/i));
   });
+
+  it("rejects knockout labels that drift from the canonical WC rounds (the transition upsert key)", () => {
+    // "Round of 32" ≠ "R32": the group→playoff transition upserts cut_counts by these labels, so a drift
+    // would silently create a parallel knockout period. Fail loud at provision time instead.
+    const drift = cfg({
+      knockoutRounds: [
+        { label: "Round of 32", cutCount: 2 },
+        { label: "R16", cutCount: 2 },
+        { label: "QF", cutCount: 1 },
+        { label: "SF", cutCount: 1 },
+        { label: "Final", cutCount: 1 },
+      ],
+    });
+    expect(validateConfig(drift)).toContainEqual(expect.stringMatching(/knockout round labels/i));
+  });
+
+  it("rejects a knockout set that is missing a round", () => {
+    const missing = cfg({
+      knockoutRounds: [
+        { label: "R32", cutCount: 2 },
+        { label: "R16", cutCount: 2 },
+        { label: "QF", cutCount: 1 },
+        { label: "SF", cutCount: 1 },
+      ],
+    });
+    expect(validateConfig(missing)).toContainEqual(expect.stringMatching(/knockout round labels/i));
+  });
 });
 
 describe("buildWaiverOrder — reverse draft order", () => {
