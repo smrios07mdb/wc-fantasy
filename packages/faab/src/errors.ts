@@ -224,3 +224,96 @@ export function faNotEligible(playerAddId: string): FaNotEligibleError {
     playerAddId,
   };
 }
+
+// ── roster-release errors (the playoff trim-down drop-only path) ───────────────
+// The immediate drop-only release a playoff advancer uses to trim 15 → ≤9 (DECISIONS §D trim-down). Unlike
+// a bid/FA grant this is a NET SHED (no add), so it has its own rejection family: a drop must be owned + not
+// locked-by-play, the squad can never fall below the 7-starter floor, and a 7–9-man end state that cannot
+// field a legal playoff XI is a CONFIRM-GATED warning (not a hard error) the caller surfaces and re-submits.
+
+/** A named release target is not actively owned by this manager. */
+export interface ReleaseNotOwnedError {
+  code: "release-not-owned";
+  message: string;
+  playerId: string;
+}
+
+/** The release named no players to drop (nothing to do). */
+export interface ReleaseNothingError {
+  code: "release-nothing";
+  message: string;
+}
+
+/** A release target has played this matchday (lineup_slot locked-on-play) — it can't be released yet
+ *  (unless the commissioner `--allow-locked-slot` carve-out is in force). */
+export interface ReleaseLockedError {
+  code: "release-locked";
+  message: string;
+  playerId: string;
+}
+
+/** The release would drop the squad below the playoff starter floor (7) — it could never field an XI. */
+export interface ReleaseBelowFloorError {
+  code: "release-below-floor";
+  message: string;
+  /** The squad size that would remain after the release. */
+  postCount: number;
+  /** The hard floor (PLAYOFF_ROSTER.starters = 7). */
+  floor: number;
+}
+
+/** SOFT-WARN (confirm-gated): the 7–9-man end state cannot field a legal playoff XI (a lane is too thin).
+ *  The caller surfaces this and re-submits with `confirmedUnfillable` to proceed deliberately. */
+export interface ReleaseUnfillableError {
+  code: "release-unfillable";
+  message: string;
+  /** The squad size that would remain after the release. */
+  postCount: number;
+}
+
+export type ReleaseError =
+  | ReleaseNotOwnedError
+  | ReleaseNothingError
+  | ReleaseLockedError
+  | ReleaseBelowFloorError
+  | ReleaseUnfillableError;
+
+export function releaseNotOwned(playerId: string): ReleaseNotOwnedError {
+  return {
+    code: "release-not-owned",
+    message: `you do not own player ${playerId}, so you cannot release him`,
+    playerId,
+  };
+}
+
+export function releaseNothing(): ReleaseNothingError {
+  return {
+    code: "release-nothing",
+    message: "no players selected to release",
+  };
+}
+
+export function releaseLocked(playerId: string): ReleaseLockedError {
+  return {
+    code: "release-locked",
+    message: `player ${playerId} has played this matchday and is locked — you can't release him until it ends`,
+    playerId,
+  };
+}
+
+export function releaseBelowFloor(postCount: number, floor: number): ReleaseBelowFloorError {
+  return {
+    code: "release-below-floor",
+    message: `releasing this many would leave ${postCount} player(s) — below the ${floor}-starter playoff floor`,
+    postCount,
+    floor,
+  };
+}
+
+export function releaseUnfillable(postCount: number): ReleaseUnfillableError {
+  return {
+    code: "release-unfillable",
+    message: `the resulting ${postCount}-man squad cannot field a legal playoff XI — confirm to release anyway`,
+    postCount,
+  };
+}

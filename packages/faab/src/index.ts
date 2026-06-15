@@ -8,9 +8,15 @@
  */
 export * from "./resolve";
 export * from "./validate";
+export * from "./release";
 export * from "./errors";
 export * from "./store";
 export * from "./window";
 export * from "./batchTime";
 export * from "./controller";
-export { MemoryFaabBatchStore, MemoryFaabBidStore, MemoryFaGrantStore } from "./memoryStore";
+export {
+  MemoryFaabBatchStore,
+  MemoryFaabBidStore,
+  MemoryFaGrantStore,
+  MemoryFaabReleaseStore,
+} from "./memoryStore";

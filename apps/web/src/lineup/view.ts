@@ -8,6 +8,7 @@
  */
 import {
   validateLineup,
+  squadCoversFormation,
   type SquadPlayer,
   type SlotState,
   type LineupValidation,
@@ -417,7 +418,9 @@ export function formationFillable(
   counts: Record<Position, number>,
   formation: FormationCounts,
 ): boolean {
-  return POSITIONS.every((pos) => counts[pos] >= formation[pos]);
+  // Single-sourced: delegates to @app/lineup's `squadCoversFormation` (the same primitive `canFieldPlayoffXI`
+  // uses) so the release flow and the lineup picker agree on "can these counts cover this shape" by construction.
+  return squadCoversFormation(counts, formation);
 }
 
 /**

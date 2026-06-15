@@ -100,7 +100,7 @@ interface ModeRules {
  * exactly FORMATIONS_PO — 2-2-2 / 2-3-1 / 3-2-1 — so "formation ∈ FORMATIONS_PO" emerges, no extra
  * constant needed.
  */
-function playoffBounds(): Record<Position, { min: number; max: number }> {
+export function playoffBounds(): Record<Position, { min: number; max: number }> {
   const b = PLAYOFF_ROSTER.bounds;
   const of = PLAYOFF_ROSTER.startingOutfield; // 6
   return {
@@ -109,6 +109,50 @@ function playoffBounds(): Record<Position, { min: number; max: number }> {
     MID: { min: b.MID.min, max: of - b.DEF.min - b.FWD.min },
     FWD: { min: b.FWD.min, max: of - b.DEF.min - b.MID.min },
   };
+}
+
+/**
+ * Does a squad SUPPLY a formation? True iff it owns >= the formation's count in every position. This is
+ * the single per-position cover primitive — the gap `validateLineup` does NOT check (the validator checks
+ * a *proposed XI* against the bounds, never that the roster has the bodies to build one). Both
+ * {@link canFieldPlayoffXI} here and apps/web's `formationFillable` consume THIS function, so there is one
+ * source of "can these counts cover this shape".
+ */
+export function squadCoversFormation(
+  counts: Record<Position, number>,
+  formation: Record<Position, number>,
+): boolean {
+  return POSITIONS.every((pos) => counts[pos] >= formation[pos]);
+}
+
+/**
+ * The complete playoff XI shapes (1 GK + 6 outfield) DERIVED from {@link playoffBounds} — not a second
+ * source of truth. Enumerating the lane bounds that sum to `PLAYOFF_ROSTER.startingOutfield` yields exactly
+ * 2-3-1 / 3-2-1 / 2-2-2 (the design's FORMATIONS_PO), so the offer-set emerges from the constant.
+ */
+function playoffXIShapes(): Record<Position, number>[] {
+  const bounds = playoffBounds();
+  const outfield = PLAYOFF_ROSTER.startingOutfield; // 6
+  const shapes: Record<Position, number>[] = [];
+  for (let def = bounds.DEF.min; def <= bounds.DEF.max; def++) {
+    for (let mid = bounds.MID.min; mid <= bounds.MID.max; mid++) {
+      for (let fwd = bounds.FWD.min; fwd <= bounds.FWD.max; fwd++) {
+        if (def + mid + fwd === outfield)
+          shapes.push({ GK: bounds.GK.min, DEF: def, MID: mid, FWD: fwd });
+      }
+    }
+  }
+  return shapes;
+}
+
+/**
+ * Can a squad with these per-position counts field SOME legal playoff XI? True iff it can supply at least
+ * one of the {@link playoffXIShapes}. This is the supply-gap test the @app/faab release validator runs on
+ * the POST-release counts: a 7–9-man playoff squad whose lanes are too lopsided to reach 1 GK + 6 outfield
+ * (e.g. 1 GK + 2 DEF + 2 MID + 1 FWD = 6 players, mins met but no shape reaches 6 starters) is unfillable.
+ */
+export function canFieldPlayoffXI(counts: Record<Position, number>): boolean {
+  return playoffXIShapes().some((shape) => squadCoversFormation(counts, shape));
 }
 
 /** Resolve the mode rules from the period kind. Knockout → playoff; everything else → group. */

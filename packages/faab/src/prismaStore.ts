@@ -19,19 +19,22 @@
  */
 import type { PrismaClient } from "@app/db";
 import { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "@app/lineup/prisma";
-import { rosterCapForLeagueStatus, type Position } from "@app/shared";
+import { rosterCapForLeagueStatus, type LeagueStatus, type Position } from "@app/shared";
 import type { BidInput, ManagerState } from "./resolve";
 import type {
   BatchContext,
   CommitBatchInput,
   FaabBatchStore,
   FaabBidStore,
+  FaabReleaseStore,
   FaGrantContext,
   FaGrantStore,
   FaTargetFacts,
   ManagerBidContext,
+  OverCapSurvivor,
   PersistedBid,
   PlayerFacts,
+  ReleaseContext,
 } from "./store";
 
 type Db = PrismaClient;
@@ -636,6 +639,176 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
         if (e instanceof FaConflict || isUniqueViolation(e)) return "conflict";
         throw e;
       }
+    },
+  };
+}
+
+// ── the playoff trim-down release adapter (DECISIONS §D trim-down) ──────────────────
+
+/**
+ * D4 participant gate, single-sourced: outside the playoff phase EVERYONE participates (so group flows are
+ * byte-identical); in the playoff phase a participant is a manager with an `alive` playoff_entry. Keyed on
+ * `status === 'alive'` (NOT row-exists) so a later per-round `eliminated` flip removes them — Phase-2 ready.
+ */
+export async function loadIsPlayoffParticipant(
+  db: Pick<Db, "playoffEntry">,
+  {
+    leagueStatus,
+    leagueId,
+    managerId,
+  }: { leagueStatus: LeagueStatus; leagueId: string; managerId: string },
+): Promise<boolean> {
+  if (leagueStatus !== "playoff") return true;
+  const entry = await db.playoffEntry.findUnique({
+    where: { leagueId_managerId: { leagueId, managerId } },
+    select: { status: true },
+  });
+  return entry?.status === "alive";
+}
+
+/**
+ * Thrown by the MANAGER release path's fail-loud slot-coverage guard: a dropped player was left with a
+ * still-locked lineup slot, meaning the lock set the validator used was stale (TOCTOU — the slot locked
+ * between validation and commit). The whole release transaction is rolled back rather than leaving a locked
+ * starter attached to a dropped player. The commissioner `allowLocked` path can release the locked slot.
+ */
+export class ReleaseStaleLockError extends Error {
+  constructor(public readonly playerIds: string[]) {
+    super(
+      `release aborted: drop target(s) ${playerIds.join(", ")} still hold a locked lineup slot — the lock state was stale (use the commissioner --allow-locked-slot path to release a played player)`,
+    );
+    this.name = "ReleaseStaleLockError";
+  }
+}
+
+export function createPrismaFaabReleaseStore(prisma: Db): FaabReleaseStore {
+  return {
+    async loadReleaseContext(managerId): Promise<ReleaseContext | null> {
+      const manager = await prisma.manager.findUnique({
+        where: { id: managerId },
+        select: { leagueId: true, league: { select: { status: true } } },
+      });
+      if (!manager) return null;
+      const { leagueId } = manager;
+      const status = manager.league.status;
+      const isPlayoffPhase = status === "playoff";
+
+      const rosterRows = await prisma.rosterPlayer.findMany({
+        where: { managerId, droppedAt: null },
+        select: { playerId: true, player: { select: { position: true } } },
+      });
+      const roster = rosterRows.map((r) => ({ playerId: r.playerId, position: r.player.position }));
+
+      // Locked-by-play set (lineup_slot.locked_at in a still-open matchday). ∅ in the R32 pre-kickoff
+      // trim window — every survivor droppable; once an R32 player has played he is in the set and locked.
+      const lockedPlayerIds = await findLockedSlotPlayerIds(prisma, {
+        managerId,
+        playerIds: roster.map((p) => p.playerId),
+      });
+
+      // The current trim window = the earliest still-open knockout period (R32). Best-effort hint passed to
+      // releaseRoster to scope a commissioner locked-slot release; null falls back to non-closed-period scope.
+      const currentPeriod = isPlayoffPhase
+        ? await prisma.period.findFirst({
+            where: { leagueId, kind: "knockout_round", status: { not: "closed" } },
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          })
+        : null;
+
+      const isPlayoffParticipant = await loadIsPlayoffParticipant(prisma, {
+        leagueStatus: status,
+        leagueId,
+        managerId,
+      });
+
+      return {
+        leagueId,
+        roster,
+        rosterCap: rosterCapForLeagueStatus(status),
+        lockedPlayerIds,
+        isPlayoffPhase,
+        isPlayoffParticipant,
+        currentPeriodId: currentPeriod?.id ?? null,
+      };
+    },
+
+    async releaseRoster(managerId, dropIds, { now, periodId, allowLocked }) {
+      const drops = [...new Set(dropIds)];
+      if (drops.length === 0) return { releasedSlots: 0 };
+
+      return prisma.$transaction(async (tx) => {
+        // Commissioner carve-out: a TRANSACTION-LOCAL GUC the lock-on-play DELETE trigger reads + exempts.
+        // Set ONLY for an --allow-locked-slot release; the manager path never sets it, so the latch holds.
+        if (allowLocked) await tx.$executeRawUnsafe("SET LOCAL app.commish_override = 'on'");
+
+        const manager = await tx.manager.findUnique({
+          where: { id: managerId },
+          select: { leagueId: true },
+        });
+        if (!manager) throw new Error(`releaseRoster: unknown manager ${managerId}`);
+        const { leagueId } = manager;
+
+        // (1) Drop the named players (active rows only — a re-run finds 0 and is a no-op).
+        await tx.rosterPlayer.updateMany({
+          where: { leagueId, managerId, playerId: { in: drops }, droppedAt: null },
+          data: { droppedAt: now },
+        });
+
+        // (2) Release each drop's lineup slots so a dropped starter stops scoring.
+        let releasedSlots = 0;
+        for (const playerId of drops) {
+          // Always release the UNLOCKED slots (the @app/lineup boundary — faab never touches lineup_slot).
+          releasedSlots += await releaseDroppedPlayerSlots(tx, { leagueId, managerId, playerId });
+          if (allowLocked) {
+            // Commissioner: also release the player's CURRENTLY-locked slot (a played starter) in the
+            // trim window. Scoped to the pinned period when known, else any still-open period — never the
+            // historical (closed-period) locked slots scoring still reads. The GUC exempts the trigger.
+            const periodFilter =
+              periodId != null
+                ? { id: periodId }
+                : { leagueId, status: { not: "closed" as const } };
+            const { count } = await tx.lineupSlot.deleteMany({
+              where: { managerId, playerId, lockedAt: { not: null }, period: periodFilter },
+            });
+            releasedSlots += count;
+          }
+        }
+
+        // (3) FAIL-LOUD slot-coverage guard (manager path): the released-slot set must cover every slotted
+        //     drop. If any drop is still locked in an open period, the injected lock set was stale (TOCTOU)
+        //     — abort rather than silently leave a locked starter attached to a dropped player.
+        if (!allowLocked) {
+          const stillLocked = await findLockedSlotPlayerIds(tx, { managerId, playerIds: drops });
+          if (stillLocked.size > 0) throw new ReleaseStaleLockError([...stillLocked]);
+        }
+
+        return { releasedSlots };
+      });
+    },
+
+    async listOverCapPlayoffSurvivors(leagueId): Promise<OverCapSurvivor[]> {
+      const league = await prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { status: true },
+      });
+      if (!league || league.status !== "playoff") return [];
+      const cap = rosterCapForLeagueStatus(league.status);
+
+      const alive = await prisma.playoffEntry.findMany({
+        where: { leagueId, status: "alive" },
+        select: { managerId: true },
+      });
+      if (alive.length === 0) return [];
+
+      const counts = await prisma.rosterPlayer.groupBy({
+        by: ["managerId"],
+        where: { leagueId, droppedAt: null, managerId: { in: alive.map((a) => a.managerId) } },
+        _count: { _all: true },
+      });
+      return counts
+        .filter((c) => c._count._all > cap)
+        .map((c) => ({ managerId: c.managerId, rosterCount: c._count._all, rosterCap: cap }));
     },
   };
 }

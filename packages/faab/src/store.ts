@@ -16,6 +16,7 @@
  */
 import type { Position } from "@app/shared";
 import type { BatchOutcome, BidInput, ManagerState } from "./resolve";
+import type { ReleaseRosterPlayer } from "./release";
 import type { PeriodWindowView } from "./window";
 
 // ── the cron's port ────────────────────────────────────────────────────────────
@@ -163,4 +164,53 @@ export interface FaGrantStore {
     runAt: Date;
     periodId?: string | null;
   }): Promise<"granted" | "conflict">;
+}
+
+// ── the playoff trim-down release port (DECISIONS §D trim-down) ─────────────────────
+
+/** The slice the release route + `commish:trim` read to validate + apply a drop-only release. */
+export interface ReleaseContext {
+  leagueId: string;
+  /** The manager's CURRENT active roster (id + position) — the validator's `roster`. */
+  roster: ReleaseRosterPlayer[];
+  /** The phase squad cap (15 group / 9 playoff), from `league.status`. */
+  rosterCap: number;
+  /** Of the roster, those LOCKED by play in a still-open matchday (∅ in the R32 pre-kickoff trim window). */
+  lockedPlayerIds: ReadonlySet<string>;
+  /** Is the league in its playoff phase (`status === 'playoff'`)? Release is offered only then. */
+  isPlayoffPhase: boolean;
+  /** D4 participant gate: NOT-playoff OR an `alive` playoff_entry. Non-participants can't release. */
+  isPlayoffParticipant: boolean;
+  /** The current open knockout period (the R32 trim window) id, or null when not in playoff / unresolved.
+   *  Passed back to {@link FaabReleaseStore.releaseRoster} as `periodId` to scope a commissioner
+   *  locked-slot release to exactly this period. */
+  currentPeriodId: string | null;
+}
+
+/** A playoff survivor still carrying more than the playoff cap (the `commish:trim --report` listing). */
+export interface OverCapSurvivor {
+  managerId: string;
+  rosterCount: number;
+  rosterCap: number;
+}
+
+export interface FaabReleaseStore {
+  /** The manager's release slice (roster + cap + locked set + participant flag), or null if unknown. */
+  loadReleaseContext(managerId: string): Promise<ReleaseContext | null>;
+  /**
+   * Apply a drop-only release in ONE transaction: set `roster_player.dropped_at = now` for `dropIds` and
+   * release their lineup slots (so a dropped starter stops scoring). The MANAGER path releases only
+   * UNLOCKED slots and then FAILS LOUD — aborting the transaction — if any drop is left with a still-locked
+   * slot (a stale injected lock set / TOCTOU); it never silently leaves a locked starter on a dropped
+   * player. The COMMISSIONER path (`allowLocked`) additionally releases a currently-locked slot under the
+   * `app.commish_override` GUC (which exempts the lock-on-play DELETE trigger). Returns the slots released.
+   */
+  releaseRoster(
+    managerId: string,
+    dropIds: readonly string[],
+    opts: { now: Date; periodId: string | null; allowLocked: boolean },
+  ): Promise<{ releasedSlots: number }>;
+  /** Playoff survivors (alive playoff_entry) whose active roster still exceeds the cap — the report read.
+   *  Returns [] outside the playoff phase (nothing to trim). */
+  listOverCapPlayoffSurvivors(leagueId: string): Promise<OverCapSurvivor[]>;
 }

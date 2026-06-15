@@ -8,19 +8,23 @@
  * NOT exported from the package root used by production — it lives here only for the controller tests
  * (the same arrangement as @app/draft's MemoryDraftStore).
  */
-import { SQUAD_SIZE, type Position } from "@app/shared";
+import { PLAYOFF_ROSTER, SQUAD_SIZE, type Position } from "@app/shared";
 import type { BidInput, ManagerState } from "./resolve";
+import type { ReleaseRosterPlayer } from "./release";
 import type {
   BatchContext,
   CommitBatchInput,
   FaabBatchStore,
   FaabBidStore,
+  FaabReleaseStore,
   FaGrantContext,
   FaGrantStore,
   FaTargetFacts,
   ManagerBidContext,
+  OverCapSurvivor,
   PersistedBid,
   PlayerFacts,
+  ReleaseContext,
 } from "./store";
 import type { PeriodWindowView } from "./window";
 
@@ -421,5 +425,94 @@ export class MemoryFaGrantStore implements FaGrantStore {
   /** The manager's budget — proves a $0 FA grant never debits it (claimFreeAgent never touches it). */
   budgetOf(managerId: string): number | undefined {
     return this.managers.get(managerId)?.faabBudget;
+  }
+}
+
+// ── the playoff trim-down release double (DECISIONS §D trim-down) ──────────────────
+
+interface MemReleaseManager {
+  managerId: string;
+  leagueId: string;
+  /** The manager's active roster (id + position) — mutated by releaseRoster. */
+  roster: ReleaseRosterPlayer[];
+  /** Phase squad cap (defaults to PLAYOFF_ROSTER.cap = 9). */
+  rosterCap?: number;
+  /** Players locked by play (undroppable on the manager path until the matchday ends). */
+  lockedPlayerIds?: string[];
+  /** Defaults true (playoff phase). */
+  isPlayoffPhase?: boolean;
+  /** D4 participant gate (defaults true). */
+  isPlayoffParticipant?: boolean;
+  currentPeriodId?: string | null;
+}
+
+export interface MemoryReleaseSeed {
+  managers: MemReleaseManager[];
+}
+
+/**
+ * In-memory {@link FaabReleaseStore} double for the release handler + `commish:trim` orchestrator tests.
+ * Models the manager's roster + locked set; `releaseRoster` drops players and, on the manager path, FAILS
+ * LOUD (throws) if a locked drop reaches it — the same TOCTOU divergence the Prisma adapter's guard catches.
+ */
+export class MemoryFaabReleaseStore implements FaabReleaseStore {
+  private readonly managers = new Map<string, MemReleaseManager>();
+
+  constructor(seed: MemoryReleaseSeed) {
+    for (const m of seed.managers) {
+      this.managers.set(m.managerId, { ...m, roster: m.roster.map((p) => ({ ...p })) });
+    }
+  }
+
+  async loadReleaseContext(managerId: string): Promise<ReleaseContext | null> {
+    const m = this.managers.get(managerId);
+    if (!m) return null;
+    return {
+      leagueId: m.leagueId,
+      roster: m.roster.map((p) => ({ ...p })),
+      rosterCap: m.rosterCap ?? PLAYOFF_ROSTER.cap,
+      lockedPlayerIds: new Set(m.lockedPlayerIds ?? []),
+      isPlayoffPhase: m.isPlayoffPhase ?? true,
+      isPlayoffParticipant: m.isPlayoffParticipant ?? true,
+      currentPeriodId: m.currentPeriodId ?? null,
+    };
+  }
+
+  async releaseRoster(
+    managerId: string,
+    dropIds: readonly string[],
+    opts: { now: Date; periodId: string | null; allowLocked: boolean },
+  ): Promise<{ releasedSlots: number }> {
+    const m = this.managers.get(managerId);
+    if (!m) throw new Error(`releaseRoster: unknown manager ${managerId}`);
+    const set = new Set(dropIds);
+    if (!opts.allowLocked) {
+      const stale = (m.lockedPlayerIds ?? []).filter((id) => set.has(id));
+      if (stale.length > 0) throw new Error(`release aborted: stale lock on ${stale.join(", ")}`);
+    } else {
+      m.lockedPlayerIds = (m.lockedPlayerIds ?? []).filter((id) => !set.has(id));
+    }
+    const before = m.roster.length;
+    m.roster = m.roster.filter((p) => !set.has(p.playerId));
+    return { releasedSlots: before - m.roster.length };
+  }
+
+  async listOverCapPlayoffSurvivors(leagueId: string): Promise<OverCapSurvivor[]> {
+    const out: OverCapSurvivor[] = [];
+    for (const m of this.managers.values()) {
+      if (m.leagueId !== leagueId) continue;
+      if ((m.isPlayoffPhase ?? true) !== true) continue;
+      if (m.isPlayoffParticipant === false) continue; // not an alive survivor
+      const cap = m.rosterCap ?? PLAYOFF_ROSTER.cap;
+      if (m.roster.length > cap) {
+        out.push({ managerId: m.managerId, rosterCount: m.roster.length, rosterCap: cap });
+      }
+    }
+    return out;
+  }
+
+  /** The manager's remaining roster ids — for assertions. */
+  rosterOf(managerId: string): string[] {
+    return (this.managers.get(managerId)?.roster ?? []).map((p) => p.playerId);
   }
 }
