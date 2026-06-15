@@ -17,12 +17,13 @@ import {
   evaluateProposal,
   fillEligibleIds,
   formationKeyOf,
-  GROUP_FORMATIONS,
+  formationSetForKind,
   isMovable,
   offeredFormations,
   reshapeToFormation,
   swapStarters,
 } from "../../src/lineup/view";
+import { PLAYOFF_ROSTER, STARTING_XI_SIZE } from "@app/shared";
 import type { SetLineupState } from "../../src/lineup/types";
 import {
   Bench,
@@ -98,23 +99,32 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     return set;
   }, [selected, squad, period, starterIds, pendingForfeits]);
 
-  // The shapes this manager can actually field right now = roster-fillable ∩ lock-legal. Only these are
-  // offered, so every pick lands on a complete, immediately-savable XI (the fix for an unfieldable default).
-  const offered = useMemo(() => offeredFormations(squad, period.locks), [squad, period.locks]);
+  // The formation offer-set is PERIOD-DRIVEN: a knockout_round period switches to the playoff reduced
+  // vocabulary (FORMATIONS_PO — 2-3-1 / 3-2-1 / 2-2-2, 7 starters); every other window is the 11-man
+  // group set. This is the one switch that turns the screen into the reduced variant.
+  const formationSet = useMemo(() => formationSetForKind(period.kind), [period.kind]);
+
+  // The shapes this manager can actually field right now = roster-fillable ∩ lock-legal, within the
+  // active mode's offer set. Only these are offered, so every pick lands on a complete, savable XI.
+  const offered = useMemo(
+    () => offeredFormations(squad, period.locks, formationSet),
+    [squad, period.locks, formationSet],
+  );
   const activeFormation = useMemo(() => formationKeyOf(squad, starterIds), [squad, starterIds]);
 
   // Pick a formation → reshape the starter set to it (locked starters kept, movable reserves promoted),
-  // then the existing swap + validate + save flow takes over. No new write path.
+  // then the existing swap + validate + save flow takes over. No new write path. The shape is resolved
+  // in the active mode's offer set, so a playoff window reshapes to a FORMATIONS_PO shape (7 starters).
   const onPickFormation = useCallback(
     (formation: string) => {
-      const counts = GROUP_FORMATIONS[formation as keyof typeof GROUP_FORMATIONS];
+      const counts = formationSet.formations[formation];
       if (!counts) return;
       const next = reshapeToFormation(squad, starterIds, period.locks, counts);
       setLineups((all) => ({ ...all, [activeId]: next }));
       setSelected(null);
       setJustSaved(false);
     },
-    [squad, period.locks, starterIds, activeId],
+    [squad, period.locks, starterIds, activeId, formationSet],
   );
 
   const onScore = useCallback((playerId: string) => setScorePlayerId(playerId), []);
@@ -271,6 +281,14 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
   const movable = squad.filter((p) => isMovable(period, p.id)).length;
 
+  // Reduced-roster mode is period-driven (DECISIONS Theme B): a knockout window is the 7+2 guillotine
+  // squad, not the 11-man group XI. Surface it in the hero so the manager knows which roster he's setting.
+  // The size is the spec constant (PLAYOFF_ROSTER.starters / STARTING_XI_SIZE) — never a second source.
+  const isPlayoffMode = period.kind === "knockout_round";
+  const rosterLabel = `${isPlayoffMode ? "Playoff XI" : "Starting XI"} · ${
+    isPlayoffMode ? PLAYOFF_ROSTER.starters : STARTING_XI_SIZE
+  } starters`;
+
   return (
     <div className="sl-screen">
       <header className="sl-topbar between">
@@ -283,6 +301,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
       <LockHero
         formationLabel={view.formationLabel}
+        rosterLabel={rosterLabel}
         movable={movable}
         locked={squad.length - movable}
         dirty={dirty}

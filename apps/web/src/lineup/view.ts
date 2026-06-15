@@ -12,7 +12,7 @@ import {
   type SlotState,
   type LineupValidation,
 } from "@app/lineup";
-import { POSITIONS, type Position } from "@app/shared";
+import { POSITIONS, type Position, type PeriodKind } from "@app/shared";
 import type { LineupPlayer, OpponentInfo, PeriodLineup, PeriodLock, StarterStatus } from "./types";
 
 export interface PitchSlot {
@@ -300,6 +300,7 @@ export function evaluateProposal(
       id: period.periodId,
       status: period.status,
       closesAt: period.closesAt ? new Date(period.closesAt) : null,
+      kind: period.kind, // knockout_round → the validator's playoff reduced-roster branch
     },
     now,
     forfeitConfirmed,
@@ -362,6 +363,43 @@ export type FormationKey = keyof typeof GROUP_FORMATIONS;
 /** The canonical group default (the design's `modeConf().def`) — used whenever the squad can field it. */
 export const DEFAULT_FORMATION_KEY: FormationKey = "4-3-3";
 
+/**
+ * The PLAYOFF (knockout) formation vocabulary (the design's `FORMATIONS_PO`; DECISIONS.md → Theme B).
+ * GK is always 1; the key is the outfield "DEF-MID-FWD" shape (each totals 6 outfield = 7 starters).
+ * These three are exactly the shapes legal under `PLAYOFF_ROSTER`'s bounds (min 2 DEF / 2 MID / 1 FWD),
+ * so the validator and this offer-set agree by construction — this is the discrete set the picker
+ * OFFERS in a knockout window, not a second source of the bound.
+ */
+export const PLAYOFF_FORMATIONS = {
+  "2-3-1": { GK: 1, DEF: 2, MID: 3, FWD: 1 },
+  "3-2-1": { GK: 1, DEF: 3, MID: 2, FWD: 1 },
+  "2-2-2": { GK: 1, DEF: 2, MID: 2, FWD: 2 },
+} as const satisfies Record<string, FormationCounts>;
+
+/** The canonical playoff default (the design's playoff `modeConf().def`). */
+export const PLAYOFF_DEFAULT_FORMATION_KEY = "2-3-1";
+
+/** A mode's discrete formation offer-set + its canonical default — selected by the period kind. */
+export interface FormationSet {
+  formations: Record<string, FormationCounts>;
+  defaultKey: string;
+}
+
+export const GROUP_FORMATION_SET: FormationSet = {
+  formations: GROUP_FORMATIONS,
+  defaultKey: DEFAULT_FORMATION_KEY,
+};
+
+export const PLAYOFF_FORMATION_SET: FormationSet = {
+  formations: PLAYOFF_FORMATIONS,
+  defaultKey: PLAYOFF_DEFAULT_FORMATION_KEY,
+};
+
+/** Resolve the formation offer-set from the period kind: knockout → playoff, everything else → group. */
+export function formationSetForKind(kind: PeriodKind | undefined): FormationSet {
+  return kind === "knockout_round" ? PLAYOFF_FORMATION_SET : GROUP_FORMATION_SET;
+}
+
 /** Tally a squad by playing position — the roster supply each formation is checked against. */
 export function rosterCounts(squad: readonly LineupPlayer[]): Record<Position, number> {
   const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
@@ -403,17 +441,24 @@ export function formationLockLegal(
   return POSITIONS.every((pos) => formation[pos] >= lockedCounts[pos]);
 }
 
-/** The shapes the picker surfaces = fillable ∩ lock-legal, in canonical order. */
+/**
+ * The shapes the picker surfaces = fillable ∩ lock-legal, in canonical order. The offer-set defaults to
+ * the group vocabulary; a knockout window passes {@link PLAYOFF_FORMATION_SET} so the playoff shapes
+ * (2-3-1 / 3-2-1 / 2-2-2) are offered instead.
+ */
 export function offeredFormations(
   squad: readonly LineupPlayer[],
   locks: readonly PeriodLock[],
-): FormationKey[] {
+  set: FormationSet = GROUP_FORMATION_SET,
+): string[] {
   const counts = rosterCounts(squad);
-  return (Object.keys(GROUP_FORMATIONS) as FormationKey[]).filter(
-    (key) =>
-      formationFillable(counts, GROUP_FORMATIONS[key]) &&
-      formationLockLegal(GROUP_FORMATIONS[key], locks, squad),
-  );
+  // Iterate ENTRIES (not keys) so each `shape` is a concrete FormationCounts — the offer-set's
+  // `formations` is a wide `Record<string, …>`, so a `[key]` lookup would type as `… | undefined`.
+  return Object.entries(set.formations)
+    .filter(
+      ([, shape]) => formationFillable(counts, shape) && formationLockLegal(shape, locks, squad),
+    )
+    .map(([key]) => key);
 }
 
 /** The current outfield shape ("DEF-MID-FWD") of a starter set — matches `buildPitch`'s formationLabel. */
@@ -430,15 +475,17 @@ export function formationKeyOf(
   return `${counts.DEF}-${counts.MID}-${counts.FWD}`;
 }
 
-/** First fillable formation, canonical 4-3-3 preferred, else the first fillable in canonical order. */
-export function defaultFormationKey(counts: Record<Position, number>): FormationKey {
-  if (formationFillable(counts, GROUP_FORMATIONS[DEFAULT_FORMATION_KEY]))
-    return DEFAULT_FORMATION_KEY;
-  return (
-    (Object.keys(GROUP_FORMATIONS) as FormationKey[]).find((key) =>
-      formationFillable(counts, GROUP_FORMATIONS[key]),
-    ) ?? DEFAULT_FORMATION_KEY
+/** First fillable formation, the set's canonical default preferred, else the first fillable in order. */
+export function defaultFormationKey(
+  counts: Record<Position, number>,
+  set: FormationSet = GROUP_FORMATION_SET,
+): string {
+  const def = set.formations[set.defaultKey];
+  if (def && formationFillable(counts, def)) return set.defaultKey;
+  const firstFillable = Object.entries(set.formations).find(([, shape]) =>
+    formationFillable(counts, shape),
   );
+  return firstFillable ? firstFillable[0] : set.defaultKey;
 }
 
 /**
@@ -475,7 +522,13 @@ export function reshapeToFormation(
  * (canonical 4-3-3 preferred), built in squad order. A 3-DEF squad opens on 3-4-3 — savable
  * immediately — instead of a blind 4-DEF default it can't fill (which capped it at 10 starters).
  */
-export function defaultStarterIds(squad: readonly LineupPlayer[]): string[] {
-  const key = defaultFormationKey(rosterCounts(squad));
-  return reshapeToFormation(squad, [], [], GROUP_FORMATIONS[key]);
+export function defaultStarterIds(
+  squad: readonly LineupPlayer[],
+  set: FormationSet = GROUP_FORMATION_SET,
+): string[] {
+  const key = defaultFormationKey(rosterCounts(squad), set);
+  // `key` is always a key of `set.formations` (defaultFormationKey returns one of its keys, or the
+  // set's default); the `?? []` only satisfies the wide-Record index type — it's unreachable.
+  const shape = set.formations[key];
+  return shape ? reshapeToFormation(squad, [], [], shape) : [];
 }

@@ -472,6 +472,9 @@ export function PeriodTabs({ periods, activeId, onSelect }: PeriodTabsProps) {
 
 export interface LockHeroProps {
   formationLabel: string;
+  /** The reduced-roster mode descriptor (e.g. "Playoff XI · 7 starters" / "Starting XI · 11 starters")
+   *  — period-driven, so a knockout window reads as the 7+2 guillotine squad, not the 11-man group XI. */
+  rosterLabel: string;
   movable: number;
   locked: number;
   /** The working XI differs from what's saved. */
@@ -480,13 +483,22 @@ export interface LockHeroProps {
   justSaved: boolean;
 }
 
-/** Compact summary hero: the formation + how many players are still movable vs frozen + save status. */
-export function LockHero({ formationLabel, movable, locked, dirty, justSaved }: LockHeroProps) {
+/** Compact summary hero: the formation + roster mode + how many players are movable vs frozen + save status. */
+export function LockHero({
+  formationLabel,
+  rosterLabel,
+  movable,
+  locked,
+  dirty,
+  justSaved,
+}: LockHeroProps) {
   return (
     <div className="sl-hero card">
       <div className="sl-hero-formation">
         <span className="t-label text-tertiary">Formation</span>
         <span className="t-h2 mono">{formationLabel}</span>
+        {/* Period-driven roster mode: makes the reduced playoff XI (7+2) legible vs the group XI (11). */}
+        <span className="sl-hero-roster t-micro text-tertiary">{rosterLabel}</span>
       </div>
       <div className="sl-hero-stats">
         <div className="sl-hero-stat">

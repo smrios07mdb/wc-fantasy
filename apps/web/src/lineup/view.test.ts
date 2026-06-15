@@ -52,6 +52,7 @@ function period(over: Partial<PeriodLineup> = {}): PeriodLineup {
   return {
     periodId: "md1",
     label: "MD1",
+    kind: "group_md",
     status: "open",
     closesAt: "2026-06-12T18:00:00.000Z",
     starterIds: XI,
