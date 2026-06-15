@@ -36,6 +36,8 @@ import { runLineupOverride, type LineupResult } from "./lineup";
 import { runTrimOverride, runTrimReport, type TrimResult, type TrimReportResult } from "./trim";
 import { runPlayoffTransition, type TransitionResult } from "./transition";
 import { createPrismaPlayoffTransitionStore } from "./transitionStore";
+import { runRoundAdvance, type AdvanceResult } from "./advance";
+import { createPrismaPlayoffAdvanceStore } from "./advanceStore";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolvePath(here, "../../../..");
@@ -458,6 +460,109 @@ function reportTransition(
   }
 }
 
+// ── playoff per-round cut application (Theme C — the guillotine ladder) ───────────────
+//   pnpm --filter @app/worker commish:advance \
+//     --as smrios07@gmail.com --round R32 \
+//     --reason "R32 frozen; applying the guillotine cut" [--break-tie "Team A,Team B"] \
+//     [--allow-incomplete] [--apply]
+// DRY-RUN by default: prints the round, FROZEN status, the alive field with each round score +
+// cumulative total, and the computed cut (or a boundary tie awaiting --break-tie). --apply runs the
+// IRREVERSIBLE cut in one transaction (idempotent — a re-run is a no-op). A residual tie is NEVER
+// auto-cut; the commissioner names exactly `cutsRemaining` managers via --break-tie (team labels).
+async function advanceCmd(argv: string[]): Promise<void> {
+  const { flags, bools } = parseFlags(argv);
+  const asEmail = reqFlag(flags, "as");
+  const roundLabel = reqFlag(flags, "round");
+  const reason = reqFlag(flags, "reason");
+  const apply = bools.has("apply");
+  const allowIncomplete = bools.has("allow-incomplete");
+  const breakTieRaw = flags["break-tie"]?.trim() ?? null;
+  const now = new Date();
+
+  const actor = await resolveActor(asEmail);
+  if (!isCommissionerActor(actor)) die(`${asEmail} is not the commissioner — advance refused`);
+
+  const leagueId = await leagueIdForActor(asEmail);
+  const teams = await loadTeams(leagueId);
+  const nameOf: Record<string, string> = {};
+  for (const t of teams) nameOf[t.managerId] = t.displayName;
+
+  // --break-tie names team labels; resolve each to a managerId (ambiguity aborts, never guesses).
+  let breakTie: string[] | null = null;
+  if (breakTieRaw) {
+    breakTie = breakTieRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((label) => pick(resolveTeam(teams, label), "team", label).managerId);
+  }
+
+  const res = await runRoundAdvance(
+    { now, store: createPrismaPlayoffAdvanceStore(prisma), log: (l) => console.log(l) },
+    {
+      actor,
+      leagueId,
+      roundLabel,
+      reason,
+      breakTie,
+      allowIncomplete,
+      apply,
+      nameOf,
+      timestamp: now.toISOString(),
+    },
+  );
+  reportAdvance(res, apply);
+}
+
+function reportAdvance(res: AdvanceResult, apply: boolean): void {
+  if ("plan" in res && res.plan) {
+    const p = res.plan;
+    const nm = new Map(p.field.map((f) => [f.managerId, f.name] as const));
+    const label = (id: string): string => nm.get(id) ?? id;
+    console.log("── commish:advance plan ────────────────────────────");
+    console.log(
+      `  round:    ${p.round}${p.isFinalRound ? " (FINAL)" : ""}  — cut ${p.cutCount ?? "?"}`,
+    );
+    console.log(
+      `  period:   ${p.frozen ? "FROZEN ✓" : "⚠ NOT FROZEN"}${p.alreadyCut ? "  (already cut)" : ""}`,
+    );
+    console.log("  alive field (round / cumulative):");
+    for (const f of p.field) {
+      console.log(
+        `     ${String(f.roundPoints).padStart(4)}  ${String(f.cumulativeTotal).padStart(5)}  ${f.name}`,
+      );
+    }
+    const r = p.resolution;
+    if (r?.kind === "determined") {
+      console.log(`  cut:      ${r.eliminated.map(label).join(", ")}`);
+      if (r.champion) console.log(`  champion: ${label(r.champion)} 🏆`);
+    } else if (r?.kind === "needsCommissioner") {
+      console.log(`  ⚠ TIE — cut ${r.cutsRemaining} of: ${r.tied.map(label).join(", ")}`);
+      console.log(`     re-run --apply --break-tie "<labels>" naming exactly ${r.cutsRemaining}`);
+    } else if (r?.kind === "invalid-tiebreak") {
+      console.log(`  ✖ ${r.reason}`);
+    }
+    console.log("────────────────────────────────────────────────────");
+  }
+  switch (res.status) {
+    case "planned":
+      console.log(
+        apply
+          ? "(nothing applied)"
+          : "DRY-RUN — re-run with --apply to execute the IRREVERSIBLE cut.",
+      );
+      break;
+    case "applied":
+      console.log("✓ round cut applied.");
+      break;
+    case "skipped":
+      console.log(`↷ skipped — ${res.reason}`);
+      break;
+    default:
+      die(res.reason); // refused / needs-commissioner
+  }
+}
+
 // ── playoff trim-down force-trim (DECISIONS §D) ───────────────────────────────────────
 //   pnpm --filter @app/worker commish:trim \
 //     --as smrios07@gmail.com --team "Los Dragones" --keep "Donnarumma,Hakimi,..." \
@@ -585,6 +690,9 @@ async function main(): Promise<void> {
     case "transition":
       await transitionCmd(rest);
       break;
+    case "advance":
+      await advanceCmd(rest);
+      break;
     default:
       console.error(
         "Usage:\n" +
@@ -592,7 +700,8 @@ async function main(): Promise<void> {
           "  commish lineup --as <email> --team <label> --period <label> --starters <csv> --reason <text> [--apply]\n" +
           "  commish trim --as <email> --team <label> (--drop <csv> | --keep <csv>) --reason <text> [--allow-locked-slot] [--apply]\n" +
           "  commish trim --as <email> --report\n" +
-          "  commish transition --as <email> --field <n> --reason <text> [--apply]",
+          "  commish transition --as <email> --field <n> --reason <text> [--apply]\n" +
+          "  commish advance --as <email> --round <R32|R16|QF|SF|Final> --reason <text> [--break-tie <labels>] [--allow-incomplete] [--apply]",
       );
       process.exit(1);
   }

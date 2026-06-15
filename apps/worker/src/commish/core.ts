@@ -138,7 +138,7 @@ export function relaxPeriodLock<T extends { status: string; closesAt: Date | nul
 // ── structured audit (stdout, not a table — the STOP-SEAM "no migration" rule) ──────
 
 export interface AuditRecord {
-  command: "roster" | "lineup" | "trim";
+  command: "roster" | "lineup" | "trim" | "advance";
   commissioner: string;
   team: string;
   managerId: string;
@@ -150,6 +150,10 @@ export interface AuditRecord {
   starters?: readonly string[];
   /** The players released this run (commish:trim) — the integrity trail for the drop-only force-trim. */
   released?: readonly string[];
+  /** The knockout round this cut applies to (commish:advance) — R32…Final. */
+  round?: string;
+  /** True when this advance cut resolved a boundary tie via `--break-tie` (commish:advance). */
+  tieAdjudicated?: boolean;
   reason: string;
   kickoffBypassed: boolean;
   /** The commissioner `--allow-locked-slot` carve-out recorded for the integrity trail (lineup / trim). */

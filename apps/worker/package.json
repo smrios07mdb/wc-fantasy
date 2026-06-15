@@ -11,6 +11,7 @@
     "commish:lineup": "tsx src/commish/cli.ts lineup",
     "commish:trim": "tsx src/commish/cli.ts trim",
     "commish:transition": "tsx src/commish/cli.ts transition",
+    "commish:advance": "tsx src/commish/cli.ts advance",
     "job:period-close": "tsx src/jobs/periodClose.ts",
     "job:recompute": "tsx src/jobs/recompute.ts",
     "job:rosters": "tsx src/jobs/syncRosters.ts",
