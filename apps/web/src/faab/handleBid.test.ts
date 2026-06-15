@@ -143,6 +143,34 @@ describe("handleSubmitBid — validation + persistence", () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it("D4: blocks a playoff non-participant (409 not-participant) without persisting", async () => {
+    const store = new MemoryFaabBidStore({
+      managers: [
+        {
+          managerId: "A",
+          leagueId: "L",
+          faabBudget: 100,
+          counts: { ...FULL },
+          squadSize: 15,
+          owned: new Set(["DROP"]),
+          isPlayoffParticipant: false, // eliminated / non-advancer in the playoff phase
+        },
+      ],
+      players: {
+        X: { position: "MID", periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z") },
+        DROP: { position: "MID", periodFirstKickoffAt: null },
+      },
+      leagueOwned: ["DROP"],
+    });
+    const res = await handleSubmitBid(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      submitBody,
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("not-participant");
+    expect(store.rows).toHaveLength(0);
+  });
 });
 
 describe("handleEditBid / handleCancelBid — self-scoped bid mutations", () => {

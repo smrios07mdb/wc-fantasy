@@ -115,6 +115,7 @@ export async function handleSubmitBid(
     ownedByLeague: ctx.ownedByLeague,
     acquisitionCutoffAt: addFacts.periodFirstKickoffAt,
     dropLocked,
+    isPlayoffParticipant: ctx.isPlayoffParticipant,
   });
   if (error) return bidErrorResult(error);
 
@@ -183,6 +184,7 @@ export async function handleEditBid(
       ownedByLeague: ctx.ownedByLeague,
       acquisitionCutoffAt: addFacts.periodFirstKickoffAt,
       dropLocked,
+      isPlayoffParticipant: ctx.isPlayoffParticipant,
     },
   );
   if (error) return bidErrorResult(error);

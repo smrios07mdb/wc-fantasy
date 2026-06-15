@@ -29,6 +29,7 @@ import {
   dropRequired,
   faNotEligible,
   faWindowClosed,
+  notParticipant,
   overBudget,
   rosterIllegal,
   type FaabBidError,
@@ -69,12 +70,20 @@ export interface BidValidationContext {
   /** Is the named drop LOCKED by play (lineup_slot.locked_at in a still-active matchday)? A locked drop
    *  has played this matchday and can't be dropped yet. False when there is no drop. */
   dropLocked: boolean;
+  /** D4 (trim-down) participant gate. The IO layer sets this `false` ONLY for a playoff non-participant (a
+   *  manager with no `alive` playoff_entry while `league.status === 'playoff'`); group-phase / pre-playoff
+   *  it is always `true`. Optional + DEFAULT-PARTICIPANT (absent ⇒ participates) so group behavior — and
+   *  every existing test — is byte-identical. */
+  isPlayoffParticipant?: boolean;
 }
 
 export function validateBidSubmission(
   sub: BidSubmission,
   ctx: BidValidationContext,
 ): FaabBidError | null {
+  // (0) D4: a playoff non-participant may not bid (inert in group — the flag is only ever false in playoff).
+  if (ctx.isPlayoffParticipant === false) return notParticipant(sub.managerId);
+
   // (1) amount ≥ 0 — $0 is the legal minimum.
   if (sub.amount < 0) return amountNegative(sub.amount);
 
@@ -116,10 +125,14 @@ export interface FaGrantValidationContext {
   rosterCap: number;
   ownedByManager: ReadonlySet<string>;
   dropLocked: boolean;
+  /** D4 (trim-down) participant gate — see {@link BidValidationContext.isPlayoffParticipant}. Optional +
+   *  default-participant (absent ⇒ participates) so group-phase FA grants are byte-identical. */
+  isPlayoffParticipant?: boolean;
 }
 
 /**
  * PURE validation for an instant $0 free-agency grant (DECISIONS §D amendment). Order:
+ *  0. D4: a playoff non-participant may not grab (inert in group).
  *  1. window: the add target's period must be in its free-agency phase (post-batch, pre-first-kickoff).
  *  2. eligibility: the target must be an open FA per the batch-clear snapshot (not live-unowned).
  *  3+4. the SAME drop + roster rules as a bid (shared `checkDropAndRoster`): drop ≠ add, drop owned,
@@ -130,6 +143,9 @@ export function validateFaGrant(
   sub: FaGrantSubmission,
   ctx: FaGrantValidationContext,
 ): FaGrantError | null {
+  // (0) D4: a playoff non-participant may not grab (inert in group — the flag is only ever false in playoff).
+  if (ctx.isPlayoffParticipant === false) return notParticipant(sub.managerId);
+
   // (1) window: accept ONLY in the free-agency phase.
   if (ctx.windowState !== "free-agency") return faWindowClosed(ctx.windowState);
 

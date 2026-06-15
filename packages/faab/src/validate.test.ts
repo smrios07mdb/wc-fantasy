@@ -157,6 +157,17 @@ describe("validateBidSubmission", () => {
       validateBidSubmission(sub({ addPosition: "DEF", dropPosition: "DEF" }), ctx()),
     ).toBeNull();
   });
+
+  // D4 (trim-down) participant gate.
+  it("rejects a playoff non-participant before any other rule", () => {
+    const e = validateBidSubmission(sub({ amount: -5 }), ctx({ isPlayoffParticipant: false }));
+    expect(e).toMatchObject({ code: "not-participant", managerId: "A" });
+  });
+
+  it("is inert when the participant flag is true or absent (group-phase byte-identical)", () => {
+    expect(validateBidSubmission(sub(), ctx({ isPlayoffParticipant: true }))).toBeNull();
+    expect(validateBidSubmission(sub(), ctx())).toBeNull(); // absent ⇒ participates
+  });
 });
 
 /**
@@ -299,5 +310,19 @@ describe("roster cap is mode-aware (15 group / 9 playoff)", () => {
       code: "roster-illegal",
       cap: 9,
     });
+  });
+
+  // D4 (trim-down) participant gate.
+  it("FA grant: rejects a playoff non-participant before the window/eligibility checks", () => {
+    const e = validateFaGrant(
+      faSub(),
+      faCtx({ windowState: "sealed-bid", isPlayoffParticipant: false }),
+    );
+    expect(e).toMatchObject({ code: "not-participant", managerId: "A" });
+  });
+
+  it("FA grant: is inert when the participant flag is true or absent", () => {
+    expect(validateFaGrant(faSub(), faCtx({ isPlayoffParticipant: true }))).toBeNull();
+    expect(validateFaGrant(faSub(), faCtx())).toBeNull();
   });
 });

@@ -61,7 +61,12 @@ function bid(
 function input(
   managers: ManagerState[],
   bids: BidInput[],
-  extra: { now?: Date; ownedByLeague?: string[]; rosterCap?: number } = {},
+  extra: {
+    now?: Date;
+    ownedByLeague?: string[];
+    rosterCap?: number;
+    participantManagerIds?: ReadonlySet<string> | null;
+  } = {},
 ): ResolveBatchInput {
   // Each manager owns its own default drop target so a MID-for-MID swap is always legal.
   const owned = new Set(extra.ownedByLeague ?? []);
@@ -72,6 +77,7 @@ function input(
     bids,
     ownedByLeague: owned,
     rosterCap: extra.rosterCap ?? 15, // group cap by default; playoff cases pass 9
+    participantManagerIds: extra.participantManagerIds,
   };
 }
 
@@ -439,5 +445,29 @@ describe("playoff phase — the injected squad cap (rosterCap) drops 15 → 9", 
       ),
     );
     expect(wonBids(out)).toHaveLength(2);
+  });
+});
+
+// ── D4 (trim-down): the non-participant resolver backstop ───────────────────────
+describe("non-participant backstop (playoff)", () => {
+  it("voids + refunds a non-participant's bid that reaches the batch, awarding the participant", () => {
+    const alive = mgr("ALIVE", 1, { owned: ["ALIVE-drop"] });
+    const cut = mgr("CUT", 2, { owned: ["CUT-drop"] });
+    const cutBid = bid("CUT", "STAR", 50); // higher amount, but not a participant
+    const aliveBid = bid("ALIVE", "STAR", 10);
+    const out = resolveFaabBatch(
+      input([alive, cut], [cutBid, aliveBid], { participantManagerIds: new Set(["ALIVE"]) }),
+    );
+    expect(resolutionFor(out, cutBid.bidId).outcome).toBe("voided_refunded");
+    expect(resolutionFor(out, aliveBid.bidId).outcome).toBe("won"); // ALIVE wins despite the lower bid
+  });
+
+  it("is inert when participantManagerIds is absent — everyone competes (group byte-identical)", () => {
+    const a = mgr("A", 1, { owned: ["A-drop"] });
+    const b = mgr("B", 2, { owned: ["B-drop"] });
+    const bHi = bid("B", "STAR", 50);
+    const aLo = bid("A", "STAR", 10);
+    const out = resolveFaabBatch(input([a, b], [bHi, aLo])); // no participant set
+    expect(resolutionFor(out, bHi.bidId).outcome).toBe("won"); // B wins on amount, never voided
   });
 });

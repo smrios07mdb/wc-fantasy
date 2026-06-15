@@ -183,12 +183,27 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
         amount: b.amount,
       }));
 
+      // D4 (trim-down): in the playoff phase the batch competes ONLY the `alive` playoff_entry holders —
+      // the resolver voids any other manager's bid. Null in group / pre-playoff (everyone participates).
+      const participantManagerIds =
+        league.status === "playoff"
+          ? new Set(
+              (
+                await prisma.playoffEntry.findMany({
+                  where: { leagueId, status: "alive" },
+                  select: { managerId: true },
+                })
+              ).map((e) => e.managerId),
+            )
+          : null;
+
       return {
         leagueId,
         managers,
         bids,
         ownedByLeague,
         rosterCap: rosterCapForLeagueStatus(league.status),
+        participantManagerIds,
       };
     },
 
@@ -316,6 +331,11 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
         counts[r.player.position] += 1;
         ownedByManager.add(r.playerId);
       }
+      const isPlayoffParticipant = await loadIsPlayoffParticipant(prisma, {
+        leagueStatus: manager.league.status,
+        leagueId: manager.leagueId,
+        managerId,
+      });
       return {
         leagueId: manager.leagueId,
         faabBudget: manager.faabBudget,
@@ -324,6 +344,7 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
         rosterCap: rosterCapForLeagueStatus(manager.league.status),
         ownedByManager,
         ownedByLeague: new Set(leagueRows.map((r) => r.playerId)),
+        isPlayoffParticipant,
       };
     },
 
@@ -533,12 +554,18 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
         counts[r.player.position] += 1;
         ownedByManager.add(r.playerId);
       }
+      const isPlayoffParticipant = await loadIsPlayoffParticipant(prisma, {
+        leagueStatus: manager.league.status,
+        leagueId: manager.leagueId,
+        managerId,
+      });
       return {
         leagueId: manager.leagueId,
         counts,
         squadSize: mine.length,
         rosterCap: rosterCapForLeagueStatus(manager.league.status),
         ownedByManager,
+        isPlayoffParticipant,
       };
     },
 

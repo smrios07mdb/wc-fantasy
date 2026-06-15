@@ -69,6 +69,11 @@ export interface ResolveBatchInput {
    *  layer from `league.status` (`rosterCapForLeagueStatus`); the award legality re-checks it per award
    *  so the batch can never push a manager over the cap by stacking no-drop wins. */
   rosterCap: number;
+  /** D4 (trim-down) resolver backstop. When set (the league is in its playoff phase), ONLY these managers
+   *  — the `alive` playoff_entry holders — compete; every OTHER manager's bid is VOIDED + refunded in the
+   *  pre-loop, behind the submission gate. `null`/`undefined` ⇒ everyone participates (the group phase),
+   *  so group batches are byte-identical. */
+  participantManagerIds?: ReadonlySet<string> | null;
 }
 
 /** Why a bid lost (it neither won nor was voided). */
@@ -129,15 +134,20 @@ interface WorkingManager {
 const HUGE = Number.MAX_SAFE_INTEGER;
 
 export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
-  const { now, managers, bids, ownedByLeague, rosterCap } = inputArg;
+  const { now, managers, bids, ownedByLeague, rosterCap, participantManagerIds } = inputArg;
 
   const resolutions: BidResolution[] = [];
   const resolved = new Set<string>();
 
-  // (1) Void + refund: any bid whose add target has already kicked off does not compete.
+  // (1) Void + refund (the pre-loop split): a bid does not compete if its add target already kicked off,
+  //     OR (D4 trim-down) the bidder is not a playoff participant — the resolver backstop behind the
+  //     submission gate. `participantManagerIds` null ⇒ everyone participates (group phase, byte-identical).
   const competing: BidInput[] = [];
   for (const b of bids) {
-    if (b.addTargetKickoffAt !== null && b.addTargetKickoffAt.getTime() <= now.getTime()) {
+    const kickedOff =
+      b.addTargetKickoffAt !== null && b.addTargetKickoffAt.getTime() <= now.getTime();
+    const nonParticipant = participantManagerIds != null && !participantManagerIds.has(b.managerId);
+    if (kickedOff || nonParticipant) {
       resolutions.push({ bidId: b.bidId, managerId: b.managerId, outcome: "voided_refunded" });
       resolved.add(b.bidId);
     } else {

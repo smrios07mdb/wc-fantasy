@@ -31,6 +31,9 @@ export interface BatchContext {
   ownedByLeague: ReadonlySet<string>;
   /** The squad roster cap for the league's phase (15 group / 9 playoff), from `league.status`. */
   rosterCap: number;
+  /** D4 (trim-down): the `alive` playoff_entry holders when the league is in its playoff phase, else null
+   *  (group / pre-playoff — everyone participates). The resolver voids any non-participant's bid. */
+  participantManagerIds?: ReadonlySet<string> | null;
 }
 
 export interface CommitBatchInput {
@@ -66,6 +69,9 @@ export interface ManagerBidContext {
   rosterCap: number;
   ownedByManager: ReadonlySet<string>;
   ownedByLeague: ReadonlySet<string>;
+  /** D4 (trim-down): false ONLY for a playoff non-participant (no `alive` playoff_entry while
+   *  `league.status === 'playoff'`); true in group / pre-playoff. Threaded into the submission validator. */
+  isPlayoffParticipant: boolean;
 }
 
 /** Per-player facts the route needs about the add/drop targets. */
@@ -129,6 +135,8 @@ export interface FaGrantContext {
   /** The squad roster cap for the league's phase (15 group / 9 playoff), from `league.status`. */
   rosterCap: number;
   ownedByManager: ReadonlySet<string>;
+  /** D4 (trim-down): false ONLY for a playoff non-participant; true in group / pre-playoff. */
+  isPlayoffParticipant: boolean;
 }
 
 /** The add target's facts for a $0 FA grant: position, its period's acquisition window, and whether it

@@ -21,7 +21,8 @@ export type FaabBidErrorCode =
   | "drop-not-owned"
   | "drop-equals-add"
   | "drop-locked"
-  | "roster-illegal";
+  | "roster-illegal"
+  | "not-participant";
 
 /** The bid amount is below the $0 minimum. */
 export interface AmountNegativeError {
@@ -89,6 +90,16 @@ export interface RosterIllegalError {
   cap: number;
 }
 
+/** D4 (trim-down): the manager is not a playoff PARTICIPANT — in the playoff phase only a manager with an
+ *  `alive` playoff_entry may bid / grab / release. A non-advancer (or an eliminated survivor) is rejected.
+ *  INERT in the group phase: there the IO layer marks everyone a participant, so this never fires. Shared by
+ *  the bid, the $0 FA grant, and the release path (defense-in-depth in front of the resolver backstop). */
+export interface NotParticipantError {
+  code: "not-participant";
+  message: string;
+  managerId: string;
+}
+
 export type FaabBidError =
   | AmountNegativeError
   | OverBudgetError
@@ -98,7 +109,8 @@ export type FaabBidError =
   | DropNotOwnedError
   | DropEqualsAddError
   | DropLockedError
-  | RosterIllegalError;
+  | RosterIllegalError
+  | NotParticipantError;
 
 // ── $0 free-agency grant errors (Prompt 48) ───────────────────────────────────
 // The instant $0 FA pickup (DECISIONS §D amendment) shares the drop/roster errors above but adds two
@@ -128,8 +140,13 @@ export type DropRosterError =
   | DropLockedError
   | RosterIllegalError;
 
-/** The grant rejection family — the shared drop/roster errors plus the two FA-specific ones. */
-export type FaGrantError = FaWindowClosedError | FaNotEligibleError | DropRosterError;
+/** The grant rejection family — the shared drop/roster errors plus the two FA-specific ones (+ the D4
+ *  participant gate, shared with the bid path). */
+export type FaGrantError =
+  | FaWindowClosedError
+  | FaNotEligibleError
+  | NotParticipantError
+  | DropRosterError;
 
 // ── constructors (centralise the messages) ────────────────────────────────────
 
@@ -222,6 +239,14 @@ export function faNotEligible(playerAddId: string): FaNotEligibleError {
     code: "fa-not-eligible",
     message: `player ${playerAddId} is not an open free agent this period (claimed, or released into the next period's batch pool)`,
     playerAddId,
+  };
+}
+
+export function notParticipant(managerId: string): NotParticipantError {
+  return {
+    code: "not-participant",
+    message: "you are not in the playoff field — waiver moves are closed for you",
+    managerId,
   };
 }
 

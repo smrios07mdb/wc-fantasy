@@ -214,6 +214,30 @@ describe("handleFaGrant — window + eligibility + grant", () => {
     expect(storeB.grants).toHaveLength(0);
   });
 
+  it("D4: blocks a playoff non-participant (409 not-participant) without granting", async () => {
+    const store = new MemoryFaGrantStore({
+      managers: [
+        {
+          managerId: "A",
+          leagueId: "L",
+          faabBudget: 100,
+          counts: { ...FULL },
+          squadSize: 15,
+          owned: new Set(["DROP"]),
+          isPlayoffParticipant: false, // eliminated / non-advancer in the playoff phase
+        },
+      ],
+      players: { X: { position: "MID", window: FA_WINDOW, faEligible: true } },
+    });
+    const res = await handleFaGrant(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      { managerId: "A", playerAddId: "X", playerDropId: null },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("not-participant");
+    expect(store.grants).toHaveLength(0);
+  });
+
   it("allows GK-for-MID on a full squad now the per-position cap is lifted (Prompt 44 → @app/faab)", async () => {
     // Was a 409 roster-illegal (GK 2→3 over the old cap); the FAAB per-position cap is retired, so the
     // grant now lands — only the 15-man total (unchanged here) gates a claim end-to-end through the route.

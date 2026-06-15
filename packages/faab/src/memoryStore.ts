@@ -48,6 +48,8 @@ export interface MemorySeed {
   managers: ManagerState[];
   /** The league's phase squad cap (15 group / 9 playoff). Defaults to the group cap. */
   rosterCap?: number;
+  /** D4 (trim-down): the playoff participants — null/undefined ⇒ everyone competes (group). */
+  participantManagerIds?: ReadonlySet<string> | null;
 }
 
 export class MemoryFaabBatchStore implements FaabBatchStore {
@@ -55,6 +57,7 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
   private readonly managers: Map<string, MemManager>;
   private readonly bids: MemBid[] = [];
   private readonly rosterCap: number;
+  private readonly participantManagerIds: ReadonlySet<string> | null;
   readonly batches: { id: string; runAt: Date }[] = [];
   /** Periods this store has already cleared — the in-memory mirror of `period.batch_cleared_at IS NULL`
    *  conditional claim (the once-only entry gate). */
@@ -63,6 +66,7 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
   constructor(seed: MemorySeed) {
     this.leagueId = seed.leagueId;
     this.rosterCap = seed.rosterCap ?? SQUAD_SIZE;
+    this.participantManagerIds = seed.participantManagerIds ?? null;
     this.managers = new Map(
       seed.managers.map((m) => [
         m.managerId,
@@ -99,6 +103,7 @@ export class MemoryFaabBatchStore implements FaabBatchStore {
         .map(({ status: _s, batchId: _b, ...bid }) => bid),
       ownedByLeague: owned,
       rosterCap: this.rosterCap,
+      participantManagerIds: this.participantManagerIds,
     };
   }
 
@@ -181,6 +186,8 @@ interface MemBidManager {
   /** The league's phase squad cap (15 group / 9 playoff). Defaults to the group cap. */
   rosterCap?: number;
   owned: Set<string>;
+  /** D4 (trim-down): defaults to true (participant) so existing group-phase tests are unchanged. */
+  isPlayoffParticipant?: boolean;
 }
 
 export interface MemoryBidSeed {
@@ -224,6 +231,7 @@ export class MemoryFaabBidStore implements FaabBidStore {
       rosterCap: m.rosterCap ?? SQUAD_SIZE,
       ownedByManager: new Set(m.owned),
       ownedByLeague: new Set(this.leagueOwned),
+      isPlayoffParticipant: m.isPlayoffParticipant ?? true,
     };
   }
 
@@ -314,6 +322,8 @@ interface MemFaManager {
   /** The league's phase squad cap (15 group / 9 playoff). Defaults to the group cap. */
   rosterCap?: number;
   owned: Set<string>;
+  /** D4 (trim-down): defaults to true (participant) so existing group-phase tests are unchanged. */
+  isPlayoffParticipant?: boolean;
 }
 
 export interface MemoryFaGrantSeed {
@@ -360,6 +370,7 @@ export class MemoryFaGrantStore implements FaGrantStore {
       counts: { ...m.counts },
       squadSize: m.squadSize,
       rosterCap: m.rosterCap ?? SQUAD_SIZE,
+      isPlayoffParticipant: m.isPlayoffParticipant ?? true,
       ownedByManager: new Set(m.owned),
     };
   }

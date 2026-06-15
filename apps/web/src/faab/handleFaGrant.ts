@@ -85,6 +85,7 @@ export async function handleFaGrant(deps: FaGrantDeps, body: FaGrantBody): Promi
       rosterCap: ctx.rosterCap,
       ownedByManager: ctx.ownedByManager,
       dropLocked,
+      isPlayoffParticipant: ctx.isPlayoffParticipant,
     },
   );
   if (error) return grantErrorResult(error);
