@@ -47,6 +47,10 @@ export interface TransitionContext {
   managers: TransitionManager[];
   /** Active roster size per manager — drives the dry-run "release N players" line (not load-bearing). */
   activeRosterSizeByManager: Record<string, number>;
+  /** Labels of group_md periods NOT yet frozen (`frozen_at IS NULL`) — i.e. whose results are not final.
+   *  Empty ⇒ the group standings are settled and safe to seed the bracket from. The precondition guard
+   *  refuses an --apply over a non-empty list unless `allowIncompleteStandings`. */
+  unfinalizedGroupPeriods: string[];
   /** The R32 period's cadence inputs → the trim deadline (= first playoff batch); null if no R32 period. */
   r32Cadence: PeriodCadenceView | null;
 }
@@ -79,6 +83,9 @@ export interface TransitionPlan {
   /** The trim deadline = the first playoff (R32) batch instant; null when R32 fixtures are not yet synced
    *  (the deadline is DERIVED, not stored — the 9-cap blocks adds until a manager has trimmed). */
   trimDeadlineAt: Date | null;
+  /** Group periods not yet frozen at derivation time (the precondition status, surfaced in the dry-run).
+   *  Empty ⇒ standings final. Non-empty appears only when seeding via `--allow-incomplete-standings`. */
+  unfinalizedGroupPeriods: string[];
 }
 
 // ── the store port (IO) ───────────────────────────────────────────────────────────────
@@ -135,6 +142,7 @@ export function buildTransitionPlan(
     waiverOrder,
     trimCap: PLAYOFF_ROSTER.cap,
     trimDeadlineAt: ctx.r32Cadence ? effectiveBatchAt(ctx.r32Cadence, leadMs) : null,
+    unfinalizedGroupPeriods: ctx.unfinalizedGroupPeriods,
   };
 }
 
@@ -153,6 +161,9 @@ export interface TransitionInput {
   /** The commissioner-chosen playoff field size (e.g. 8 or 10), fixed at the transition (Theme C). */
   fieldSize: number;
   reason: string;
+  /** Override the "all group periods frozen" precondition — seed the bracket from provisional standings.
+   *  Default false: the transition is irreversible, so it refuses over not-yet-final group results. */
+  allowIncompleteStandings: boolean;
   apply: boolean;
 }
 
@@ -195,6 +206,19 @@ export async function runPlayoffTransition(
     return {
       status: "refused",
       reason: "no group standings found — recompute standings before transitioning",
+    };
+  }
+
+  // (1b) Finality precondition: the transition is IRREVERSIBLE and seeds the whole bracket, so it refuses
+  //      over not-yet-final group results (any group_md period still unfrozen) unless the commissioner
+  //      explicitly overrides. The dry-run always REPORTS the status (see the plan), so it is eyeballable.
+  if (ctx.unfinalizedGroupPeriods.length > 0 && !input.allowIncompleteStandings) {
+    return {
+      status: "refused",
+      reason:
+        `group standings are not final — ${ctx.unfinalizedGroupPeriods.length} group period(s) not yet ` +
+        `frozen (${ctx.unfinalizedGroupPeriods.join(", ")}); finalize them, or pass ` +
+        `--allow-incomplete-standings to seed from provisional standings`,
     };
   }
 

@@ -342,15 +342,18 @@ function reportLineup(res: LineupResult, apply: boolean): void {
 // ── group→playoff transition (Theme C/D) ─────────────────────────────────────────────
 //   pnpm --filter @app/worker commish:transition \
 //     --as smrios07@gmail.com --field 8 \
-//     --reason "group stage complete; collapsing into the guillotine ladder" [--apply]
-// DRY-RUN by default: prints the seeded field + per-round cut schedule + release/trim plan. --apply runs
-// the IRREVERSIBLE transition in one transaction (idempotent — a second --apply is a no-op).
+//     --reason "group stage complete; collapsing into the guillotine ladder" \
+//     [--allow-incomplete-standings] [--apply]
+// DRY-RUN by default: prints the standings-finality status + seeded field + per-round cut schedule +
+// release/trim plan. --apply runs the IRREVERSIBLE transition in one transaction (idempotent — a second
+// --apply is a no-op). Refuses over unfrozen group periods unless --allow-incomplete-standings.
 async function transitionCmd(argv: string[]): Promise<void> {
   const { flags, bools } = parseFlags(argv);
   const asEmail = reqFlag(flags, "as");
   const fieldRaw = reqFlag(flags, "field");
   const reason = reqFlag(flags, "reason");
   const apply = bools.has("apply");
+  const allowIncompleteStandings = bools.has("allow-incomplete-standings");
   const now = new Date();
 
   const fieldSize = Number(fieldRaw);
@@ -376,7 +379,7 @@ async function transitionCmd(argv: string[]): Promise<void> {
       store: createPrismaPlayoffTransitionStore(prisma),
       log: (l) => console.log(l),
     },
-    { actor, leagueId, fieldSize, reason, apply },
+    { actor, leagueId, fieldSize, reason, allowIncompleteStandings, apply },
   );
   reportTransition(res, apply, nameOf);
 }
@@ -391,6 +394,13 @@ function reportTransition(
     const p = res.plan;
     console.log("── commish:transition plan ─────────────────────────");
     console.log(`  league:       ${p.leagueId}`);
+    console.log(
+      `  standings:    ${
+        p.unfinalizedGroupPeriods.length === 0
+          ? "FINAL ✓ (all group periods frozen)"
+          : `⚠ NOT FINAL — ${p.unfinalizedGroupPeriods.join(", ")} unfrozen (seeding via --allow-incomplete-standings)`
+      }`,
+    );
     console.log(`  field size:   ${p.fieldSize}  (${p.released.length} non-advancer(s) released)`);
     console.log(`  status flip:  group → playoff`);
     console.log("  field (seed → manager):");

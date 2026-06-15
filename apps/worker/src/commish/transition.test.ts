@@ -41,6 +41,8 @@ interface StoreSeed {
   leagueStatus: LeagueStatus;
   managers: SeedManager[];
   r32Cadence?: PeriodCadenceView | null;
+  /** Group periods not yet frozen (the finality precondition). Default [] = standings final. */
+  unfinalizedGroupPeriods?: string[];
 }
 
 /** An in-memory {@link PlayoffTransitionStore} mirroring the Prisma adapter's semantics. */
@@ -51,11 +53,13 @@ class MemoryTransitionStore implements PlayoffTransitionStore {
   readonly entries = new Map<string, { seed: number; status: string }>();
   applyCount = 0;
   private readonly r32: PeriodCadenceView | null;
+  private readonly unfinalizedGroupPeriods: string[];
 
   constructor(seed: StoreSeed) {
     this.leagueStatus = seed.leagueStatus;
     for (const m of seed.managers) this.managers.set(m.managerId, { ...m });
     this.r32 = seed.r32Cadence ?? null;
+    this.unfinalizedGroupPeriods = seed.unfinalizedGroupPeriods ?? [];
   }
 
   async loadTransitionContext(leagueId: string): Promise<TransitionContext | null> {
@@ -70,6 +74,7 @@ class MemoryTransitionStore implements PlayoffTransitionStore {
         waiverOrderPosition: m.waiverOrderPosition,
       })),
       activeRosterSizeByManager: Object.fromEntries(all.map((m) => [m.managerId, m.rosterSize])),
+      unfinalizedGroupPeriods: this.unfinalizedGroupPeriods,
       r32Cadence: this.r32,
     };
   }
@@ -130,6 +135,7 @@ const input = (over: Record<string, unknown> = {}) => ({
   leagueId: "L1",
   fieldSize: 8,
   reason: "group stage complete",
+  allowIncompleteStandings: false,
   apply: false,
   ...over,
 });
@@ -146,6 +152,7 @@ describe("buildTransitionPlan", () => {
       waiverOrderPosition: m.waiverOrderPosition,
     })),
     activeRosterSizeByManager: Object.fromEntries(twelveManagers().map((m) => [m.managerId, 15])),
+    unfinalizedGroupPeriods: [],
     r32Cadence: null,
     ...over,
   });
@@ -308,5 +315,24 @@ describe("runPlayoffTransition", () => {
       input({ apply: true }),
     );
     expect(res.status).toBe("refused");
+  });
+
+  it("refuses over not-yet-final group standings (an unfrozen group period) without the override", async () => {
+    const s = store({ unfinalizedGroupPeriods: ["MD2", "MD3"] });
+    const res = await runPlayoffTransition(deps(s), input({ apply: true }));
+    expect(res.status).toBe("refused");
+    if (res.status === "refused") expect(res.reason).toMatch(/not final/);
+    expect(s.applyCount).toBe(0); // nothing applied over provisional standings
+  });
+
+  it("--allow-incomplete-standings seeds from provisional standings and surfaces them in the plan", async () => {
+    const s = store({ unfinalizedGroupPeriods: ["MD3"] });
+    const res = await runPlayoffTransition(
+      deps(s),
+      input({ apply: true, allowIncompleteStandings: true }),
+    );
+    expect(res.status).toBe("applied");
+    if (res.status === "applied") expect(res.plan.unfinalizedGroupPeriods).toEqual(["MD3"]);
+    expect(s.leagueStatus).toBe("playoff");
   });
 });

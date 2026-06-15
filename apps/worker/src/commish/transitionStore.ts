@@ -23,7 +23,7 @@ export function createPrismaPlayoffTransitionStore(prisma: Db): PlayoffTransitio
       });
       if (!league) return null;
 
-      const [standingRows, managerRows, rosterRows, r32] = await Promise.all([
+      const [standingRows, managerRows, rosterRows, unfrozenGroupRows, r32] = await Promise.all([
         // The FINAL group standings carry the seeds the playoff field is taken from (scope=group_stage).
         prisma.standing.findMany({
           where: { leagueId, scope: "group_stage", seed: { not: null } },
@@ -37,6 +37,11 @@ export function createPrismaPlayoffTransitionStore(prisma: Db): PlayoffTransitio
         prisma.rosterPlayer.findMany({
           where: { leagueId, droppedAt: null },
           select: { managerId: true },
+        }),
+        // Group periods whose results are NOT yet final (frozen_at IS NULL) — the finality precondition.
+        prisma.period.findMany({
+          where: { leagueId, kind: "group_md", frozenAt: null },
+          select: { label: true },
         }),
         // The R32 knockout period + its first fixture kickoff → the trim deadline (first playoff batch).
         prisma.period.findFirst({
@@ -66,6 +71,7 @@ export function createPrismaPlayoffTransitionStore(prisma: Db): PlayoffTransitio
           waiverOrderPosition: m.waiverOrderPosition,
         })),
         activeRosterSizeByManager,
+        unfinalizedGroupPeriods: unfrozenGroupRows.map((p) => p.label),
         r32Cadence: r32
           ? {
               id: r32.id,
