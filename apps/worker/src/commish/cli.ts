@@ -20,7 +20,7 @@ import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { prisma } from "@app/db";
-import { createPrismaFaGrantStore } from "@app/faab/prisma";
+import { createPrismaFaGrantStore, createPrismaFaabReleaseStore } from "@app/faab/prisma";
 import { DEFAULT_FAAB_BATCH_LEAD_MIN } from "@app/faab";
 import { createPrismaLineupStore } from "@app/lineup/prisma";
 import {
@@ -33,6 +33,7 @@ import {
 } from "./core";
 import { runRosterOverride, type RosterResult } from "./roster";
 import { runLineupOverride, type LineupResult } from "./lineup";
+import { runTrimOverride, runTrimReport, type TrimResult, type TrimReportResult } from "./trim";
 import { runPlayoffTransition, type TransitionResult } from "./transition";
 import { createPrismaPlayoffTransitionStore } from "./transitionStore";
 
@@ -117,6 +118,18 @@ async function loadPlayers(): Promise<NamedPlayer[]> {
     select: { id: true, displayName: true, firstName: true, lastName: true },
   });
   return rows;
+}
+
+/** A manager's ACTIVE roster players (id + names) — the scoped pool `commish:trim` resolves --drop/--keep
+ *  names against, so a cut never matches a player the manager doesn't own. */
+async function loadRosterPlayers(managerId: string): Promise<NamedPlayer[]> {
+  const rows = await prisma.rosterPlayer.findMany({
+    where: { managerId, droppedAt: null },
+    select: {
+      player: { select: { id: true, displayName: true, firstName: true, lastName: true } },
+    },
+  });
+  return rows.map((r) => r.player);
 }
 
 /** Unwrap a resolution or abort with the candidate list (never guess on ambiguity). */
@@ -445,6 +458,116 @@ function reportTransition(
   }
 }
 
+// ── playoff trim-down force-trim (DECISIONS §D) ───────────────────────────────────────
+//   pnpm --filter @app/worker commish:trim \
+//     --as smrios07@gmail.com --team "Los Dragones" --keep "Donnarumma,Hakimi,..." \
+//     --reason "they never trimmed; cutting to the cap before R32 locks" [--allow-locked-slot] [--apply]
+//   pnpm --filter @app/worker commish:trim --as smrios07@gmail.com --report   # survivors over cap (dry)
+// DRY-RUN by default. Reuses the @app/faab release primitive (validateRelease + releaseRoster); --report
+// (or no --team) lists survivors still over cap and never cuts — the cut choice is the operator's.
+async function trimCmd(argv: string[]): Promise<void> {
+  const { flags, bools } = parseFlags(argv);
+  const asEmail = reqFlag(flags, "as");
+  const report = bools.has("report");
+  const teamLabel = flags["team"]?.trim() ?? null;
+  const now = new Date();
+
+  const actor = await resolveActor(asEmail);
+  if (!isCommissionerActor(actor)) die(`${asEmail} is not the commissioner — trim refused`);
+  const leagueId = await leagueIdForActor(asEmail);
+
+  // Report mode: --report, or no --team named.
+  if (report || !teamLabel) {
+    const res = await runTrimReport(
+      { store: createPrismaFaabReleaseStore(prisma) },
+      { actor, leagueId },
+    );
+    const nameOf = new Map((await loadTeams(leagueId)).map((t) => [t.managerId, t.displayName]));
+    reportTrimReport(res, nameOf);
+    await prisma.$disconnect();
+    return;
+  }
+
+  const reason = reqFlag(flags, "reason");
+  const apply = bools.has("apply");
+  const allowLocked = bools.has("allow-locked-slot");
+  const dropRaw = flags["drop"]?.trim() ?? null;
+  const keepRaw = flags["keep"]?.trim() ?? null;
+  if ((dropRaw === null) === (keepRaw === null)) {
+    die("pass exactly one of --drop <csv> or --keep <csv>");
+  }
+
+  const team = pick(resolveTeam(await loadTeams(leagueId), teamLabel), "team", teamLabel);
+  const rosterPlayers = await loadRosterPlayers(team.managerId);
+  const nameOf: Record<string, string> = {};
+  for (const p of rosterPlayers) nameOf[p.id] = p.displayName;
+
+  // Resolve --drop / --keep names against the manager's OWN roster (ambiguity aborts, never guesses).
+  const resolveList = (raw: string): string[] =>
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((n) => pick(resolvePlayer(rosterPlayers, n), "roster player", n).id);
+
+  const selection =
+    dropRaw !== null
+      ? ({ kind: "drop", ids: resolveList(dropRaw) } as const)
+      : ({ kind: "keep", ids: resolveList(keepRaw!) } as const);
+
+  const res = await runTrimOverride(
+    { now, store: createPrismaFaabReleaseStore(prisma), log: (l) => console.log(l) },
+    {
+      actor,
+      managerId: team.managerId,
+      teamLabel: team.displayName,
+      selection,
+      nameOf,
+      reason,
+      apply,
+      allowLocked,
+      timestamp: now.toISOString(),
+    },
+  );
+  reportTrim(res, apply);
+}
+
+function reportTrim(res: TrimResult, apply: boolean): void {
+  if ("plan" in res && res.plan) {
+    const p = res.plan;
+    console.log("── commish:trim plan ──────────────────────────────");
+    console.log(`  team:   ${p.team} (${p.managerId})`);
+    console.log(`  squad:  ${p.before} → ${p.after}  (cap ${p.rosterCap})`);
+    console.log(`  drop:   ${p.dropNames.length ? p.dropNames.join(", ") : "(none)"}`);
+    if (p.unfillable) {
+      console.log("  ⚠️  WARNING — the remaining squad CANNOT field a legal playoff XI");
+    }
+    console.log("────────────────────────────────────────────────────");
+  }
+  switch (res.status) {
+    case "planned":
+      console.log(apply ? "(nothing applied)" : "DRY-RUN — re-run with --apply to execute.");
+      break;
+    case "applied":
+      console.log("✓ trimmed.");
+      break;
+    default:
+      die(res.reason);
+  }
+}
+
+function reportTrimReport(res: TrimReportResult, nameOf: Map<string, string>): void {
+  if (res.status === "refused") die(res.reason);
+  console.log("── commish:trim report — survivors over cap ────────");
+  if (res.survivors.length === 0) {
+    console.log("  (none — every survivor is within the cap)");
+  }
+  for (const s of res.survivors) {
+    console.log(`  ${nameOf.get(s.managerId) ?? s.managerId}: ${s.rosterCount}/${s.rosterCap}`);
+  }
+  console.log("────────────────────────────────────────────────────");
+}
+
 // ── entry ────────────────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   const command = process.argv[2];
@@ -456,6 +579,9 @@ async function main(): Promise<void> {
     case "lineup":
       await lineupCmd(rest);
       break;
+    case "trim":
+      await trimCmd(rest);
+      break;
     case "transition":
       await transitionCmd(rest);
       break;
@@ -464,6 +590,8 @@ async function main(): Promise<void> {
         "Usage:\n" +
           "  commish roster --as <email> --team <label> --add <player> --reason <text> [--apply]\n" +
           "  commish lineup --as <email> --team <label> --period <label> --starters <csv> --reason <text> [--apply]\n" +
+          "  commish trim --as <email> --team <label> (--drop <csv> | --keep <csv>) --reason <text> [--allow-locked-slot] [--apply]\n" +
+          "  commish trim --as <email> --report\n" +
           "  commish transition --as <email> --field <n> --reason <text> [--apply]",
       );
       process.exit(1);

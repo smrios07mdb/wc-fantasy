@@ -138,7 +138,7 @@ export function relaxPeriodLock<T extends { status: string; closesAt: Date | nul
 // ── structured audit (stdout, not a table — the STOP-SEAM "no migration" rule) ──────
 
 export interface AuditRecord {
-  command: "roster" | "lineup";
+  command: "roster" | "lineup" | "trim";
   commissioner: string;
   team: string;
   managerId: string;
@@ -148,9 +148,11 @@ export interface AuditRecord {
   /** The commissioner `--period` pin recorded for the integrity trail (roster), or null when unpinned. */
   period?: string | null;
   starters?: readonly string[];
+  /** The players released this run (commish:trim) — the integrity trail for the drop-only force-trim. */
+  released?: readonly string[];
   reason: string;
   kickoffBypassed: boolean;
-  /** The commissioner `--allow-locked-slot` carve-out recorded for the integrity trail (lineup). */
+  /** The commissioner `--allow-locked-slot` carve-out recorded for the integrity trail (lineup / trim). */
   lockOverride?: boolean;
   timestamp: string;
 }
