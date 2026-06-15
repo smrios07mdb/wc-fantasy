@@ -15,6 +15,7 @@ export type LineupErrorCode =
   | "played-player-started"
   | "voided-player-started"
   | "forfeit-requires-confirm"
+  | "playoff-roster-cap"
   | "wrong-period";
 
 /** A starting XI whose per-position count breaks a Theme B formation bound (FORMATION_BOUNDS). */
@@ -79,6 +80,17 @@ export interface ForfeitRequiresConfirmError {
   playerId: string;
 }
 
+/** The active squad exceeds the playoff reduced-roster cap (PLAYOFF_ROSTER.cap = 9). Playoff mode only;
+ *  the group stage's 15-man squad is bounded by FAAB/draft, not by `validateLineup`. */
+export interface PlayoffRosterCapError {
+  code: "playoff-roster-cap";
+  message: string;
+  /** The current active squad size. */
+  have: number;
+  /** PLAYOFF_ROSTER.cap (9). */
+  cap: number;
+}
+
 /** The target period is not editable: it doesn't exist, its wave is closed, or `now` is past the window. */
 export interface WrongPeriodError {
   code: "wrong-period";
@@ -95,9 +107,19 @@ export type LineupError =
   | PlayedPlayerStartedError
   | VoidedPlayerStartedError
   | ForfeitRequiresConfirmError
+  | PlayoffRosterCapError
   | WrongPeriodError;
 
 // ── constructors (centralise the messages) ────────────────────────────────────
+
+export function playoffRosterCap(have: number, cap: number): PlayoffRosterCapError {
+  return {
+    code: "playoff-roster-cap",
+    message: `playoff roster is ${have} players — the reduced cap is ${cap}`,
+    have,
+    cap,
+  };
+}
 
 export function illegalFormation(
   position: Position,

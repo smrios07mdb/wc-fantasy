@@ -46,7 +46,8 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         }),
         prisma.period.findUnique({
           where: { id: periodId },
-          select: { id: true, leagueId: true, status: true, closesAt: true },
+          // `kind` selects the validator's roster mode (knockout_round → playoff reduced roster).
+          select: { id: true, leagueId: true, status: true, closesAt: true, kind: true },
         }),
       ]);
 
@@ -74,7 +75,12 @@ export function createPrismaLineupStore(prisma: Db): LineupStore {
         })),
         period:
           periodRow && periodRow.leagueId === manager.leagueId
-            ? { id: periodRow.id, status: periodRow.status, closesAt: periodRow.closesAt }
+            ? {
+                id: periodRow.id,
+                status: periodRow.status,
+                closesAt: periodRow.closesAt,
+                kind: periodRow.kind,
+              }
             : null,
       };
     },
