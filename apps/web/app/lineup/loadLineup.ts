@@ -10,6 +10,7 @@ import { prisma } from "@app/db";
 import { sortByPeriodOrder, isLockedNow } from "@app/shared";
 import {
   defaultStarterIds,
+  formationSetForKind,
   resolveKickoffByPlayer,
   resolveOpponentByPlayer,
   resolveStarterStatusByPlayer,
@@ -52,8 +53,9 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     prisma.period.findMany({
       where: { leagueId: manager.leagueId, status: { in: ["open", "pending"] } },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
-      // frozenAt feeds the forfeit-model movability gate (frozen period → nothing movable).
-      select: { id: true, label: true, status: true, closesAt: true, frozenAt: true },
+      // frozenAt feeds the forfeit-model movability gate (frozen period → nothing movable). `kind`
+      // selects the roster MODE downstream: knockout_round → playoff reduced roster (7+2, FORMATIONS_PO).
+      select: { id: true, label: true, status: true, closesAt: true, frozenAt: true, kind: true },
     }),
   ]);
 
@@ -171,12 +173,17 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     return {
       periodId: p.id,
       label: p.label,
+      // knockout_round drives the playoff reduced-roster mode (7+2, FORMATIONS_PO) in the validator + UI.
+      kind: p.kind,
       status: p.status,
       closesAt: p.closesAt ? p.closesAt.toISOString() : null,
-      // A period the manager hasn't set yet starts from the first FILLABLE formation (canonical 4-3-3
-      // when his squad can field it, else a shape it can — e.g. a 3-DEF squad opens on 3-4-3, savable
-      // immediately). A saved lineup is loaded as-is — its shape is never overridden.
-      starterIds: savedStarters.length > 0 ? savedStarters : defaultStarterIds(squad),
+      // A period the manager hasn't set yet starts from the first FILLABLE formation in its mode's offer
+      // set (group: canonical 4-3-3 when his squad can field it, else a shape it can — e.g. a 3-DEF squad
+      // opens on 3-4-3; playoff: canonical 2-3-1 over FORMATIONS_PO). A saved lineup is loaded as-is.
+      starterIds:
+        savedStarters.length > 0
+          ? savedStarters
+          : defaultStarterIds(squad, formationSetForKind(p.kind)),
       locks: slots
         .filter((s) => isLockedNow(s.lockedAt, now))
         .map((s) => ({ playerId: s.playerId, isStarter: s.isStarter })),

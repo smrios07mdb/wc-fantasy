@@ -73,6 +73,7 @@ const STARTERS = [
 const BASE_PERIOD: PeriodLineup = {
   periodId: "md1",
   label: "MD1",
+  kind: "group_md",
   status: "open",
   closesAt: "2099-01-01T00:00:00.000Z",
   starterIds: STARTERS,

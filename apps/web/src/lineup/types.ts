@@ -5,7 +5,7 @@
  * route. Lock state here is the AUTHORITATIVE `lineup_slot.locked_at` projection (locked vs movable) —
  * the live playing/played split is the "vs the field" surface (a later prompt), out of scope here.
  */
-import type { Position, PeriodStatus } from "@app/shared";
+import type { Position, PeriodStatus, PeriodKind } from "@app/shared";
 
 /** The opponent side of a squad player's fixture in a period — for the per-player fixture indicator. */
 export interface OpponentInfo {
@@ -66,6 +66,10 @@ export interface SlotMeta {
 export interface PeriodLineup {
   periodId: string;
   label: string;
+  /** The window kind — `knockout_round` switches the screen to the reduced playoff roster (7+2,
+   *  FORMATIONS_PO); anything else is the full 11-man group window. Drives both the legality mode and
+   *  the formation offer-set. */
+  kind: PeriodKind;
   status: PeriodStatus;
   closesAt: string | null; // ISO; null = no explicit close
   /** The currently-saved starters (the other squad players are the bench). */

@@ -40,6 +40,7 @@ function stateFor(squad: LineupPlayer[]): SetLineupState {
   const period: PeriodLineup = {
     periodId: "md1",
     label: "MD1",
+    kind: "group_md",
     status: "open",
     closesAt: "2099-01-01T00:00:00.000Z", // far future → the window is editable
     starterIds: defaultStarterIds(squad), // mirrors the SSR loader's seed
