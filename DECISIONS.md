@@ -1546,15 +1546,25 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   `.db-bracket`/`.db-podium`; only `.db-reinforce` + `.db-myrecap` (+ the `.db-br-me`/`.db-br-foot`
   survival extras) are new. Pure derivations live in `src/dashboard/playoffModules.ts` (16 unit tests).
 
-- **GAP (flagged, deferred — NOT bolted on here): the complete-arm SEASON-stats recap.** The design's
+- **GAP — CLOSED (`feat/playoffs-season-stats`): the complete-arm SEASON-stats recap.** The design's
   complete screen shows each finisher's **total title points** and the viewer's **season power record /
-  total points / best week**. `PlayoffsView` does **not** expose these — it carries per-round
-  `score_manager_period.points` only; the cumulative tournament totals are a `buildPlayoffsView` *input*
-  (`loadCumulativeTournamentTotals`), not an output. The dashboard therefore shows the **knockout** finish
-  (champion / runner-up / out in round X) only, with a `TODO(confirm)` at the recap site
-  (`ChampionModule` / `MyFinishModule`). **Clean deferred fix:** a separate read-model pass that surfaces
-  the cumulative totals (already gathered by `loadCumulativeTournamentTotals` for the live-tiebreak input)
-  in `PlayoffsView`'s **output**, then the recap consumes them — `packages/recompute` stays untouched here.
+  total points / best week**. These are now first-class on `PlayoffsView.seasonStats` (`Record<managerId,
+  {totalTitlePoints, powerW, powerL, bestWeek}>`), derived **purely** in `buildPlayoffsView` from inputs it
+  already receives — the sanctioned read-model pass, NOT a loader attachment (chosen because every input is
+  already threaded into the pure builder: `cumulativeTotals` → `totalTitlePoints`; the group all-play-all
+  `seeds[].gW/gL` → `powerW/powerL`; `groupPeriods` ∪ `roundScores` → `bestWeek` via the pure
+  `bestWeekByManager`). **Definitions (locked):** *power record* = the group-stage all-play-all W-L (the
+  regular-season "power record" = `computeStandings(groupPeriods)`), NOT extended over the guillotine rounds,
+  so it reads identically to the group dashboard's "season W-L"; *best week* = the max single-period total
+  across ALL periods (the only `period.kind`s are group_md + knockout_round, so the two inputs cover every
+  period); *total title points* = Σ all-period `score_manager_period.points`. The recap consumes them:
+  `ChampionModule` shows total title points per podium row (`.db-pod-pts`, the role pill dropped),
+  `MyFinishModule` renders the design's 4-cell `.db-myrecap` (finish · power record · total pts · best week),
+  and the complete-arm `PrimaryBanner` surfaces them in its sub-line + secondary; the `TODO(confirm)`s are
+  removed. **Scope:** READ-side only — the WRITE engine (`selectGuillotineCuts`/`resolveRoundCut`/
+  `advanceStore`/transition) and the cut/classification logic are byte-untouched (the view's *output* grew);
+  `loadPlayoffs` stays byte-untouched (it spreads `...core`); the theater consumes the additive field
+  unchanged. No new write, no scoring-rule change (aggregations of existing scores), no migration.
 
 ## Profile rename / Settings route (Prompt 39)
 
