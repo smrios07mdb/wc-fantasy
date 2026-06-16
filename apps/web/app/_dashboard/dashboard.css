@@ -485,6 +485,28 @@
   font-weight: 700;
   font-size: var(--fs-sm);
 }
+/* survival status line (your safe/zone state + margin to the blade) + the round-cut footer */
+.db-br-me {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--win) 14%, transparent);
+  color: var(--win);
+}
+.db-br-me.is-risk {
+  background: var(--elim-soft);
+  color: var(--elim);
+}
+.db-br-foot {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
 
 /* ─── podium (complete — future) ─────────────────────────────────────────────────────────── */
 .db-podium {
@@ -520,6 +542,51 @@
 }
 .db-pod-pts {
   font-weight: 700;
+}
+
+/* ─── reinforce (playoff — FAAB reset reminder) ──────────────────────────────────────────── */
+.db-reinforce {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.db-rf-tag {
+  align-self: flex-start;
+}
+.db-rf-budget {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.db-rf-budget b {
+  font-size: 22px;
+}
+.db-rf-pending {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.db-rf-note {
+  margin: 0;
+}
+
+/* ─── your run (complete — knockout finish tiles) ────────────────────────────────────────── */
+.db-myrecap {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.db-myrec-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+.db-myrec-stat b {
+  font-size: 18px;
 }
 
 /* ─── responsive ─────────────────────────────────────────────────────────────────────────── */

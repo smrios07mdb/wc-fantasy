@@ -13,6 +13,12 @@
 import type { DashboardPhase } from "../../src/dashboard/selectDashboardPhase";
 import type { DraftRoomState } from "../../src/draft/types";
 import type { VsFieldView } from "@app/vsfield";
+import type { PlayoffsView } from "../playoffs/loadPlayoffs";
+import {
+  selectSurvivalView,
+  selectChampionPodium,
+  selectViewerFinish,
+} from "../../src/dashboard/playoffModules";
 
 // Phase → CSS custom-property value (functional colours from ds.css, not hex).
 const PHASE_COLOR: Record<DashboardPhase, string> = {
@@ -66,6 +72,7 @@ function bannerContent(
   phase: DashboardPhase,
   draft: DraftRoomState | null,
   vsField: VsFieldView | null,
+  playoffs: PlayoffsView | null,
   earliestGroupKickoff: string | null,
 ): BannerContent {
   const N = draft?.managers.length ?? 0;
@@ -193,30 +200,89 @@ function bannerContent(
   }
 
   if (phase === "playoff") {
-    // STOP(P38): Guillotine / playoff bracket are deferred — no real data to show here.
+    // Real guillotine state from PlayoffsView (READ-ONLY). Null only in the brief pre-seeding window.
+    if (!playoffs) {
+      return {
+        eyebrow: PHASE_EYEBROW["playoff"],
+        title: "Knockouts underway",
+        sub: "The guillotine bracket is being seeded.",
+        big: "KO",
+        bigMono: true,
+        ctaLabel: "Playoff theater",
+        ctaHref: "/playoffs",
+        secondary: [],
+      };
+    }
+    const sv = selectSurvivalView(playoffs);
+    const title =
+      sv.meSafe === true
+        ? "You're alive"
+        : sv.meSafe === false
+          ? "You're on the block"
+          : "Knockouts underway";
+    const marginV =
+      sv.marginPoints === null
+        ? "—"
+        : sv.meSafe
+          ? `+${sv.marginPoints} clear`
+          : `${Math.abs(sv.marginPoints)} short`;
     return {
       eyebrow: PHASE_EYEBROW["playoff"],
-      title: "Knockouts underway",
-      sub: "The group stage is done. Playoff bracket is coming in a later update.",
-      big: "KO",
+      title,
+      sub: `${sv.roundLabel ?? "Knockouts"} · ${sv.aliveNow}→${sv.survivesNow} survive · ${sv.cutCount} cut this round · reduced roster, FAAB reset to $100`,
+      big: `${sv.aliveNow} left`,
       bigMono: true,
-      ctaLabel: "Vs the field",
-      ctaHref: "/vsfield",
-      secondary: [],
+      ctaLabel: "Playoff theater",
+      ctaHref: "/playoffs",
+      secondary: [
+        { l: "Your margin", v: marginV },
+        { l: "Cut this round", v: `${sv.cutCount}` },
+      ],
     };
   }
 
   if (phase === "complete") {
-    // STOP(P38): Tournament-complete recap is deferred.
+    // Real champion + the viewer's knockout finish from PlayoffsView (READ-ONLY). The season-stats recap
+    // is a flagged read-model gap (see Dashboard.tsx ChampionModule / MyFinishModule TODO(confirm)).
+    const podium = playoffs ? selectChampionPodium(playoffs) : null;
+    const finish = playoffs ? selectViewerFinish(playoffs) : null;
+    const champName = podium?.champion?.name ?? null;
+    const bigFinish =
+      finish?.outcome === "champion"
+        ? "1st"
+        : finish?.outcome === "runner-up"
+          ? "2nd"
+          : finish?.outcome === "eliminated"
+            ? (finish.roundLabel ?? "—")
+            : "—";
+    const finishLabel =
+      finish?.outcome === "champion"
+        ? "Champion"
+        : finish?.outcome === "runner-up"
+          ? "Runner-up"
+          : finish?.outcome === "eliminated"
+            ? `Out · ${finish.roundLabel ?? "knockouts"}`
+            : "—";
+    const sub =
+      finish?.outcome === "champion"
+        ? "You won it all — congratulations."
+        : finish?.outcome === "runner-up"
+          ? "You finished runner-up."
+          : finish?.outcome === "eliminated"
+            ? `You were eliminated at the ${finish.roundLabel ?? "knockouts"}.`
+            : "The tournament has finished.";
     return {
       eyebrow: PHASE_EYEBROW["complete"],
-      title: "Tournament complete",
-      sub: "The tournament has finished. Final standings recap is coming in a later update.",
-      big: "FT",
+      title: champName ? `Champion · ${champName}` : "Tournament complete",
+      sub,
+      big: bigFinish,
       bigMono: true,
-      ctaLabel: "Vs the field",
-      ctaHref: "/vsfield",
-      secondary: [],
+      ctaLabel: "Playoff theater",
+      ctaHref: "/playoffs",
+      secondary: [
+        { l: "Champion", v: champName ?? "—" },
+        { l: "Your finish", v: finishLabel },
+      ],
     };
   }
 
@@ -285,14 +351,16 @@ export function PrimaryBanner({
   phase,
   draft,
   vsField,
+  playoffs,
   earliestGroupKickoff,
 }: {
   phase: DashboardPhase;
   draft: DraftRoomState | null;
   vsField: VsFieldView | null;
+  playoffs: PlayoffsView | null;
   earliestGroupKickoff: string | null;
 }) {
-  const content = bannerContent(phase, draft, vsField, earliestGroupKickoff);
+  const content = bannerContent(phase, draft, vsField, playoffs, earliestGroupKickoff);
   const phcColor = PHASE_COLOR[phase];
 
   return (

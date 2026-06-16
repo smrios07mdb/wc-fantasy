@@ -8,7 +8,9 @@
  *   - `PrimaryBanner` (in ./PrimaryBanner.tsx) handles the phase-coloured headline strip.
  *   - Pre-draft + draft modules: built in Prompt 37.
  *   - Group modules: built in Prompt 38 — record, standings, matchday.
- *   - Playoff + complete: minimal honest interims (Guillotine + recap deferred to later prompts).
+ *   - Playoff modules: Survival (the guillotine bracket — current round + your margin to the blade) +
+ *     Reinforce (FAAB reset), from PlayoffsView (READ-ONLY). The live experience stays in /playoffs.
+ *   - Complete modules: Champion (podium) + Your run (knockout finish), from PlayoffsView (READ-ONLY).
  *
  * STOP seams (data not available in production this prompt):
  *   1. No scheduledStartAt on draft — pre-draft countdown renders as "waiting for commissioner".
@@ -16,8 +18,9 @@
  *   2. No per-manager "ready" flag — ReadinessModule renders all dots off (presence-only in the
  *      draft room via Realtime; server-side there is no readiness concept).
  *      (flagged in ReadinessModule below)
- *   3. Playoff bracket / Guillotine — deferred; renders "Knockouts underway" interim only.
- *   4. Tournament-complete recap — deferred; renders "Tournament complete" interim only.
+ *   3. Complete-arm SEASON stats (total title points, power record, best week) are NOT in PlayoffsView
+ *      — the recap shows the knockout finish only; the season recap is a flagged read-model gap
+ *      (TODO(confirm) in MyFinishModule + a DECISIONS line).
  */
 import type { Position } from "@app/shared";
 import { SQUAD_COMPOSITION } from "@app/shared";
@@ -27,6 +30,12 @@ import { Flag } from "../draft/Flag";
 import type { DraftRoomState } from "../../src/draft/types";
 import type { DashboardPhase } from "../../src/dashboard/selectDashboardPhase";
 import type { DashboardData } from "./loadDashboard";
+import type { PlayoffsView } from "../playoffs/loadPlayoffs";
+import {
+  selectSurvivalView,
+  selectChampionPodium,
+  selectViewerFinish,
+} from "../../src/dashboard/playoffModules";
 import { PrimaryBanner } from "./PrimaryBanner";
 import "./dashboard.css";
 
@@ -439,12 +448,213 @@ function formatKickoffTime(iso: string): string {
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+// ─── playoff phase modules ──────────────────────────────────────────────────────────────────
+
+/**
+ * Guillotine survival — the live knockout round's field with each manager's safe/zone state, the
+ * viewer marked + their signed margin to the blade, and the round's cut summary. One combined module
+ * (survival + current-round summary), mirroring the design's `BracketModule`; the LIVE experience lives
+ * in the dedicated /playoffs theater this links into (no second live controller). All derivation is the
+ * pure `selectSurvivalView` over PlayoffsView (READ-ONLY). CSS: .db-bracket / .db-br-* (pre-stubbed).
+ */
+function SurvivalModule({ playoffs }: { playoffs: PlayoffsView }) {
+  const sv = selectSurvivalView(playoffs);
+  const names = playoffs.managerNames;
+  const title = sv.roundLabel ? `Guillotine · ${sv.roundLabel} survival` : "Guillotine survival";
+
+  return (
+    <Module title={title} cta={{ label: "Playoff theater", href: "/playoffs" }}>
+      {sv.meSafe !== null && (
+        <div className={"db-br-me" + (sv.meSafe ? " is-safe" : " is-risk")}>
+          {sv.meSafe ? (
+            <span>
+              You&apos;re safe
+              {sv.marginPoints !== null && <b className="mono"> · +{sv.marginPoints} clear</b>}
+            </span>
+          ) : (
+            <span>
+              You&apos;re in the zone
+              {sv.marginPoints !== null && (
+                <b className="mono"> · {Math.abs(sv.marginPoints)} short</b>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {sv.rows.length === 0 ? (
+        <p className="t-caption text-secondary db-empty-note">Bracket forming…</p>
+      ) : (
+        <div className="db-bracket">
+          {sv.rows.map((r) => (
+            <div
+              className={
+                "db-br-row" + (r.isMe ? " is-me" : "") + (r.state !== "safe" ? " is-risk" : "")
+              }
+              key={r.managerId}
+            >
+              <span className="db-br-seed mono">{r.rank}</span>
+              <MgrAvatar
+                id={r.managerId}
+                displayName={names[r.managerId] ?? r.managerId}
+                size="sm"
+              />
+              <span className="db-br-name">{r.isMe ? "You" : (names[r.managerId] ?? "—")}</span>
+              <span className="db-br-pts mono">{r.points}</span>
+              {r.state !== "safe" && <span className="pill pill-elim">cut line</span>}
+            </div>
+          ))}
+          <div className="db-br-foot t-caption text-tertiary">
+            {sv.zoneCount} in the zone · {sv.cutCount} cut this round · {sv.aliveNow}→
+            {sv.survivesNow} survive
+          </div>
+        </div>
+      )}
+    </Module>
+  );
+}
+
+/**
+ * FAAB reinforcement reminder — the knockout-window budget resets to a fresh $100; survivors reinforce
+ * via blind FAAB. A SUMMARY that links into /waivers (the reset surface) — it does not duplicate the
+ * waivers screen. Sourced from the loader-attached `reinforcement` (loadWaivers' WaiversView, READ-ONLY).
+ * CSS: .db-reinforce / .db-rf-* (new). Renders the reminder even when reinforcement is null (graceful).
+ */
+function ReinforceModule({ playoffs }: { playoffs: PlayoffsView }) {
+  const w = playoffs.reinforcement;
+  const pendingCount = w?.claims.length ?? 0;
+  return (
+    <Module title="Reinforce your survivors" cta={{ label: "Open waivers", href: "/waivers" }}>
+      <div className="db-reinforce">
+        <span className="pill pill-win db-rf-tag">FAAB reset · $100</span>
+        {w && (
+          <div className="db-rf-budget">
+            <b className="mono">${w.faabBudget}</b>
+            <span className="text-tertiary">available</span>
+            {pendingCount > 0 && (
+              <span className="db-rf-pending">
+                · {pendingCount} pending bid{pendingCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
+        <p className="db-rf-note t-caption text-secondary">
+          Survivors reinforce via blind FAAB — your budget resets to a fresh $100 for the knockouts.
+        </p>
+      </div>
+    </Module>
+  );
+}
+
+// ─── complete phase modules ─────────────────────────────────────────────────────────────────
+
+/**
+ * Champion podium — the champion + the runner-up (cut in the Final), names resolved server-side via
+ * PlayoffsView.managerNames. Mirrors the design's `RecapModule`. CSS: .db-podium / .db-pod-* (pre-stubbed).
+ *
+ * TODO(confirm): the design's podium also shows each finisher's TOTAL TITLE POINTS — a cumulative
+ * figure PlayoffsView does NOT expose (it carries per-round points only). We show the role, not a
+ * misleading round-points number. The clean deferred fix is a read-model pass that surfaces the
+ * cumulative totals (already a `buildPlayoffsView` input via `loadCumulativeTournamentTotals`) in
+ * PlayoffsView's output. Recorded in DECISIONS; not bolted on here (packages/recompute stays untouched).
+ */
+function ChampionModule({ playoffs }: { playoffs: PlayoffsView }) {
+  const { champion, runnerUp } = selectChampionPodium(playoffs);
+
+  if (!champion) {
+    return (
+      <Module title="Champion" cta={{ label: "Playoff theater", href: "/playoffs" }}>
+        <p className="t-caption text-secondary db-empty-note">Champion pending…</p>
+      </Module>
+    );
+  }
+
+  return (
+    <Module title="Champion" cta={{ label: "Playoff theater", href: "/playoffs" }}>
+      <div className="db-podium">
+        <div className={"db-pod-row is-champ" + (champion.isMe ? " is-me" : "")}>
+          <span className="db-pod-medal" aria-hidden="true">
+            🥇
+          </span>
+          <MgrAvatar id={champion.managerId} displayName={champion.name} size="sm" />
+          <span className="db-pod-name">{champion.isMe ? "You" : champion.name}</span>
+          <span className="pill pill-win">Champion</span>
+        </div>
+        {runnerUp && (
+          <div className={"db-pod-row" + (runnerUp.isMe ? " is-me" : "")}>
+            <span className="db-pod-medal" aria-hidden="true">
+              🥈
+            </span>
+            <MgrAvatar id={runnerUp.managerId} displayName={runnerUp.name} size="sm" />
+            <span className="db-pod-name">{runnerUp.isMe ? "You" : runnerUp.name}</span>
+            <span className="pill">Runner-up</span>
+          </div>
+        )}
+      </div>
+    </Module>
+  );
+}
+
+/**
+ * Your run — the viewer's KNOCKOUT finish (champion / runner-up / out in round X + that round's
+ * rank/points), derived purely via `selectViewerFinish`. Mirrors the design's `MyRecapModule`.
+ * CSS: .db-myrecap / .db-myrec-* (new).
+ *
+ * TODO(confirm): the design's "Your season" recap also shows power record / total title pts / best
+ * week — all SEASON figures PlayoffsView does NOT expose (they live in VsFieldView.season). We show
+ * the knockout finish only; the season recap is the read-model gap deferred above (DECISIONS). The
+ * "Vs the field" CTA bridges to the full season standings in the meantime.
+ */
+function MyFinishModule({ playoffs }: { playoffs: PlayoffsView }) {
+  const f = selectViewerFinish(playoffs);
+  const outcomeLabel =
+    f.outcome === "champion"
+      ? "Champion"
+      : f.outcome === "runner-up"
+        ? "Runner-up"
+        : f.outcome === "eliminated"
+          ? "Eliminated"
+          : "—";
+
+  return (
+    <Module title="Your run" cta={{ label: "Vs the field", href: "/vsfield" }}>
+      <div className="db-myrecap">
+        <div className="db-myrec-stat">
+          <b className="display">{outcomeLabel}</b>
+          <span className="t-micro text-tertiary">
+            {f.roundLabel ? `at the ${f.roundLabel}` : "finish"}
+          </span>
+        </div>
+        {f.seed !== null && (
+          <div className="db-myrec-stat">
+            <b className="display mono">#{f.seed}</b>
+            <span className="t-micro text-tertiary">seed</span>
+          </div>
+        )}
+        {f.rank !== null && (
+          <div className="db-myrec-stat">
+            <b className="display mono">#{f.rank}</b>
+            <span className="t-micro text-tertiary">round rank</span>
+          </div>
+        )}
+        {f.points !== null && (
+          <div className="db-myrec-stat">
+            <b className="display mono">{f.points}</b>
+            <span className="t-micro text-tertiary">round pts</span>
+          </div>
+        )}
+      </div>
+    </Module>
+  );
+}
+
 // ─── module router ────────────────────────────────────────────────────────────────────────
 
 type PreDraftKey = "info" | "ready";
 type DraftKey = "forming" | "picks";
 type GroupKey = "record" | "standings" | "matchday";
-type ModuleKey = PreDraftKey | DraftKey | GroupKey;
+type PlayoffKey = "survival" | "reinforce";
+type CompleteKey = "champion" | "finish";
+type ModuleKey = PreDraftKey | DraftKey | GroupKey | PlayoffKey | CompleteKey;
 
 /** Which modules render for each phase — mirrors design's `modulesFor()`. */
 function modulesFor(phase: DashboardPhase): ModuleKey[] {
@@ -459,11 +669,13 @@ function modulesFor(phase: DashboardPhase): ModuleKey[] {
     case "group":
       return ["record", "standings", "matchday"];
     case "playoff":
-      // STOP(P38): Guillotine / bracket deferred — no real modules yet.
-      return [];
+      // The guillotine bracket + the FAAB-reset reminder, from PlayoffsView. (The design also lists
+      // lock/fixtures/activity — not PlayoffsView-derivable; dropped, same call the group arm made.)
+      return ["survival", "reinforce"];
     case "complete":
-      // STOP(P38): Tournament-complete recap deferred.
-      return [];
+      // Champion podium + the viewer's knockout finish, from PlayoffsView. (The season-stats recap is
+      // a flagged read-model gap — see ChampionModule / MyFinishModule TODO(confirm).)
+      return ["champion", "finish"];
     default: {
       const _exhaustive: never = phase;
       return _exhaustive;
@@ -471,7 +683,12 @@ function modulesFor(phase: DashboardPhase): ModuleKey[] {
   }
 }
 
-function renderModule(key: ModuleKey, draft: DraftRoomState | null, vsField: VsFieldView | null) {
+function renderModule(
+  key: ModuleKey,
+  draft: DraftRoomState | null,
+  vsField: VsFieldView | null,
+  playoffs: PlayoffsView | null,
+) {
   switch (key) {
     case "info":
       return <LeagueInfoModule key={key} draft={draft} />;
@@ -487,6 +704,14 @@ function renderModule(key: ModuleKey, draft: DraftRoomState | null, vsField: VsF
       return vsField ? <StandingsModule key={key} vsField={vsField} /> : null;
     case "matchday":
       return vsField ? <MatchdayModule key={key} vsField={vsField} /> : null;
+    case "survival":
+      return playoffs ? <SurvivalModule key={key} playoffs={playoffs} /> : null;
+    case "reinforce":
+      return playoffs ? <ReinforceModule key={key} playoffs={playoffs} /> : null;
+    case "champion":
+      return playoffs ? <ChampionModule key={key} playoffs={playoffs} /> : null;
+    case "finish":
+      return playoffs ? <MyFinishModule key={key} playoffs={playoffs} /> : null;
     default: {
       const _exhaustive: never = key;
       return _exhaustive;
@@ -497,12 +722,22 @@ function renderModule(key: ModuleKey, draft: DraftRoomState | null, vsField: VsF
 // ─── main export ─────────────────────────────────────────────────────────────────────────
 
 export function Dashboard({ data }: { data: DashboardData }) {
-  const { phase, draft, vsField, earliestGroupKickoff } = data;
+  const { phase, draft, vsField, playoffs, earliestGroupKickoff } = data;
   const keys = modulesFor(phase);
 
   // The group layout uses the spotlight (wider main + rail) for standings prominence.
   // All other phases with modules use the masonry grid.
   const useSpotlight = phase === "group";
+
+  // Masonry cells for the non-spotlight phases — render first, then drop nulls so we never emit an
+  // empty `.db-grid` (e.g. the brief knockout window where the ladder isn't seeded yet → playoffs is
+  // null → both modules return null; the PrimaryBanner still fills that state honestly).
+  const gridCells =
+    keys.length > 0 && !useSpotlight
+      ? keys
+          .map((k) => [k, renderModule(k, draft, vsField, playoffs)] as const)
+          .filter(([, mod]) => mod !== null)
+      : [];
 
   return (
     <div className="db-page">
@@ -510,48 +745,44 @@ export function Dashboard({ data }: { data: DashboardData }) {
         phase={phase}
         draft={draft}
         vsField={vsField}
+        playoffs={playoffs}
         earliestGroupKickoff={earliestGroupKickoff}
       />
 
-      {(phase === "pre-kickoff" || phase === "playoff" || phase === "complete") &&
-        keys.length === 0 && (
-          // Honest interim for phases without modules yet — shows the banner already rendered above.
-          // STOP(P38): Playoff bracket + complete recap are deferred.
-          <div className="db-interim">
-            <div style={{ display: "flex", gap: 10 }}>
-              <a className="btn btn-ghost" href="/lineup">
-                Set lineup
-              </a>
-              <a className="btn btn-ghost" href="/vsfield">
-                Vs the field
-              </a>
-            </div>
+      {phase === "pre-kickoff" && keys.length === 0 && (
+        // Honest interim for pre-kickoff — the banner above carries the countdown; jump links below.
+        <div className="db-interim">
+          <div style={{ display: "flex", gap: 10 }}>
+            <a className="btn btn-ghost" href="/lineup">
+              Set lineup
+            </a>
+            <a className="btn btn-ghost" href="/vsfield">
+              Vs the field
+            </a>
           </div>
-        )}
+        </div>
+      )}
 
       {keys.length > 0 && useSpotlight && vsField && (
         <div className="db-spotlight">
           <div className="db-spot-main">
             {/* Standings gets the wide column */}
-            {renderModule("standings", draft, vsField)}
+            {renderModule("standings", draft, vsField, playoffs)}
           </div>
           <div className="db-spot-rail">
-            {renderModule("record", draft, vsField)}
-            {renderModule("matchday", draft, vsField)}
+            {renderModule("record", draft, vsField, playoffs)}
+            {renderModule("matchday", draft, vsField, playoffs)}
           </div>
         </div>
       )}
 
-      {keys.length > 0 && !useSpotlight && (
+      {gridCells.length > 0 && (
         <div className="db-grid">
-          {keys.map((k) => {
-            const mod = renderModule(k, draft, vsField);
-            return mod ? (
-              <div className="db-grid-cell" key={k}>
-                {mod}
-              </div>
-            ) : null;
-          })}
+          {gridCells.map(([k, mod]) => (
+            <div className="db-grid-cell" key={k}>
+              {mod}
+            </div>
+          ))}
         </div>
       )}
     </div>

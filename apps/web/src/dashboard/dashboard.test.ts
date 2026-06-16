@@ -245,8 +245,10 @@ describe("dashboard — loadDashboard P38 composition + vsField population", () 
     expect(loader38).toContain("earliestGroupKickoff:");
   });
 
-  it("only loads vsField when phase is 'group' (not for other tournament phases)", () => {
-    expect(loader38).toContain('phase === "group"');
+  it("only loads vsField when the tournament phase is 'group' (not for other phases)", () => {
+    // The loader names the raw selectTournamentPhase result `tournamentPhase`; the final render phase
+    // is `resolveKnockoutPhase(tournamentPhase, …)` in the knockout branch.
+    expect(loader38).toContain('tournamentPhase === "group"');
     expect(loader38).toContain("loadVsField(sessionManagerId)");
   });
 
@@ -257,8 +259,14 @@ describe("dashboard — loadDashboard P38 composition + vsField population", () 
     expect(loader38).toContain("kickoffAt: true");
   });
 
-  it("STOP(P38) seams documented for playoff and complete interims", () => {
-    expect(loader38).toContain("STOP(P38)");
+  it("knockout window attaches playoffs READ-ONLY via loadPlayoffs + resolveKnockoutPhase", () => {
+    expect(loader38).toContain("loadPlayoffs");
+    expect(loader38).toContain('from "../playoffs/loadPlayoffs"');
+    expect(loader38).toContain("resolveKnockoutPhase");
+    // PlayoffsView.complete is the authoritative playoff↔complete discriminator (not the Final-FT signal).
+    expect(loader38).toContain("playoffs?.complete");
+    // DashboardData carries the playoff view, mirroring the vsField attach (group-only stays group-only).
+    expect(loader38).toContain("playoffs:");
   });
 });
 
@@ -296,11 +304,16 @@ describe("dashboard — group phase modules are built (P38)", () => {
     expect(dashboard).toContain("db-spot-rail");
   });
 
-  it("playoff and complete phases return empty module lists (minimal interim only)", () => {
+  it("modulesFor 'playoff' returns the survival bracket + reinforce reminder", () => {
     expect(dashboard).toContain('case "playoff"');
+    expect(dashboard).toContain('"survival"');
+    expect(dashboard).toContain('"reinforce"');
+  });
+
+  it("modulesFor 'complete' returns the champion podium + the viewer's run", () => {
     expect(dashboard).toContain('case "complete"');
-    // STOP seam comments present
-    expect(dashboard).toContain("STOP(P38)");
+    expect(dashboard).toContain('"champion"');
+    expect(dashboard).toContain('"finish"');
   });
 });
 
@@ -329,12 +342,16 @@ describe("dashboard — PrimaryBanner extended for tournament phases (P38)", () 
     expect(banner).toContain("allPlayAllW");
   });
 
-  it("playoff + complete banners have STOP(P38) seams documented", () => {
-    expect(banner).toContain("STOP(P38)");
+  it("playoff + complete banners render real PlayoffsView data (no STOP interim)", () => {
+    expect(banner).toContain("selectSurvivalView");
+    expect(banner).toContain("selectChampionPodium");
+    expect(banner).toContain("selectViewerFinish");
+    expect(banner).not.toContain("STOP(P38)");
   });
 
-  it("PrimaryBanner signature accepts vsField + earliestGroupKickoff props", () => {
+  it("PrimaryBanner signature accepts vsField + playoffs + earliestGroupKickoff props", () => {
     expect(banner).toContain("vsField:");
+    expect(banner).toContain("playoffs:");
     expect(banner).toContain("earliestGroupKickoff:");
   });
 });
@@ -349,5 +366,85 @@ describe("dashboard — CSS is fully tokenised (P38 additions)", () => {
     expect(css).toContain("db-match-list");
     expect(css).toContain("db-md-lock");
     expect(css).toContain("db-empty-note");
+  });
+});
+
+// ─── this prompt: dashboard playoff + complete arms (PlayoffsView, READ-ONLY) ────────────────
+
+const resolver = readSrc("resolveKnockoutPhase.ts");
+const playoffModules = readSrc("playoffModules.ts");
+
+describe("dashboard — playoff arm modules (survival + reinforce, from PlayoffsView)", () => {
+  it("SurvivalModule reuses the pre-stubbed bracket CSS (.db-bracket / .db-br-*)", () => {
+    expect(dashboard).toContain("SurvivalModule");
+    expect(dashboard).toContain("selectSurvivalView");
+    expect(dashboard).toContain("db-bracket");
+    expect(dashboard).toContain("db-br-row");
+  });
+
+  it("SurvivalModule links into the /playoffs theater (one live surface, not two)", () => {
+    expect(dashboard).toContain('href: "/playoffs"');
+  });
+
+  it("ReinforceModule is the FAAB-reset reminder sourced from reinforcement → /waivers", () => {
+    expect(dashboard).toContain("ReinforceModule");
+    expect(dashboard).toContain("reinforcement");
+    expect(dashboard).toContain('href: "/waivers"');
+    expect(dashboard).toContain("db-reinforce");
+  });
+});
+
+describe("dashboard — complete arm modules (champion + finish, from PlayoffsView)", () => {
+  it("ChampionModule reuses the pre-stubbed podium CSS (.db-podium / .db-pod-*)", () => {
+    expect(dashboard).toContain("ChampionModule");
+    expect(dashboard).toContain("selectChampionPodium");
+    expect(dashboard).toContain("db-podium");
+    expect(dashboard).toContain("db-pod-row");
+  });
+
+  it("MyFinishModule renders the viewer's knockout finish (db-myrecap)", () => {
+    expect(dashboard).toContain("MyFinishModule");
+    expect(dashboard).toContain("selectViewerFinish");
+    expect(dashboard).toContain("db-myrecap");
+  });
+
+  it("season-stats recap gap is flagged at the recap site (TODO(confirm) + the deferred fix)", () => {
+    expect(dashboard).toContain("TODO(confirm)");
+    // The deferred fix names the cumulative-totals read-model pass (already a buildPlayoffsView input).
+    expect(dashboard).toContain("loadCumulativeTournamentTotals");
+  });
+});
+
+describe("dashboard — resolveKnockoutPhase is pure, PlayoffsView.complete authoritative", () => {
+  it("resolves the knockout render phase from playoffsComplete (not the Final-FT signal)", () => {
+    expect(resolver).toContain("export function resolveKnockoutPhase");
+    expect(resolver).toContain("playoffsComplete");
+  });
+
+  it("non-knockout phases pass through (total over TournamentPhase)", () => {
+    expect(resolver).toContain('tournamentPhase !== "playoff"');
+    expect(resolver).toContain('tournamentPhase !== "complete"');
+  });
+});
+
+describe("dashboard — playoffModules pure derivations stay read-model-faithful", () => {
+  it("exports the three derivations the modules + banner consume", () => {
+    expect(playoffModules).toContain("export function selectSurvivalView");
+    expect(playoffModules).toContain("export function selectChampionPodium");
+    expect(playoffModules).toContain("export function selectViewerFinish");
+  });
+
+  it("imports its types from @app/recompute and stays IO-free (no @app/db / prisma)", () => {
+    expect(playoffModules).toContain('from "@app/recompute"');
+    expect(playoffModules).not.toContain("@app/db");
+    expect(playoffModules).not.toContain("prisma");
+  });
+
+  it("CSS: new reinforce + myrecap rules present; bracket + podium reused (still hex-free)", () => {
+    expect(css).toContain("db-reinforce");
+    expect(css).toContain("db-myrecap");
+    expect(css).toContain("db-bracket");
+    expect(css).toContain("db-podium");
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}(?:[^0-9a-fA-F]|$)/m);
   });
 });
