@@ -2,15 +2,16 @@
  * Pure module-data derivations for the dashboard's KNOCKOUT phases (playoff + complete). IO-free,
  * unit-tested. The dashboard's server modules (Dashboard.tsx) render these shapes; everything is
  * sourced READ-ONLY from `PlayoffsView` (loadPlayoffs) — `@app/recompute` is byte-untouched and no
- * field is invented. A figure the read-model does not expose (e.g. cumulative title points) is NOT
- * derived here; it is flagged at the recap site (see TODO(confirm) in Dashboard.tsx).
+ * field is invented. The complete-arm SEASON stats (total title points / power record / best week)
+ * are now first-class on `PlayoffsView.seasonStats` (the sanctioned read-model pass — derived purely in
+ * `buildPlayoffsView`), so the recap consumes them directly rather than flagging a gap.
  *
  * These helpers take the minimal slices of `PlayoffsView` they need (each input interface is a subset
  * of `PlayoffsView`, so the component passes the whole view) and stay name-free EXCEPT the podium,
  * which resolves names via the loader-attached `managerNames` map (Theme F — the browser never reads
  * `manager`). They key everything by managerId otherwise.
  */
-import type { RankedRow, RankedState, PlayoffRoundView } from "@app/recompute";
+import type { RankedRow, RankedState, PlayoffRoundView, ManagerSeasonStats } from "@app/recompute";
 
 // ─── survival (playoff arm — the live guillotine round) ─────────────────────────────────────
 
@@ -123,12 +124,15 @@ export interface PodiumInput {
   readonly totalRounds: number;
   readonly rounds: readonly PlayoffRoundView[];
   readonly managerNames: Record<string, string>;
+  readonly seasonStats: Record<string, ManagerSeasonStats>;
 }
 
 export interface PodiumEntry {
   readonly managerId: string;
   readonly name: string;
   readonly isMe: boolean;
+  /** Cumulative tournament total ("total title points") — `PlayoffsView.seasonStats[id].totalTitlePoints`. */
+  readonly totalTitlePoints: number;
 }
 
 export interface ChampionPodium {
@@ -138,24 +142,29 @@ export interface ChampionPodium {
 }
 
 /**
- * Champion + runner-up for the complete arm's podium, with names resolved from `managerNames`. The
- * runner-up is whoever was cut in the Final round (`rounds[last].eliminatedIds[0]`). NOTE: this is the
- * PlayoffsView-faithful podium — it carries NO cumulative title points (the read-model does not expose
- * them; flagged for a separate read-model pass). Returns nulls when there is no champion yet.
+ * Champion + runner-up for the complete arm's podium, with names resolved from `managerNames` and each
+ * finisher's TOTAL TITLE POINTS from `seasonStats` (the design's `RecapModule` shows the cumulative
+ * figure — now first-class on `PlayoffsView`). The runner-up is whoever was cut in the Final round
+ * (`rounds[last].eliminatedIds[0]`). Returns nulls when there is no champion yet.
  */
 export function selectChampionPodium(input: PodiumInput): ChampionPodium {
-  const { managerId, champion, totalRounds, rounds, managerNames } = input;
+  const { managerId, champion, totalRounds, rounds, managerNames, seasonStats } = input;
   if (!champion) return { champion: null, runnerUp: null };
 
-  const nameOf = (id: string): string => managerNames[id] ?? id;
+  const ptsOf = (id: string): number => seasonStats[id]?.totalTitlePoints ?? 0;
+  const entryOf = (id: string): PodiumEntry => ({
+    managerId: id,
+    name: managerNames[id] ?? id,
+    isMe: id === managerId,
+    totalTitlePoints: ptsOf(id),
+  });
+
   const finalRound = totalRounds > 0 ? rounds[totalRounds - 1] : undefined;
   const runnerUpId = finalRound?.eliminatedIds?.[0] ?? null;
 
   return {
-    champion: { managerId: champion, name: nameOf(champion), isMe: champion === managerId },
-    runnerUp: runnerUpId
-      ? { managerId: runnerUpId, name: nameOf(runnerUpId), isMe: runnerUpId === managerId }
-      : null,
+    champion: entryOf(champion),
+    runnerUp: runnerUpId ? entryOf(runnerUpId) : null,
   };
 }
 
@@ -167,6 +176,7 @@ export interface ViewerFinishInput {
   readonly totalRounds: number;
   readonly rounds: readonly PlayoffRoundView[];
   readonly seedOf: Record<string, number>;
+  readonly seasonStats: Record<string, ManagerSeasonStats>;
 }
 
 export interface ViewerFinish {
@@ -176,18 +186,33 @@ export interface ViewerFinish {
   readonly roundLabel: string | null;
   readonly rank: number | null;
   readonly points: number | null;
+  /** SEASON recap (the design's `MyRecapModule`) — the viewer's `PlayoffsView.seasonStats` row, 0s when
+   *  the viewer is not a seeded participant. `powerW`/`powerL` = the group all-play-all "power record". */
+  readonly powerW: number;
+  readonly powerL: number;
+  readonly totalTitlePoints: number;
+  readonly bestWeek: number;
 }
 
 /**
- * The viewer's KNOCKOUT finish for the complete arm's "Your run" module — derived purely from the
- * ladder: champion, runner-up (cut in the Final), or eliminated in round X (+ that round's rank/points).
- * "unknown" only when the viewer is neither champion nor found in any round's `eliminatedIds` (e.g. a
- * non-participant). The viewer's SEASON stats (power record, total title pts, best week) are a
- * read-model gap and intentionally NOT derived here.
+ * The viewer's complete-arm "Your run" recap — the KNOCKOUT outcome (champion, runner-up cut in the
+ * Final, or eliminated in round X; "unknown" for a non-participant) PLUS the viewer's SEASON stats
+ * (power record / total title pts / best week) read straight from `PlayoffsView.seasonStats`. The
+ * design's `MyRecapModule` renders the outcome + the three season figures; the knockout-round rank/points
+ * stay on the shape (the banner + future cards still read them). Pure — derived from the ladder + the
+ * pre-aggregated `seasonStats`.
  */
 export function selectViewerFinish(input: ViewerFinishInput): ViewerFinish {
-  const { managerId, champion, totalRounds, rounds, seedOf } = input;
+  const { managerId, champion, totalRounds, rounds, seedOf, seasonStats } = input;
   const seed = seedOf[managerId] ?? null;
+  // The viewer's season row (0s when not a seeded participant) — spread into every outcome branch.
+  const s = seasonStats[managerId];
+  const season = {
+    powerW: s?.powerW ?? 0,
+    powerL: s?.powerL ?? 0,
+    totalTitlePoints: s?.totalTitlePoints ?? 0,
+    bestWeek: s?.bestWeek ?? 0,
+  };
 
   // Champion short-circuit (load-bearing — do NOT drop in a future simplify): the champion appears in
   // no round's eliminatedIds, so without this branch the scan below would fall through to "unknown".
@@ -201,6 +226,7 @@ export function selectViewerFinish(input: ViewerFinishInput): ViewerFinish {
       roundLabel: finalRound?.round ?? null,
       rank: row?.rank ?? null,
       points: row?.points ?? null,
+      ...season,
     };
   }
 
@@ -214,8 +240,9 @@ export function selectViewerFinish(input: ViewerFinishInput): ViewerFinish {
       roundLabel: round.round,
       rank: row?.rank ?? null,
       points: row?.points ?? null,
+      ...season,
     };
   }
 
-  return { outcome: "unknown", seed, roundLabel: null, rank: null, points: null };
+  return { outcome: "unknown", seed, roundLabel: null, rank: null, points: null, ...season };
 }

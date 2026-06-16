@@ -70,6 +70,25 @@ export interface PlayoffSeed {
 }
 
 /**
+ * Per-manager SEASON aggregates surfaced for the complete-arm recap (the design's `RecapModule` podium
+ * total points + `MyRecapModule` power record / total pts / best week). PURE aggregations of EXISTING
+ * scores — no new write, no scoring-rule change:
+ *   • `totalTitlePoints` — Σ `score_manager_period.points` over ALL periods (= the `cumulativeTotals`
+ *     input the live boundary tiebreak already uses).
+ *   • `powerW` / `powerL` — the group-stage all-play-all W-L (the regular-season "power record" =
+ *     `seeds[].gW/gL` = `computeStandings(groupPeriods)`); NOT extended over the knockouts (guillotine
+ *     rounds are not all-play-all), so it reads identically to the group dashboard's "season W-L".
+ *   • `bestWeek` — the max single-period total across ALL periods (group_md ∪ knockout_round are the only
+ *     two `period.kind`s, so `groupPeriods` + `roundScores` together cover every period). 0 when none.
+ */
+export interface ManagerSeasonStats {
+  totalTitlePoints: number;
+  powerW: number;
+  powerL: number;
+  bestWeek: number;
+}
+
+/**
  * The §21 view-model CORE — everything classification/derivation. The loader spreads this and attaches the
  * reused `reducedLineup` / `reinforcement` reads to form the full `PlayoffsView`. `champion` / `complete`
  * are the read-derived "tournament over" signals (§21 under-specified them; added here — the loader reads,
@@ -93,6 +112,9 @@ export interface PlayoffsViewCore {
   champion: string | null;
   /** Derived "tournament over": every round cut AND a champion exists. The loader never reads league.status. */
   complete: boolean;
+  /** managerId → SEASON aggregates for the complete-arm recap (total title pts / power record / best week).
+   *  PURE: aggregates the SAME stored scores the builder already receives — no new input, no new IO. */
+  seasonStats: Record<string, ManagerSeasonStats>;
 }
 
 export interface PlayoffEntryInput {
@@ -142,6 +164,27 @@ function rankRows(
 }
 
 /**
+ * Each manager's best single-period total ("best week") = the max over their group-period scores
+ * (`groupPeriods`) and their per-knockout-round scores (`roundScores`). Those two inputs cover EVERY
+ * period (the only `period.kind`s are group_md + knockout_round), so this is the true season max. Pure;
+ * a manager with no scored period is absent from the map (the caller defaults it to 0).
+ */
+export function bestWeekByManager(
+  groupPeriods: readonly PeriodScores[],
+  roundScores: Record<string, Record<string, number>>,
+): ReadonlyMap<string, number> {
+  const best = new Map<string, number>();
+  const bump = (id: string, pts: number): void => {
+    const cur = best.get(id);
+    if (cur === undefined || pts > cur) best.set(id, pts);
+  };
+  for (const period of groupPeriods) for (const s of period.scores) bump(s.managerId, s.points);
+  for (const byManager of Object.values(roundScores))
+    for (const [id, pts] of Object.entries(byManager)) bump(id, pts);
+  return best;
+}
+
+/**
  * The provisional cut "zone" for a live round — the set of managers facing the blade — computed via the
  * SAME {@link resolveRoundCut} the apply path uses (it reuses `selectGuillotineCuts` verbatim). On an
  * unbroken boundary tie the zone is the FULL provisional cut = (managers strictly below the boundary) ∪
@@ -188,6 +231,21 @@ export function buildPlayoffsView(input: BuildPlayoffsViewInput): PlayoffsViewCo
     .sort((a, b) => a.seed - b.seed || cmpId(a.managerId, b.managerId));
   const seedOf: Record<string, number> = {};
   for (const s of seeds) seedOf[s.managerId] = s.seed;
+
+  // ── season aggregates for the complete-arm recap (PURE — same stored scores, no new input/IO) ──
+  // totalTitlePoints = the cumulative tournament total already threaded in; powerW/L = the group
+  // all-play-all record (standBy, = seeds[].gW/gL); bestWeek = max single-period total over all periods.
+  const bestWeek = bestWeekByManager(groupPeriods, roundScores);
+  const seasonStats: Record<string, ManagerSeasonStats> = {};
+  for (const e of entries) {
+    const g = standBy.get(e.managerId);
+    seasonStats[e.managerId] = {
+      totalTitlePoints: cumulativeTotals.get(e.managerId) ?? 0,
+      powerW: g?.allPlayAllW ?? 0,
+      powerL: g?.allPlayAllL ?? 0,
+      bestWeek: bestWeek.get(e.managerId) ?? 0,
+    };
+  }
 
   // ── per-round classification ──
   // A round is `past` iff some entry was cut in it. The `live` round is the first uncut one; everything
@@ -301,5 +359,6 @@ export function buildPlayoffsView(input: BuildPlayoffsViewInput): PlayoffsViewCo
     me,
     champion,
     complete,
+    seasonStats,
   };
 }

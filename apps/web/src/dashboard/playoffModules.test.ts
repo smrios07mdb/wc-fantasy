@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { RankedRow, RankedState, PlayoffRoundView } from "@app/recompute";
+import type { RankedRow, RankedState, PlayoffRoundView, ManagerSeasonStats } from "@app/recompute";
 import { selectSurvivalView, selectChampionPodium, selectViewerFinish } from "./playoffModules";
 
 // ─── fixtures ───────────────────────────────────────────────────────────────────────────────
@@ -32,6 +32,18 @@ function round(
     eliminatedIds: opts.eliminatedIds ?? null,
   };
 }
+
+const stat = (
+  totalTitlePoints: number,
+  powerW: number,
+  powerL: number,
+  bestWeek: number,
+): ManagerSeasonStats => ({
+  totalTitlePoints,
+  powerW,
+  powerL,
+  bestWeek,
+});
 
 // ─── selectSurvivalView ─────────────────────────────────────────────────────────────────────
 
@@ -175,8 +187,9 @@ describe("selectSurvivalView — live guillotine round summary", () => {
 
 // ─── selectChampionPodium ───────────────────────────────────────────────────────────────────
 
-describe("selectChampionPodium — champion + runner-up with names (no title points)", () => {
+describe("selectChampionPodium — champion + runner-up with names + total title points", () => {
   const names = { m1: "Ana", m2: "Bo", me: "You" };
+  const seasonStats = { m1: stat(140, 7, 1, 52), m2: stat(118, 6, 2, 48) };
   const finalRound = round(2, "Final", "past", {
     ranked: [row("m1", 50, 1, "safe"), row("m2", 44, 2, "eliminated")],
     survivors: ["m1"],
@@ -184,16 +197,22 @@ describe("selectChampionPodium — champion + runner-up with names (no title poi
   });
   const rounds = [round(0, "R16", "past"), round(1, "SF", "past"), finalRound];
 
-  it("resolves champion + runner-up (cut in the Final) from managerNames", () => {
+  it("resolves champion + runner-up (cut in the Final) from managerNames, carrying total title points", () => {
     const p = selectChampionPodium({
       managerId: "me",
       champion: "m1",
       totalRounds: 3,
       rounds,
       managerNames: names,
+      seasonStats,
     });
-    expect(p.champion).toEqual({ managerId: "m1", name: "Ana", isMe: false });
-    expect(p.runnerUp).toEqual({ managerId: "m2", name: "Bo", isMe: false });
+    expect(p.champion).toEqual({
+      managerId: "m1",
+      name: "Ana",
+      isMe: false,
+      totalTitlePoints: 140,
+    });
+    expect(p.runnerUp).toEqual({ managerId: "m2", name: "Bo", isMe: false, totalTitlePoints: 118 });
   });
 
   it("marks isMe when the viewer is the champion", () => {
@@ -203,6 +222,7 @@ describe("selectChampionPodium — champion + runner-up with names (no title poi
       totalRounds: 3,
       rounds,
       managerNames: names,
+      seasonStats,
     });
     expect(p.champion?.isMe).toBe(true);
   });
@@ -214,26 +234,28 @@ describe("selectChampionPodium — champion + runner-up with names (no title poi
       totalRounds: 3,
       rounds,
       managerNames: names,
+      seasonStats,
     });
     expect(p).toEqual({ champion: null, runnerUp: null });
   });
 
-  it("falls back to the managerId when a name is missing; null runner-up when the Final has no cut", () => {
+  it("falls back to managerId for a missing name AND 0 for missing season stats; null runner-up when the Final has no cut", () => {
     const p = selectChampionPodium({
       managerId: "me",
       champion: "mX",
       totalRounds: 1,
       rounds: [round(0, "Final", "past", { eliminatedIds: null })],
       managerNames: {},
+      seasonStats: {},
     });
-    expect(p.champion).toEqual({ managerId: "mX", name: "mX", isMe: false });
+    expect(p.champion).toEqual({ managerId: "mX", name: "mX", isMe: false, totalTitlePoints: 0 });
     expect(p.runnerUp).toBeNull();
   });
 });
 
 // ─── selectViewerFinish ─────────────────────────────────────────────────────────────────────
 
-describe("selectViewerFinish — the viewer's knockout finish", () => {
+describe("selectViewerFinish — the viewer's knockout finish + season recap", () => {
   const finalRound = round(2, "Final", "past", {
     ranked: [row("m1", 50, 1, "safe", 4), row("m2", 44, 2, "eliminated", 1)],
     eliminatedIds: ["m2"],
@@ -244,55 +266,79 @@ describe("selectViewerFinish — the viewer's knockout finish", () => {
   });
   const rounds = [r16, round(1, "SF", "past"), finalRound];
   const seedOf = { m1: 4, m2: 1, m5: 7 };
+  // Season rows: m1 power 7-1 / 140 pts / best 52; m2 6-2 / 118 / 48; m5 3-4 / 60 / 18.
+  const seasonStats = { m1: stat(140, 7, 1, 52), m2: stat(118, 6, 2, 48), m5: stat(60, 3, 4, 18) };
 
-  it("champion: outcome champion, Final round, rank/points from the Final row", () => {
+  it("champion: outcome champion + Final rank/points + the viewer's season recap", () => {
     const f = selectViewerFinish({
       managerId: "m1",
       champion: "m1",
       totalRounds: 3,
       rounds,
       seedOf,
+      seasonStats,
     });
-    expect(f).toEqual({ outcome: "champion", seed: 4, roundLabel: "Final", rank: 1, points: 50 });
+    expect(f).toEqual({
+      outcome: "champion",
+      seed: 4,
+      roundLabel: "Final",
+      rank: 1,
+      points: 50,
+      powerW: 7,
+      powerL: 1,
+      totalTitlePoints: 140,
+      bestWeek: 52,
+    });
   });
 
-  it("runner-up: cut in the LAST round → runner-up (not generic eliminated)", () => {
+  it("runner-up: cut in the LAST round → runner-up (not generic eliminated), with season recap", () => {
     const f = selectViewerFinish({
       managerId: "m2",
       champion: "m1",
       totalRounds: 3,
       rounds,
       seedOf,
+      seasonStats,
     });
     expect(f.outcome).toBe("runner-up");
     expect(f.roundLabel).toBe("Final");
     expect(f.rank).toBe(2);
     expect(f.points).toBe(44);
     expect(f.seed).toBe(1);
+    expect(f.powerW).toBe(6);
+    expect(f.powerL).toBe(2);
+    expect(f.totalTitlePoints).toBe(118);
+    expect(f.bestWeek).toBe(48);
   });
 
-  it("eliminated mid-ladder: outcome eliminated, the round they went out + that round's rank/points", () => {
+  it("eliminated mid-ladder: outcome eliminated, the round they went out + that round's rank/points + season recap", () => {
     const f = selectViewerFinish({
       managerId: "m5",
       champion: "m1",
       totalRounds: 3,
       rounds,
       seedOf,
+      seasonStats,
     });
     expect(f.outcome).toBe("eliminated");
     expect(f.roundLabel).toBe("R16");
     expect(f.rank).toBe(7);
     expect(f.points).toBe(20);
     expect(f.seed).toBe(7);
+    expect(f.powerW).toBe(3);
+    expect(f.powerL).toBe(4);
+    expect(f.totalTitlePoints).toBe(60);
+    expect(f.bestWeek).toBe(18);
   });
 
-  it("non-participant (not champion, not in any eliminatedIds) → unknown", () => {
+  it("non-participant (not champion, not in any eliminatedIds) → unknown + zeroed season recap", () => {
     const f = selectViewerFinish({
       managerId: "ghost",
       champion: "m1",
       totalRounds: 3,
       rounds,
       seedOf,
+      seasonStats,
     });
     expect(f).toEqual({
       outcome: "unknown",
@@ -300,6 +346,10 @@ describe("selectViewerFinish — the viewer's knockout finish", () => {
       roundLabel: null,
       rank: null,
       points: null,
+      powerW: 0,
+      powerL: 0,
+      totalTitlePoints: 0,
+      bestWeek: 0,
     });
   });
 });

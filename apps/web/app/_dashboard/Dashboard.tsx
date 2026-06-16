@@ -18,9 +18,10 @@
  *   2. No per-manager "ready" flag — ReadinessModule renders all dots off (presence-only in the
  *      draft room via Realtime; server-side there is no readiness concept).
  *      (flagged in ReadinessModule below)
- *   3. Complete-arm SEASON stats (total title points, power record, best week) are NOT in PlayoffsView
- *      — the recap shows the knockout finish only; the season recap is a flagged read-model gap
- *      (TODO(confirm) in MyFinishModule + a DECISIONS line).
+ *
+ * The complete-arm SEASON stats (total title points, power record, best week) are now first-class on
+ * `PlayoffsView.seasonStats` (derived purely in `buildPlayoffsView`), so the recap renders them directly
+ * — the earlier read-model gap is CLOSED (ChampionModule podium + MyFinishModule below; DECISIONS).
  */
 import type { Position } from "@app/shared";
 import { SQUAD_COMPOSITION } from "@app/shared";
@@ -549,13 +550,10 @@ function ReinforceModule({ playoffs }: { playoffs: PlayoffsView }) {
 
 /**
  * Champion podium — the champion + the runner-up (cut in the Final), names resolved server-side via
- * PlayoffsView.managerNames. Mirrors the design's `RecapModule`. CSS: .db-podium / .db-pod-* (pre-stubbed).
- *
- * TODO(confirm): the design's podium also shows each finisher's TOTAL TITLE POINTS — a cumulative
- * figure PlayoffsView does NOT expose (it carries per-round points only). We show the role, not a
- * misleading round-points number. The clean deferred fix is a read-model pass that surfaces the
- * cumulative totals (already a `buildPlayoffsView` input via `loadCumulativeTournamentTotals`) in
- * PlayoffsView's output. Recorded in DECISIONS; not bolted on here (packages/recompute stays untouched).
+ * PlayoffsView.managerNames, each row showing its TOTAL TITLE POINTS (the cumulative tournament total,
+ * now first-class on PlayoffsView.seasonStats). Mirrors the design's `RecapModule` row exactly —
+ * medal · avatar · name · total-title-pts; the medal (🥇/🥈) + is-champ tint already carry the role, so
+ * no separate role pill. CSS: .db-podium / .db-pod-* / .db-pod-pts (pre-stubbed, no new CSS).
  */
 function ChampionModule({ playoffs }: { playoffs: PlayoffsView }) {
   const { champion, runnerUp } = selectChampionPodium(playoffs);
@@ -577,7 +575,7 @@ function ChampionModule({ playoffs }: { playoffs: PlayoffsView }) {
           </span>
           <MgrAvatar id={champion.managerId} displayName={champion.name} size="sm" />
           <span className="db-pod-name">{champion.isMe ? "You" : champion.name}</span>
-          <span className="pill pill-win">Champion</span>
+          <span className="db-pod-pts mono">{champion.totalTitlePoints}</span>
         </div>
         {runnerUp && (
           <div className={"db-pod-row" + (runnerUp.isMe ? " is-me" : "")}>
@@ -586,7 +584,7 @@ function ChampionModule({ playoffs }: { playoffs: PlayoffsView }) {
             </span>
             <MgrAvatar id={runnerUp.managerId} displayName={runnerUp.name} size="sm" />
             <span className="db-pod-name">{runnerUp.isMe ? "You" : runnerUp.name}</span>
-            <span className="pill">Runner-up</span>
+            <span className="db-pod-pts mono">{runnerUp.totalTitlePoints}</span>
           </div>
         )}
       </div>
@@ -595,14 +593,11 @@ function ChampionModule({ playoffs }: { playoffs: PlayoffsView }) {
 }
 
 /**
- * Your run — the viewer's KNOCKOUT finish (champion / runner-up / out in round X + that round's
- * rank/points), derived purely via `selectViewerFinish`. Mirrors the design's `MyRecapModule`.
- * CSS: .db-myrecap / .db-myrec-* (new).
- *
- * TODO(confirm): the design's "Your season" recap also shows power record / total title pts / best
- * week — all SEASON figures PlayoffsView does NOT expose (they live in VsFieldView.season). We show
- * the knockout finish only; the season recap is the read-model gap deferred above (DECISIONS). The
- * "Vs the field" CTA bridges to the full season standings in the meantime.
+ * Your season — the viewer's complete-arm recap, mirroring the design's `MyRecapModule` exactly: four
+ * cells in the `.db-myrecap` 2×2 grid = finish · power record · total pts · best week. The finish is the
+ * knockout outcome (champion / runner-up / out at round X); the three stats are SEASON figures now
+ * first-class on `PlayoffsView.seasonStats` (`selectViewerFinish`). Power record = the group all-play-all
+ * W-L (reads identically to the group-phase "season W-L"). CSS: .db-myrecap / .db-myrec-* (pre-stubbed).
  */
 function MyFinishModule({ playoffs }: { playoffs: PlayoffsView }) {
   const f = selectViewerFinish(playoffs);
@@ -616,7 +611,7 @@ function MyFinishModule({ playoffs }: { playoffs: PlayoffsView }) {
           : "—";
 
   return (
-    <Module title="Your run" cta={{ label: "Vs the field", href: "/vsfield" }}>
+    <Module title="Your season" cta={{ label: "Vs the field", href: "/vsfield" }}>
       <div className="db-myrecap">
         <div className="db-myrec-stat">
           <b className="display">{outcomeLabel}</b>
@@ -624,24 +619,20 @@ function MyFinishModule({ playoffs }: { playoffs: PlayoffsView }) {
             {f.roundLabel ? `at the ${f.roundLabel}` : "finish"}
           </span>
         </div>
-        {f.seed !== null && (
-          <div className="db-myrec-stat">
-            <b className="display mono">#{f.seed}</b>
-            <span className="t-micro text-tertiary">seed</span>
-          </div>
-        )}
-        {f.rank !== null && (
-          <div className="db-myrec-stat">
-            <b className="display mono">#{f.rank}</b>
-            <span className="t-micro text-tertiary">round rank</span>
-          </div>
-        )}
-        {f.points !== null && (
-          <div className="db-myrec-stat">
-            <b className="display mono">{f.points}</b>
-            <span className="t-micro text-tertiary">round pts</span>
-          </div>
-        )}
+        <div className="db-myrec-stat">
+          <b className="display mono">
+            {f.powerW}–{f.powerL}
+          </b>
+          <span className="t-micro text-tertiary">power record</span>
+        </div>
+        <div className="db-myrec-stat">
+          <b className="display mono">{f.totalTitlePoints}</b>
+          <span className="t-micro text-tertiary">total pts</span>
+        </div>
+        <div className="db-myrec-stat">
+          <b className="display mono">{f.bestWeek}</b>
+          <span className="t-micro text-tertiary">best week</span>
+        </div>
       </div>
     </Module>
   );
@@ -673,8 +664,9 @@ function modulesFor(phase: DashboardPhase): ModuleKey[] {
       // lock/fixtures/activity — not PlayoffsView-derivable; dropped, same call the group arm made.)
       return ["survival", "reinforce"];
     case "complete":
-      // Champion podium + the viewer's knockout finish, from PlayoffsView. (The season-stats recap is
-      // a flagged read-model gap — see ChampionModule / MyFinishModule TODO(confirm).)
+      // Champion podium (+ total title pts) + the viewer's season recap (finish / power record / total
+      // pts / best week), all from PlayoffsView.seasonStats. (Design's standings/activity dropped — same
+      // PlayoffsView-subset call the playoff arm made.)
       return ["champion", "finish"];
     default: {
       const _exhaustive: never = phase;

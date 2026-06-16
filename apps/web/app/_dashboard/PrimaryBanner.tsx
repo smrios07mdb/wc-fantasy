@@ -242,8 +242,9 @@ function bannerContent(
   }
 
   if (phase === "complete") {
-    // Real champion + the viewer's knockout finish from PlayoffsView (READ-ONLY). The season-stats recap
-    // is a flagged read-model gap (see Dashboard.tsx ChampionModule / MyFinishModule TODO(confirm)).
+    // Real champion + the viewer's finish + SEASON recap from PlayoffsView (READ-ONLY). The complete-arm
+    // season stats (power record / total title points / best week) are first-class on
+    // PlayoffsView.seasonStats (selectViewerFinish) — surfaced here in the viewer's headline + stats.
     const podium = playoffs ? selectChampionPodium(playoffs) : null;
     const finish = playoffs ? selectViewerFinish(playoffs) : null;
     const champName = podium?.champion?.name ?? null;
@@ -263,14 +264,29 @@ function bannerContent(
           : finish?.outcome === "eliminated"
             ? `Out · ${finish.roundLabel ?? "knockouts"}`
             : "—";
-    const sub =
+    // The viewer's season-recap phrase (null when they were not a participant → generic copy, no stats).
+    const finishPhrase =
       finish?.outcome === "champion"
-        ? "You won it all — congratulations."
+        ? "as champion"
         : finish?.outcome === "runner-up"
-          ? "You finished runner-up."
+          ? "as runner-up"
           : finish?.outcome === "eliminated"
-            ? `You were eliminated at the ${finish.roundLabel ?? "knockouts"}.`
-            : "The tournament has finished.";
+            ? `out at the ${finish.roundLabel ?? "knockouts"}`
+            : null;
+    const sub =
+      finish && finishPhrase
+        ? `You finished ${finishPhrase} · ${finish.totalTitlePoints} total pts`
+        : "The tournament has finished.";
+    const secondary =
+      finish && finishPhrase
+        ? [
+            { l: "Power record", v: `${finish.powerW}–${finish.powerL}` },
+            { l: "Best week", v: `${finish.bestWeek} pts` },
+          ]
+        : [
+            { l: "Champion", v: champName ?? "—" },
+            { l: "Your finish", v: finishLabel },
+          ];
     return {
       eyebrow: PHASE_EYEBROW["complete"],
       title: champName ? `Champion · ${champName}` : "Tournament complete",
@@ -279,10 +295,7 @@ function bannerContent(
       bigMono: true,
       ctaLabel: "Playoff theater",
       ctaHref: "/playoffs",
-      secondary: [
-        { l: "Champion", v: champName ?? "—" },
-        { l: "Your finish", v: finishLabel },
-      ],
+      secondary,
     };
   }
 

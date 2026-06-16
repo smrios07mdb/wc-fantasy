@@ -38,6 +38,10 @@ const VIEW: PlayoffsView = {
   me: { managerId: "mgr-alice", seed: 1, points: 20, rank: 1, state: "safe" },
   champion: null,
   complete: false,
+  seasonStats: {
+    "mgr-alice": { totalTitlePoints: 20, powerW: 1, powerL: 0, bestWeek: 20 },
+    "mgr-bob": { totalTitlePoints: 12, powerW: 0, powerL: 1, bestWeek: 12 },
+  },
   managerId: "mgr-alice",
   reducedLineup: null,
   reinforcement: null,

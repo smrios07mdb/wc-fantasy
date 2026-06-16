@@ -3,6 +3,7 @@ import { selectGuillotineCuts } from "./guillotine";
 import type { PeriodScores } from "./standing";
 import {
   buildPlayoffsView,
+  bestWeekByManager,
   type BuildPlayoffsViewInput,
   type PlayoffEntryInput,
   type PlayoffRoundInput,
@@ -358,5 +359,98 @@ describe("buildPlayoffsView — no rounds", () => {
     expect(view.champion).toBeNull();
     expect(view.aliveNow).toBe(0);
     expect(view.survivesNow).toBe(0);
+    expect(view.seasonStats).toEqual({});
+  });
+});
+
+// ── best week (pure helper) — max single-period total across group ∪ knockout ──────────────
+describe("bestWeekByManager", () => {
+  it("takes the max over group periods AND knockout rounds; a manager with no scored period is omitted", () => {
+    const best = bestWeekByManager([ps("g1", { A: 30, B: 10 }), ps("g2", { A: 5, B: 40 })], {
+      R32: { A: 50, B: 1 },
+      Final: { A: 2 },
+    });
+    expect(best.get("A")).toBe(50); // max(30, 5, 50, 2)
+    expect(best.get("B")).toBe(40); // max(10, 40, 1)
+    expect(best.has("C")).toBe(false); // never scored
+  });
+
+  it("empty inputs → empty map", () => {
+    expect(bestWeekByManager([], {}).size).toBe(0);
+  });
+});
+
+// ── season stats (complete-arm recap: total title pts / power record / best week) ───────────
+describe("buildPlayoffsView — season stats", () => {
+  it("surfaces total title points (cumulativeTotals), group power record (seeds gW/gL), and best week", () => {
+    // Two group periods, three managers. All-play-all cumulative:
+    //   g1 A>B>C: A 2-0, B 1-1, C 0-2.  g2 B>A>C: B 2-0, A 1-1, C 0-2.
+    //   → A 3-1, B 3-1, C 0-4.  (A tie would bank neither — none here.)
+    const view = buildPlayoffsView(
+      base({
+        groupPeriods: [ps("g1", { A: 30, B: 20, C: 10 }), ps("g2", { A: 25, B: 40, C: 5 })],
+        rounds: [round("Final", 1)],
+        entries: [entry("A", 1), entry("B", 2), entry("C", 3, "eliminated", "Final")],
+        roundScores: { Final: { A: 60, B: 12, C: 8 } },
+        cumulativeTotals: totals({ A: 115, B: 72, C: 23 }),
+      }),
+    );
+    expect(view.seasonStats.A).toEqual({
+      totalTitlePoints: 115,
+      powerW: 3,
+      powerL: 1,
+      bestWeek: 60,
+    });
+    expect(view.seasonStats.B).toEqual({
+      totalTitlePoints: 72,
+      powerW: 3,
+      powerL: 1,
+      bestWeek: 40,
+    });
+    expect(view.seasonStats.C).toEqual({
+      totalTitlePoints: 23,
+      powerW: 0,
+      powerL: 4,
+      bestWeek: 10,
+    });
+  });
+
+  it("manager with no knockout score → best week from the group periods; a scoreless entrant → all zero", () => {
+    const view = buildPlayoffsView(
+      base({
+        groupPeriods: [ps("g1", { A: 22, B: 8 })],
+        rounds: [round("Final", 1)],
+        entries: [entry("A", 1), entry("B", 2), entry("Z", 3)],
+        roundScores: { Final: { A: 9 } }, // B has no knockout row; Z scored nowhere
+        cumulativeTotals: totals({ A: 31, B: 8 }), // Z absent → defaults to 0
+      }),
+    );
+    expect(view.seasonStats.A!.bestWeek).toBe(22); // group 22 > Final 9
+    expect(view.seasonStats.B!.bestWeek).toBe(8); // group only
+    // A seeded entrant who never scored is still present, with graceful zeros (no throw).
+    expect(view.seasonStats.Z).toEqual({ totalTitlePoints: 0, powerW: 0, powerL: 0, bestWeek: 0 });
+  });
+
+  it("a tie in a period banks neither W nor L; best week still counts the tied value", () => {
+    const view = buildPlayoffsView(
+      base({
+        groupPeriods: [ps("g1", { A: 15, B: 15 })],
+        rounds: [round("Final", 1)],
+        entries: [entry("A", 1), entry("B", 2)],
+        cumulativeTotals: totals({ A: 15, B: 15 }),
+      }),
+    );
+    expect(view.seasonStats.A).toEqual({
+      totalTitlePoints: 15,
+      powerW: 0,
+      powerL: 0,
+      bestWeek: 15,
+    });
+    expect(view.seasonStats.B).toEqual({
+      totalTitlePoints: 15,
+      powerW: 0,
+      powerL: 0,
+      bestWeek: 15,
+    });
   });
 });

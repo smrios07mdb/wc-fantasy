@@ -349,6 +349,13 @@ describe("dashboard — PrimaryBanner extended for tournament phases (P38)", () 
     expect(banner).not.toContain("STOP(P38)");
   });
 
+  it("complete-arm banner surfaces the viewer's season recap (total pts + power record + best week)", () => {
+    expect(banner).toContain("totalTitlePoints");
+    expect(banner).toContain("total pts");
+    expect(banner).toContain("Power record");
+    expect(banner).toContain("Best week");
+  });
+
   it("PrimaryBanner signature accepts vsField + playoffs + earliestGroupKickoff props", () => {
     expect(banner).toContain("vsField:");
     expect(banner).toContain("playoffs:");
@@ -394,24 +401,32 @@ describe("dashboard — playoff arm modules (survival + reinforce, from Playoffs
   });
 });
 
-describe("dashboard — complete arm modules (champion + finish, from PlayoffsView)", () => {
-  it("ChampionModule reuses the pre-stubbed podium CSS (.db-podium / .db-pod-*)", () => {
+describe("dashboard — complete arm modules (champion + season recap, from PlayoffsView.seasonStats)", () => {
+  it("ChampionModule reuses the pre-stubbed podium CSS + shows each finisher's total title points", () => {
     expect(dashboard).toContain("ChampionModule");
     expect(dashboard).toContain("selectChampionPodium");
     expect(dashboard).toContain("db-podium");
     expect(dashboard).toContain("db-pod-row");
+    // Total title points on each podium row (reuses the pre-stubbed .db-pod-pts) — no role pill.
+    expect(dashboard).toContain("db-pod-pts");
+    expect(dashboard).toContain("totalTitlePoints");
   });
 
-  it("MyFinishModule renders the viewer's knockout finish (db-myrecap)", () => {
+  it("MyFinishModule renders the season recap — finish · power record · total pts · best week (db-myrecap)", () => {
     expect(dashboard).toContain("MyFinishModule");
     expect(dashboard).toContain("selectViewerFinish");
     expect(dashboard).toContain("db-myrecap");
+    expect(dashboard).toContain("power record");
+    expect(dashboard).toContain("total pts");
+    expect(dashboard).toContain("best week");
   });
 
-  it("season-stats recap gap is flagged at the recap site (TODO(confirm) + the deferred fix)", () => {
-    expect(dashboard).toContain("TODO(confirm)");
-    // The deferred fix names the cumulative-totals read-model pass (already a buildPlayoffsView input).
-    expect(dashboard).toContain("loadCumulativeTournamentTotals");
+  it("the complete-arm season-stats recap gap is CLOSED — no TODO(confirm); stats from PlayoffsView.seasonStats", () => {
+    // The recap site no longer flags a gap; the figures are derived in the pure read-model pass.
+    expect(dashboard).not.toContain("TODO(confirm)");
+    expect(playoffModules).toContain("seasonStats");
+    expect(playoffModules).toContain("totalTitlePoints");
+    expect(playoffModules).toContain("bestWeek");
   });
 });
 
