@@ -4,7 +4,7 @@
  * (.st-app/.st-top/.st-nav/.st-scroll) are DROPPED — the production AppShell owns the topbar/nav/scroll, and
  * ds.css is global (root layout). What remains is the screen BODY: hero, round-board + ladder, the guillotine,
  * the reduced pitch, reinforce, and the mobile (.mpo-*) condensed layout. Tokens (--elim/--live/--accent/
- * --win/--refund/--surface-*/--pos-*/--kit-outline + the `livepulse` keyframe + --ease-*) are the global ds.
+ * --win/--refund/--surface-x/--pos-x/--kit-outline + the `livepulse` keyframe + --ease-x) are the global ds.
  *
  * Accent rule (design/CLAUDE.md §3): COBALT marks ONLY you (.is-me / .po-you) + primary CTAs; the CUT is
  * --elim (red); the LIVE indicator is --live (red). No gold anywhere.
