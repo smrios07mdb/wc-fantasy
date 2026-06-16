@@ -27,6 +27,10 @@ import type {
   StandingUpsert,
 } from "./store";
 
+// The single canonical cumulative-tournament-total derivation, surfaced on this Prisma subpath so both the
+// write path (`advanceStore.loadRoundContext`) and the read path (`loadPlayoffs`) import it from one place.
+export { loadCumulativeTournamentTotals, sumByManager } from "./cumulativeTotals";
+
 /** Minimal client surface this store needs (the singleton from `@app/db` satisfies it). */
 type Db = PrismaClient;
 
