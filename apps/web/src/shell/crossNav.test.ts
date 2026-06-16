@@ -16,6 +16,7 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
       "vsfield",
       "waivers",
       "pool",
+      "playoffs",
       "scoring",
       "settings",
     ]);
@@ -31,6 +32,8 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
     // Prompt 45: user-facing label renamed to "Quiniela" (the id/href/key stay "pool").
     expect(byId.pool).toMatchObject({ href: "/pool", label: "Quiniela" });
     expect(byId.scoring).toMatchObject({ href: "/scoring", label: "Scoring" });
+    // Phase 4: the guillotine playoffs theater is a real nav entry.
+    expect(byId.playoffs).toMatchObject({ href: "/playoffs", label: "Playoffs" });
     expect(byId.home).toMatchObject({ href: "/", label: "Home" });
     // Prompt 39: Settings seam is now a real route.
     expect(byId.settings).toMatchObject({ href: "/settings", label: "Settings" });
@@ -50,8 +53,14 @@ describe("BOTTOM_TAB_ITEMS — primary mobile bottom bar destinations", () => {
 });
 
 describe("MORE_SHEET_ITEMS — secondary destinations in the More sheet", () => {
-  it("lists the More sheet items in spec order: Scoring · Waivers · Draft · Settings", () => {
-    expect(MORE_SHEET_ITEMS.map((i) => i.id)).toEqual(["scoring", "waivers", "draft", "settings"]);
+  it("lists the More sheet items in spec order: Scoring · Waivers · Playoffs · Draft · Settings", () => {
+    expect(MORE_SHEET_ITEMS.map((i) => i.id)).toEqual([
+      "scoring",
+      "waivers",
+      "playoffs",
+      "draft",
+      "settings",
+    ]);
   });
 
   it("covers the routes NOT in the bottom bar", () => {
@@ -69,6 +78,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
     expect(selectActiveNav("/waivers")).toBe("waivers");
     expect(selectActiveNav("/pool")).toBe("pool");
+    expect(selectActiveNav("/playoffs")).toBe("playoffs");
     expect(selectActiveNav("/scoring")).toBe("scoring");
     expect(selectActiveNav("/settings")).toBe("settings");
   });

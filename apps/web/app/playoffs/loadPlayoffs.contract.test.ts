@@ -36,6 +36,15 @@ describe("loadPlayoffs — assembly contract", () => {
     expect(loader).toContain("prisma.playoffEntry.findMany");
   });
 
+  it("attaches a server-composed managerId→name map (the SCOPED read-model exception; screen never reads manager rows)", () => {
+    // The screen needs field-wide names (survivor rows + guillotined avatars); the pure core stays
+    // name-free. This loader-side attachment keeps the browser off a direct `manager` read (Theme F).
+    expect(loader).toContain("prisma.manager.findMany");
+    expect(loader).toContain("managerNames");
+    // It is a plain owner-bypass read keyed by leagueId — still no write, still no league.status touch.
+    expect(loader).toContain("select: { id: true, displayName: true }");
+  });
+
   it("derives the cumulative total via the SHARED loadCumulativeTournamentTotals helper (single-sourced with the apply path)", () => {
     // The boundary tiebreak is the SAME cumulative total the apply path computes — BOTH paths call the one
     // canonical helper (its period scoping lives once), so they cannot drift. It passes its OWN participant

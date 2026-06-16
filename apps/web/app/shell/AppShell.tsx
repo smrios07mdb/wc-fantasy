@@ -82,6 +82,13 @@ function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
         <path d="M8.5 12.5 11 15l4.5-5.5" />
       </>
     ),
+    // Playoffs = the guillotine: two posts + a dropping blade wedge (the screen's signature, Phase 4).
+    playoffs: (
+      <>
+        <path d="M5 3v18M19 3v18" />
+        <path d="M5 4h14v6l-14 4z" />
+      </>
+    ),
     // Scoring = a rulebook / lined document (the in-app scoring reference, Prompt 28).
     scoring: (
       <>

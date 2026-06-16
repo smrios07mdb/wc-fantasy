@@ -33,6 +33,14 @@ export type PlayoffsView = PlayoffsViewCore & {
   reducedLineup: SetLineupState | null;
   /** The FAAB reinforcement surface (reset-$100 budget, carried claims, waiver order) — `loadWaivers`'s. */
   reinforcement: WaiversView | null;
+  /**
+   * managerId → display name for the WHOLE guillotine field. The pure `buildPlayoffsView` core stays
+   * name-free (it keys everything by managerId); the SCREEN needs names for the survivor rows + the
+   * on-the-block / guillotined avatars. This is a SCOPED read-model exception (DECISIONS): a server-composed
+   * loader-side attachment — like `reducedLineup.displayName`, it lives in this owner-bypass edge so the
+   * browser never does a direct `manager` read (Theme F). @app/recompute is byte-untouched.
+   */
+  managerNames: Record<string, string>;
 };
 
 export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsView | null> {
@@ -43,8 +51,9 @@ export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsVie
   if (!manager) return null;
   const leagueId = manager.leagueId;
 
-  // The knockout ladder, the group periods (→ final standings), and the seeded field.
-  const [knockoutPeriods, groupPeriodRows, entries] = await Promise.all([
+  // The knockout ladder, the group periods (→ final standings), the seeded field, and the league's
+  // managers (→ the names map the screen renders — server-composed here, NOT read by the browser).
+  const [knockoutPeriods, groupPeriodRows, entries, managerRows] = await Promise.all([
     prisma.period.findMany({
       where: { leagueId, kind: "knockout_round" },
       select: { id: true, label: true, cutCount: true },
@@ -57,7 +66,15 @@ export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsVie
       where: { leagueId },
       select: { managerId: true, seed: true, status: true, eliminatedRound: true },
     }),
+    prisma.manager.findMany({
+      where: { leagueId },
+      select: { id: true, displayName: true },
+    }),
   ]);
+
+  // managerId → display name (the loader-side names attachment; @app/recompute stays name-free).
+  const managerNames: Record<string, string> = {};
+  for (const m of managerRows) managerNames[m.id] = m.displayName;
 
   // No knockout ladder, or no seeded field yet → there is no playoff read surface (the page renders the
   // non-playoff state). Mirrors `loadLineup` returning null when there is nothing to set.
@@ -138,5 +155,5 @@ export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsVie
     groupPeriods,
   });
 
-  return { managerId: viewerManagerId, ...core, reducedLineup, reinforcement };
+  return { managerId: viewerManagerId, ...core, reducedLineup, reinforcement, managerNames };
 }

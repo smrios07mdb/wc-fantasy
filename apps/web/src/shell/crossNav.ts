@@ -17,6 +17,7 @@ export type NavId =
   | "vsfield"
   | "waivers"
   | "pool"
+  | "playoffs"
   | "scoring"
   | "settings";
 
@@ -36,6 +37,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // Match pick'em pool (Prompt 42) — grouped with the gameplay screens, ahead of the reference pages.
   // User-facing label is "Quiniela" (Prompt 45 copy rename); the NavId/route/id key stay "pool".
   { id: "pool", href: "/pool", label: "Quiniela" },
+  // Guillotine playoffs theater (Phase 4) — the live knockout screen, with the gameplay group.
+  { id: "playoffs", href: "/playoffs", label: "Playoffs" },
   // Scoring rules reference (Prompt 28) — a static, always-available in-app reference page.
   { id: "scoring", href: "/scoring", label: "Scoring" },
   // Settings profile page (Prompt 39) — profile-name rename + deferred sections.
@@ -51,10 +54,12 @@ export const BOTTOM_TAB_ITEMS: readonly NavItem[] = [
   { id: "pool", href: "/pool", label: "Quiniela" },
 ];
 
-// Secondary destinations surfaced in the More bottom sheet, in order (per Prompt 40 spec).
+// Secondary destinations surfaced in the More bottom sheet, in order (per Prompt 40 spec; Phase 4 adds
+// Playoffs to the overflow — IA §3 keeps it out of the 4 primary bottom tabs).
 export const MORE_SHEET_ITEMS: readonly NavItem[] = [
   { id: "scoring", href: "/scoring", label: "Scoring" },
   { id: "waivers", href: "/waivers", label: "Waivers" },
+  { id: "playoffs", href: "/playoffs", label: "Playoffs" },
   { id: "draft", href: "/draft", label: "Draft room" },
   { id: "settings", href: "/settings", label: "Settings" },
 ];
