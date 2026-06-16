@@ -17,6 +17,7 @@
  * `champion`. Server-side as the table owner — RLS does not bite. No roster / FAAB / scoring writes.
  */
 import type { PrismaClient } from "@app/db";
+import { loadCumulativeTournamentTotals } from "@app/recompute/prisma";
 import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
 
 /** One alive manager's inputs for the round resolution. */
@@ -104,16 +105,10 @@ export function createPrismaPlayoffAdvanceStore(prisma: PrismaClient): PlayoffAd
         : [];
       const roundBy = new Map(roundScores.map((s) => [s.managerId, s.points] as const));
 
-      // Cumulative tournament total: Σ points over ALL the league's periods (scope via the period
-      // relation — `score_manager_period` carries no leagueId). Computed on the fly, no stored column.
-      const allScores = aliveIds.length
-        ? await prisma.scoreManagerPeriod.findMany({
-            where: { managerId: { in: aliveIds }, period: { leagueId } },
-            select: { managerId: true, points: true },
-          })
-        : [];
-      const cumBy = new Map<string, number>();
-      for (const s of allScores) cumBy.set(s.managerId, (cumBy.get(s.managerId) ?? 0) + s.points);
+      // Cumulative tournament total: Σ points over ALL the league's periods (the boundary tiebreak), via the
+      // SINGLE canonical helper the read path (`loadPlayoffs`) shares — one derivation, computed on the fly,
+      // no stored column. Single-sourcing the period scoping here is what keeps the live zone == this cut.
+      const cumBy = await loadCumulativeTournamentTotals(prisma, leagueId, aliveIds);
 
       return {
         leagueId,

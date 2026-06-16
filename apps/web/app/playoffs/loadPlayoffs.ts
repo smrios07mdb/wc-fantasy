@@ -18,6 +18,7 @@
  */
 import { prisma } from "@app/db";
 import { buildPlayoffsView, type PlayoffsViewCore } from "@app/recompute";
+import { loadCumulativeTournamentTotals } from "@app/recompute/prisma";
 import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
 import { loadLineup } from "../lineup/loadLineup";
 import { loadWaivers } from "../waivers/loadWaivers";
@@ -75,7 +76,7 @@ export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsVie
   const labelByPeriodId = new Map(orderedRounds.map((p) => [p.id, p.label] as const));
   const groupIds = groupPeriodRows.map((p) => p.id);
 
-  const [knockoutScores, groupScores, allScores] = await Promise.all([
+  const [knockoutScores, groupScores, cumulativeTotals] = await Promise.all([
     // Each knockout round's per-manager score (0 where no row).
     knockoutIds.length
       ? prisma.scoreManagerPeriod.findMany({
@@ -90,13 +91,10 @@ export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsVie
           select: { periodId: true, managerId: true, points: true },
         })
       : [],
-    // Cumulative tournament total: Σ points over ALL the league's periods (scope via the period relation —
-    // `score_manager_period` carries no leagueId). Mirrors `advanceStore.loadRoundContext`'s derivation
-    // exactly — the canonical one, not a second way.
-    prisma.scoreManagerPeriod.findMany({
-      where: { managerId: { in: participantIds }, period: { leagueId } },
-      select: { managerId: true, points: true },
-    }),
+    // Cumulative tournament total (the live boundary tiebreak): Σ points over ALL the league's periods, via
+    // the SINGLE canonical helper the WRITE path (`advanceStore.loadRoundContext`) shares — so the displayed
+    // "facing-the-blade" zone and the eventual `commish:advance` cut use one derivation and cannot drift.
+    loadCumulativeTournamentTotals(prisma, leagueId, participantIds),
   ]);
 
   // roundScores: roundLabel → managerId → points.
@@ -118,12 +116,6 @@ export async function loadPlayoffs(viewerManagerId: string): Promise<PlayoffsVie
     periodId: id,
     scores: groupScoresByPeriod.get(id) ?? [],
   }));
-
-  // Cumulative totals (advanceStore's reduce).
-  const cumulativeTotals = new Map<string, number>();
-  for (const s of allScores) {
-    cumulativeTotals.set(s.managerId, (cumulativeTotals.get(s.managerId) ?? 0) + s.points);
-  }
 
   // The two REUSED reads — the viewer's reduced playoff XI + the FAAB reinforcement state. Threaded
   // verbatim (no reimplementation); they are pass-throughs the builder never sees.

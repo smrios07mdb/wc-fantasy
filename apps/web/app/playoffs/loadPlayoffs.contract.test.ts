@@ -36,10 +36,13 @@ describe("loadPlayoffs — assembly contract", () => {
     expect(loader).toContain("prisma.playoffEntry.findMany");
   });
 
-  it("derives the cumulative total via advanceStore's derivation (Σ over ALL periods, period relation)", () => {
-    // The boundary tiebreak must be the SAME cumulative total the apply path computes — scoped via the
-    // period relation, summed on the fly (no second derivation, no stored column).
-    expect(loader).toContain("period: { leagueId }");
+  it("derives the cumulative total via the SHARED loadCumulativeTournamentTotals helper (single-sourced with the apply path)", () => {
+    // The boundary tiebreak is the SAME cumulative total the apply path computes — BOTH paths call the one
+    // canonical helper (its period scoping lives once), so they cannot drift. It passes its OWN participant
+    // set; the inline cumulative query is gone — the period scoping no longer lives in this loader.
+    expect(loader).toContain('from "@app/recompute/prisma"');
+    expect(loader).toContain("loadCumulativeTournamentTotals(prisma, leagueId, participantIds)");
+    expect(codeOnly).not.toContain("period: { leagueId }");
   });
 
   it("orders the ladder by the canonical KNOCKOUT_ROUNDS index", () => {
