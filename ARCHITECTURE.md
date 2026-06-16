@@ -881,13 +881,70 @@ without any re-derivation. `DashboardData` extended with `vsField: VsFieldView |
 **Banner phase colour** — always via the inline `--phc` CSS custom property set on `.db-banner`
 (e.g., `var(--live)` for group/playoff, `var(--info)` for pre-kickoff, `var(--success)` for
 complete). `--accent` = cobalt; it is **never** used for phase colour in the banner. The
-dashboard.css module carries deferred `.db-br-row` and `.db-pod-row` `.is-me` styles (ported
-from the design_reference bracket/podium sections) — but no playoff/complete component renders
-them (`modulesFor` returns `[]` for those phases). STOP(P38) seams documented inline.
+dashboard.css module carries `.db-br-row` and `.db-pod-row` `.is-me` styles (ported from the
+design_reference bracket/podium sections) — at P38 no playoff/complete component rendered them
+(`modulesFor` returned `[]`); they are now consumed by the playoff/complete arms (next subsection,
+which retired the STOP(P38) interims).
 
 **`PrimaryBanner.tsx` signature change:** added `vsField: VsFieldView | null` and
 `earliestGroupKickoff: string | null` props (both null-safe; pre-draft and draft branches
 ignore them).
+
+### Dashboard playoff + complete phases (`feat/dashboard-playoff-phases`)
+
+Fills the two `// STOP(P38)` interim arms (`modulesFor` returned `[]` for `playoff`/`complete`) with
+real modules sourced **READ-ONLY** from `PlayoffsView` — the exact pattern P38 used for the group
+phase's `loadVsField` attach. **Read/presentation only**: the engine + read-model
+(`buildPlayoffsView` / `loadPlayoffs` / `PlayoffsView` / `resolveRoundCut`) are **byte-untouched**;
+no `league.status` write; no new Realtime/RLS/publication; no new live controller (the live
+experience stays in the dedicated `/playoffs` theater this links into).
+
+**Data path** (`loadDashboard.ts`) — mirrors the group `vsField` attach. `DashboardData` gains
+`playoffs: PlayoffsView | null` (same shape posture as `vsField`). When the raw `selectTournamentPhase`
+result (named `tournamentPhase` in the loader) is in the **knockout window** (`playoff` | `complete`),
+the loader calls `loadPlayoffs(sessionManagerId)` READ-ONLY and resolves the final render phase via the
+pure `resolveKnockoutPhase(tournamentPhase, playoffs?.complete ?? null)`. `vsField` stays group-only.
+
+**The playoff↔complete discriminator** = **`PlayoffsView.complete`** (every round cut + a `champion`
+`playoff_entry` exists), NOT `selectTournamentPhase`'s own Final-FT `complete`. The two can briefly
+disagree around the Final whistle (the match flips to `completed` before/after the worker writes the
+champion row), so `resolveKnockoutPhase` makes `PlayoffsView.complete` authoritative — we never render
+the complete arm before its champion data exists: `(complete, false) → playoff`, `(playoff, true) →
+complete`. Pure, 7 unit tests (`resolveKnockoutPhase.test.ts`). The `league.status → complete` routing
+stays an **OPEN** decision owned by the worker/state-machine thread; the dashboard, like the theater,
+reads the derivation only.
+
+**Pure derivations** (`src/dashboard/playoffModules.ts`, IO-free, 16 unit tests) consume `PlayoffsView`
+and invent nothing:
+- `selectSurvivalView` — the current round's rank-ordered field with per-row safe/zone state, the
+  viewer marked, and the **signed cut margin** (`me.points −` first-cut / last-safe boundary, read from
+  per-row `state` so a live boundary tie doesn't skew it).
+- `selectChampionPodium` — champion + runner-up (Final `eliminatedIds[0]`), names via the loader's
+  `managerNames` map (Theme F — the browser never reads `manager`).
+- `selectViewerFinish` — the viewer's knockout finish (champion / runner-up / out in round X + that
+  round's rank/points), scanned from `rounds[].eliminatedIds`.
+
+**Modules** (`Dashboard.tsx`, masonry `db-grid`; the group `db-spotlight` stays group-only):
+- Playoff arm = **`SurvivalModule`** (the guillotine bracket — survival + current-round summary
+  combined, as the design's `BracketModule`; CTA → `/playoffs`) + **`ReinforceModule`** (FAAB-reset
+  reminder from `playoffs.reinforcement`; CTA → `/waivers`). The design's `lock`/`fixtures`/`activity`
+  are **dropped** — not PlayoffsView-derivable (same subset discipline P38 applied to the group arm).
+- Complete arm = **`ChampionModule`** (podium) + **`MyFinishModule`** (the viewer's run). The design's
+  `standings`/`activity` are dropped.
+
+**CSS** — reuses the pre-stubbed `.db-bracket`/`.db-br-*` + `.db-podium`/`.db-pod-*`; adds only the
+survival status line + footer (`.db-br-me`/`.db-br-foot`), `.db-reinforce`/`.db-rf-*`, and
+`.db-myrecap`/`.db-myrec-*`. Still zero hex, gold-free, `--phc`/functional tokens only.
+
+**Flagged read-model gap** — the design's complete-arm **season stats** (total title points, season
+power record, best week) and the 3-slot podium's title-points are **NOT** in `PlayoffsView` (it carries
+per-round points only; cumulative totals are a `buildPlayoffsView` *input*, not an output). The recap
+shows the **knockout** finish only; the season recap is deferred to a separate read-model pass
+(`TODO(confirm)` at the recap site; DECISIONS → the gap line). `packages/recompute` stays untouched.
+
+**`PrimaryBanner.tsx`** — the playoff/complete arms now render real `PlayoffsView` data (via the same
+three pure derivations); added a `playoffs: PlayoffsView | null` prop. Banner phase colour unchanged
+(`--phc`: `var(--live)` playoff, `var(--success)` complete).
 
 ## 12. Pick'em pool (Prompt 40)
 

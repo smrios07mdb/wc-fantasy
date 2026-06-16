@@ -1517,6 +1517,45 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   `periodKind === null` (period not yet linked) advances no phase — a kicked-off-but-unseeded match
   stays `pre-kickoff` rather than being guessed. No migration; pure-selector + two thin loaders + tests.
 
+## Dashboard playoff + complete phases (`feat/dashboard-playoff-phases`)
+
+- **The two `// STOP(P38)` interim arms are filled, sourced READ-ONLY from `PlayoffsView`** (the exact
+  pattern P38 used for the group phase's `loadVsField` attach). `DashboardData` gains
+  `playoffs: PlayoffsView | null`; `loadDashboard` calls `loadPlayoffs` READ-ONLY in the knockout window.
+  Read/presentation only — `buildPlayoffsView` / `loadPlayoffs` / `PlayoffsView` / `resolveRoundCut` are
+  **byte-untouched**; no `league.status` write; no new Realtime/RLS/publication; no second live controller
+  (the live experience stays in the `/playoffs` theater the dashboard links into).
+
+- **`PlayoffsView.complete` is the authoritative playoff↔complete render discriminator, NOT
+  `selectTournamentPhase`'s own Final-FT `complete`.** Note P44 already gave `selectTournamentPhase` a
+  `complete` member (Final `status === "completed"`), and `buildPlayoffsView` *independently* derives
+  `complete` (every round cut + a `champion` `playoff_entry` exists). These two signals can briefly
+  disagree around the Final whistle (the match flips to `completed` before/after the worker writes the
+  champion row). The pure `resolveKnockoutPhase(tournamentPhase, playoffs?.complete ?? null)` resolves it
+  by trusting `PlayoffsView.complete`: `(complete, false) → playoff` (Final FT'd, champion not yet
+  written → never show an empty champion arm), `(playoff, true) → complete`. The `league.status → complete`
+  routing remains an **OPEN** decision owned by the worker/state-machine thread; the dashboard reads the
+  derivation only (same posture as the theater).
+
+- **Module subset discipline (consume `PlayoffsView`, invent nothing).** Playoff arm = `SurvivalModule`
+  (guillotine bracket = survival + current-round summary combined, as the design's `BracketModule`) +
+  `ReinforceModule` (FAAB-reset reminder → `/waivers`). Complete arm = `ChampionModule` (champion +
+  runner-up podium) + `MyFinishModule` (the viewer's knockout finish). The design's
+  `lock`/`fixtures`/`activity` (playoff) and `standings`/`activity` (complete) are **dropped** — not
+  PlayoffsView-derivable, the same subset call P38 made for the group arm. CSS reuses the pre-stubbed
+  `.db-bracket`/`.db-podium`; only `.db-reinforce` + `.db-myrecap` (+ the `.db-br-me`/`.db-br-foot`
+  survival extras) are new. Pure derivations live in `src/dashboard/playoffModules.ts` (16 unit tests).
+
+- **GAP (flagged, deferred — NOT bolted on here): the complete-arm SEASON-stats recap.** The design's
+  complete screen shows each finisher's **total title points** and the viewer's **season power record /
+  total points / best week**. `PlayoffsView` does **not** expose these — it carries per-round
+  `score_manager_period.points` only; the cumulative tournament totals are a `buildPlayoffsView` *input*
+  (`loadCumulativeTournamentTotals`), not an output. The dashboard therefore shows the **knockout** finish
+  (champion / runner-up / out in round X) only, with a `TODO(confirm)` at the recap site
+  (`ChampionModule` / `MyFinishModule`). **Clean deferred fix:** a separate read-model pass that surfaces
+  the cumulative totals (already gathered by `loadCumulativeTournamentTotals` for the live-tiebreak input)
+  in `PlayoffsView`'s **output**, then the recap consumes them — `packages/recompute` stays untouched here.
+
 ## Profile rename / Settings route (Prompt 39)
 
 - **`display_name` is the single user-editable manager identity.** There is no `team_name` or
