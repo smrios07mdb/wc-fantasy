@@ -60,8 +60,8 @@ export default async function ScoringPage() {
         <section className="sc-section" aria-labelledby="sc-s1">
           <h2 id="sc-s1">1 · Performance Rating</h2>
           <p className="sc-note">
-            Applies only to players who received a Sofascore rating (i.e. actually played). This is
-            the primary tuning lever for the whole model.
+            Applies only to players who received a match rating (i.e. actually played). This is the
+            primary tuning lever for the whole model.
           </p>
           <table className="sc-table">
             <thead>

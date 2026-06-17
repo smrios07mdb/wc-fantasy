@@ -9,8 +9,8 @@
  * (draft_id, pick_no) and the `roster_player` active-ownership partial-unique are the DB backstops —
  * a constraint trip (P2002) rolls the whole transaction back and surfaces as a clean `false` (no-op).
  *
- * Like @app/scrape's adapter this has no unit test (it needs a live DB); it is covered by `tsc
- * --noEmit` plus the Memory double's tests, which exercise the same controller against the same port.
+ * This Prisma adapter has no unit test (it needs a live DB); it is covered by `tsc --noEmit` plus the
+ * Memory double's tests, which exercise the same controller against the same port.
  */
 import { Prisma, type PrismaClient } from "@app/db";
 import type { Position } from "@app/shared";

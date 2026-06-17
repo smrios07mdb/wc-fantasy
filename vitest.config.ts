@@ -18,7 +18,7 @@ export default defineConfig({
   // Resolve apps/web's `@/*` alias so jsdom component tests can mount its app-router components.
   resolve: { alias: [{ find: /^@\//, replacement: webDir }] },
   test: {
-    // Packages hold the pure logic; apps (e.g. the scraper edge) carry a few unit tests too.
+    // Packages hold the pure logic; apps (e.g. apps/web) carry a few unit tests too.
     // `apps/**/lib/**` covers app-level pure helpers (e.g. apps/web/lib/site-origin). `.tsx` is matched
     // so co-located React component tests (e.g. app/lineup/FormationPicker.test.tsx) run too.
     include: [

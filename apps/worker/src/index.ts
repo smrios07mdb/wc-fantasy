@@ -1,5 +1,5 @@
 /**
- * @app/worker — long-running ingestion / FAAB-batch / period-close / scraper host.
+ * @app/worker — long-running ingestion / FAAB-batch / period-close host.
  *
  * Skeleton only: boots, logs structured startup, runs an empty scheduler loop, and shuts down
  * cleanly on SIGINT/SIGTERM. No polling, cron, or feature behavior yet (ARCHITECTURE.md §3).

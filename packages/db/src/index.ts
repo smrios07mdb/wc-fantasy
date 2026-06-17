@@ -23,7 +23,7 @@ if (process.env.NODE_ENV !== "production") {
 export * from "@prisma/client";
 export { PrismaClient } from "@prisma/client";
 
-// Shared low-level DB helpers (the no-clobber dirty invariant, used by @app/ingest + @app/scrape).
+// Shared low-level DB helpers (the no-clobber dirty invariant, used by @app/ingest).
 export * from "./dirty";
 
 // Importing `./parity` is unnecessary at runtime (it is type-only), but it lives under `src/`

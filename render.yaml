@@ -1,16 +1,16 @@
 # Render Blueprint — WC Fantasy (Infrastructure-as-Code for the launch topology).
 #
 # Two vendors only: Render (compute) + Supabase (Postgres / Auth / Realtime) — DECISIONS.md "Architecture
-# & Stack" (the prompt's "Theme E") §372. One repo, ONE build, four service shapes:
+# & Stack" (the prompt's "Theme E") §372. One repo, ONE build, three service shapes:
 #   • web     — the Next.js app (UI + API routes, incl. the gated POST /api/draft/pick)
 #   • worker  — the RESIDENT draft controller + ingestion scheduler (one process; ARCHITECTURE.md §2/§5)
 #   • cron    — daily FAAB batch + hourly period-close (the two modes the worker EXTERNALIZES; roster
 #               re-pull is self-scheduled in the worker via WORKER_ROSTERS_SYNC_EVERY_TICKS, so it is
 #               NOT a cron — Theme G §522)
-#   • scraper — the isolated Playwright rating scraper (apps/scraper). NON-GATING at launch (see below)
+# The isolated Sofascore rating scraper was REMOVED (CODE_PROMPT_57); see the retired-service note below.
 #
 # ── Env contract (the load-bearing pooler split — DECISIONS.md §574–578) ──────────────────────────
-#   DATABASE_URL = Supabase TRANSACTION pooler (PgBouncer, :6543) → app + worker + scraper RUNTIME.
+#   DATABASE_URL = Supabase TRANSACTION pooler (PgBouncer, :6543) → app + worker RUNTIME.
 #   DIRECT_URL   = Supabase SESSION pooler (:5432) → `prisma migrate deploy` ONLY (the txn pooler
 #                  cannot carry migrations). Used by the web service `preDeployCommand`, once per release.
 #   NEXT_PUBLIC_* are BUILD-TIME on web (inlined into the client bundle at `next build`, not read at
@@ -26,8 +26,8 @@
 # ── Region / plans ────────────────────────────────────────────────────────────────────────────────
 #   Set `region` to match the Supabase project (runbook A1: "one region near the league"). `virginia`
 #   (US-East) suits an America/New_York league on a US-East Supabase project — change as needed.
-#   `plan: starter` sizes the documented ~$14 baseline (web + worker); the scraper + crons add cost —
-#   exact tiers are a dashboard/billing choice (Sergio's). The scraper MAY be suspended until go-live.
+#   `plan: starter` sizes the documented ~$14 baseline (web + worker); the crons add cost — exact tiers
+#   are a dashboard/billing choice (Sergio's).
 
 envVarGroups:
   # Non-secret shared config only — Render forbids `sync: false` in a group, so the secret pooler URLs
@@ -122,31 +122,14 @@ services:
       - key: VAPID_SUBJECT # mailto:/https: contact URL (push-service contract)
         sync: false
 
-  # ── Isolated Sofascore rating scraper (apps/scraper, Playwright). NON-GATING at launch ───────────
-  # The league launches on the BALLDONTLIE rating fallback; the scrape flips on once stats land
-  # (Prompt 05b isolation). Playwright is NOT yet wired — `apps/scraper/src/wiring.ts` uses a
-  # `notWiredLauncher`, so this service BOOTS and idles (each tick logs a contained "not wired" error;
-  # it NEVER throws into the app / ingestion / scoring). Ratings fall back to BALLDONTLIE through the
-  # group stage. Sergio MAY suspend this service until go-live.
-  #   TODO(confirm: go-live scrape): wire Playwright — `pnpm add playwright` (apps/scraper) +
-  #   `npx playwright install chromium`, swap `notWiredLauncher` in wiring.ts, and APPEND to the
-  #   buildCommand below: ` && pnpm --filter @app/scraper exec playwright install --with-deps chromium`.
-  - type: worker
-    name: wc-fantasy-scraper
-    runtime: node
-    plan: starter
-    region: virginia
-    branch: main
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: pnpm --filter @app/scraper start
-    envVars:
-      - fromGroup: wc-fantasy-shared
-      - key: DATABASE_URL # pooled (:6543) — scraper writes rating_player_match via @app/db
-        sync: false
-      - key: SCRAPER_TICK_MS # slow + polite settle loop; the rating lands near/after FT
-        value: "300000"
-      - key: SCRAPER_POLITE_GAP_MS # polite gap between match-page fetches
-        value: "4000"
+  # ── RETIRED: isolated Sofascore rating scraper (was `wc-fantasy-scraper`) ────────────────────────
+  # The Sofascore scraper was REMOVED (CODE_PROMPT_57). It was structurally inert (AUDIT F-P2-03 — empty
+  # Sofascore index, placeholder selector, unwired `notWiredLauncher`), so every rating already resolved
+  # to the BALLDONTLIE `rating`, which is now the canonical rating source of record (resolver
+  # `[manual, balldontlie]`; DECISIONS.md → Data source). `apps/scraper` + `packages/scrape` are deleted.
+  # ⚠️ OPERATOR (Sergio, owns Render): removing the block here does NOT auto-delete the already-deployed
+  # `wc-fantasy-scraper` worker service — delete/suspend it manually in the Render dashboard so it stops
+  # trying to run the now-removed `pnpm --filter @app/scraper start`. (Mirrors the faab-batch note below.)
 
   # ── RETIRED: daily FAAB batch cron (was `wc-fantasy-faab-batch`) ─────────────────────────────────
   # The FAAB cadence is now ONE blind-bid batch per scoring period, cleared before that period's first

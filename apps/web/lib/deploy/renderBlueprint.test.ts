@@ -14,7 +14,6 @@
  *   web    : DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
  *            SUPABASE_SERVICE_ROLE_KEY (+ DIRECT_URL for the migrate preDeployCommand)
  *   worker : DATABASE_URL, BALLDONTLIE_API_KEY
- *   scraper: DATABASE_URL
  *   cron   : DATABASE_URL
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -163,27 +162,24 @@ const SECRET_KEYS = [
 ];
 
 describe("render.yaml — Blueprint structure & topology", () => {
-  it("parses structurally (guards the parser): ≥1 env group + the 4 services", () => {
+  it("parses structurally (guards the parser): ≥1 env group + the 3 services", () => {
     // The daily `wc-fantasy-faab-batch` cron was RETIRED (Theme-D per-matchday amendment): FAAB now
-    // runs as a per-period trigger inside the worker tick, not a separate cron.
+    // runs as a per-period trigger inside the worker tick, not a separate cron. The isolated Sofascore
+    // `wc-fantasy-scraper` worker was REMOVED (CODE_PROMPT_57 — ratings run on the BALLDONTLIE rating).
     expect(bp.groups.length).toBeGreaterThanOrEqual(1);
     expect(bp.services.map((s) => s.name).sort()).toEqual(
-      [
-        "wc-fantasy-period-close",
-        "wc-fantasy-scraper",
-        "wc-fantasy-web",
-        "wc-fantasy-worker",
-      ].sort(),
+      ["wc-fantasy-period-close", "wc-fantasy-web", "wc-fantasy-worker"].sort(),
     );
   });
 
-  it("defines the Theme E topology: web + resident worker + scraper worker + 1 cron", () => {
+  it("defines the Theme E topology: web + resident worker + 1 cron", () => {
     expect(svc("wc-fantasy-web").type).toBe("web");
     expect(svc("wc-fantasy-worker").type).toBe("worker");
-    expect(svc("wc-fantasy-scraper").type).toBe("worker"); // resident, not cron
     expect(svc("wc-fantasy-period-close").type).toBe("cron");
     // FAAB batch is no longer a cron — see the retired-cron note in render.yaml.
     expect(bp.services.find((s) => s.name === "wc-fantasy-faab-batch")).toBeUndefined();
+    // The isolated Sofascore scraper worker was removed — see the retired-service note in render.yaml.
+    expect(bp.services.find((s) => s.name === "wc-fantasy-scraper")).toBeUndefined();
   });
 
   it("every service builds from one repo on `main` with a start command", () => {
@@ -242,14 +238,6 @@ describe("render.yaml — env reconciliation (required keys on the right service
     expect(keys).toContain("WORKER_ROSTERS_SYNC_EVERY_TICKS"); // roster re-pull is in-worker, not a cron
     expect(keys.has("SUPABASE_SERVICE_ROLE_KEY")).toBe(false); // bypasses RLS via Prisma owner
     expect(keys.has("NEXT_PUBLIC_SUPABASE_ANON_KEY")).toBe(false);
-  });
-
-  it("scraper carries the DB + its own ticks; no feed/Supabase keys (isolated)", () => {
-    const keys = effectiveKeys(svc("wc-fantasy-scraper"));
-    expect(keys).toContain("DATABASE_URL");
-    expect(keys).toContain("SCRAPER_TICK_MS");
-    expect(keys.has("BALLDONTLIE_API_KEY")).toBe(false);
-    expect(keys.has("SUPABASE_SERVICE_ROLE_KEY")).toBe(false);
   });
 
   it("each cron carries the DB (via the shared group) + a schedule", () => {
