@@ -580,6 +580,22 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   dropped_at >= batch_cleared_at)` (no snapshot table). First-come = the `roster_player_active_ownership_uq`
   partial unique (exactly one winner; loser → clean `fa-conflict`). The Prompt-47 "$0 FA surface is a
   TODO(confirm)" is now CLOSED. See ARCHITECTURE §3 + PROJECT.md (Prompt 48).
+- **Fixed (`fix/faab-sealed-bid-latch-boundary`) — the sealed→free-agency boundary is the LATCH, not first
+  kickoff.** Prompts 47/48 left bid submission gated ONLY on the period's first kickoff
+  (`acquisitionCutoffAt`), so the sealed-bid phase did not actually END at batch-clear. **The MD1 strand
+  incident:** two $0 sealed bids submitted during the free-agency window (after `batch_cleared_at` was
+  stamped, before first kickoff) were accepted by `POST /api/faab/bid` and stranded permanently — the latch
+  blocks any batch re-run, so they never resolved. Fix: `validateBidSubmission` now routes through the
+  shared `acquisitionWindowState` and rejects a sealed bid once the add target's period has cleared its
+  batch (`batch_cleared_at IS NOT NULL` ⇒ free-agency ⇒ new `bid-window-closed`, 409 — use the $0 FA grab
+  instead), keeping `add-kicked-off` (now ≥ first kickoff) as the unchanged outer "locked" bound. The
+  add-period `batch_cleared_at` is threaded through `PlayerFacts` (resolved via the SAME
+  `resolveAddPeriodWindow` the FA grant uses) → `BidValidationContext` → both the submit AND edit handler
+  paths; `WaiversClient` maps the code to a friendly message. **`window.ts`, `resolveFaabBatch`/`resolve.ts`,
+  the §D purity matrix, and the worker cadence are byte-unchanged** (the fix REUSES the existing pure
+  predicate). The decision: the acquisition-window boundary is driven by the actual latch
+  (`period.batch_cleared_at`), never the scheduled batch time and never the first-kickoff cutoff. See
+  ARCHITECTURE §3 + PROJECT.md.
 
 #### Mesh with the per-player acquisition deadline (locked: can't add a player once his match kicks off)
 - The pre-dawn batch precedes the day's kickoffs (WC earliest ≈ noon local), so it can legally

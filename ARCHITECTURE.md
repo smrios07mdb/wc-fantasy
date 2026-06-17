@@ -253,13 +253,21 @@ only the cadence and the acquisition cutoff moved.
   the worker for the **same reason `acquisitionWindowState` did**: `apps/web` cannot import `apps/worker`,
   so the **web waivers "next batch" element** (`loadWaivers` → `buildBatchWindowView`) computes the
   **identical instant** the worker fires against — one source of truth, no display-vs-fire drift.
-- **Acquisition cutoff → the period's first kickoff (league-wide).** Bid submission (`@app/faab`
-  `validateBidSubmission`) now gates on the add target's **period** first kickoff (`acquisitionCutoffAt`),
-  not the per-player kickoff. The batch keeps the per-player kickoff only for the defensive void-refund.
+- **Acquisition window — bid submission gates on BOTH boundaries (latch-driven).** `validateBidSubmission`
+  (`@app/faab`) now routes through the shared `acquisitionWindowState`: a sealed bid is accepted ONLY in
+  the **sealed-bid** phase. It is rejected once the add target's period reaches **free-agency** — keyed on
+  the actual **`period.batch_cleared_at` LATCH**, not the scheduled batch time (`bid-window-closed`, 409) —
+  and once it reaches **locked** at the league-wide first kickoff (`add-kicked-off`, the unchanged outer
+  bound; `acquisitionCutoffAt`, not the per-player kickoff). The IO layer (`getPlayerFacts`) resolves the
+  period's first kickoff AND `batch_cleared_at` from the SAME `resolveAddPeriodWindow` the $0 FA grant uses,
+  so the bid route and the FA route can never disagree on which period gates the add. **The MD1 strand bug
+  this closes:** sealed bids were previously gated ONLY on first kickoff, so a (sealed) $0 bid placed in the
+  free-agency gap (post-clear, pre-kickoff) was accepted, then stranded — the batch latch blocks any re-run,
+  so it could never resolve. The batch keeps the per-player kickoff only for the defensive void-refund;
   Theme-B sub-IN eligibility is unchanged (per-incoming-player kickoff, in the lineup path).
 - **Acquisition window** = sealed-bid (before the batch) → $0 free-agency (after clear, before kickoff)
   → hard league-wide lock (at first kickoff). The pure `acquisitionWindowState` predicate (`@app/faab`)
-  models the three phases — shared by the worker cadence and the web FA route.
+  models the three phases — shared by the worker cadence, the web FA route, AND (now) the bid validator.
 - **$0 free-agency grant (Prompt 48).** Between batch-clear and the period's first kickoff, any manager
   grabs an unclaimed player for **$0, applied immediately** (no bidding, no waiver order). Gated route
   **`POST /api/faab/free-agent`** on the bid-route template: `requireManager` → `assertCanActAsManager
