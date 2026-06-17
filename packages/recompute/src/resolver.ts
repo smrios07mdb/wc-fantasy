@@ -2,9 +2,11 @@
  * Rating resolver — pure (ARCHITECTURE.md §3, DECISIONS.md → Data source Amendment 2a).
  *
  * The scoring engine reads the rating through ONE resolver with a configurable source priority per
- * (match, player). Default `[manual, scrape, balldontlie]`: Sofascore `scrape` is the calibrated
- * primary; `balldontlie` is the automatic fallback; a `manual` override beats both. The resolver is
- * a pure function of the source-tagged `rating_player_match` rows for one (match, player).
+ * (match, player). Default `[manual, balldontlie]`: `balldontlie` is the canonical rating source of
+ * record; a `manual` override beats it. (The Sofascore `scrape` arm was removed — CODE_PROMPT_57,
+ * AUDIT F-P2-03; the `'scrape'` enum value is retained-but-unused pending a post-tournament schema
+ * drop.) The resolver is a pure function of the source-tagged `rating_player_match` rows for one
+ * (match, player).
  */
 import { DEFAULT_RATING_SOURCE_PRIORITY, type RatingSource } from "@app/shared";
 
@@ -38,8 +40,8 @@ export function pickRating(
 }
 
 /**
- * The headline resolver (ARCHITECTURE.md §3 signature): the chosen rating or null. Sofascore
- * `scrape` leads, `balldontlie` is the fallback, `manual` overrides — reorderable via `priority`.
+ * The headline resolver (ARCHITECTURE.md §3 signature): the chosen rating or null. `balldontlie` is
+ * the canonical source, `manual` overrides — reorderable via `priority`.
  */
 export function resolveRating(
   rows: readonly RatingRow[],

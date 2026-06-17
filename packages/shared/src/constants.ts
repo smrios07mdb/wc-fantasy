@@ -5,12 +5,14 @@
 import type { LeagueStatus, Position, RatingSource } from "./enums";
 
 /**
- * Rating resolver priority: first non-null wins (ARCHITECTURE.md §3, DECISIONS.md Amendment 2a).
- * Config-driven per league/match later; this is the default ordering.
+ * Rating resolver priority: first non-null wins (ARCHITECTURE.md §3, DECISIONS.md → Data source).
+ * `balldontlie` is the canonical rating source of record; a `manual` override beats it. The Sofascore
+ * `scrape` arm was removed (CODE_PROMPT_57 — it was structurally inert, AUDIT F-P2-03); the `'scrape'`
+ * `RatingSource` enum value is retained-but-unused pending a post-tournament schema drop, so it is
+ * simply absent from this priority. Config-driven per league/match later; this is the default ordering.
  */
 export const DEFAULT_RATING_SOURCE_PRIORITY: readonly RatingSource[] = [
   "manual",
-  "scrape",
   "balldontlie",
 ] as const;
 
