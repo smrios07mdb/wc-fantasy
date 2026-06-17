@@ -24,7 +24,7 @@ pnpm-workspaces monorepo, TypeScript end-to-end:
 ```
 apps/
   web/        Next.js (App Router) + React + Tailwind — SSR + API route handlers
-  worker/     long-running Node service — ingestion scheduler / FAAB batch / scraper (skeleton)
+  worker/     long-running Node service — ingestion scheduler / FAAB batch / period close
 packages/
   db/         Prisma schema, generated client, migrations — the one place the DB is defined
   shared/     shared TS enums & domain types — imported by every app + package

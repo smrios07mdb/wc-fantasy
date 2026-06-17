@@ -19,17 +19,17 @@ One unified model. Sofascore-inspired, position-balanced, high-scoring. No miles
    a lineup state, never a scoring rule.
 
 ## ⚠️ Data dependency
-Values below assume a **Sofascore-grade feed**, including the proprietary **Sofascore player match
-rating**, to which this ladder is calibrated.
-**Update (Architecture thread):** BALLDONTLIE's WC feed *also* exposes a **native per-match `rating`**
-(0–10), but its provenance is unknown — so **Sofascore (scraped) remains the PRIMARY rating source**,
-and BALLDONTLIE's rating is the **automatic fallback** when the scrape is missing for a player-match
-(applied to the same ladder; commissioner-overridable). The rest of the model is provider-agnostic
-given sufficient stat granularity. See DECISIONS.md → Data source, and the per-line feed mapping in
-**ARCHITECTURE.md §7**.
+Values below assume a **Sofascore-grade feed**, including a **per-match player `rating`** (0–10) to
+which this ladder is calibrated.
+**Update (CODE_PROMPT_57 — scraper removed):** the rating is sourced from **BALLDONTLIE's native
+per-match `rating`**, which is now the **canonical rating source of record**. The Sofascore scraper —
+originally the primary/calibration source — was **removed** (it was structurally inert; AUDIT F-P2-03),
+so BALLDONTLIE's `rating` feeds this ladder directly, with a `manual` override on top
+(commissioner-correctable). The rest of the model is provider-agnostic given sufficient stat
+granularity. See DECISIONS.md → Data source, and the per-line feed mapping in **ARCHITECTURE.md §7**.
 
 ## 1. Performance Rating — all who play — AMPLIFIED ladder
-| Sofascore rating | Points |
+| Match rating | Points |
 |---|---|
 | < 6.0 | −2 |
 | 6.0–6.5 | −1 |
@@ -141,8 +141,9 @@ scoring needs to move — it's the position-neutral lever.
 Scoring **values above are unchanged.** This addendum only records how each line is fed. Full
 field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 derive · 🟠 manual · ❌ drop.
 
-- **🟣 Rating (§1):** **Sofascore scrape = primary** (the ladder's calibration target); BALLDONTLIE's
-  native `rating` = automatic fallback (provenance unknown). Resolver `[manual, scrape, balldontlie]`.
+- **🟣 Rating (§1):** **BALLDONTLIE native `rating` = canonical** (the ladder's source of record);
+  `manual` overrides it. Resolver `[manual, balldontlie]`. (The Sofascore scrape — once the
+  primary/calibration source — was removed in CODE_PROMPT_57; it was structurally inert, AUDIT F-P2-03.)
 - **✅ Native / direct (BALLDONTLIE):** minutes (§2), goals/assists (§3), key passes, dribbles,
   duels, passing, long balls, was fouled, clearances, shots blocked (defensive — confirmed),
   interceptions, tackles won, **shots on target, big chances created, accurate crosses, touches,

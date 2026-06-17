@@ -23,10 +23,10 @@ for public scale; that would be the un-boring mistake.
 | ORM / migrations | **Prisma** (Drizzle acceptable) | Typed, boring, ubiquitous. |
 | Realtime | **Supabase Realtime** (draft room + vs-the-field) | Reuses the DB vendor; server-authoritative state in Postgres, broadcast on change. Fallback: Socket.IO + polling. |
 | Auth | **Supabase Auth** — email magic-link (+ optional Google), email allowlist | Passwordless, private, nothing to operate. |
-| Compute host | **Render** (Web Service + Cron Jobs + Background Workers + scraper Worker) | One platform that hosts a Next.js app *and* real long-running workers + cron. (Railway equivalent; Vercel for the app if you want its DX, accepting a 3rd vendor.) |
+| Compute host | **Render** (Web Service + Cron Jobs + Background Worker) | One platform that hosts a Next.js app *and* real long-running workers + cron. (Railway equivalent; Vercel for the app if you want its DX, accepting a 3rd vendor.) |
 | Ingestion | **Polling** the BALLDONTLIE WC API (no webhooks exist at our tier) | Tighter cadence during live windows; idempotent upserts; recompute on settle. |
 | Data feed tier | **BALLDONTLIE GOAT — $39.99/mo, single FIFA product** | Unlocks every endpoint we use; 600 req/min; 48h trial for dev. |
-| Sofascore rating | **Isolated scraper — PRIMARY source** (BALLDONTLIE rating = fallback) | The ladder is calibrated to Sofascore; BALLDONTLIE's rating provenance is unknown, so it backs up the scrape rather than replacing it. |
+| Match rating | **BALLDONTLIE native `rating` — CANONICAL** (Sofascore scraper removed) | The Sofascore scraper was removed (CODE_PROMPT_57 — structurally inert, AUDIT F-P2-03); BALLDONTLIE's `rating` is the canonical rating source of record. Resolver `[manual, balldontlie]`. |
 | Vendors total | **2** (Render + Supabase) | Each does what it's best at; data is plain SQL → low lock-in. |
 | Est. run cost | **≈ $40/mo feed + low-double-digit hosting** | A season, not forever. |
 
@@ -80,7 +80,7 @@ set of types.** For a small team that is the single biggest reliability win avai
   everything else is ordinary CRUD.
 - **Backend:** a **modular monolith** — the Next.js app's route handlers serve the web API
   (auth'd reads/writes: set lineup, submit FAAB bid, make pick, admin overrides). Scheduled and
-  long-running work (pollers, FAAB batch, period close, scraper) runs in a **separate worker
+  long-running work (pollers, FAAB batch, period close) runs in a **separate worker
   service in the same repo**, sharing the same database and the same TypeScript model code.
   Monorepo, shared `packages/` for the scoring engine + feed client + DB schema.
 - **Why not microservices:** at a dozen users they are pure overhead. One deployable app + a
@@ -107,23 +107,23 @@ Two managed vendors. Single region near the league. No multi-region, no Kubernet
                  |    - FAAB batch trigger (per period, before its 1st kickoff)    |
                  |                                                                 |
                  |  Cron Job: period-close check (when a wave's last match ends)   |
-                 |                                                                 |
-                 |  Worker (ISOLATED): Sofascore rating scraper [PRIMARY]          |
-                 +---------------+-------------------------------------+-----------+
-                                 | SQL + Realtime                      | writes rating only
-                                 v                                     v
+                 +---------------+------------------------------------------------+
+                                 | SQL + Realtime
+                                 v
                  +------------------------- Supabase ------------------------------+
                  |  Postgres (all state)  -  Auth (magic-link)  -  Realtime (WS)   |
                  +----------------------------------------------------------------+
                                  ^
                                  | pull (REST, cursor-paginated, polling)
-                 +---------------+---------------+      +----------------------------+
-                 | BALLDONTLIE FIFA WC API (GOAT) |      | Sofascore (scrape, PRIMARY) |
-                 +-------------------------------+      +----------------------------+
+                 +--------------------------------------------------+
+                 | BALLDONTLIE FIFA WC API (GOAT)                    |
+                 |   stats / events + native per-match rating       |
+                 |   (rating is now the CANONICAL source of record) |
+                 +--------------------------------------------------+
 ```
 
 - **App on Render Web Service.** Render hosts a Next.js app *and* gives first-class **Cron Jobs**
-  and **Background Workers**, so the schedulers/scraper live on the same platform with the same
+  and **Background Workers**, so the schedulers live on the same platform with the same
   build. (Railway is an equivalent one-platform swap. If the team wants Vercel's Next.js DX, put
   the app on Vercel and keep the workers on Render/Railway — a 3rd vendor, documented but not the
   default.)
@@ -132,13 +132,13 @@ Two managed vendors. Single region near the league. No multi-region, no Kubernet
   Neon) is a connection-string change, not a rewrite. Low lock-in.
 
 ### Can it get *even* simpler later?
-In principle the architecture is shaped to collapse: **if the rating scrape ever became
-unnecessary** (see §3) **and ~1/min live polling via external cron sufficed**, the whole thing
-could drop to **Vercel + Supabase only** (Vercel Cron hits a fast `/api/poll` route; no always-on
-worker, no Playwright). **In practice that path is now unlikely:** Sofascore is the *primary*
-rating source (see §3 / Data source), so the scraper Worker stays. We keep the two-vendor + worker
-setup as the default; the collapse is a documented option only if rating sourcing is ever revisited
-— "boring now, with a clear
+In principle the architecture is shaped to collapse: **if ~1/min live polling via external cron
+sufficed**, the whole thing could drop to **Vercel + Supabase only** (Vercel Cron hits a fast
+`/api/poll` route; no always-on worker). **Update (CODE_PROMPT_57):** the rating scrape was removed and
+BALLDONTLIE's native `rating` is now canonical, so the Playwright scraper Worker is **gone** — but the
+always-on worker is still required for live polling + lock-on-play + the recompute sweeper, so we keep
+the two-vendor + worker setup as the default; the full collapse is a documented option only if live
+polling is ever revisited — "boring now, with a clear
 path to one fewer moving part."
 
 ---
@@ -341,34 +341,28 @@ score is recomputable at any time.** This is exactly what the late-settling rati
   against a real Postgres before concurrent scraper writes begin).
 
 ### The rating source (resolver)
-**Sofascore is the primary rating source** — the locked ladder is calibrated to it. BALLDONTLIE
-exposes its own `rating`, but its provenance is unknown, so it is **not** trusted as primary. The
-scoring engine reads the rating through **one resolver** with a configurable source priority per
-`(match, player)`:
+**BALLDONTLIE's native per-match `rating` is the canonical rating source of record** (CODE_PROMPT_57).
+The Sofascore scraper — originally the primary/calibration source — was **removed** (it was structurally
+inert; AUDIT F-P2-03). The scoring engine reads the rating through **one resolver** with a configurable
+source priority per `(match, player)`:
 
 ```
-rating := first non-null of [ manual_override, sofascore_scrape, balldontlie ]   // config-driven
+rating := first non-null of [ manual_override, balldontlie ]   // config-driven
 ```
 
-The Sofascore scrape leads; **BALLDONTLIE's native `rating` is the automatic fallback** when the
-scrape is missing for a player-match — a strictly better resilience story than "scrape or null."
-Caveat: a fallback applies the same 0–10 ladder to BALLDONTLIE's rating, accepting a possible
-scale/distribution mismatch; it fires only on a scrape miss (rare), and the commissioner can
-override.
+A `manual` override (commissioner correction) beats the BALLDONTLIE `rating`; otherwise the native
+`rating` is used directly. The 0–10 ladder (SCORING.md §1) is applied to it. The rest of the model is
+provider-agnostic given sufficient stat granularity.
 
-- **Action for Code (one-time):** compare BALLDONTLIE's `rating` against Sofascore's on a sample of
-  matches — purely to gauge **how good the fallback is** (not to replace the scrape). The scrape
-  stays primary regardless; the rest of the model is provider-agnostic.
-
-### Sofascore scraper (isolated; PRIMARY rating source)
-- Its **own worker/service**, sandboxed, with **one job**: write one rating value per
-  player-match into `rating_player_match (source='scrape')`. Its fragility/blocking can never
-  touch the app, the DB writes of other ingestion, or scoring (scoring just reads whatever the
-  resolver returns, falling back to BALLDONTLIE, then null).
-- Playwright (Node, in-stack). Narrow surface = one field = far more reliable than scraping a
-  whole stat line, per the locked Data-source rationale. It is **required** (Sofascore is primary),
-  but isolation + the BALLDONTLIE fallback mean a scrape outage **degrades gracefully** rather than
-  dropping the rating line.
+> **History (scraper removed — CODE_PROMPT_57).** The original design scraped the proprietary Sofascore
+> rating as PRIMARY, with BALLDONTLIE as the automatic fallback (resolver `[manual, scrape, balldontlie]`,
+> its own isolated Playwright worker writing `rating_player_match(source='scrape')`). The scrape arm
+> never went live — empty Sofascore index, placeholder selector, unwired launcher (AUDIT
+> **F-P2-03/04/05/06**) — so every player-match already resolved to BALLDONTLIE. CODE_PROMPT_57 ratifies
+> that reality: the scraper code (`apps/scraper` + `packages/scrape`) is deleted, the resolver collapses
+> to `[manual, balldontlie]`, and BALLDONTLIE is canonical. The `'scrape'` `RatingSource` enum value and
+> the `sofascore_*` id columns remain as dead-but-harmless schema (drop deferred to a post-tournament
+> migration; see DECISIONS.md → Data source Amendment 3).
 
 ### Manual override / correction path (Cowork)
 - An **admin-only surface** in the Next.js app (commissioner / Cowork operator). It writes to the
@@ -468,12 +462,12 @@ not by hopeful application code:
   - **`sofascore_match_id` (`fifa_match`) + `sofascore_player_id` (`player`) (Prompt 05b) — stored
     Sofascore ids** for the isolated scraper's identity resolution. Nullable, `@unique` (mirror
     `balldontlie_*_id`); populated by a **verified one-time `keyMatch` pass** (auto-writes only the
-    unambiguous date+codes / team+normalized-name matches; flags the rest for manual entry). The scrape
-    path resolves a target by **STORED id ONLY** — never live name-matching — because the resolver
-    prefers `scrape` over `balldontlie`, so a wrong id would feed a wrong PRIMARY rating (worse than no
-    row). A missing id → no `scrape` row → balldontlie fallback.
-  - **Note (Prompt 05a/05b):** the player-match dirty invariant (`STAT_DIRTY_UPDATE` /
-    `markStatPlayerDirty`) lives in `@app/db`, imported by both ingestion (05a) and the scraper (05b).
+    unambiguous date+codes / team+normalized-name matches; flags the rest for manual entry).
+    **⚠️ DEAD COLUMNS (CODE_PROMPT_57):** the Sofascore scraper was removed and BALLDONTLIE's `rating` is
+    now canonical, so these `sofascore_*` ids are no longer written or read by any code — they remain only
+    as dead-but-harmless schema (drop deferred post-tournament; see DECISIONS.md → Data source Amendment 3).
+  - **Note (Prompt 05a):** the player-match dirty invariant (`STAT_DIRTY_UPDATE` /
+    `markStatPlayerDirty`) lives in `@app/db`, imported by ingestion (05a).
 
 **Roster / lineups (lock timestamps live here)**
 - `roster_player` — manager_id, player_id, acquired_at, dropped_at. **Ownership**; unique
@@ -683,7 +677,7 @@ directly or derive; six lines force a call (all minor/rare).**
 ### ✅ Direct field mappings
 | SCORING line | Field(s) |
 |---|---|
-| Performance rating | Sofascore scrape (PRIMARY); `player_match_stats.rating` = fallback *(see rating finding)* |
+| Performance rating | BALLDONTLIE `player_match_stats.rating` (CANONICAL — Sofascore scraper removed, CODE_PROMPT_57) *(see rating finding)* |
 | Appearance (minutes) | `minutes_played` |
 | Goal / Assist | `goals`, `assists` (also `match_events` goal incidents) |
 | Key passes | `key_passes` |
@@ -735,13 +729,13 @@ directly or derive; six lines force a call (all minor/rare).**
 - **Rating fallback quality** — the one-time BALLDONTLIE-vs-Sofascore comparison (§3), to gauge the
   fallback only; Sofascore stays primary regardless.
 
-### 💡 Rating finding (Sofascore stays primary)
+### 💡 Rating finding (BALLDONTLIE rating is canonical — scraper removed)
 BALLDONTLIE's FIFA feed exposes its **own** `rating` (and the full Sofascore-style vocabulary —
 xG/xGoT, big chances, touches, ball recoveries, attack momentum, best-players/MOTM, average
-positions). But its **provenance is unknown**, so it is **not** adopted as primary: the locked
-ladder is calibrated to Sofascore, so **the Sofascore scrape remains the primary rating source and
-a required component.** BALLDONTLIE's `rating` serves as the **automatic fallback** (resolver order
-`[manual, scrape, balldontlie]`), which improves resilience over the original "scrape or null."
+positions). Originally its provenance was unknown so it was treated only as a fallback behind the
+Sofascore scrape — but the scrape arm never went live (AUDIT F-P2-03), so **CODE_PROMPT_57 removed the
+scraper and adopted BALLDONTLIE's `rating` as the canonical rating source of record** (resolver order
+`[manual, balldontlie]`). The locked 0–10 ladder (SCORING.md §1) is applied to it directly.
 
 ### 📦 Promoted columns + the un-promoted catch-all (`stat_player_match.extra`)
 **PROMOTED COLUMNS (feat/scoring-promote-lines).** Five fields that previously lived only in `extra`
@@ -815,9 +809,10 @@ infrastructure to enforce them already lives in this doc:
 ## 10. Amendments this thread forces elsewhere
 - **SCORING.md** — six verification-forced line changes (3 drops, 2 keep-via-manual, 1 remap).
   Documented as a marked amendment block; model balance untouched.
-- **Data source** — (a) rating sourced via a resolver `[manual, scrape, balldontlie]` with the
-  **Sofascore scrape PRIMARY and required** (BALLDONTLIE's `rating` = automatic fallback; its
-  provenance is unknown so it does not replace the scrape); (b) ingestion is **polling** (no
+- **Data source** — (a) rating sourced via a resolver `[manual, balldontlie]` with **BALLDONTLIE's
+  native `rating` CANONICAL** and `manual` overriding it (the Sofascore scraper was removed in
+  CODE_PROMPT_57 — it was structurally inert, AUDIT F-P2-03; the schema drop of the `'scrape'` enum
+  value + `sofascore_*` columns is deferred post-tournament); (b) ingestion is **polling** (no
   webhooks at GOAT), so **no webhook receiver is built**; (c) tier confirmed **GOAT $39.99/mo**
   (not ALL-ACCESS); (d) live latency ≈ a few minutes (reinforces recompute). The "confirm which
   tier / webhooks" open item is resolved.

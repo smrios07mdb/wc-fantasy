@@ -51,12 +51,12 @@ Not client-facing — fun with friends. Guiding constraint: **"boring and reliab
 | Theme | Status |
 |---|---|
 | A. Scoring | ✅ LOCKED (see SCORING.md) — **amended:** 6 verification-forced line changes from the BALLDONTLIE field map (3 drops, 2 keep-via-manual, 1 remap); balance untouched; **§8 card-handling clarification** folded in (additive stacking; top minute band = ≥60 catch-all; no point values changed); **feat/scoring-promote-lines** added five §4 lines (shots on target +1/3, ball recoveries +1/5 outfield, big chances created +1/1, accurate crosses +1/4, touches +1/25) promoted out of `extra`, recalibrated possession lost −1/8 → −1/10, and **rejected aerials** (⊂ duels, would double-count) — a scoring change ⇒ re-ingest completed matches + full recompute/standings restate required |
-| Data source | ✅ LOCKED — BALLDONTLIE WC API (stats/events) + Sofascore rating scrape + manual failsafe (**amended twice:** (1) locking is play-driven → needs live substitution events; (2) verification — **Sofascore scrape is the PRIMARY rating source** (calibration target), BALLDONTLIE's own `rating` = automatic fallback (provenance unknown); ingestion is **polling** (no webhooks at our tier); tier confirmed **GOAT $39.99/mo**) |
+| Data source | ✅ LOCKED — BALLDONTLIE WC API (stats/events + rating) + manual failsafe (**amended 3×:** (1) locking is play-driven → needs live substitution events; (2) verification — both feeds carry a per-match `rating`; (3) **CODE_PROMPT_57** — the Sofascore scraper was REMOVED (structurally inert, AUDIT F-P2-03), so **BALLDONTLIE's native `rating` is the canonical rating source of record**, resolver `[manual, balldontlie]`; ingestion is **polling** (no webhooks at our tier); tier confirmed **GOAT $39.99/mo**) |
 | B. Roster & lineups | ✅ LOCKED — 15-man squad (2/5/5/3), XI of 11, lock-on-play / no auto-subs, multiple-lineups defined, playoff cap ≈9 (7+2); transition + playoff lineup mode implemented (Phases 1+3, 87a7e1a→3952e62) |
 | C. League & format | ✅ LOCKED — all-play-all regular season (seed by record, ties by total points), period = matchday wave; **snake draft, per-pick timer = config, autopick queue→best-available**; **playoff field flexible (likely 8 or 10), per-round cut ≈2 tapering to 1 over the 5 WC knockout rounds, fixed at the transition**; **guillotine elimination tie = lowest cumulative tournament total points** (commissioner backstop); **late-correction freeze ≈6h after last FT, commissioner-only after**. Only the recruiting-dependent manager/field number is deferred (config); transition + playoff lineup mode implemented (Phases 1+3, 87a7e1a→3952e62) |
 | D. FAAB & Waivers | ✅ LOCKED — $100 (resets to a fresh $100 at the playoffs; single budget across knockout rounds); daily pre-dawn blind-bid batch + $0 free-agency fallthrough; per-player kickoff void+refund; rolling waiver-order tiebreak (seeded once by reverse draft order, carried forward into the playoffs — no re-seed; move-to-bottom only when the tiebreak is used); reinforcement = same FAAB cycle on the playoff field; transition + playoff lineup mode implemented (Phases 1+3, 87a7e1a→3952e62) |
 | E. World Cup attrition | ✅ RESOLVED — folded into the playoff transition + FAAB (reinforcement now fully specified in Theme D) |
-| Architecture & stack | ✅ LOCKED (see ARCHITECTURE.md) — TypeScript/Next.js, Postgres via Supabase (+ Auth + Realtime), Render compute (web + workers + cron), polling ingestion, recompute scoring pipeline, lock-on-play live consumer; live "vs the field" screen + draft-room infra specified (draft *rules* now locked in Theme C) |
+| Architecture & stack | ✅ LOCKED (see ARCHITECTURE.md) — TypeScript/Next.js, Postgres via Supabase (+ Auth + Realtime), Render compute (web + worker + cron), polling ingestion, recompute scoring pipeline, lock-on-play live consumer; live "vs the field" screen + draft-room infra specified (draft *rules* now locked in Theme C) |
 
 **Live-incident fixes (2026-06-11, MD1):** **premature lineup locks** — ~35 MD1 `lineup_slot` rows
 carried `locked_at ≈ now` while their `fifa_match` was still `scheduled` (kickoff days out). Root cause:
@@ -184,11 +184,12 @@ retired; single-league assumption, documented); the player-match dirty invariant
 to `@app/db` (`STAT_DIRTY_UPDATE` / `markStatPlayerDirty`, imported by ingestion + scraper); the
 scraper is a physically isolated `packages/scrape` + `apps/scraper` (no `@app/ingest` import) resolving
 identity by **stored Sofascore IDs only** at scrape time, populated by a verified one-time `keyMatch`
-pass (auto-writes unambiguous, flags the rest). **Go-live (post-launch — balldontlie carries the
-rating until then):** apply the pending migrations (`period_id`, `kickoff_lock_fallback`, the
-`recompute_scope` enum-retire, `sofascore_ids`); confirm the BALLDONTLIE base-path/auth header;
-implement `loadSofaIndex` (the Sofascore index source — currently stubbed `[]`) + `pnpm add playwright`
-& wire the launcher; smoke-test ingestion against the GOAT trial + a real Supabase. · **Prompt 06 —
+pass (auto-writes unambiguous, flags the rest). **⚠️ The scraper was REMOVED in CODE_PROMPT_57**
+(structurally inert — AUDIT F-P2-03); **BALLDONTLIE's native `rating` is now the canonical rating
+source** (resolver `[manual, balldontlie]`). **Go-live remaining:** apply the pending migrations
+(`period_id`, `kickoff_lock_fallback`, the `recompute_scope` enum-retire — the `sofascore_ids` drop is
+DEFERRED post-tournament); confirm the BALLDONTLIE base-path/auth header; smoke-test ingestion against
+the GOAT trial + a real Supabase. · **Prompt 06 —
 server-authoritative draft controller (engine), COMPLETE ✅** (327 tests). New pure `packages/draft`
 (`@app/draft`): snake order (`managerForPick`), roster legality (the 2/5/5/3 caps via `@app/shared`),
 and autopick selection (queue → best-available, both filtered to available + position-legal) + a
@@ -535,3 +536,28 @@ Merge HELD pending clearance.
 ### 2026-06-17 — FAAB sealed→free-agency boundary is the batch-clear LATCH, not first kickoff (fix/faab-sealed-bid-latch-boundary, merge HELD)
 
 **fix/faab-sealed-bid-latch-boundary** (source commit `b05b78d` + this brain commit `[skip render]`). **2331 passed | 18 skipped** (measured baseline at the branch point — main `b88b7b2` — was 2325 passed | 18 skipped via root `vitest run`; **+6 passing** = validate 3 [sealed-accept / cleared-reject / locked-outer-bound, all non-UTC] + window 1 [MD1 non-UTC regression] + handleBid 2 [post-clear submit 409-no-write + edit-path re-gate 409-no-write]). Full `pnpm db:generate && pnpm -w typecheck && pnpm lint && pnpm test && pnpm --filter @app/web build` all exit 0; `pnpm format:check` flags ONLY two PRE-EXISTING untouched audit `.md` files (every changed file passes prettier). **The incident:** in MD1, two $0 sealed bids submitted during the free-agency window (after `period.batch_cleared_at` was stamped, before first kickoff) were accepted by `POST /api/faab/bid` and stranded permanently — the latch blocks any batch re-run, so they never resolved. **Root cause:** `validateBidSubmission` gated only on the period first kickoff (`acquisitionCutoffAt`), so the sealed-bid phase never actually ENDED at batch-clear. **Fix (latch-driven boundary):** the validator now routes through the shared **`acquisitionWindowState`** (single source of truth) — "locked" (now ≥ first kickoff) → `add-kicked-off` (unchanged outer bound, byte-equivalent condition); "free-agency" (`batch_cleared_at IS NOT NULL`) → the new **`bid-window-closed`** (409) — and only the still-sealed phase accepts a bid. The add-period's `batch_cleared_at` is threaded through `PlayerFacts` (resolved via the SAME `resolveAddPeriodWindow` the $0 FA grant uses → the bid route and FA route can never disagree on the gating period; the now-dead `periodFirstKickoff` helper was removed, firstKickoff resolution byte-equivalent) → `BidValidationContext` → BOTH the submit AND edit handler call sites; `WaiversClient` maps the code to a friendly message (no UUID leak). **Scope fences (proven):** `window.ts` already keyed sealed→FA on the latch (the real gap was the validator never consulting it); `resolveFaabBatch`/`resolve.ts` **byte-unchanged** (sha `a7b6666…` identical, 0 diff lines), §D purity test green, worker cadence (`selectPeriodsToClear`/dispatch/commitBatch) + the FA-grant route untouched; no schema migration. **Adversarial 3-lens review (× verify):** zero confirmed blockers/highs — boundary-logic CLEAN (full edge matrix), spec/DoD CLEAN; the one finding (the new code missing from `WaiversClient`'s `ERROR_MESSAGES` → raw-UUID leak) + a missing edit-path test were both applied. See DECISIONS.md → Theme-D amendment (latch-driven boundary) + ARCHITECTURE.md §3. **Merge HELD pending Chat clearance.**
+
+### 2026-06-17 — Sofascore scraper REMOVED; BALLDONTLIE `rating` canonical (CODE_PROMPT_57, merge HELD)
+
+**Removed the Sofascore scraper entirely** (`apps/scraper` + `packages/scrape`). It was structurally
+inert (AUDIT Pass-2 **F-P2-03** — empty Sofascore index, placeholder selector, unwired launcher), so
+every rating already resolved to BALLDONTLIE's native `rating`, now the **canonical rating source of
+record**. Two code commits + a docs commit. **Code:** resolver priority collapsed
+`[manual, scrape, balldontlie]` → **`[manual, balldontlie]`** (`@app/shared/src/constants.ts`);
+`resolver.contract.test.ts` relocated into `@app/recompute` + rewritten for the 2-source order;
+`apps/scraper` + `packages/scrape` deleted; `render.yaml` `wc-fantasy-scraper` service removed (replaced
+with a RETIRED note); `renderBlueprint.test.ts` updated in lockstep (asserts the service is now absent);
+`pnpm-lock.yaml` regenerated; `.env.example`/worker/db/draft/vitest comments + the `/scoring` page
+de-scraper'd; `.prettierignore` gained `audit/` (a pre-existing baseline format-debt, same class as the
+brain docs). **Retired findings F-P2-03/04/05/06.** **Schema/enum UNTOUCHED — deferred post-tournament:**
+the `RatingSource` `'scrape'` value + `player.sofascore_player_id` + `fifa_match.sofascore_match_id` stay
+as dead-but-harmless artifacts (the `parity.ts` guard requires `enums.ts` to mirror the Prisma enum).
+Gate green: `pnpm -w typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm --filter @app/web
+build` + `pnpm install --frozen-lockfile` all exit 0 (2301 passed | 18 skipped, down from 2326 with the
+scraper test files removed). ⚠️ **Sergio (Render dashboard):** delete/suspend the deployed
+`wc-fantasy-scraper` worker service (removing the IaC block does not delete the running service).
+**Merge HELD pending Chat clearance.** See ARCHITECTURE.md §2/§3/§7/§10 + DECISIONS.md → Data source
+Amendment 3 + SCORING.md §1.
+
+**⚠️ WATCH ITEM:** `duels_won` populates on live data (159/189 played rows; 17 substantial-minute NULLs =
+minor symmetric undercount); **F-P1-02 latent** — observability fix, normal priority.

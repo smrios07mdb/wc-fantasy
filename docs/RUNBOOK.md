@@ -16,7 +16,7 @@
 1. **The pooler split.** Prisma needs two different Supabase connection strings:
    | Env var | Supabase pooler | Port | Used by |
    |---|---|---|---|
-   | `DATABASE_URL` | **Transaction** pooler (PgBouncer) | **6543** | app + worker + scraper **runtime** |
+   | `DATABASE_URL` | **Transaction** pooler (PgBouncer) | **6543** | app + worker **runtime** |
    | `DIRECT_URL` | **Session** pooler | **5432** | **`prisma migrate deploy` ONLY** |
    The transaction pooler **cannot carry migrations** — that is why `migrate deploy` runs on `DIRECT_URL`.
    Append **`?pgbouncer=true`** to `DATABASE_URL` (Prisma + PgBouncer). The schema's `datasource.directUrl`
@@ -46,16 +46,13 @@
 
 1. Render dashboard → **Blueprints** → **New Blueprint Instance** → pick this repo/branch. Render reads
    `render.yaml` and proposes: **`wc-fantasy-web`** (web), **`wc-fantasy-worker`** (resident worker),
-   **`wc-fantasy-scraper`** (worker), **`wc-fantasy-faab-batch`** + **`wc-fantasy-period-close`** (cron), and
-   the **`wc-fantasy-shared`** env group.
+   **`wc-fantasy-period-close`** (cron), and the **`wc-fantasy-shared`** env group.
 2. Apply. Render creates the services + the group but **will not deploy successfully until the secrets are
    bound** (next step) — that is expected.
-3. **The scraper is non-gating.** Playwright is not yet wired (`apps/scraper/src/wiring.ts` → `notWiredLauncher`),
-   so `wc-fantasy-scraper` boots and idles (each tick logs a contained "not wired" error; ratings fall back to
-   BALLDONTLIE through the group stage). You **may suspend** it until the go-live scrape wiring lands. See the
-   `TODO(confirm: go-live scrape)` in `render.yaml`. Simplest at launch: **leave `wc-fantasy-scraper`
-   un-provisioned entirely** (skip/decline it in the Blueprint apply, or delete the service) — nothing depends
-   on it until Playwright + `loadSofaIndex` land.
+3. **No rating scraper.** The Sofascore scraper was REMOVED (CODE_PROMPT_57 — it was structurally inert,
+   AUDIT F-P2-03); BALLDONTLIE's native `rating` is the canonical rating source. ⚠️ If a
+   `wc-fantasy-scraper` worker was deployed by an earlier Blueprint apply, **delete/suspend it in the Render
+   dashboard** — removing the `render.yaml` block does not delete the running service.
 
 ## (b) Bind secrets — what goes where (build-time vs runtime)
 
@@ -77,7 +74,6 @@ config (`NODE_ENV`, `LOG_LEVEL`). **Never commit a secret.**
 | `BALLDONTLIE_API_KEY`                                                       | **worker**                 | runtime                  | BALLDONTLIE dashboard (GOAT key)                                                |
 | `BALLDONTLIE_BASE_URL`, `BALLDONTLIE_RPM`                                   | worker (non-secret)        | runtime                  | `render.yaml` (`RPM` 600 paid / 5 trial)                                        |
 | `WORKER_TICK_MS`, `WORKER_DRAFT_TICK_MS`, `WORKER_ROSTERS_SYNC_EVERY_TICKS` | worker (non-secret)        | runtime                  | `render.yaml`                                                                   |
-| `SCRAPER_TICK_MS`, `SCRAPER_POLITE_GAP_MS`                                  | scraper (non-secret)       | runtime                  | `render.yaml`                                                                   |
 
 > **Build-time note (§575):** `NEXT_PUBLIC_*` are **inlined at `next build`** — they live inline on the web
 > service. If you change one, you must **re-deploy** the web service (a runtime restart will not pick it up).
@@ -96,7 +92,7 @@ postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.co
 postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-Set `DATABASE_URL` on every DB-touching service (web, worker, scraper, both crons) and `DIRECT_URL` on web +
+Set `DATABASE_URL` on every DB-touching service (web, worker, both crons) and `DIRECT_URL` on web +
 worker — **per service**, since Render won't take a `sync: false` secret on the env group. Also, in Supabase →
 **Auth → URL Configuration**, allowlist the auth callback: `https://wc-fantasy-web.onrender.com/auth/callback`
 (+ `http://localhost:3000/auth/callback` for local).
@@ -247,18 +243,14 @@ Realtime, and worker autopick** — on the deployed stack. **Put the Realtime-AU
 | ------------------------- | ----------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
 | `wc-fantasy-web`          | web               | `pnpm --filter @app/web start`               | `preDeployCommand` = `db:migrate:deploy`; `healthCheckPath` = `/api/health` |
 | `wc-fantasy-worker`       | worker (resident) | `pnpm --filter @app/worker start`            | draft ticker + ingestion scheduler; roster re-pull self-scheduled           |
-| `wc-fantasy-scraper`      | worker            | `pnpm --filter @app/scraper start`           | **non-gating**; Playwright not yet wired                                    |
 | `wc-fantasy-faab-batch`   | cron `0 10 * * *` | `pnpm --filter @app/worker job:faab`         | daily FAAB batch trigger                                                    |
 | `wc-fantasy-period-close` | cron `0 * * * *`  | `pnpm --filter @app/worker job:period-close` | hourly period-close trigger                                                 |
 
 ### TODO(confirm) — operator decisions not pinned by spec
 
 - **`region`** on every service should match the Supabase project region (default `virginia`).
-- **Plan tiers** (`plan: starter`) size the ~$14 web+worker baseline; the scraper + crons add cost — adjust in
-  the dashboard (Sergio's billing call). The scraper may be **suspended** until the go-live scrape wiring.
-- **Go-live scrape wiring** (out of scope here): `pnpm add playwright` (apps/scraper) + `npx playwright install
-chromium`, swap `notWiredLauncher`, and append `&& pnpm --filter @app/scraper exec playwright install
---with-deps chromium` to the scraper `buildCommand`.
+- **Plan tiers** (`plan: starter`) size the ~$14 web+worker baseline; the crons add cost — adjust in the
+  dashboard (Sergio's billing call).
 - **Provisioning shell:** run `provision` / `job:rosters` from a **Render Shell on the worker** (inherits the
   env group) rather than locally, to avoid copying prod secrets onto a laptop.
 

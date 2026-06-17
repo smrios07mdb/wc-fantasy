@@ -390,8 +390,8 @@ see the amendment under **Data source** below.
 
 ## Open themes — agenda for future threads
 
-### Data source  ✅ LOCKED (amended twice — lock-on-play + verification)
-**Hybrid: BALLDONTLIE API (stats/events/schedule) + Sofascore scrape (rating — PRIMARY) + manual failsafe.**
+### Data source  ✅ LOCKED (amended three times — lock-on-play + verification + scraper removal)
+**Hybrid: BALLDONTLIE API (stats/events/schedule + rating — CANONICAL) + manual failsafe.** (The Sofascore scrape was REMOVED — see **Amendment 3** below.)
 - **Live scoring** (not settled-only) — frequent polling during match windows.
 - **BALLDONTLIE FIFA World Cup API** = primary feed: schedule, rosters, lineups, events
   (with minutes), per-match player & team stats, live scores. Covers WC 2018/2022/2026.
@@ -456,6 +456,29 @@ per-line table: **ARCHITECTURE.md §7**. Verdict:
   webhooks" open item.**
 - **(d) Live latency ≈ a few minutes** on the feed (detailed stats can lag hours; the rating lands
   near/after FT) → **reinforces the recompute pipeline** (event points live, settle later).
+
+**⚠️ AMENDMENT 3 (2026-06-17, CODE_PROMPT_57 — Sofascore scraper REMOVED; BALLDONTLIE rating CANONICAL).**
+- **Decision (Sergio, confirmed):** scratch the Sofascore scraper entirely. **BALLDONTLIE's native
+  per-match `rating` becomes the canonical rating source of record.** The resolver priority collapses
+  `[manual, scrape, balldontlie]` → **`[manual, balldontlie]`** (`@app/shared`
+  `DEFAULT_RATING_SOURCE_PRIORITY`); a `manual` override still beats the feed rating.
+- **Rationale:** the scrape arm was **structurally inert** (AUDIT Pass-2 **F-P2-03** — empty Sofascore
+  index, placeholder `__SOFA_DATA__` selector, unwired `notWiredLauncher`), so every player-match
+  already resolved to the BALLDONTLIE `rating`, which has performed well in live group-stage scoring.
+  This **supersedes Amendment 2(a)** ("Sofascore PRIMARY/required"): there is no longer a primary scrape
+  and a fallback — BALLDONTLIE is canonical.
+- **Retired findings:** the four scraper findings are now moot/closed by deletion — **F-P2-03** (inert
+  arm), **F-P2-04** (single placeholder selector, no fallback), **F-P2-05** (no rating range
+  validation), **F-P2-06** (wrong-row permanence).
+- **Code removed:** `apps/scraper` (`@app/scraper`) + `packages/scrape` (`@app/scrape`); the
+  `wc-fantasy-scraper` Render service block (⚠️ **Sergio** deletes the deployed service on the Render
+  dashboard — removing the IaC block does not delete the running service).
+- **DEFERRED — schema drop (post-tournament).** No migration now (a live migration is riskier than a few
+  dead columns). The `RatingSource` `'scrape'` enum value, `player.sofascore_player_id`, and
+  `fifa_match.sofascore_match_id` stay as dead-but-harmless artifacts. NB: the
+  `packages/db/src/parity.ts` compile-time guard requires `@app/shared` `RATING_SOURCES` to mirror the
+  Prisma `RatingSource` enum, so the value cannot be dropped from one side only — drop all three together
+  after the tournament.
 
 **Live nuance:** event-based points update live; the rating settles near/after full-time, so that
 component lags and adjusts during/after a match — handled by the recomputable scoring pipeline
@@ -747,9 +770,9 @@ scale (a private league of ~12 managers, one ~month-long tournament, ~104 matche
   modes: schedule-sync (hourly/daily) → pre-match lineup pull (lock starters) → live poll (events
   + stats + shots; lock subs at entry minute) → settle poll (until stats + rating land →
   recompute). Idempotent upserts self-correct on re-poll.
-- **Rating resolver:** `first non-null of [manual, scrape, balldontlie]` (config-driven); the
-  scraper is isolated, writes one field only, and is the **PRIMARY rating source and required**
-  (BALLDONTLIE's `rating` is the automatic fallback — see Amendment 2(a)).
+- **Rating resolver:** `first non-null of [manual, balldontlie]` (config-driven); **BALLDONTLIE's
+  native `rating` is the canonical rating source of record**, `manual` overrides it. (The Sofascore
+  scraper was removed in CODE_PROMPT_57 — see Amendment 3.)
 - **Manual / Cowork override surface** writes the raw/manual layer and triggers the same recompute
   — corrections and the feed-gap fields (penalty won/committed) share one code path. Owns the
   **lock-on-play fallback** (per-match revert to kickoff-locking + an alert if the live poller goes
@@ -766,8 +789,8 @@ scale (a private league of ~12 managers, one ~month-long tournament, ~104 matche
 #### Amendments this thread forces (ratify)
 - **Theme A / SCORING.md** — six verification-forced line changes (3 drops, 2 keep-via-manual, 1
   remap), documented as a marked amendment block; model balance untouched and reversible.
-- **Data source** — Amendment 2 above: rating via resolver with the **Sofascore scrape PRIMARY/required**
-  (BALLDONTLIE `rating` = automatic fallback), **polling** ingestion (no webhook receiver), tier
+- **Data source** — Amendments 2–3 above: rating via resolver `[manual, balldontlie]` with
+  **BALLDONTLIE's native `rating` CANONICAL** (the Sofascore scraper was removed — CODE_PROMPT_57), **polling** ingestion (no webhook receiver), tier
   **GOAT $39.99/mo**, live latency ≈ a few minutes.
 
 #### Theme C now closed (resolved this thread)
