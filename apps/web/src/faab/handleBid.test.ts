@@ -32,10 +32,26 @@ function freshStore(opts: { lockedDrops?: string[] } = {}) {
       },
     ],
     players: {
-      // periodFirstKickoffAt = the add target's PERIOD first kickoff (the league-wide cutoff).
-      X: { position: "MID", periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z") },
-      DROP: { position: "MID", periodFirstKickoffAt: null },
-      KICKED: { position: "MID", periodFirstKickoffAt: new Date("2026-06-10T05:00:00Z") },
+      // periodFirstKickoffAt = the add target's PERIOD first kickoff (the league-wide cutoff);
+      // periodBatchClearedAt = that period's blind-bid batch-clear latch (null = still sealed-bid).
+      X: {
+        position: "MID",
+        periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z"),
+        periodBatchClearedAt: null,
+      },
+      DROP: { position: "MID", periodFirstKickoffAt: null, periodBatchClearedAt: null },
+      KICKED: {
+        position: "MID",
+        periodFirstKickoffAt: new Date("2026-06-10T05:00:00Z"),
+        periodBatchClearedAt: null,
+      },
+      // CLEARED: the add-period's batch has already cleared (free-agency phase), though its first
+      // kickoff (15:00Z) is still ahead of NOW (06:00Z) — a sealed bid here is the MD1 stranded gap.
+      CLEARED: {
+        position: "MID",
+        periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z"),
+        periodBatchClearedAt: new Date("2026-06-10T05:30:00Z"),
+      },
     },
     leagueOwned: ["DROP"],
     lockedDrops: opts.lockedDrops,
@@ -124,6 +140,19 @@ describe("handleSubmitBid — validation + persistence", () => {
     expect((res.body as { error: string }).error).toBe("add-kicked-off");
   });
 
+  it("rejects a sealed bid AFTER the add-period's batch cleared (409 bid-window-closed) — no write", async () => {
+    // The MD1 strand: the batch latch is stamped (free-agency phase) but first kickoff is still ahead;
+    // a sealed bid must be rejected BEFORE any write (the manager uses the $0 FA route instead).
+    const store = freshStore();
+    const res = await handleSubmitBid(
+      { resolveManager: async () => okOutcome, store, now: NOW }, // NOW = 06:00Z, kickoff 15:00Z
+      { ...submitBody, playerAddId: "CLEARED" },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("bid-window-closed");
+    expect(store.rows).toHaveLength(0);
+  });
+
   it("rejects a drop locked by play (409 drop-locked) without persisting", async () => {
     const store = freshStore({ lockedDrops: ["DROP"] }); // DROP has played this matchday
     const res = await handleSubmitBid(
@@ -158,8 +187,12 @@ describe("handleSubmitBid — validation + persistence", () => {
         },
       ],
       players: {
-        X: { position: "MID", periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z") },
-        DROP: { position: "MID", periodFirstKickoffAt: null },
+        X: {
+          position: "MID",
+          periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z"),
+          periodBatchClearedAt: null,
+        },
+        DROP: { position: "MID", periodFirstKickoffAt: null, periodBatchClearedAt: null },
       },
       leagueOwned: ["DROP"],
     });
@@ -193,6 +226,29 @@ describe("handleEditBid / handleCancelBid — self-scoped bid mutations", () => 
     );
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: "not_your_manager" });
+  });
+
+  it("re-gates the window on EDIT: raising a bid whose add-period has since cleared (409 bid-window-closed) — no write", async () => {
+    const store = freshStore();
+    // A bid placed while sealed, on a player (CLEARED) whose period's batch has since cleared. The edit
+    // path re-validates against the add target's window, so the raise must be rejected before any write.
+    store.rows.push({
+      bidId: "stale-bid",
+      managerId: "A",
+      playerAddId: "CLEARED",
+      playerDropId: "DROP",
+      amount: 10,
+      note: null,
+      status: "pending",
+    } as never);
+
+    const res = await handleEditBid(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      { managerId: "A", bidId: "stale-bid", amount: 25, playerDropId: "DROP", note: "raise" },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("bid-window-closed");
+    expect(store.rows[0]!.amount).toBe(10); // unchanged — no write
   });
 
   it("edits the manager's own pending bid (200)", async () => {

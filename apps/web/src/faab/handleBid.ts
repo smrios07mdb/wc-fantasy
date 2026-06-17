@@ -88,13 +88,12 @@ export async function handleSubmitBid(
     dropLocked = await deps.store.isDropLocked(g.managerId, body.playerDropId);
   }
 
-  // TODO(confirm): the $0 free-agency surface. The Theme-D amendment describes "$0 first-come free
-  // agency after the batch clears, until first kickoff." There is NO dedicated FA-claim route today
-  // (Prompt 25 flagged this) — a $0 bid here is a SEALED bid that clears at the period's batch, not an
-  // immediate first-come grant. So this branch enforces only the HARD cutoff (the period's first
-  // kickoff, via `acquisitionCutoffAt` below); the sealed-vs-free-agency phase split + the first-come
-  // grant are a deferred surface. The pure `acquisitionWindowState` (apps/worker/src/faab/selectors.ts)
-  // is the ready building block to gate it once that surface exists.
+  // A bid here is a SEALED bid that clears at the add-period's blind-bid batch. The validator now gates
+  // BOTH boundaries of the acquisition window (via `acquisitionWindowState`): the HARD first-kickoff lock
+  // (`acquisitionCutoffAt`) AND the sealed→free-agency latch (`batchClearedAt`). Once the period's batch
+  // has cleared, the sealed phase is over and this route rejects (`bid-window-closed`, 409) — the manager
+  // uses the dedicated $0 first-come FA route (`/api/faab/free-agent`, `handleFaGrant`) instead. (A sealed
+  // $0 bid accepted in the post-clear gap was stranded behind the latch in MD1 — this closes that gap.)
   const pendingTotal = await deps.store.sumOtherPendingBids(g.managerId, null);
   const submission: BidSubmission = {
     managerId: g.managerId,
@@ -114,6 +113,7 @@ export async function handleSubmitBid(
     ownedByManager: ctx.ownedByManager,
     ownedByLeague: ctx.ownedByLeague,
     acquisitionCutoffAt: addFacts.periodFirstKickoffAt,
+    batchClearedAt: addFacts.periodBatchClearedAt,
     dropLocked,
     isPlayoffParticipant: ctx.isPlayoffParticipant,
   });
@@ -183,6 +183,7 @@ export async function handleEditBid(
       ownedByManager: ctx.ownedByManager,
       ownedByLeague: ctx.ownedByLeague,
       acquisitionCutoffAt: addFacts.periodFirstKickoffAt,
+      batchClearedAt: addFacts.periodBatchClearedAt,
       dropLocked,
       isPlayoffParticipant: ctx.isPlayoffParticipant,
     },

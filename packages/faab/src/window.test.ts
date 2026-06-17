@@ -26,6 +26,19 @@ describe("acquisitionWindowState", () => {
     expect(acquisitionWindowState(cleared, new Date("2026-06-11T07:00:00Z"))).toBe("free-agency");
   });
 
+  it("MD1 regression: a CLEARED latch ⇒ free-agency even with first kickoff still ahead (non-UTC tz)", () => {
+    // The boundary keys on the actual `batch_cleared_at` LATCH, not a scheduled batch time. Instants use a
+    // −04:00 offset to show the predicate compares ABSOLUTE instants (tz only affects display). A sealed $0
+    // bid placed in THIS phase was accepted then stranded behind the latch in MD1 — now it's free-agency.
+    const cleared = period({
+      batchClearedAt: new Date("2026-06-11T02:00:00-04:00"),
+      firstKickoffAt: new Date("2026-06-11T08:00:00-04:00"),
+    });
+    expect(acquisitionWindowState(cleared, new Date("2026-06-11T04:00:00-04:00"))).toBe(
+      "free-agency",
+    );
+  });
+
   it("is LOCKED at the period's first kickoff (hard league-wide lock — FA closed)", () => {
     const cleared = period({ batchClearedAt: new Date("2026-06-11T06:00:00Z") });
     expect(acquisitionWindowState(cleared, FIRST_KICK)).toBe("locked");

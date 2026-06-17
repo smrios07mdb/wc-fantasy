@@ -30,6 +30,7 @@ function ctx(over: Partial<BidValidationContext> = {}): BidValidationContext {
     ownedByManager: new Set(["DROP"]),
     ownedByLeague: new Set(["DROP"]),
     acquisitionCutoffAt: new Date("2026-06-10T15:00:00Z"), // the period's first kickoff (upcoming)
+    batchClearedAt: null, // sealed-bid phase by default (latch not yet stamped)
     dropLocked: false,
     ...over,
   };
@@ -98,6 +99,50 @@ describe("validateBidSubmission", () => {
         ctx({ now, acquisitionCutoffAt: new Date("2026-06-10T15:00:00Z") }),
       ),
     ).toBeNull();
+  });
+
+  // ── the sealed → free-agency LATCH boundary (the MD1 strand fix) ───────────────────────────────────
+  // Instants are written with a non-UTC (−04:00) offset to document that the window predicate compares
+  // ABSOLUTE instants — it is timezone-agnostic; the league tz only matters for batch-time display.
+
+  it("ACCEPTS a sealed bid while the batch latch is still null (sealed-bid phase, now < kickoff)", () => {
+    // Pre-batch: 08:00−04:00, first kickoff 11:00−04:00, batch not yet cleared.
+    expect(
+      validateBidSubmission(
+        sub(),
+        ctx({
+          now: new Date("2026-06-10T08:00:00-04:00"),
+          acquisitionCutoffAt: new Date("2026-06-10T11:00:00-04:00"),
+          batchClearedAt: null,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("REJECTS a sealed bid once the period's batch has cleared (free-agency phase, now < kickoff)", () => {
+    // The MD1 gap: batch cleared at 07:00−04:00, first kickoff still ahead at 11:00−04:00, now 08:00−04:00.
+    const e = validateBidSubmission(
+      sub(),
+      ctx({
+        now: new Date("2026-06-10T08:00:00-04:00"),
+        acquisitionCutoffAt: new Date("2026-06-10T11:00:00-04:00"),
+        batchClearedAt: new Date("2026-06-10T07:00:00-04:00"),
+      }),
+    );
+    expect(e?.code).toBe("bid-window-closed");
+  });
+
+  it("keeps add-kicked-off as the OUTER bound once locked, even when the batch also cleared", () => {
+    // Post-kickoff: now 12:00−04:00 ≥ kickoff 11:00−04:00 → locked wins over the cleared latch.
+    const e = validateBidSubmission(
+      sub(),
+      ctx({
+        now: new Date("2026-06-10T12:00:00-04:00"),
+        acquisitionCutoffAt: new Date("2026-06-10T11:00:00-04:00"),
+        batchClearedAt: new Date("2026-06-10T07:00:00-04:00"),
+      }),
+    );
+    expect(e?.code).toBe("add-kicked-off");
   });
 
   it("requires a drop once the roster is full", () => {

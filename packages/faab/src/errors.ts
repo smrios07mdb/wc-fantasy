@@ -17,6 +17,7 @@ export type FaabBidErrorCode =
   | "over-budget"
   | "add-owned"
   | "add-kicked-off"
+  | "bid-window-closed"
   | "drop-required"
   | "drop-not-owned"
   | "drop-equals-add"
@@ -50,6 +51,17 @@ export interface AddOwnedError {
 /** The add target's match has already kicked off — the acquisition deadline has passed. */
 export interface AddKickedOffError {
   code: "add-kicked-off";
+  message: string;
+  playerAddId: string;
+}
+
+/** The add target's period has already CLEARED its blind-bid batch (`batch_cleared_at IS NOT NULL`) — the
+ *  sealed-bid phase is over and the period is now in free agency, so a (sealed) bid is no longer accepted;
+ *  the $0 first-come FA grab route takes over. Distinct from `add-kicked-off` (the harder first-kickoff
+ *  lock): this fires in the WINDOW between batch-clear and first kickoff. A sealed $0 bid stranded in this
+ *  gap — accepted but never re-resolvable past the latch — was the MD1 incident this rejection closes. */
+export interface BidWindowClosedError {
+  code: "bid-window-closed";
   message: string;
   playerAddId: string;
 }
@@ -105,6 +117,7 @@ export type FaabBidError =
   | OverBudgetError
   | AddOwnedError
   | AddKickedOffError
+  | BidWindowClosedError
   | DropRequiredError
   | DropNotOwnedError
   | DropEqualsAddError
@@ -179,6 +192,14 @@ export function addKickedOff(playerAddId: string): AddKickedOffError {
   return {
     code: "add-kicked-off",
     message: `player ${playerAddId}'s match has already kicked off — he can no longer be acquired`,
+    playerAddId,
+  };
+}
+
+export function bidWindowClosed(playerAddId: string): BidWindowClosedError {
+  return {
+    code: "bid-window-closed",
+    message: `the sealed-bid window for player ${playerAddId}'s period has closed (free agency is open) — grab him as a free agent instead`,
     playerAddId,
   };
 }

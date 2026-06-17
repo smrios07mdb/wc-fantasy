@@ -80,6 +80,10 @@ export interface PlayerFacts {
   /** The acquisition cutoff for adding this player: his relevant fixture's PERIOD first kickoff
    *  (league-wide), or null if none upcoming. Superseded the per-player kickoff (Theme-D amendment). */
   periodFirstKickoffAt: Date | null;
+  /** The add target's PERIOD blind-bid batch-clear latch (`period.batch_cleared_at`), or null if the
+   *  batch has not yet cleared. NOT-NULL ⇒ the period left sealed-bid for free agency, so a sealed bid is
+   *  rejected (`bid-window-closed`); resolved from the SAME add-period window as `periodFirstKickoffAt`. */
+  periodBatchClearedAt: Date | null;
 }
 
 /** A bid as persisted/echoed by the route. */

@@ -8,9 +8,12 @@
  * window" amendment):
  *  1. amount ≥ 0 ($0 is legal; negative is not).
  *  2. amount ≤ faabBudget − (sum of the manager's OTHER pending bids) — no over-commit across claims.
- *  3. the add target is unowned league-wide AND its PERIOD's first kickoff has not passed at `now`. The
- *     cutoff is the league-wide period first kickoff (NOT the player's own kickoff) — the amendment
- *     supersedes the per-player-kickoff deadline. The IO layer resolves `acquisitionCutoffAt`.
+ *  3. the add target is unowned league-wide AND its PERIOD is still in its SEALED-BID phase at `now`.
+ *     The window is the shared `acquisitionWindowState` (single source of truth): "locked" once the
+ *     league-wide period first kickoff passes (`add-kicked-off` — the outer bound, NOT the player's own
+ *     kickoff per the amendment), and "free-agency" once that period's blind-bid batch has CLEARED
+ *     (`bid-window-closed` — sealed bids are closed; the $0 FA grab takes over). The IO layer resolves
+ *     both `acquisitionCutoffAt` (the period first kickoff) and `batchClearedAt` (the batch-clear latch).
  *  4. the drop ≠ the add; the drop is owned by this manager; a drop is REQUIRED once the squad is full.
  *  5. the add/drop keeps the roster within the phase roster cap (15 group / 9 playoff; the per-position
  *     2/5/5/3 cap was lifted — Prompt 44 extended to FAAB; lineup/formation legality is a separate
@@ -18,11 +21,12 @@
  */
 import { POSITIONS, type Position } from "@app/shared";
 import type { PositionCounts } from "./resolve";
-import type { AcquisitionWindow } from "./window";
+import { acquisitionWindowState, type AcquisitionWindow } from "./window";
 import {
   addKickedOff,
   addOwned,
   amountNegative,
+  bidWindowClosed,
   dropEqualsAdd,
   dropLocked,
   dropNotOwned,
@@ -65,8 +69,14 @@ export interface BidValidationContext {
   /** Players actively owned by ANY manager in the league (validates the add availability). */
   ownedByLeague: ReadonlySet<string>;
   /** The acquisition cutoff: the add target's PERIOD first kickoff (league-wide), or null if none
-   *  upcoming. Superseded the per-player kickoff (Theme-D amendment). Resolved by the IO layer. */
+   *  upcoming. Superseded the per-player kickoff (Theme-D amendment). Resolved by the IO layer. This is
+   *  the HARD "locked" boundary (outer bound); the sealed→free-agency boundary below fires earlier. */
   acquisitionCutoffAt: Date | null;
+  /** The add target's PERIOD blind-bid batch-clear LATCH (`period.batch_cleared_at`), or null if the
+   *  batch has not yet cleared. NOT-NULL ⇒ the period left its sealed-bid phase for free agency, so a
+   *  (sealed) bid is rejected (`bid-window-closed`) and the manager must use the $0 FA grab instead. Keyed
+   *  on the actual latch (not the scheduled batch time), mirroring `acquisitionWindowState`. IO-resolved. */
+  batchClearedAt: Date | null;
   /** Is the named drop LOCKED by play (lineup_slot.locked_at in a still-active matchday)? A locked drop
    *  has played this matchday and can't be dropped yet. False when there is no drop. */
   dropLocked: boolean;
@@ -91,11 +101,20 @@ export function validateBidSubmission(
   const available = ctx.faabBudget - ctx.pendingTotal;
   if (sub.amount > available) return overBudget(sub.amount, available);
 
-  // (3) add availability + the acquisition cutoff (the period's first kickoff, league-wide).
+  // (3) add availability + the acquisition WINDOW. The shared `acquisitionWindowState` is the single
+  //     source of truth (it keys the sealed→free-agency boundary on the period's batch-clear LATCH, not a
+  //     scheduled time): a period past its first kickoff is "locked" (`add-kicked-off`, the same outer
+  //     bound as before — the condition is identical), and a period whose blind-bid batch has CLEARED is
+  //     in "free-agency" — sealed bids are closed, so the manager must use the $0 FA grab route instead
+  //     (`bid-window-closed`). A sealed $0 bid accepted in this gap was the MD1 strand incident. Only the
+  //     still-sealed phase accepts a bid.
   if (ctx.ownedByLeague.has(sub.playerAddId)) return addOwned(sub.playerAddId);
-  if (ctx.acquisitionCutoffAt !== null && ctx.acquisitionCutoffAt.getTime() <= ctx.now.getTime()) {
-    return addKickedOff(sub.playerAddId);
-  }
+  const window = acquisitionWindowState(
+    { batchClearedAt: ctx.batchClearedAt, firstKickoffAt: ctx.acquisitionCutoffAt },
+    ctx.now,
+  );
+  if (window === "locked") return addKickedOff(sub.playerAddId);
+  if (window === "free-agency") return bidWindowClosed(sub.playerAddId);
 
   // (4)+(5) drop rules + roster legality — shared with the $0 FA grant.
   return checkDropAndRoster(sub, ctx);

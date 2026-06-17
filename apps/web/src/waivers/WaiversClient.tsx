@@ -28,6 +28,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   "over-budget": "Over budget — lower your bid or cancel another claim.",
   "add-owned": "That player is already owned in the league.",
   "add-kicked-off": "Too late — his match has already kicked off.",
+  "bid-window-closed":
+    "Sealed bids for his matchday have closed — grab him as a free agent instead.",
   "drop-required": "Pick a player to drop — your squad is full.",
   "drop-not-owned": "You don’t own the player you’re trying to drop.",
   "drop-equals-add": "The add and the drop can’t be the same player.",
