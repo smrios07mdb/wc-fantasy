@@ -49,6 +49,12 @@ export async function runFaabBatch(
     bids: ctx.bids,
     ownedByLeague: ctx.ownedByLeague,
     rosterCap: ctx.rosterCap,
+    // D4 (trim-down) participant gate: in the playoff phase the context carries the `alive` set and the
+    // resolver voids + refunds every non-participant's still-pending bid (the backstop behind the
+    // submission gate, for bids left pending across the group→playoff cutover). `null` in group ⇒ a
+    // no-op (every bid competes), so group batches stay byte-identical. Threading this closes F-P0-01:
+    // the controller previously omitted it, leaving the field `undefined` and the gate dead in prod.
+    participantManagerIds: ctx.participantManagerIds,
   });
 
   // commitBatch claims the period (conditional, IS NULL) as the FIRST step of the apply transaction;

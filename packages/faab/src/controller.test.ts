@@ -165,3 +165,80 @@ describe("runFaabBatch — orchestration + idempotency", () => {
     expect(s.ownedBy("A")).not.toContain("A-drop"); // dropped once
   });
 });
+
+describe("runFaabBatch — D4 playoff participant gate (F-P0-01)", () => {
+  // A playoff-phase batch context carries `participantManagerIds` (the `alive` set), exactly as the
+  // Prisma `loadBatchContext` builds it when `league.status === 'playoff'`. The controller MUST thread it
+  // into the resolver, which voids + refunds every non-participant's still-pending bid. This is the
+  // controller-boundary coverage F-P0-01 / F-P2-01 was missing — the pure resolver was already correct,
+  // but the controller dropped the field so the gate was dead on the production batch path.
+  function playoffStore(participantManagerIds: ReadonlySet<string>) {
+    return new MemoryFaabBatchStore({
+      leagueId: "L",
+      participantManagerIds,
+      managers: [
+        {
+          managerId: "A",
+          faabBudget: 100,
+          waiverOrderPosition: 1,
+          counts: FULL,
+          ownedPlayerIds: ["A-drop"],
+        },
+        {
+          managerId: "B",
+          faabBudget: 100,
+          waiverOrderPosition: 2,
+          counts: FULL,
+          ownedPlayerIds: ["B-drop"],
+        },
+      ],
+    });
+  }
+
+  it("voids + refunds an eliminated (non-participant) manager's bid — it can't out-bid a survivor", async () => {
+    // A is alive; B is eliminated (NOT in the participant set) yet bids HIGHER on the same player.
+    const s = playoffStore(new Set(["A"]));
+    s.addPendingBid(pendingBid("alive", "A", "X", 10, "A-drop")); // survivor, lower bid
+    s.addPendingBid(pendingBid("elim", "B", "X", 30, "B-drop")); // eliminated, higher bid
+
+    const summary = await runFaabBatch(s, "L", NOW, PERIOD);
+
+    // The eliminated bid is voided + refunded and does NOT win, despite being the higher amount.
+    expect(s.bidStatus("elim")).toBe("voided_refunded");
+    expect(s.ownedBy("B")).not.toContain("X");
+    expect(s.budgetOf("B")).toBe(100); // refunded — the budget was never debited
+    // Control: the alive manager's bid resolves normally and wins the now-uncontested player.
+    expect(s.bidStatus("alive")).toBe("won");
+    expect(s.ownedBy("A")).toContain("X");
+    expect(s.budgetOf("A")).toBe(90); // debited 10
+    expect(summary.voided).toBe(1);
+    expect(summary.won).toBe(1);
+  });
+
+  it("does NOT void a participant: in playoff an alive manager's higher bid still wins", async () => {
+    // Both A and B are alive participants → the gate must touch neither; the higher bid wins as usual.
+    const s = playoffStore(new Set(["A", "B"]));
+    s.addPendingBid(pendingBid("lo", "A", "X", 10, "A-drop"));
+    s.addPendingBid(pendingBid("hi", "B", "X", 30, "B-drop"));
+
+    await runFaabBatch(s, "L", NOW, PERIOD);
+
+    expect(s.bidStatus("hi")).toBe("won");
+    expect(s.ownedBy("B")).toContain("X");
+    expect(s.bidStatus("lo")).toBe("lost");
+  });
+
+  it("is a no-op in the group phase (participantManagerIds null): every bid competes", async () => {
+    // `store()` seeds NO participant set (null = group / pre-playoff). The gate is inert — the higher bid
+    // wins regardless of participation. This is what makes the F-P0-01 fix safe to deploy mid-tournament.
+    const s = store();
+    s.addPendingBid(pendingBid("lo", "A", "X", 10, "A-drop"));
+    s.addPendingBid(pendingBid("hi", "B", "X", 30, "B-drop"));
+
+    await runFaabBatch(s, "L", NOW, PERIOD);
+
+    expect(s.bidStatus("hi")).toBe("won");
+    expect(s.ownedBy("B")).toContain("X");
+    expect(s.bidStatus("lo")).toBe("lost");
+  });
+});
