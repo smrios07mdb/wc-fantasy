@@ -101,6 +101,12 @@ _(feat/scoring-promote-lines: shots on target, big chances created, accurate cro
 | Clean sheet (60+ min) | +4 |
 | Goals conceded | −1 / 1 _(was −1/2 before Prompt 28; updated for tighter defensive accountability)_ |
 
+**Goals conceded excludes VAR-overturned goals.** A goal chalked off by VAR concedes nothing — the
+engine drops any `goal` event paired to a `varDecision/goalNotAwarded` for the same scorer (within ≤3
+effective minutes), so a disallowed goal does **not** cost the keeper/defenders a −1 nor break their
+clean sheet. Goal _credit_ (§3) is stat-based and unaffected. See ARCHITECTURE.md §7 / Appendix A for
+the incident vocabulary, the overturn rule, and the score-reconciliation invariant that guards it.
+
 ## 7. Penalties — all
 | Stat | Value |
 |---|---|
@@ -165,8 +171,10 @@ field mapping: **ARCHITECTURE.md → Appendix A**. Legend: ✅ direct · 🟡 de
   never exceeds `duels_won`), **non-negative remainders** (`duels_won − aerial_duels_won ≥ 0`), and
   **aerial never present without duels**. A separate aerial line would double-count, so aerials stay
   **UNSCORED**; `aerial_duels_won` / `aerial_duels_lost` are retained verbatim in `extra` for reference.
-- **⚠️ Confirm during the GOAT trial:** own-goal `incident_class` label; that
-  `match_shots.situation` flags `penalty` reliably.
+- **✅ CONFIRMED — own-goal `incident_class` = `goal/ownGoal`:** an own goal arrives as
+  `incident_type=goal` / `incident_class=ownGoal` (the engine keys goal classification on
+  `incident_type` exactly — ARCHITECTURE.md §7 / Appendix A). **⚠️ Still confirm during the GOAT
+  trial:** that `match_shots.situation` flags `penalty` reliably.
 
 ---
 

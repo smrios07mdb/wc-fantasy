@@ -702,12 +702,51 @@ directly or derive; six lines force a call (all minor/rare).**
   when the player's `team_id` is the match's home or away team (`concededByPlayerTeam`,
   packages/recompute/adapter). Without this guard an uninvolved team's `scorerTeam != playerTeam`
   is trivially true for **every** goal, so a non-participant "concedes" the whole match (the
-  2026-06-11 MD1 −1 bug — defense in depth behind the participant gate above).
+  2026-06-11 MD1 −1 bug — defense in depth behind the participant gate above). **Conceded also
+  excludes VAR-overturned goals** — see the incident-vocabulary subsection (Appendix A) below.
 - **Penalty missed** = `match_shots` where it's a penalty (`situation`) and `shot_type ≠ goal` ->
   charge the shooter (−3).
 - **Penalty saved** = same `match_shots` row with `shot_type = save` -> credit the opposing
   on-pitch keeper (+5). *(One row yields both the taker's −3 and the keeper's +5.)*
-- **Own goal** = `match_events` goal incident flagged own-goal -> the OG scorer (−2).
+- **Own goal** = `match_events` goal incident flagged own-goal -> the OG scorer.
+
+### 🟢 `match_events` incident vocabulary — goal classification & VAR overturn (Appendix A)
+**Goal classification keys on `incident_type` EXACTLY, never on a label substring.** A real goal is
+always `incident_type=goal`; its `incident_class` is one of `regular` / `penalty` / `ownGoal`. VAR
+review outcomes arrive as a SEPARATE `incident_type=varDecision`:
+
+| `incident_type` | `incident_class` | meaning | engine treatment |
+|---|---|---|---|
+| `goal` | `regular` | open-play goal | goal credit (§3, stat-based) + conceded (§6) |
+| `goal` | `penalty` | scored penalty | goal credit + conceded |
+| `goal` | `ownGoal` | own goal | OG scorer −4 (§8) + conceded vs the OG team |
+| `varDecision` | `goalAwarded` | VAR upheld a goal | **ignored** (the `goal` row already scores it) |
+| `varDecision` | `goalNotAwarded` | VAR **disallowed** a goal | overturn signal — voids the paired goal |
+| `varDecision` | `vip_for_goal` | VAR-review marker | **ignored** |
+
+The earlier `isGoalEvent` test, `label(e).includes("goal")` (label = `incident_type` +
+`incident_class`), wrongly matched all three `varDecision` classes — their class CONTAINS the
+substring "goal" — so a single disallowed goal was counted up to **3×** (the `goal` row +
+`goalAwarded` + `goalNotAwarded`). `isGoalEvent` now returns `norm(incident_type) === "goal"`, so
+only real goals count; VAR rows are read only by `overturnedGoals`.
+
+**VAR overturn (Route A — derive truth from the event list).** The feed leaves a disallowed goal's
+`goal/*` row in place (it does **not** set `rescinded`); the only overturn signal is a sibling
+`varDecision/goalNotAwarded` for the **same scorer**. `overturnedGoals` pairs each `goalNotAwarded`
+to the nearest not-yet-voided same-player goal within **≤3 effective minutes** (one void cancels one
+goal); `goalsConcededWhileOn` then skips rescinded **or** overturned goals. Route A was chosen over
+trusting a per-row flag precisely because the feed does not set one.
+
+**Reconciliation invariant (the Route-A safety net).** For each team, the whole-match count of
+non-overturned conceded `goal` events MUST equal `teamGoalsAgainst` (the authoritative, VAR-correct
+match score). Tests assert equality; at runtime `buildScoreInput` `console.warn`s the `matchId` +
+both counts on divergence and **never throws** — live scoring proceeds on the windowed non-overturned
+count, with the mismatch flagged so a human can inspect any VAR shape the model did not anticipate.
+The warn fires only when the comparison is COMPUTABLE — `reconciliationApplies` requires the final
+score to be known (NULL home/away early-live) and every standing goal's scorer team resolvable
+(`player.team_id` is patchy) — so the per-player guard does not flood on ordinary live data; only a
+genuine VAR-shape mismatch on a settled, fully-attributed match warns. (`reconcileConceded` is the
+pure helper; the store populates the optional `MatchTeamContext.matchId` that labels the warn.)
 
 ### ⚠️ Gaps — forced calls (all minor/rare). See SCORING.md amendments.
 | SCORING line | Status | Call |
@@ -724,8 +763,11 @@ directly or derive; six lines force a call (all minor/rare).**
   the attacking-side "shots blocked" is the separate `team_match_stats.shots_blocked` + `match_shots`
   `block`). Design intent is locked; just a 30-second sanity-check on first live data that the feed
   field matches (centre-backs accrue it, strikers don't).
-- **Enum values** for `match_shots.situation` (penalty detection) and `match_events.incident_class`
-  (own-goal, second-yellow vs red) — verify against the first live data.
+- **`match_events.incident_class` — goal & VAR classes CONFIRMED** (live GOAT data, incl. the
+  Argentina–Algeria reference): goals are `goal/{regular,penalty,ownGoal}`; VAR outcomes are
+  `varDecision/{goalAwarded,goalNotAwarded,vip_for_goal}` (see the incident-vocabulary subsection /
+  Appendix A above). Still verify `match_shots.situation` (penalty detection) and the
+  second-yellow-vs-red `incident_class` labels against live data.
 - **Rating fallback quality** — the one-time BALLDONTLIE-vs-Sofascore comparison (§3), to gauge the
   fallback only; Sofascore stays primary regardless.
 

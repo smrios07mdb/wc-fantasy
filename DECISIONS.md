@@ -2585,3 +2585,61 @@ Writing `'complete'` would FIX NOTHING and silently:
 A post-tournament bid returns a misleading **200 + pending row**. IF a period ever lingered uncleared (a worker-outage class of event), the worker — status still `'playoff'`, `batch_cleared_at IS NULL` — would clear it on resume and EXECUTE the bid. This has **no competitive effect**: scoring is over, so it is a phantom budget debit / roster swap on a dead league. The contained fix, IF ever wanted, is a single tournament-over guard on the bid-submit handler reusing the read-model's existing tournament-over predicate (Final period + closed + a `champion` `playoff_entry`, per the `PlayoffsView`/dashboard `complete` arm). **DEFERRED** — declined now because adding a tournament-over predicate to LIVE code risks mis-firing and shutting FAAB DURING live play, which is worse than the consequence-free residual it prevents.
 
 **Evidence.** `vitest run packages/faab apps/worker/src/faab apps/web/src/faab` → **204 passed, 5 skipped** (12 files passed + 1 skipped; the skipped suite is the env-gated `packages/faab/src/release.integration.test.ts`). [In this monorepo `pnpm exec vitest …` trips pnpm's recursive-exec wrapper — run the root `"test": "vitest run"` binary directly.] [skip render]
+
+## VAR-overturned goals no longer inflate goals-conceded (Route A + reconciliation guard, 2026-06-17)
+
+**The bug.** `score_player_match` over-charged goals conceded on any match with VAR activity. Two
+defects on the event-derived conceded path in `packages/recompute/src/adapter.ts`:
+1. **VAR-substring.** `isGoalEvent` tested `label(e).includes("goal")`, where `label =
+   incident_type + incident_class`. That matched `varDecision` rows whose class merely CONTAINS
+   "goal" — `goalAwarded`, `goalNotAwarded`, `vip_for_goal` — so every VAR review around a goal was
+   counted as an extra conceded goal.
+2. **Disallowed goals stayed counted.** The feed leaves a VAR-disallowed goal's `goal/*` row in
+   place (`rescinded=false`); the only overturn signal is a sibling `varDecision/goalNotAwarded`.
+   Nothing read it, so a chalked-off goal still conceded.
+
+Reference (live GOAT data): **Argentina 3-0 Algeria** — Chaïbi's min-8 goal (`goal/regular`) was
+awarded (`varDecision/goalAwarded` min-8) then disallowed (`varDecision/goalNotAwarded` min-9);
+`away_score` ended **0**. The old engine charged Argentina's keeper **3** conceded (the goal row +
+both varDecision rows) and wiped his clean sheet. Correct answer: **0 conceded, clean sheet +4**.
+
+**The fix (Route A — derive the truth from the event list).**
+- `isGoalEvent` keys on `incident_type` EXACTLY (`norm(incident_type) === "goal"`); real goals are
+  always `goal/{regular,penalty,ownGoal}`, so VAR rows are no longer goals.
+- `overturnedGoals` pairs each `varDecision/goalNotAwarded` to the nearest not-yet-voided same-player
+  goal within **≤3 effective minutes** (one void cancels one goal); `goalAwarded` / `vip_for_goal`
+  and every other VAR class are ignored. `goalsConcededWhileOn` skips rescinded **or** overturned
+  goals. Goal CREDIT (§3, stat-based) and `teamGoalsAgainst` (the match score, already VAR-correct)
+  were untouched — only the event-derived conceded path changed. No §1–§8 value moved.
+
+**Why Route A over trusting a flag:** the feed does not set `rescinded` on a VAR-disallowed goal, so
+there is no per-row truth to read — the event list is the only source. To catch any VAR shape we did
+not model, a **reconciliation invariant** rides alongside: for each team the count of non-overturned
+conceded `goal` events MUST equal `teamGoalsAgainst`. Tests assert equality; at runtime
+`buildScoreInput` `console.warn`s (`matchId` + both counts) on divergence and **never throws** — live
+scoring continues on the windowed non-overturned count, just flagged. `reconcileConceded` is the pure
+helper, and `buildScoreInput` only warns when the comparison is even COMPUTABLE:
+`reconciliationApplies` gates it to (a) team-in-match, (b) a KNOWN final score (home/away are NULL
+early-live, where the event count legitimately leads the not-yet-ingested score), and (c) a
+resolvable scorer team for every standing goal (`player.team_id` is patchy). Without that gate the
+per-player warn would FLOOD on ordinary live data — a defect caught by the adversarial-review pass;
+with it, only a genuine VAR-shape mismatch on a settled, fully-attributed match warns.
+`MatchTeamContext.matchId` (a new OPTIONAL field) is populated by `prismaStore.getPlayerMatchInput`,
+so the warn names the fixture.
+
+**Residual (accepted; spec-pinned heuristic).** The overturn pairing IS the spec's chosen rule —
+nearest same-`playerId` goal within **≤3 effective minutes**, one void per goal. If the live feed ever
+stamps a `goalNotAwarded` >3 effMinute from its goal, attaches it to a different/empty `playerId`, or
+emits it with no goal row, the pairing misses; the reconciliation guard flags the divergent ones
+(→ `ok=false` → warn). One silent corner remains: an equidistant same-scorer tie can void the wrong
+goal while the whole-match count still matches the score (no warn). Widening the window or changing
+the pairing key is a one-line follow-up IF live data shows it's needed — surfaced for clearance, not
+silently changed.
+
+**Deploy / restate.** An adapter change behaves like a `scorePlayerMatch` change for restatement —
+`job:recompute` (`forcedRestate`) only re-sums rollups and never re-runs the adapter, so it is
+INSUFFICIENT. Restating already-scored VAR matches is the standard **RE-DIRTY → SWEEP**: AFTER the
+code deploys, `UPDATE stat_player_match SET dirty = true WHERE match_id IN (…VAR-affected matches…);`
+the ~60s `runRecomputeSweep` re-derives `score_player_match` through the new adapter and cascades to
+manager-period + standings. Full gate green (2317 passing). `feat/fix-var-conceded`, merge HELD for
+Chat clearance. `[skip render]`
