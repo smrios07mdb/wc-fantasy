@@ -15,5 +15,6 @@ export * from "./playoffsView";
 export * from "./transition";
 export * from "./recompute";
 export * from "./freeze";
+export * from "./periodStatus";
 export * from "./forcedRestate";
 export { MemoryStore } from "./memoryStore";

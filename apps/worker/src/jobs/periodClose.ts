@@ -10,10 +10,22 @@
  * `postponed` or `abandoned` fixture) are logged as warnings for manual resolution; their periods
  * are not frozen.
  *
- * Shape mirrors the FAAB batch split: the pure decision fn (`selectPeriodsToFreeze`) in
- * @app/recompute carries no IO; this file is the thin Prisma-backed cron body.
+ * The same hourly run ALSO advances `period.status` (the pending → open → closed lifecycle): it
+ * closes a wave once every fixture is `completed` and promotes the next wave to `open`, keeping
+ * exactly one open period. This is DECOUPLED from freeze — status-close keys on "all fixtures
+ * completed", not on `frozen_at` / `result_freeze_hours` — and is what `findLockedSlotPlayerIds`
+ * gates on, so without it a finished matchday's played players stay locked forever (waiver drops
+ * freeze). The pure decision fn is `selectPeriodStatusTransitions`.
+ *
+ * Shape mirrors the FAAB batch split: the pure decision fns (`selectPeriodsToFreeze`,
+ * `selectPeriodStatusTransitions`) in @app/recompute carry no IO; this file is the thin
+ * Prisma-backed cron body.
  */
-import { selectPeriodsToFreeze, selectAnomalyPeriods } from "@app/recompute";
+import {
+  selectPeriodsToFreeze,
+  selectAnomalyPeriods,
+  selectPeriodStatusTransitions,
+} from "@app/recompute";
 import { prisma } from "../wiring";
 import { log } from "../logger";
 
@@ -81,7 +93,62 @@ async function main(): Promise<void> {
     }
   }
 
-  log.info("job.periodClose.done", { frozen: toFreeze.length, anomalies: anomalyIds.length });
+  // ── Status lifecycle (DECOUPLED from freeze) ──
+  // Close a wave once its last fixture is completed and promote the next to open, keeping exactly one
+  // open period. Loads ALL periods (not just unfrozen) so the earliest-current computation sees the
+  // already-closed waves; the pure fn keys on "every fixture completed", never on frozen_at.
+  const lifecyclePeriods = await prisma.period.findMany({
+    where: { leagueId: league.id },
+    select: {
+      id: true,
+      label: true,
+      status: true,
+      frozenAt: true,
+      matches: { select: { kickoffAt: true, status: true } },
+    },
+  });
+  const lifecycleFixturesByPeriod = Object.fromEntries(
+    lifecyclePeriods.map((p) => [p.id, p.matches]),
+  );
+
+  const { toClose, toOpen } = selectPeriodStatusTransitions(
+    lifecyclePeriods,
+    lifecycleFixturesByPeriod,
+  );
+
+  if (toClose.length > 0 || toOpen.length > 0) {
+    // One atomic transaction. Each update is guarded by the expected PRIOR status so an hourly
+    // re-run (or a concurrent worker) is a clean no-op rather than a clobber: closing only matches a
+    // not-yet-closed row; opening only matches a still-pending row.
+    await prisma.$transaction([
+      ...toClose.map((periodId) =>
+        prisma.period.updateMany({
+          where: { id: periodId, status: { not: "closed" } },
+          data: { status: "closed" },
+        }),
+      ),
+      ...toOpen.map((periodId) =>
+        prisma.period.updateMany({
+          where: { id: periodId, status: "pending" },
+          data: { status: "open" },
+        }),
+      ),
+    ]);
+
+    for (const periodId of toClose) {
+      log.info("job.periodClose.statusAdvanced", { periodId, to: "closed" });
+    }
+    for (const periodId of toOpen) {
+      log.info("job.periodClose.statusAdvanced", { periodId, to: "open" });
+    }
+  }
+
+  log.info("job.periodClose.done", {
+    frozen: toFreeze.length,
+    anomalies: anomalyIds.length,
+    closed: toClose.length,
+    opened: toOpen.length,
+  });
 }
 
 main()
