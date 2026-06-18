@@ -536,6 +536,39 @@ deviation from one-cut-per-round (cuts now adapt to field size over 5 knockout r
 late-correction-after-period-close freeze policy (final at `result_freeze_hours`≈6 after last FT,
 commissioner-only after). Only the recruiting-dependent manager/field number is deferred (config).
 
+#### ⚠️ AMENDMENT (feat/period-status-lifecycle — the `period.status` lifecycle is now WIRED; freeze ≠ close)
+
+The **`period.status` lifecycle** (`pending → open → closed`, `PERIOD_STATUSES` in @app/shared) was
+specced but never advanced in code: provisioning seeded every period `pending`, and the period-close
+cron only stamped `frozen_at` (the scoring freeze) — it never wrote `status`. So a matchday opened at
+seed and **never closed**.
+
+**Why it bit (the MD1 waiver-drop freeze, unblocked by hand 2026-06-17).** `findLockedSlotPlayerIds`
+(@app/lineup) gates on `period.status !== "closed"`, so a wave whose status stayed `pending`/`open`
+**kept every played player locked forever** → all waiver **drops froze the instant a matchday's matches
+ended**. MD1 was unblocked manually (`MD1 → closed`, `MD2 → open` via SQL); this amendment wires it so
+the freeze cannot recur.
+
+**Decision — advance status automatically inside the existing hourly period-close cron.** A new PURE
+`selectPeriodStatusTransitions` (@app/recompute, the IO-free sibling of `selectPeriodsToFreeze`) returns
+`{ toClose, toOpen }`:
+
+- **Close** a period once it has ≥1 fixture and **every** fixture is `completed` and it is **not** an
+  anomaly (a `postponed`/`abandoned` fixture means it isn't cleanly over → leave it; it's already logged
+  for the commissioner — reuses `selectAnomalyPeriods`).
+- **Open** the EARLIEST period (canonical tournament order, @app/shared `comparePeriodLabels`) that is
+  not in `existing-closed ∪ to-close`, and only if it is still `pending`. This maintains **exactly one
+  open period**, self-heals a bootstrap with no open period, and opens nothing at tournament end.
+- Applied as ONE guarded, idempotent `$transaction` — each `updateMany` matches the expected prior
+  status, so the hourly re-run (or a concurrent run) is a clean no-op, never a clobber.
+
+**Freeze ≠ status-close — two independent clocks (the load-bearing distinction).** `frozen_at` (the
+late-correction freeze above) gates **commissioner-only restatement** and waits `result_freeze_hours`
+(≈6 h) after the last FT. Status-`closed` keys **purely on "all fixtures completed"**, *never* on
+`frozen_at` — a wave is over the moment its matches finish, regardless of the freeze window. They are
+decoupled on purpose: dropping a played player after close is safe because his **locked** lineup slot
+stays (scoring reads the slot); only **unlocked** slots release. Infra: ARCHITECTURE.md §22.
+
 ### D. FAAB & Waivers  ✅ LOCKED (this thread)
 Tiebreak principle (previously locked) **confirmed and sharpened**; budget, processing cadence,
 free-agency rules, and the load-bearing **playoff reinforcement** mechanism now fully defined.

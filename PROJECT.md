@@ -561,3 +561,39 @@ Amendment 3 + SCORING.md §1.
 
 **⚠️ WATCH ITEM:** `duels_won` populates on live data (159/189 played rows; 17 substantial-minute NULLs =
 minor symmetric undercount); **F-P1-02 latent** — observability fix, normal priority.
+
+### 2026-06-17 — Period `status` lifecycle is WIRED into the period-close cron (feat/period-status-lifecycle, merge HELD)
+
+**feat/period-status-lifecycle** (off latest merged main `50fda2c`) — code commit `46cf899` + a separate
+`[skip render]` docs commit. **The incident:** the `period.status` lifecycle (`pending → open → closed`,
+`PERIOD_STATUSES`) was never advanced — provisioning seeds `pending`, and the hourly period-close cron only
+stamped `frozen_at`. So a matchday opened at seed and **never closed**, and `findLockedSlotPlayerIds`
+(@app/lineup, gates on `status !== "closed"`) kept every played player locked forever → **all waiver drops
+froze the moment a matchday's matches ended**. MD1 was unblocked by hand on 2026-06-17 (`MD1 → closed`,
+`MD2 → open` via SQL); this wires it so it can't recur. **Fix:** a new PURE
+`selectPeriodStatusTransitions(periods, fixturesByPeriod)` in **@app/recompute** (IO-free sibling of
+`selectPeriodsToFreeze`; reuses `selectAnomalyPeriods` + @app/shared `comparePeriodLabels`) returns
+`{ toClose, toOpen }` — **close** a wave once every fixture is `completed` (∧ ≥1 fixture ∧ not an anomaly),
+**open** the earliest canonical-order period not in `closed ∪ to-close` iff still `pending` (maintains
+**exactly one open period**, self-heals a no-open bootstrap, empty at tournament end). **DECOUPLED from
+freeze** — keys on "all fixtures completed", NOT `frozen_at`/`result_freeze_hours` (dropping a played player
+after close is safe: his locked slot stays, only unlocked slots release). Wired into `periodClose.ts` AFTER
+the byte-untouched freeze block: a second unfiltered period query (the freeze query is `frozenAt: null`-scoped
+→ would miss already-closed waves the earliest-current pick needs) feeds the fn; applied as ONE guarded,
+idempotent `$transaction` (`updateMany` matching the expected prior status); new `job.periodClose.statusAdvanced`
+logs + `closed`/`opened` counts on `done`. **Signature note:** the prompt's illustrative `now` arg was DROPPED
+— the close conditions + structural `toOpen` use no clock, none of the spec tests exercise it, and sibling
+`selectAnomalyPeriods` likewise takes none. **Scope fences:** freeze logic (`selectPeriodsToFreeze`/`frozen_at`),
+`findLockedSlotPlayerIds`/`slotRelease.ts`, `periodOrder` ordering/fallback all UNTOUCHED; no schema migration
+(column + enum exist); no web change. **DoD green:** `pnpm db:generate && pnpm -w typecheck && pnpm lint &&
+pnpm format:check && pnpm test` all exit 0 on the `50fda2c` base — **2325 passed | 18 skipped (+18 new
+`periodStatus` tests)**. Purity proof: `periodStatus.ts` imports only `@app/shared` + `./freeze`; the only
+runtime `@app/db` in @app/recompute lives in `prismaStore.ts` (the separate `@app/recompute/prisma` subpath,
+not the index chain). **Adversarial 3-lens review (× verify), opus/high:** 0 confirmed findings. See
+ARCHITECTURE.md §22 + DECISIONS.md → Theme C amendment. **Merge HELD pending Chat clearance.**
+
+**⚠️ LOCAL-REPO HAZARD (not my change):** during this session an external actor (VS Code git integration or a
+concurrent process — no git hook exists) twice ran `merge feat/fix-var-conceded: Fast-forward`, and once
+checked out `main` and FF-merged the held VAR branch INTO local `main` (local `main` → `68eeb76`; `origin/main`
+still `50fda2c`, nothing pushed). My work was preserved as commit `46cf899` and recovered. Local `main` may
+need resetting to `origin/main`; the stray auto-merge should be disabled.
