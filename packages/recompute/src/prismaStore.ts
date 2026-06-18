@@ -143,6 +143,7 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
       }));
 
       const team: MatchTeamContext = {
+        matchId, // labels the conceded-reconciliation warn (adapter.buildScoreInput)
         playerTeamId: player.teamId,
         homeTeamId: match.homeTeamId,
         awayTeamId: match.awayTeamId,

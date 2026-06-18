@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { scorePlayerMatch, SCORE_CATEGORIES as C, type ScoreBreakdown } from "@app/scoring";
 import {
   buildScoreInput,
   playerAppearedInMatch,
+  reconcileConceded,
   type ScoreInputBundle,
   type EventRow,
   type ShotRow,
@@ -45,6 +46,9 @@ const goal = (over: Partial<EventRow>): EventRow => ({
 });
 const card = (over: Partial<EventRow>): EventRow => goal({ incidentType: "card", ...over });
 const sub = (over: Partial<EventRow>): EventRow => goal({ incidentType: "substitution", ...over });
+/** A `varDecision` row (the VAR outcome the feed emits ALONGSIDE — not in place of — the goal row). */
+const varDec = (incidentClass: string, over: Partial<EventRow>): EventRow =>
+  goal({ incidentType: "varDecision", incidentClass, ...over });
 const shot = (over: Partial<ShotRow>): ShotRow => ({
   playerId: null,
   shotType: null,
@@ -107,7 +111,8 @@ describe("adapter — clean-sheet inputs are TWO distinct values from distinct s
     const i = buildScoreInput(
       bundle({
         role: "GK",
-        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { ownA: "A", gB: "B" } },
+        // away (B) = one real B goal + one own goal by A (an OG counts for the opponent) = 2.
+        team: { ...teamCtx(), homeScore: 0, awayScore: 2, teamByPlayerId: { ownA: "A", gB: "B" } },
         events: [
           goal({ playerId: "gB", timeMinute: 30 }), // opponent goal while on → conceded
           goal({ playerId: "ownA", incidentClass: "ownGoal", timeMinute: 50 }), // own team OG → conceded
@@ -115,6 +120,207 @@ describe("adapter — clean-sheet inputs are TWO distinct values from distinct s
       }),
     );
     expect(i.goalsConcededWhileOn).toBe(2);
+  });
+});
+
+describe("adapter — VAR decisions & overturned goals do not inflate conceded (Route A)", () => {
+  // Reference: Argentina 3-0 Algeria. Chaïbi (away) "scores" min-8 (goal/regular), VAR awards it
+  // (varDecision/goalAwarded min-8), then disallows it (varDecision/goalNotAwarded min-9). The goal
+  // row stays in place; away_score ends 0. The OLD engine charged Argentina's keeper 3 conceded —
+  // the goal PLUS both varDecision rows, whose class contains the substring "goal".
+  it("a VAR-disallowed goal concedes nothing and the clean sheet survives (Chaïbi reference case)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: {
+          ...teamCtx(),
+          matchId: "49de9295",
+          homeScore: 3,
+          awayScore: 0, // the goal was chalked off → away stays on 0
+          teamByPlayerId: { chaibi: "B" },
+        },
+        events: [
+          goal({ playerId: "chaibi", incidentClass: "regular", timeMinute: 8 }),
+          varDec("goalAwarded", { playerId: "chaibi", timeMinute: 8 }),
+          varDec("goalNotAwarded", { playerId: "chaibi", timeMinute: 9 }),
+        ],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(0);
+    const b = scorePlayerMatch(i);
+    expect(pointsFor(b, C.cleanSheet)).toBe(4); // +4 preserved
+    expect(pointsFor(b, C.goalsConceded)).toBe(0);
+  });
+
+  it("a VAR-confirmed goal (goalAwarded, no goalNotAwarded) is conceded exactly ONCE, not twice", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { scorerB: "B" } },
+        events: [
+          goal({ playerId: "scorerB", incidentClass: "regular", timeMinute: 25 }),
+          varDec("goalAwarded", { playerId: "scorerB", timeMinute: 25 }), // old engine double-counted this
+        ],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(1);
+    expect(pointsFor(scorePlayerMatch(i), C.goalsConceded)).toBe(-1);
+  });
+
+  it("a vip_for_goal varDecision is ignored entirely (neither a goal nor an overturn)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { scorerB: "B" } },
+        events: [
+          goal({ playerId: "scorerB", incidentClass: "regular", timeMinute: 40 }),
+          varDec("vip_for_goal", { playerId: "scorerB", timeMinute: 41 }),
+        ],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(1);
+  });
+
+  it("an own goal still counts as conceded AND still charges the scorer −4 (goal/ownGoal)", () => {
+    // Conceded side: the keeper's own team turns it into their own net while he is on.
+    const keeper = buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { ownA: "A" } },
+        events: [goal({ playerId: "ownA", incidentClass: "ownGoal", timeMinute: 55 })],
+      }),
+    );
+    expect(keeper.goalsConcededWhileOn).toBe(1);
+
+    // Scorer side: the own-goal scorer is charged −4 (unchanged by the VAR fix).
+    const scorer = buildScoreInput(
+      bundle({
+        playerId: "ownA",
+        role: "DEF",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { ownA: "A" } },
+        events: [goal({ playerId: "ownA", incidentClass: "ownGoal", timeMinute: 55 })],
+      }),
+    );
+    expect(scorer.ownGoals).toBe(1);
+    expect(pointsFor(scorePlayerMatch(scorer), C.ownGoal)).toBe(-4);
+  });
+
+  it("a penalty goal (goal/penalty) counts as conceded", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { penB: "B" } },
+        events: [goal({ playerId: "penB", incidentClass: "penalty", timeMinute: 70 })],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(1);
+  });
+
+  it("a subbed keeper still EXCLUDES a VAR-disallowed goal that fell inside his window", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 60 },
+        team: {
+          ...teamCtx(),
+          homeScore: 0,
+          awayScore: 1,
+          teamByPlayerId: { scorerB: "B", ruledOut: "B" },
+        },
+        events: [
+          sub({ playerOutId: "p1", timeMinute: 60 }),
+          goal({ playerId: "ruledOut", incidentClass: "regular", timeMinute: 30 }), // disallowed, inside window
+          varDec("goalNotAwarded", { playerId: "ruledOut", timeMinute: 31 }),
+          goal({ playerId: "scorerB", incidentClass: "regular", timeMinute: 40 }), // stands, inside window
+        ],
+      }),
+    );
+    expect(i.goalsConcededWhileOn).toBe(1); // only the standing goal
+  });
+
+  it("the reconciliation invariant holds on a clean multi-goal match (no VAR)", () => {
+    const b = bundle({
+      role: "GK",
+      stat: { ...zeroStat(), minutesPlayed: 90 },
+      team: {
+        ...teamCtx(),
+        homeScore: 1,
+        awayScore: 3,
+        teamByPlayerId: { gB1: "B", gB2: "B", gB3: "B", gA: "A" },
+      },
+      events: [
+        goal({ playerId: "gB1", incidentClass: "regular", timeMinute: 12 }),
+        goal({ playerId: "gB2", incidentClass: "penalty", timeMinute: 45 }),
+        goal({ playerId: "gB3", incidentClass: "regular", timeMinute: 77 }),
+        goal({ playerId: "gA", incidentClass: "regular", timeMinute: 88 }), // own team's goal — not conceded
+      ],
+    });
+    const r = reconcileConceded(b);
+    expect(r.eventCount).toBe(3);
+    expect(r.matchScore).toBe(3);
+    expect(r.ok).toBe(true);
+    expect(buildScoreInput(b).goalsConcededWhileOn).toBe(3); // windowed input agrees
+  });
+
+  it("a divergence is reported by reconcileConceded and only WARNS — it never throws", () => {
+    // Inconsistent fixture: a standing opponent goal, but the match score claims 0 against → a VAR
+    // shape we did not model. The guard must flag it (matchId + counts) without breaking scoring.
+    const b = bundle({
+      role: "GK",
+      stat: { ...zeroStat(), minutesPlayed: 90 },
+      team: {
+        ...teamCtx(),
+        matchId: "m-var-x",
+        homeScore: 0,
+        awayScore: 0,
+        teamByPlayerId: { ghost: "B" },
+      },
+      events: [goal({ playerId: "ghost", incidentClass: "regular", timeMinute: 30 })],
+    });
+    expect(reconcileConceded(b).ok).toBe(false);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() => buildScoreInput(b)).not.toThrow();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]?.[0])).toContain("m-var-x");
+    warn.mockRestore();
+  });
+
+  it("does NOT warn while the match score is unknown (NULL home/away during early-live)", () => {
+    // A standing goal is ingested before the aggregate score lands — the event count legitimately
+    // leads the not-yet-populated score; that is a data lag, not a VAR-shape divergence.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 30 },
+        team: { ...teamCtx(), homeScore: null, awayScore: null, teamByPlayerId: { sb: "B" } },
+        events: [goal({ playerId: "sb", incidentClass: "regular", timeMinute: 20 })],
+      }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does NOT warn when a standing goal's scorer team is unresolved (player.team_id data gap)", () => {
+    // away_score=1 but the scorer's team is unknown → a mismatch here is a data gap, not VAR.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    buildScoreInput(
+      bundle({
+        role: "GK",
+        stat: { ...zeroStat(), minutesPlayed: 90 },
+        team: { ...teamCtx(), homeScore: 0, awayScore: 1, teamByPlayerId: { sb: null } },
+        events: [goal({ playerId: "sb", incidentClass: "regular", timeMinute: 30 })],
+      }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

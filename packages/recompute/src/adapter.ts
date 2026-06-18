@@ -78,6 +78,8 @@ export interface MatchTeamContext {
   awayScore: number | null;
   /** scorer / penalty-taker playerId → their teamId (for conceded / own-goal / penalty attribution). */
   teamByPlayerId: Readonly<Record<string, string | null | undefined>>;
+  /** Optional match id — used ONLY to label the conceded-reconciliation warn (see buildScoreInput). */
+  matchId?: string;
 }
 
 /**
@@ -133,12 +135,51 @@ function classifyCard(e: EventRow): CardKind | null {
   return null;
 }
 
+/**
+ * A real GOAL incident — `incident_type='goal'` EXACTLY (classes regular / penalty / ownGoal). It
+ * deliberately does NOT key on the label substring "goal": that wrongly swept in `varDecision` rows
+ * whose class merely CONTAINS "goal" (goalAwarded, goalNotAwarded, vip_for_goal), inflating conceded
+ * (the VAR-substring bug — DECISIONS.md). VAR outcomes are read separately by {@link overturnedGoals}.
+ */
 function isGoalEvent(e: EventRow): boolean {
-  return label(e).includes("goal");
+  return norm(e.incidentType) === "goal";
 }
 
 function isOwnGoalEvent(e: EventRow): boolean {
   return isGoalEvent(e) && label(e).includes("own");
+}
+
+/** A `varDecision`/`goalNotAwarded` row — the one VAR class that VOIDS a goal (the overturn signal). */
+function isGoalNotAwarded(e: EventRow): boolean {
+  return norm(e.incidentType) === "vardecision" && norm(e.incidentClass) === "goalnotawarded";
+}
+
+/**
+ * GOAL events overturned by VAR (Route A — DECISIONS.md). The feed leaves a disallowed goal's
+ * `goal/*` row in place (not rescinded); the only overturn signal is a sibling
+ * `varDecision/goalNotAwarded` event for the SAME scorer. We pair each goalNotAwarded to the nearest
+ * not-yet-voided same-player goal within ≤3 effective minutes — one void cancels exactly one goal.
+ * Every other varDecision class (goalAwarded, vip_for_goal, …) is ignored: under {@link isGoalEvent}
+ * those are no longer goals at all. Pure — derived solely from the event list; identity by reference.
+ */
+function overturnedGoals(events: readonly EventRow[]): ReadonlySet<EventRow> {
+  const goals = events.filter((e) => !e.rescinded && isGoalEvent(e) && e.playerId != null);
+  const overturned = new Set<EventRow>();
+  for (const v of events) {
+    if (v.rescinded || !isGoalNotAwarded(v) || v.playerId == null) continue;
+    let best: EventRow | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const g of goals) {
+      if (g.playerId !== v.playerId || overturned.has(g)) continue;
+      const dist = Math.abs(effMinute(g) - effMinute(v));
+      if (dist <= 3 && dist < bestDist) {
+        best = g;
+        bestDist = dist;
+      }
+    }
+    if (best) overturned.add(best);
+  }
+  return overturned;
 }
 
 // ── derivations ───────────────────────────────────────────────────────────────────────────────
@@ -200,16 +241,72 @@ function concededByPlayerTeam(e: EventRow, t: MatchTeamContext): boolean {
   return isOwnGoalEvent(e) ? scorerTeam === t.playerTeamId : scorerTeam !== t.playerTeamId;
 }
 
-/** Goals conceded WHILE the player was on the pitch — the −1 input, from event minutes (§7). */
+/**
+ * Goals conceded WHILE the player was on the pitch — the −1 input, from event minutes (§7). Skips
+ * rescinded rows AND VAR-overturned goals ({@link overturnedGoals}): a disallowed goal never
+ * happened, so it concedes nothing (the VAR-conceded fix — DECISIONS.md).
+ */
 function goalsConcededWhileOn(b: ScoreInputBundle, window: OnPitch): number {
+  const overturned = overturnedGoals(b.events);
   let count = 0;
   for (const e of b.events) {
-    if (e.rescinded || !isGoalEvent(e)) continue;
+    if (e.rescinded || overturned.has(e) || !isGoalEvent(e)) continue;
     if (!concededByPlayerTeam(e, b.team)) continue;
     const m = effMinute(e);
     if (m >= window.entry && m <= window.exit) count++;
   }
   return count;
+}
+
+/**
+ * Whole-match count of non-overturned goal events conceded by the player's team — the event-derived
+ * shadow of {@link teamGoalsAgainst} (which reads the authoritative, VAR-correct match score). Unlike
+ * {@link goalsConcededWhileOn} this is NOT windowed: it counts every standing conceded goal in the
+ * match, so the two can be reconciled (see {@link reconcileConceded}).
+ */
+function concededGoalEventCount(b: ScoreInputBundle): number {
+  const overturned = overturnedGoals(b.events);
+  return b.events.filter(
+    (e) => !e.rescinded && !overturned.has(e) && isGoalEvent(e) && concededByPlayerTeam(e, b.team),
+  ).length;
+}
+
+/**
+ * Route-A reconciliation invariant (DECISIONS.md / ARCHITECTURE.md Appendix A): the event-derived
+ * conceded count MUST equal the authoritative VAR-correct match score. Agreement means our goal /
+ * overturn classification reproduced the real score; divergence means a VAR shape we did not model.
+ * Pure — the caller decides what to do with `ok` (tests assert it; {@link buildScoreInput} warns).
+ */
+export function reconcileConceded(b: ScoreInputBundle): {
+  eventCount: number;
+  matchScore: number;
+  ok: boolean;
+} {
+  const eventCount = concededGoalEventCount(b);
+  const matchScore = teamGoalsAgainst(b.team);
+  return { eventCount, matchScore, ok: eventCount === matchScore };
+}
+
+/**
+ * Whether the reconciliation invariant can be MEANINGFULLY evaluated for this bundle — i.e. whether a
+ * mismatch would signal a VAR shape we did not model rather than a mere data gap. It is valid only
+ * when (a) the player's team is in the match, (b) the FINAL score is known (home/away are NULL during
+ * early-live / pre-settle, where an event-derived count legitimately leads the not-yet-ingested
+ * score), and (c) every standing conceded-eligible goal has a resolvable scorer team (`player.team_id`
+ * is documented as patchy; an unresolved scorer drops out of BOTH the event count and the windowed
+ * conceded, so the gap is a data issue, not VAR). When any fails we stay silent rather than cry wolf —
+ * the warn runs per-player every sweep tick, so false alarms would flood. This gates ONLY the warn;
+ * the conceded value (`goalsConcededWhileOn`) is never affected.
+ */
+function reconciliationApplies(b: ScoreInputBundle): boolean {
+  const t = b.team;
+  if (!teamInMatch(t) || t.homeScore == null || t.awayScore == null) return false;
+  const overturned = overturnedGoals(b.events);
+  for (const e of b.events) {
+    if (e.rescinded || overturned.has(e) || !isGoalEvent(e)) continue;
+    if (e.playerId == null || t.teamByPlayerId[e.playerId] == null) return false;
+  }
+  return true;
 }
 
 // ── participant gate (the live MD1 "only score players who appeared" invariant) ─────────────────
@@ -321,6 +418,22 @@ export function buildScoreInput(b: ScoreInputBundle): ScoreInput {
   const s = b.stat;
   const window = onPitchWindow(b.events, b.playerId);
   const cards = cardsFor(b.events, b.playerId);
+
+  // Route-A safety net: the windowed conceded count rides on the same goal / overturn classification
+  // as the whole-match count, which must reconcile to the authoritative score. If it does not — once
+  // the comparison is even computable (reconciliationApplies: final score known + scorers resolvable)
+  // — a VAR shape slipped past our model: warn (matchId + both counts) but NEVER throw, so live
+  // scoring still proceeds on the windowed non-overturned count, just flagged for a human to inspect.
+  if (reconciliationApplies(b)) {
+    const reconciliation = reconcileConceded(b);
+    if (!reconciliation.ok) {
+      console.warn(
+        `[recompute] conceded reconciliation mismatch: match=${b.team.matchId ?? "unknown"} ` +
+          `team=${b.team.playerTeamId ?? "unknown"} eventGoals=${reconciliation.eventCount} ` +
+          `matchScore=${reconciliation.matchScore}`,
+      );
+    }
+  }
 
   return {
     role: b.role,
