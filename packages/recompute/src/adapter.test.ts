@@ -452,43 +452,38 @@ describe("adapter — own goal from event rows (§7)", () => {
   });
 });
 
-describe("adapter — card input-shape feeds the engine's stacked result (Prompt-02a matrix)", () => {
-  it("a two-yellow dismissal (one 2nd-yellow event) → yellow −1 + 2nd-yellow bucket, NO red line", () => {
-    // The feed emits only the second-yellow incident; the adapter must still set the first yellow.
+describe("adapter — card classification keys on incident_type EXACTLY (sibling of isGoalEvent)", () => {
+  // Live feed (Q4 2026-06-19): card classes are ONLY `red` / `yellow` (bare tokens). The classifier
+  // gates on incident_type === 'card', then matches the colour class by exact equality, else null.
+  it("card/yellow (live token) → yellow −1; no red, no second-yellow", () => {
     const i = buildScoreInput(
-      bundle({ events: [card({ playerId: "p1", incidentClass: "yellowRed", timeMinute: 70 })] }),
+      bundle({ events: [card({ playerId: "p1", incidentClass: "yellow", timeMinute: 35 })] }),
     );
     expect(i.yellowCard).toBe(true);
-    expect(i.secondYellowMinute).toBe(70);
+    expect(i.secondYellowMinute).toBeNull();
     expect(i.redCardMinute).toBeNull();
-    const b = scorePlayerMatch(i);
-    expect(pointsFor(b, C.yellowCard)).toBe(-1);
-    expect(pointsFor(b, C.secondYellow)).toBe(-1); // ≥60
-    expect(has(b, C.redCard)).toBe(false);
-    expect(b.total).toBe(-2);
+    expect(pointsFor(scorePlayerMatch(i), C.yellowCard)).toBe(-1);
   });
 
-  it("a straight red (no prior yellow) → red bucket only, no yellow line", () => {
+  it("card/red (live token) → straight red bucket, no yellow line (regression)", () => {
     const i = buildScoreInput(
-      bundle({ events: [card({ playerId: "p1", incidentClass: "redCard", timeMinute: 20 })] }),
+      bundle({ events: [card({ playerId: "p1", incidentClass: "red", timeMinute: 20 })] }),
     );
     expect(i.redCardMinute).toBe(20);
     expect(i.yellowCard).toBe(false);
     const b = scorePlayerMatch(i);
-    expect(pointsFor(b, C.redCard)).toBe(-4);
+    expect(pointsFor(b, C.redCard)).toBe(-4); // <30 band
     expect(has(b, C.yellowCard)).toBe(false);
   });
 
-  it("buckets on the EFFECTIVE minute (time + added time): a 90+4 second yellow lands in ≥60", () => {
+  it("buckets the red on the EFFECTIVE minute (time + added): a 90+4 red lands in the ≥60 band", () => {
     const i = buildScoreInput(
       bundle({
-        events: [
-          card({ playerId: "p1", incidentClass: "secondYellow", timeMinute: 90, addedTime: 4 }),
-        ],
+        events: [card({ playerId: "p1", incidentClass: "red", timeMinute: 90, addedTime: 4 })],
       }),
     );
-    expect(i.secondYellowMinute).toBe(94);
-    expect(pointsFor(scorePlayerMatch(i), C.secondYellow)).toBe(-1);
+    expect(i.redCardMinute).toBe(94);
+    expect(pointsFor(scorePlayerMatch(i), C.redCard)).toBe(-2); // ≥60 catch-all
   });
 
   it("a rescinded card is ignored", () => {
@@ -500,6 +495,68 @@ describe("adapter — card input-shape feeds the engine's stacked result (Prompt
       }),
     );
     expect(i.yellowCard).toBe(false);
+  });
+
+  it("varDecision/cardUpgrade is a feed annotation, not a card (the theme)", () => {
+    // The upgrade itself materialises as a real card/* row; the cardUpgrade row scores nothing.
+    const i = buildScoreInput(
+      bundle({ events: [varDec("cardUpgrade", { playerId: "p1", timeMinute: 65 })] }),
+    );
+    expect(i.yellowCard).toBe(false);
+    expect(i.redCardMinute).toBeNull();
+    expect(i.secondYellowMinute).toBeNull();
+  });
+
+  it("a VAR card upgrade scores exactly ONE red — the real card/red, not the cardUpgrade beside it (live shape)", () => {
+    // Live data: a VAR upgrade arrives as a materialised card/red PLUS a bare varDecision/cardUpgrade
+    // annotation for the same player. Only the real card row may score — no phantom, no double count.
+    const i = buildScoreInput(
+      bundle({
+        events: [
+          card({ playerId: "p1", incidentClass: "red", timeMinute: 55 }),
+          varDec("cardUpgrade", { playerId: "p1", timeMinute: 55 }),
+        ],
+      }),
+    );
+    expect(i.redCardMinute).toBe(55);
+    expect(pointsFor(scorePlayerMatch(i), C.redCard)).toBe(-3); // 30–59 band, ONCE
+  });
+
+  it("varDecision/goalNotAwarded does not leak into the card path (sibling exact-gate)", () => {
+    const i = buildScoreInput(
+      bundle({ events: [varDec("goalNotAwarded", { playerId: "p1", timeMinute: 9 })] }),
+    );
+    expect(i.yellowCard).toBe(false);
+    expect(i.redCardMinute).toBeNull();
+  });
+
+  it("LANDMINE: a colour-bearing non-card type (varDecision/red) mints NO phantom red", () => {
+    // The whole point of the exact incident_type gate: the OLD substring form (label includes 'red')
+    // would have classified this as a straight red. The gate returns null because type !== 'card'.
+    const i = buildScoreInput(
+      bundle({ events: [varDec("red", { playerId: "p1", timeMinute: 20 })] }),
+    );
+    expect(i.redCardMinute).toBeNull();
+    expect(has(scorePlayerMatch(i), C.redCard)).toBe(false);
+  });
+
+  it("two-yellow gap (documenting): two separate card/yellow rows score only −1 today (cross-row pairing not built)", () => {
+    // SEAM (separate thread): a two-yellow dismissal has no feed class token (Q4 2026-06-19) — the
+    // feed emits two card/yellow rows. The correct −1 + second-yellow band needs cross-row pairing of
+    // those rows in the discipline aggregation, NOT per-row here, so today both classify as plain
+    // `yellow` (idempotent) and the dismissal is under-counted at −1. Asserted to make the gap explicit.
+    const i = buildScoreInput(
+      bundle({
+        events: [
+          card({ playerId: "p1", incidentClass: "yellow", timeMinute: 25 }),
+          card({ playerId: "p1", incidentClass: "yellow", timeMinute: 70 }),
+        ],
+      }),
+    );
+    expect(i.yellowCard).toBe(true);
+    expect(i.secondYellowMinute).toBeNull();
+    expect(i.redCardMinute).toBeNull();
+    expect(scorePlayerMatch(i).total).toBe(-1); // only the single yellow −1 today
   });
 });
 

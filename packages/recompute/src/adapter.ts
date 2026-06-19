@@ -113,25 +113,32 @@ const effMinute = (e: { timeMinute: number | null; addedTime: number | null }): 
 
 const label = (e: EventRow): string => `${norm(e.incidentType)} ${norm(e.incidentClass)}`;
 
-// ── card classification (the §7 incident_class "second-yellow vs red" confirm-in-code item) ──────
+// ── card classification — exact incident_type gate (sibling of isGoalEvent); §7 second-yellow seam ─
 
+// CardKind keeps its full vocabulary: `second_yellow` is still read by onPitchWindow/cardsFor even
+// though classifyCard can no longer mint it (no feed class token for it — see the SEAM note below).
 type CardKind = "yellow" | "second_yellow" | "red";
 
 /**
- * Classify a card event defensively from incidentType+incidentClass. A card that is BOTH yellow and
- * red (e.g. "yellowRed") — or explicitly "second" — is a **second yellow, NOT a straight red**.
- * TODO(confirm): verify `match_events.incident_class` labels against first live data (ARCHITECTURE §7).
+ * Classify a card event, keyed on `incident_type` EXACTLY (`'card'`) — the sibling of
+ * {@link isGoalEvent}'s exact gate. The earlier form substring-matched the combined `label(e)` and was
+ * correct on live data only by luck: a `varDecision/cardUpgrade` row cleared its `includes("card")`
+ * admission yet matched no colour branch (→ null). Keying on `incident_type` immunises against a
+ * future upgrade label that carries a colour token (e.g. a hypothetical `varDecision/red`) minting a
+ * phantom red beside the real `card/*` row it annotates. A VAR card upgrade is a feed ANNOTATION; the
+ * upgrade itself materialises as a real `card/{yellow,red}` row that scores on its own (live data,
+ * Q4 2026-06-19 — ARCHITECTURE.md §7 / Appendix A, DECISIONS.md).
+ *
+ * SEAM (separate thread): a two-yellow dismissal has no feed class token (Q4 2026-06-19); classes are
+ * only `red` / `yellow`. Detecting it — the first-yellow −1 plus the second-yellow minute band — needs
+ * cross-row pairing of two `card/yellow` rows for the same (player, match), which is aggregation-layer
+ * work (the discipline rollup), NOT a per-row classification. So second_yellow is not produced here.
  */
 function classifyCard(e: EventRow): CardKind | null {
-  const l = label(e);
-  const yellow = l.includes("yellow");
-  const red = l.includes("red");
-  if (!yellow && !red && !l.includes("card")) return null;
-  const second =
-    l.includes("second") || l.includes("yellow2") || l.includes("2ndyellow") || (yellow && red);
-  if (second) return "second_yellow";
-  if (red) return "red";
-  if (yellow) return "yellow";
+  if (norm(e.incidentType) !== "card") return null; // exact gate — mirrors isGoalEvent; non-card types never enter
+  const cls = norm(e.incidentClass);
+  if (cls === "red") return "red";
+  if (cls === "yellow") return "yellow";
   return null;
 }
 
