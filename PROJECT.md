@@ -8,13 +8,14 @@ locking, head-to-head group stage, guillotine playoffs on a reduced roster, FAAB
 Not client-facing — fun with friends. Guiding constraint: **"boring and reliable" over clever.**
 
 ## Build surfaces (who owns what)
-- **Claude Code** — implementation
+- **Claude Code** — implementation; now owns the git lifecycle for its work — commit → `--ff-only` merge to main → push to origin → trigger the Render deploy; merges autonomously on green gates for contained work, but holds for Chat clearance before merging the high-risk classes (resolver / purity / migration / shared-validator)
 - **Claude Cowork** — progress tracking + manual/operational steps (draft kickoff, stat
   overrides/corrections, FAAB processing oversight)
-- **Claude Chat** — ideation, planning, decisions (this surface)
+- **Claude Chat** — architect / reviewer / advisor (this surface) — not a blocking merge-gate
 - **Claude Design** — UX/UI
 
 ## Working protocol
+- **Merge & git discipline (updated 2026-06-18):** `--ff-only`, no force-push. Code merges + pushes + deploys autonomously on green for contained work; pauses for explicit Chat clearance before merging resolver / purity / migration / shared-validator changes. Sergio retains live Supabase DB writes (production data / RLS / commish_override). Parallel work runs in isolated git worktrees — never share a working tree (the real concurrency guardrail; the earlier "auto-merge/contamination" episodes were a permitted Code session acting within its allow-list, now resolved — not an external actor). Sergio re-uploads the four brain files to Project knowledge after each merge.
 - **One decision/theme per conversation thread.** Keeps context lean and decisions clean.
 - These files are the source-of-truth "brain":
   - `PROJECT.md` (this) — overview, surfaces, protocol, status
@@ -562,7 +563,7 @@ Amendment 3 + SCORING.md §1.
 **⚠️ WATCH ITEM:** `duels_won` populates on live data (159/189 played rows; 17 substantial-minute NULLs =
 minor symmetric undercount); **F-P1-02 latent** — observability fix, normal priority.
 
-### 2026-06-17 — Period `status` lifecycle is WIRED into the period-close cron (feat/period-status-lifecycle, merge HELD)
+### 2026-06-17 — Period `status` lifecycle is WIRED into the period-close cron (feat/period-status-lifecycle, MERGED + DEPLOYED)
 
 **feat/period-status-lifecycle** (off latest merged main `50fda2c`) — code commit `46cf899` + a separate
 `[skip render]` docs commit. **The incident:** the `period.status` lifecycle (`pending → open → closed`,
@@ -590,10 +591,8 @@ pnpm format:check && pnpm test` all exit 0 on the `50fda2c` base — **2325 pass
 `periodStatus` tests)**. Purity proof: `periodStatus.ts` imports only `@app/shared` + `./freeze`; the only
 runtime `@app/db` in @app/recompute lives in `prismaStore.ts` (the separate `@app/recompute/prisma` subpath,
 not the index chain). **Adversarial 3-lens review (× verify), opus/high:** 0 confirmed findings. See
-ARCHITECTURE.md §22 + DECISIONS.md → Theme C amendment. **Merge HELD pending Chat clearance.**
+ARCHITECTURE.md §22 + DECISIONS.md → Theme C amendment. **MERGED + DEPLOYED:** rebased onto `68eeb76`, ff-merged to main as `0369d35` (feat) + `c1e3629` (docs [skip render]) — rebased twins of `46cf899` + `a414158`; shipped in the 2026-06-18 worker deploy (manual, since the [skip render] tip suppressed auto-deploy).
 
-**⚠️ LOCAL-REPO HAZARD (not my change):** during this session an external actor (VS Code git integration or a
-concurrent process — no git hook exists) twice ran `merge feat/fix-var-conceded: Fast-forward`, and once
-checked out `main` and FF-merged the held VAR branch INTO local `main` (local `main` → `68eeb76`; `origin/main`
-still `50fda2c`, nothing pushed). My work was preserved as commit `46cf899` and recovered. Local `main` may
-need resetting to `origin/main`; the stray auto-merge should be disabled.
+### 2026-06-18 — VAR phantom-goals CLOSEOUT (fix on main, deployed)
+
+**Fix = `395443e` ("Route A") on main (`c1e3629`), deployed 2026-06-18:** `isGoalEvent` keys on `incidentType === "goal"` exactly; `overturnedGoals` pairs each `varDecision/goalNotAwarded` to nearest same-player goal ≤3 eff-min; `conceded` + `credit` + `reconcileConceded` skip overturned. **Remediation 2026-06-18:** matches `28eb1fc7…` / `49de9295…` / `b174b0b7…` marked `stat_player_match.dirty=true` → worker sweep re-scored → stale phantom −1s flushed. **Remaining:** card classifier (`classifyCard` substring anti-pattern) — own thread, holds for Chat clearance.
