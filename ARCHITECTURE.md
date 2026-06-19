@@ -748,6 +748,19 @@ score to be known (NULL home/away early-live) and every standing goal's scorer t
 genuine VAR-shape mismatch on a settled, fully-attributed match warns. (`reconcileConceded` is the
 pure helper; the store populates the optional `MatchTeamContext.matchId` that labels the warn.)
 
+**Card classification keys on `incident_type` EXACTLY too (the sibling per-row gate).** `classifyCard`
+gates on `incident_type === 'card'`, then matches `incident_class` by **exact equality** — `red` → red,
+`yellow` → yellow, else null (no substring matching of the combined label). A VAR **card upgrade** is a
+SEPARATE `incident_type=varDecision` / `incident_class=cardUpgrade` ANNOTATION; the upgrade itself
+materialises as a real `card/{yellow,red}` row that scores on its own, so the `cardUpgrade` row is
+ignored (live data, Q4 2026-06-19 — 3 cardUpgrade rows across 2 matches, each beside a materialised
+`card/red`). The exact gate also immunises against a hypothetical colour-bearing non-card label
+(`varDecision/red`) minting a phantom red. **Second-yellow-vs-red representation remains
+confirm-in-code:** the feed carries NO second-yellow class token (classes are only `red` / `yellow` as
+of Q4), so a two-yellow dismissal arrives as two `card/yellow` rows — detecting it (the first-yellow −1
+plus the second-yellow minute band) is **cross-row pairing in the discipline aggregation, not per-row
+classification**, an unbuilt seam (see the SEAM comment in `classifyCard` and DECISIONS.md).
+
 ### ⚠️ Gaps — forced calls (all minor/rare). See SCORING.md amendments.
 | SCORING line | Status | Call |
 |---|---|---|
@@ -763,11 +776,13 @@ pure helper; the store populates the optional `MatchTeamContext.matchId` that la
   the attacking-side "shots blocked" is the separate `team_match_stats.shots_blocked` + `match_shots`
   `block`). Design intent is locked; just a 30-second sanity-check on first live data that the feed
   field matches (centre-backs accrue it, strikers don't).
-- **`match_events.incident_class` — goal & VAR classes CONFIRMED** (live GOAT data, incl. the
+- **`match_events.incident_class` — goal, VAR & card classes CONFIRMED** (live GOAT data, incl. the
   Argentina–Algeria reference): goals are `goal/{regular,penalty,ownGoal}`; VAR outcomes are
-  `varDecision/{goalAwarded,goalNotAwarded,vip_for_goal}` (see the incident-vocabulary subsection /
-  Appendix A above). Still verify `match_shots.situation` (penalty detection) and the
-  second-yellow-vs-red `incident_class` labels against live data.
+  `varDecision/{goalAwarded,goalNotAwarded,vip_for_goal,cardUpgrade}`; cards are `card/{yellow,red}`
+  (see the incident-vocabulary subsection / Appendix A above). **No second-yellow class token exists
+  (Q4 2026-06-19)** — `classifyCard` therefore matches `card/{red,yellow}` exactly and never mints
+  `second_yellow`; two-yellow banding is deferred to a cross-row discipline aggregation (a known seam,
+  DECISIONS.md). Still verify `match_shots.situation` (penalty detection) against live data.
 - **Rating fallback quality** — the one-time BALLDONTLIE-vs-Sofascore comparison (§3), to gauge the
   fallback only; Sofascore stays primary regardless.
 

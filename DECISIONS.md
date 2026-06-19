@@ -2676,3 +2676,43 @@ code deploys, `UPDATE stat_player_match SET dirty = true WHERE match_id IN (…V
 the ~60s `runRecomputeSweep` re-derives `score_player_match` through the new adapter and cascades to
 manager-period + standings. Full gate green (2317 passing). `feat/fix-var-conceded`, merge HELD for
 Chat clearance. `[skip render]`
+
+## Card classifier keys on incident_type EXACTLY (sibling of the isGoalEvent / conceded fix, 2026-06-19)
+
+**The change.** `classifyCard` (`packages/recompute/src/adapter.ts`) no longer substring-matches the
+combined `label(e)` (= `incident_type` + `incident_class`). It now keys on `incident_type` EXACTLY —
+the same exact-gate that fixed `isGoalEvent` and the VAR-conceded path directly above:
+1. `if (norm(incidentType) !== "card") return null;` — non-card types never enter.
+2. discriminate `norm(incidentClass)` by **exact equality**: `red` → red, `yellow` → yellow, else null.
+The old `label(e).includes(...)` admission and the `(yellow && red)` second-yellow heuristic are gone.
+
+**Why it was correct only by luck before.** A live `varDecision/cardUpgrade` row cleared the old
+`includes("card")` admission (its class contains "card") yet matched no colour branch, so it fell
+through to `null`. So the old code already excluded cardUpgrade — but a future upgrade label carrying a
+colour token (a hypothetical `varDecision/red`) would have minted a **phantom red** beside the real
+card it annotates. The exact `incident_type === 'card'` gate immunises against that.
+
+**Live data — exclusion is correct, change is byte-identical (no sweep).** 3 `varDecision/cardUpgrade`
+rows across 2 matches (MD1 `4358…`, MD2 `5f6c…`), each **paired to a materialised `card/red`** that
+already scored the red — all correctly scored *pre-fix*. Excluding the cardUpgrade annotation is correct
+**because the feed carries the upgrade on a real card row** (it replaces, it does not append a separate
+scorable row). Verified **byte-identical across the full 18-pair `incident_type`×`incident_class`
+vocabulary** (Q4 2026-06-19, zero flips on live rows). Therefore **NO data remediation**: stored
+`score_player_match` breakdowns are already correct — do **not** mark `stat_player_match` dirty and do
+**not** run a sweep. The change only immunises future rows.
+
+**Two follow-ups recorded as watch-items (NOT fixed here):**
+- **(a) Two-yellow banding is an unbuilt cross-row aggregation gap.** The feed has **no second-yellow
+  class token** (Q4: classes are only `red` / `yellow`); a two-yellow dismissal surfaces as two
+  separate `card/yellow` rows. Per-row classification cannot detect it, so `classifyCard` no longer
+  mints `second_yellow` (the dead branch was dropped; `CardKind` keeps the member, still read by
+  `onPitchWindow`/`cardsFor`). Today such a dismissal scores only the single yellow **−1**, under-counting
+  the correct −1 + second-yellow band. The correct fix is pairing two `card/yellow` rows for the same
+  (player, match) in the **discipline aggregation**, a separate thread — see the SEAM comment in
+  `classifyCard` and ARCHITECTURE.md §7 / Appendix A.
+- **(b) cardUpgrade coexisting with a still-present `card/yellow` for the same offence would
+  double-count.** Not present today — the feed **replaces** (materialises the upgraded `card/red`), it
+  does not append. If that ever changes, the pre-upgrade yellow + the upgraded red would both score.
+
+Engine-only; `pnpm typecheck && lint && format:check && test` green. `feat/card-classifier-exact` — the
+engine (code) commit is the push tip (the docs commit is `[skip render]`) so the worker redeploys.

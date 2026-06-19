@@ -131,10 +131,17 @@ two-yellow dismissal equals a straight red at the same band, which is exactly wh
 row sits one point above the red row. A **straight red** takes its bucket with no −1; a yellow
 followed by a *separate* straight red takes both. Minute bands are **lower-bound-inclusive**, and the
 **top band is ≥60 (a catch-all)** so a stoppage-time dismissal at 90+N lands in it rather than scoring
-0; bucket on the **effective minute** (`time_minute` + `added_time`). *Feed→input note:* the
-`match_events`→engine mapping must set the first-yellow signal alongside the second-yellow and
-classify a two-yellow dismissal as **second yellow, not red** (the `incident_class` confirm-in-code
-item, ARCHITECTURE §7). No point values changed.
+0; bucket on the **effective minute** (`time_minute` + `added_time`). *Feed→input note (updated
+2026-06-19):* `classifyCard` keys on `incident_type='card'` EXACTLY and matches the colour class by
+exact equality (`card/{red,yellow}`) — the sibling of the goal/conceded exact-gate. A VAR **card
+upgrade** is carried on a real `card/red` row that scores on its own; the separate
+`varDecision/cardUpgrade` row is **excluded** as a bare annotation (live data — ARCHITECTURE §7 /
+Appendix A, DECISIONS.md). **Two-yellow detection is deferred:** the feed carries **no second-yellow
+class token** (classes are only `red` / `yellow`), so a two-yellow dismissal arrives as two
+`card/yellow` rows. The §8 stacking rule above (first-yellow −1 + second-yellow band) is unchanged in
+intent, but realising it needs **cross-row pairing of the two `card/yellow` rows in the discipline
+aggregation, not per-row classification** — an unbuilt seam, so today such a dismissal scores only the
+single yellow −1. No point values changed.
 
 ## Balance reference
 Monster games ≈ **23–26** across all positions (forward hat-trick edges highest). Floors:
