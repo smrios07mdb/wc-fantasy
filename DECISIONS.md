@@ -2763,3 +2763,23 @@ delegation when the user calls for it.
 **Operational home.** Repo-root **CLAUDE.md** (§ Definition of Done / Merge Policy)
 is the quick-reference; this entry is the rationale record. CLAUDE.md also pins the
 worktree, TDD/testing, documentation, and output conventions. Docs-only; `[skip render]`.
+
+---
+
+## P48 — Claude Code tooling layer (2026-06-19)
+
+**Decision.** Adopt a three-tier automation model in `.claude/`: deterministic hooks
+for must-always rules, explicit skills for ergonomic gate runs, and a read-only
+subagent for audit work. Auto-invocation never drives a side-effectful action.
+
+**What shipped.**
+- `.claude/skills/gate/SKILL.md` — explicit-only `/gate` (`disable-model-invocation: true`); runs the full DoD gate (typecheck → lint → format:check → test, +build for web threads); holds merge by default.
+- `.claude/skills/braindocs/SKILL.md` — model-invocable `/braindocs`; updates the four brain docs with cross-refs; outputs diffs only, never pushes.
+- `.claude/agents/auditor.md` — read-only auditor subagent (tools: Read/Grep/Glob, model: opus); traces one lane per invocation, reports P0–P3 findings with path:line.
+- `.claude/hooks/guard-git.sh` — `PreToolUse(Bash)` hook; blocks `--force` / `--force-with-lease` / `-f` pushes deterministically; exit 2 = block.
+- `.claude/settings.json` — wires the two hooks (`PreToolUse(Bash)` → guard-git, `Stop` → background typecheck).
+- `CLAUDE.md §Tooling` — quick-reference for all five surfaces.
+
+**Rationale.** Determinism matched to stakes: hooks enforce invariants that must NEVER break (no-force-push), skills handle things that are useful but don't need to run on every action, the subagent keeps audit work read-only and scoped. The Stop typecheck is informational only (`|| true`), never blocking.
+
+**Supersedes.** Nothing; this is additive tooling config only. No app logic, no migration, no scoring change.
