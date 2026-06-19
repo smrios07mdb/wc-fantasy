@@ -8,14 +8,14 @@ locking, head-to-head group stage, guillotine playoffs on a reduced roster, FAAB
 Not client-facing — fun with friends. Guiding constraint: **"boring and reliable" over clever.**
 
 ## Build surfaces (who owns what)
-- **Claude Code** — implementation; now owns the git lifecycle for its work — commit → `--ff-only` merge to main → push to origin → trigger the Render deploy; merges autonomously on green gates for contained work, but holds for Chat clearance before merging the high-risk classes (resolver / purity / migration / shared-validator)
+- **Claude Code** — implementation; owns the git lifecycle for its work — commit → `--ff-only` merge to main → push to origin → trigger the Render deploy; **holds by default** (user owns the merge); may commit+merge+deploy autonomously only when the user explicitly preauthorizes for that change; always holds for high-risk classes (resolver / purity / migration / shared-validator / anything touching live scoring or production data) — see CLAUDE.md § Definition of Done / Merge Policy and DECISIONS.md § Merge policy (2026-06-19)
 - **Claude Cowork** — progress tracking + manual/operational steps (draft kickoff, stat
   overrides/corrections, FAAB processing oversight)
 - **Claude Chat** — architect / reviewer / advisor (this surface) — not a blocking merge-gate
 - **Claude Design** — UX/UI
 
 ## Working protocol
-- **Merge & git discipline (updated 2026-06-18):** `--ff-only`, no force-push. Code merges + pushes + deploys autonomously on green for contained work; pauses for explicit Chat clearance before merging resolver / purity / migration / shared-validator changes. Sergio retains live Supabase DB writes (production data / RLS / commish_override). Parallel work runs in isolated git worktrees — never share a working tree (the real concurrency guardrail; the earlier "auto-merge/contamination" episodes were a permitted Code session acting within its allow-list, now resolved — not an external actor). Sergio re-uploads the four brain files to Project knowledge after each merge.
+- **Merge & git discipline (updated 2026-06-19):** `--ff-only`, no force-push. **Hold by default** — once DoD gate is green (typecheck/lint/format/build/tests) with implementation + tests + docs delivered, Code holds and waits for the user's merge decision. Merge authority sits with the user. Contained changes may be delegated: the user may explicitly preauthorize Code to commit + `--ff-only` merge + push + deploy on green; absent that explicit authorization, Code holds. High-risk classes (resolver / purity / migration / shared-validator / live scoring or production data) always hold regardless. Sergio retains live Supabase DB writes (production data / RLS / commish_override). Parallel work runs in isolated git worktrees — never share a working tree (the real concurrency guardrail). Sergio re-uploads the four brain files to Project knowledge after each merge. See CLAUDE.md § Definition of Done / Merge Policy and DECISIONS.md § Merge policy (2026-06-19).
 - **One decision/theme per conversation thread.** Keeps context lean and decisions clean.
 - These files are the source-of-truth "brain":
   - `PROJECT.md` (this) — overview, surfaces, protocol, status

@@ -2738,3 +2738,28 @@ vocabulary** (Q4 2026-06-19, zero flips on live rows). Therefore **NO data remed
 
 Engine-only; `pnpm typecheck && lint && format:check && test` green. `feat/card-classifier-exact` — the
 engine (code) commit is the push tip (the docs commit is `[skip render]`) so the worker redeploys.
+
+## Merge policy — hold by default, user owns the merge; contained work delegable by explicit preauthorization (2026-06-19)
+
+**The change.** The three-role workflow's prior default — *Claude Code merges
+autonomously on green gates for contained changes* — is RETIRED. New default:
+once a feature reaches a fully green DoD gate (typecheck, lint, format, build,
+tests) WITH implementation + tests + docs delivered, Code **holds** and waits
+for the user's merge decision. Merge authority sits with the user by default.
+
+**The carve-out (intent unchanged, now explicit).** The user OWNS the merge on
+all high-risk / critical changes — resolver, purity, migration, shared-validator,
+and anything touching live scoring or production data — these ALWAYS hold. For
+*simple, contained* changes the user may **preempt** and explicitly authorize Code
+to commit, `--ff-only` merge, push, and deploy on green. Absent that explicit
+authorization, Code holds. Principle: strategic delegation — hand Code the merge
+when it clearly saves a round-trip; hold when the blast radius isn't obvious.
+
+**Why.** The old auto-merge-on-green default put contained changes through before
+the user had eyes on them. Flipping the default to hold keeps the user in the loop
+without adding friction for the cases that matter, while still allowing fast-path
+delegation when the user calls for it.
+
+**Operational home.** Repo-root **CLAUDE.md** (§ Definition of Done / Merge Policy)
+is the quick-reference; this entry is the rationale record. CLAUDE.md also pins the
+worktree, TDD/testing, documentation, and output conventions. Docs-only; `[skip render]`.
