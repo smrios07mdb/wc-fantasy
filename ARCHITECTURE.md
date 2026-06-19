@@ -272,19 +272,23 @@ only the cadence and the acquisition cutoff moved.
   grabs an unclaimed player for **$0, applied immediately** (no bidding, no waiver order). Gated route
   **`POST /api/faab/free-agent`** on the bid-route template: `requireManager` → `assertCanActAsManager
   ({scope:"self"})` → **401/403 before any write** (the shared `faabGate`), then the **free-agency
-  window** gate, **snapshot eligibility**, the **same drop + roster rules** as a bid (the shared
+  window** gate, **live-unowned eligibility**, the **same drop + roster rules** as a bid (the shared
   `validateFaGrant` / `checkDropAndRoster`), then an **atomic first-come claim** (`claimFreeAgent`):
   drop the named player + INSERT the add, gated on the `roster_player_active_ownership_uq` partial
   unique so **exactly one** of two concurrent grabs wins and the loser gets a clean `fa-conflict` (the
   tx rolls back). **$0 — budget unchanged, waiver order untouched.**
-- **FA eligibility = the BATCH-CLEAR SNAPSHOT, not live-unowned.** A player is grabbable iff he was
-  unowned at this period's batch-clear AND is still unowned — so a player **dropped during the window is
-  NOT grabbable this window** (he enters the next period's batch pool; this is the anti-snipe property).
-  Mechanism (chosen — **no snapshot table**): the single immutable predicate `NOT EXISTS roster_player
-  WHERE player=X AND (dropped_at IS NULL OR dropped_at >= period.batch_cleared_at)`, which correctly
-  holds batch winners/droppees, mid-window FA drops, and the claimed-then-dropped race. (Equivalent to an
-  `fa_open`-per-period marker, but derived from `roster_player` history + the existing `batch_cleared_at`
-  — no extra write, no snapshot-idempotency problem.) The 1-cycle waiver hold is removed (never was code).
+- **FA eligibility = LIVE-UNOWNED (commissioner decision Jun 18 2026; supersedes the Prompt-48 batch-clear
+  snapshot).** A player is a free agent the **moment he holds no active roster spot** — including a player
+  dropped by a winning waiver bid AND a player dropped mid-window. **The anti-snipe hold is removed.** The
+  single predicate is `EXISTS roster_player WHERE league=L AND player=X AND dropped_at IS NULL` (currently
+  rostered ⇒ ineligible) — i.e. `dropped_at IS NULL` only; the retired snapshot added `OR dropped_at >=
+  period.batch_cleared_at`. Factored into the pure IO-free `liveOwnedWhere`
+  (`packages/faab/src/faEligibility.ts`) and shared by all three eligibility sites — the pool
+  (`listFaIneligiblePlayerIds`, `snapshotAt` param dropped), the per-player re-check
+  (`getFaTargetFacts.faEligible`), and the grant tx re-check (`claimFreeAgent`) — so they cannot drift. No
+  snapshot table, no new schema (history-derived) + the existing active-ownership unique. **NOT touched:**
+  the sealed→free-agency WINDOW phase (`acquisitionWindowState` / `batch_cleared_at` latch / kickoff
+  cutoff / the commish `--period` pin) is a SEPARATE gate. The 1-cycle waiver hold was removed earlier.
 - **Schema.** `period.waiver_batch_at` + `period.batch_cleared_at` (migration
   `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS). The FA grant needs
   **no new schema** (history-derived eligibility + the existing active-ownership unique).
@@ -292,10 +296,11 @@ only the cadence and the acquisition cutoff moved.
   (`FreeAgentPanel`) that consumes **`POST /api/faab/free-agent`** for instant $0 add/drop pickups. The
   SAME `acquisitionWindowState` phase the `BatchBar` shows drives the acquisition surface: sealed-bid →
   the sealed claim form; free-agency → the FA list (instant Add, reusing the composer's `droppableRoster`
-  drop picker); locked → Add disabled. The offered pool is the **snapshot-eligible** set the loader
-  resolves via `listFaIneligiblePlayerIds` (`@app/faab/prisma`) — the SAME `snapshotOwnershipWhere`
-  predicate `getFaTargetFacts` re-checks at grant time, so the list and the route can't drift (a stale
-  list only falls through to the `fa-conflict` 409, surfaced inline). **Prompt 48 shipped + tested the
+  drop picker); locked → Add disabled. The offered pool is the **live-unowned** set the loader resolves via
+  `listFaIneligiblePlayerIds` (`@app/faab/prisma`) — the SAME `liveOwnedWhere` predicate `getFaTargetFacts`
+  / `claimFreeAgent` re-check at grant time, so the list and the route can't drift (a stale list only falls
+  through to the `fa-conflict` 409, surfaced inline). Since the Jun 18 2026 live-unowned amendment the pool
+  is the same in EVERY phase (the earlier snapshot-pool branch is retired). **Prompt 48 shipped + tested the
   route but never surfaced it**, so the window's only UI action was a sealed bid that wouldn't clear
   until the next batch — this wiring closes that gap.
 - **Playoff rounds** light up via the SAME generic period path once their period rows exist (Theme C);

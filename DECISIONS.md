@@ -630,12 +630,26 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   cron retired. `resolveFaabBatch` is byte-unchanged. See ARCHITECTURE §3 + PROJECT.md (Prompt 47).
 - **Implemented (Prompt 48, `feat/faab-fa-grant`, stacked on 47):** the instant **$0 free-agency
   grant** is now built — `POST /api/faab/free-agent`, accepted only in the free-agency phase
-  (`acquisitionWindowState`), $0 (budget unchanged, no waiver order). **FA eligibility = the batch-clear
+  (`acquisitionWindowState`), $0 (budget unchanged, no waiver order). ~~**FA eligibility = the batch-clear
   snapshot, NOT live-unowned** (a player dropped during the window is held to the next batch); chosen
   mechanism = the history predicate `NOT EXISTS roster_player WHERE player=X AND (dropped_at IS NULL OR
-  dropped_at >= batch_cleared_at)` (no snapshot table). First-come = the `roster_player_active_ownership_uq`
-  partial unique (exactly one winner; loser → clean `fa-conflict`). The Prompt-47 "$0 FA surface is a
-  TODO(confirm)" is now CLOSED. See ARCHITECTURE §3 + PROJECT.md (Prompt 48).
+  dropped_at >= batch_cleared_at)` (no snapshot table).~~ **SUPERSEDED Jun 18 2026 → live-unowned (see the
+  amendment below).** First-come = the `roster_player_active_ownership_uq` partial unique (exactly one
+  winner; loser → clean `fa-conflict`). The Prompt-47 "$0 FA surface is a TODO(confirm)" is now CLOSED.
+  See ARCHITECTURE §3 + PROJECT.md (Prompt 48).
+- **AMENDMENT — FA eligibility is LIVE-UNOWNED, not the batch-clear snapshot (commissioner decision Jun 18
+  2026; `feat/faab-live-unowned-fa`).** A player is a free agent the **moment he holds no active roster
+  spot** — including a player dropped by a winning waiver bid AND a player dropped mid-window. **The
+  anti-snipe hold is REMOVED** (the `OR dropped_at >= batch_cleared_at` term that held a freshly-dropped
+  player back to the next batch is deleted). The single predicate is now `EXISTS roster_player WHERE
+  league=L AND player=X AND dropped_at IS NULL` (currently rostered ⇒ ineligible), factored into the pure
+  IO-free `liveOwnedWhere` (`packages/faab/src/faEligibility.ts`) and shared by ALL THREE eligibility sites
+  — the waivers pool (`listFaIneligiblePlayerIds`, `snapshotAt` param dropped), the per-player re-check
+  (`getFaTargetFacts.faEligible`), and the grant tx re-check (`claimFreeAgent`) — so a player shown as a
+  free agent is exactly one the $0 grant accepts. **Window machinery UNCHANGED:** the sealed→free-agency
+  LATCH + the kickoff cutoff (`acquisitionWindowState`, `batch_cleared_at`, `claimFreeAgent`'s `T===null`
+  guard, the commish `--period` pin) are a SEPARATE gate and are not touched. `/waivers` now offers the
+  live-unowned pool in EVERY phase (the phase-split snapshot branch is retired). SCORING.md untouched.
 - **Fixed (`fix/faab-sealed-bid-latch-boundary`) — the sealed→free-agency boundary is the LATCH, not first
   kickoff.** Prompts 47/48 left bid submission gated ONLY on the period's first kickoff
   (`acquisitionCutoffAt`), so the sealed-bid phase did not actually END at batch-clear. **The MD1 strand
