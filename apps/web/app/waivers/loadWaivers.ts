@@ -66,69 +66,56 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   const leagueId = manager.leagueId;
   const now = new Date();
 
-  const [
-    league,
-    managerRows,
-    pendingBids,
-    rosterRows,
-    ownedRows,
-    upcomingMatches,
-    seasonScores,
-    periodRows,
-  ] = await Promise.all([
-    prisma.league.findUnique({
-      where: { id: leagueId },
-      select: { timezone: true, status: true },
-    }),
-    // Rolling waiver order + names (public). Seeded managers sort by position; unseeded (null) last.
-    prisma.manager.findMany({
-      where: { leagueId },
-      select: { id: true, displayName: true, waiverOrderPosition: true },
-      orderBy: [{ waiverOrderPosition: "asc" }, { displayName: "asc" }],
-    }),
-    // The viewer's OWN pending claims (self-scoped).
-    prisma.faabBid.findMany({
-      where: { managerId: viewerManagerId, status: "pending" },
-      select: {
-        id: true,
-        amount: true,
-        playerAdd: { select: PLAYER_SELECT },
-        playerDrop: { select: PLAYER_SELECT },
-      },
-    }),
-    // The viewer's current squad.
-    prisma.rosterPlayer.findMany({
-      where: { managerId: viewerManagerId, droppedAt: null },
-      select: { player: { select: PLAYER_SELECT } },
-    }),
-    // Every owned player league-wide → free agents are the complement.
-    prisma.rosterPlayer.findMany({
-      where: { leagueId, droppedAt: null },
-      select: { playerId: true },
-    }),
-    // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff.
-    prisma.fifaMatch.findMany({
-      where: { status: { in: ["scheduled", "in_progress"] } },
-      select: { homeTeamId: true, awayTeamId: true, kickoffAt: true },
-      orderBy: { kickoffAt: "asc" },
-    }),
-    // Season fantasy points per player (sum across matches) — "if available, else —".
-    prisma.scorePlayerMatch.groupBy({ by: ["playerId"], _sum: { points: true } }),
-    // Periods + each one's first kickoff — drives the "next batch" acquisition-window element. Mirrors
-    // the worker cadence read (period + MIN-kickoff fixture) so web shows the EXACT instant it fires.
-    prisma.period.findMany({
-      where: { leagueId },
-      select: {
-        id: true,
-        label: true,
-        status: true,
-        waiverBatchAt: true,
-        batchClearedAt: true,
-        matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
-      },
-      orderBy: [{ opensAt: "asc" }, { label: "asc" }],
-    }),
-  ]);
+  const [league, managerRows, pendingBids, rosterRows, upcomingMatches, seasonScores, periodRows] =
+    await Promise.all([
+      prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { timezone: true, status: true },
+      }),
+      // Rolling waiver order + names (public). Seeded managers sort by position; unseeded (null) last.
+      prisma.manager.findMany({
+        where: { leagueId },
+        select: { id: true, displayName: true, waiverOrderPosition: true },
+        orderBy: [{ waiverOrderPosition: "asc" }, { displayName: "asc" }],
+      }),
+      // The viewer's OWN pending claims (self-scoped).
+      prisma.faabBid.findMany({
+        where: { managerId: viewerManagerId, status: "pending" },
+        select: {
+          id: true,
+          amount: true,
+          playerAdd: { select: PLAYER_SELECT },
+          playerDrop: { select: PLAYER_SELECT },
+        },
+      }),
+      // The viewer's current squad.
+      prisma.rosterPlayer.findMany({
+        where: { managerId: viewerManagerId, droppedAt: null },
+        select: { player: { select: PLAYER_SELECT } },
+      }),
+      // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff.
+      prisma.fifaMatch.findMany({
+        where: { status: { in: ["scheduled", "in_progress"] } },
+        select: { homeTeamId: true, awayTeamId: true, kickoffAt: true },
+        orderBy: { kickoffAt: "asc" },
+      }),
+      // Season fantasy points per player (sum across matches) — "if available, else —".
+      prisma.scorePlayerMatch.groupBy({ by: ["playerId"], _sum: { points: true } }),
+      // Periods + each one's first kickoff — drives the "next batch" acquisition-window element. Mirrors
+      // the worker cadence read (period + MIN-kickoff fixture) so web shows the EXACT instant it fires.
+      prisma.period.findMany({
+        where: { leagueId },
+        select: {
+          id: true,
+          label: true,
+          status: true,
+          waiverBatchAt: true,
+          batchClearedAt: true,
+          matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
+        },
+        orderBy: [{ opensAt: "asc" }, { label: "asc" }],
+      }),
+    ]);
 
   // The current period for the waiver window: the OPEN wave, else the soonest PENDING by first
   // fixture kickoff. Null (all closed / none pending) → the "next batch" element is hidden.
@@ -191,16 +178,13 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     playerIds: roster.map((p) => p.id),
   });
 
-  // The free-agent pool. In the free-agency phase the FA panel offers INSTANT $0 pickups, so the pool
-  // must be the snapshot-eligible set the grant accepts (owned-now OR dropped-this-window excluded),
-  // resolved via the SAME predicate the route re-checks (`listFaIneligiblePlayerIds`) — no re-derived
-  // eligibility logic. In every other phase the sealed-bid composer wants the live-unowned complement.
-  const ownedIds = new Set(ownedRows.map((r) => r.playerId));
-  const faSnapshotAt =
-    batchWindow?.phase === "free-agency" ? (currentPeriodRow?.batchClearedAt ?? null) : null;
-  const excludeIds = faSnapshotAt
-    ? await listFaIneligiblePlayerIds(prisma, leagueId, faSnapshotAt)
-    : ownedIds;
+  // The free-agent pool = LIVE-UNOWNED in EVERY phase (commish decision Jun 18 2026): a player is a free
+  // agent the moment he holds no active roster spot. The sealed-bid composer and the free-agency $0 panel
+  // now offer the SAME set, resolved via the one predicate the route re-checks at grant time
+  // (`listFaIneligiblePlayerIds` → `liveOwnedWhere`) — so a player shown as a free agent is exactly one
+  // the $0 grant accepts (a stale list only falls through to the route's `fa-conflict` 409). The earlier
+  // phase split (snapshot pool in free-agency, live-unowned elsewhere) is retired with the anti-snipe hold.
+  const excludeIds = await listFaIneligiblePlayerIds(prisma, leagueId);
   const freeAgentRows = await prisma.player.findMany({
     where: { id: { notIn: excludeIds.size ? [...excludeIds] : ["__none__"] } },
     select: PLAYER_SELECT,

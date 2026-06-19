@@ -17,6 +17,7 @@ const PURE_MODULES = [
   "errors.ts",
   "store.ts",
   "window.ts", // the acquisition-window predicate (Prompt 48) — security-critical, gates the $0 FA window
+  "faEligibility.ts", // the live-unowned FA-eligibility rule (Jun 18 2026) — pure, shared by the adapter
   "controller.ts",
   "memoryStore.ts",
   "index.ts",

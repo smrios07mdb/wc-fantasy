@@ -4,7 +4,7 @@
  * the real engine for everything correctness-critical:
  *   • the atomic drop + unlocked-slot-release + first-come INSERT (`claimFreeAgent` — the
  *     `roster_player_active_ownership_uq` guard, valid-drop, slot-release ALL kept), $0;
- *   • the roster cap + valid-drop rules (`validateFaGrant` with ONLY the window/snapshot gates
+ *   • the roster cap + valid-drop rules (`validateFaGrant` with ONLY the window/eligibility gates
  *     neutralized — `windowState:"free-agency"`, `faEligible:true`, `dropLocked:false`).
  *
  * In front of the engine stay the override's own guards: the commissioner gate, a required reason, the
@@ -129,8 +129,8 @@ export async function runRosterOverride(
     return { status: "skipped", reason: "already in the desired end state", plan };
   }
 
-  // (2) KEEP the roster cap + valid-drop by reusing `validateFaGrant`; ONLY the window + snapshot +
-  //     drop-lock gates are neutralized (the deliberate, commissioner-only bypass).
+  // (2) KEEP the roster cap + valid-drop by reusing `validateFaGrant`; ONLY the window + (live-unowned)
+  //     eligibility + drop-lock gates are neutralized (the deliberate, commissioner-only bypass).
   const verr = validateFaGrant(
     {
       managerId: input.managerId,

@@ -218,8 +218,8 @@ describe("validateBidSubmission", () => {
 /**
  * $0 free-agency grant validation (DECISIONS.md → Theme D amendment, Prompt 48). Unlike a bid, there is
  * no amount/budget/cutoff check: the cost is $0, and the timing is the WINDOW gate (free-agency phase
- * only) + the snapshot ELIGIBILITY (open-at-batch-clear, not live-unowned). Drop + roster rules are the
- * SAME as a bid (shared `checkDropAndRoster`).
+ * only) + the LIVE-UNOWNED ELIGIBILITY (no active roster spot; Jun 18 2026 amendment). Drop + roster rules
+ * are the SAME as a bid (shared `checkDropAndRoster`).
  */
 function faCtx(over: Partial<FaGrantValidationContext> = {}): FaGrantValidationContext {
   return {
@@ -261,7 +261,7 @@ describe("validateFaGrant", () => {
     expect(e?.code).toBe("fa-window-closed");
   });
 
-  it("rejects a target that is not an open free agent (batch-clear snapshot rule)", () => {
+  it("rejects a target that is not a live free agent (still actively rostered)", () => {
     expect(validateFaGrant(faSub(), faCtx({ faEligible: false }))?.code).toBe("fa-not-eligible");
   });
 

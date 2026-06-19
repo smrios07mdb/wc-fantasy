@@ -18,6 +18,7 @@ const page = read("../../app/waivers/page.tsx");
 const layout = read("../../app/waivers/layout.tsx");
 const loader = read("../../app/waivers/loadWaivers.ts");
 const faStore = read("../../../../packages/faab/src/prismaStore.ts");
+const faElig = read("../../../../packages/faab/src/faEligibility.ts");
 
 describe("WaiversClient — interactive surface wiring", () => {
   it("is a Client Component (needs state + fetch)", () => {
@@ -113,19 +114,23 @@ describe("waivers route — gate + mount + self-scoped reads", () => {
 });
 
 describe("instant $0 free-agency — Waivers-tab surface (Prompt 48 route, finally wired)", () => {
-  it("the loader offers the SNAPSHOT-eligible pool in the free-agency phase via the shared predicate", () => {
-    // The FA list must be the pool the grant accepts (owned-now OR dropped-this-window excluded), NOT the
-    // sealed composer's live-unowned complement — and it must REUSE the route's predicate, not re-derive.
-    expect(loader).toContain("listFaIneligiblePlayerIds");
-    expect(loader).toMatch(/phase === "free-agency"/);
-    expect(loader).toContain("batchClearedAt"); // T = the current period's batch-clear snapshot instant
+  it("the loader offers the LIVE-UNOWNED pool in EVERY phase via the shared predicate (no snapshot branch)", () => {
+    // Jun 18 2026: a player is a free agent the moment he holds no active spot. The FA list = the live
+    // free-agent set the grant accepts, resolved via the ONE predicate the route re-checks — phase-agnostic.
+    // The retired snapshot branch (faSnapshotAt / phase-gated pool) is gone.
+    expect(loader).toMatch(/listFaIneligiblePlayerIds\(prisma, leagueId\)/);
+    expect(loader).not.toContain("faSnapshotAt");
+    expect(loader).not.toMatch(/phase === "free-agency"/); // the pool is no longer gated on the FA phase
   });
 
-  it("the FA eligibility predicate is defined ONCE (per-player re-check + batch list share it)", () => {
-    // Single source of truth: both getFaTargetFacts (one player) and listFaIneligiblePlayerIds (the pool)
-    // go through snapshotOwnershipWhere, so the offered list and the accepted grant cannot drift.
-    expect(faStore).toContain("function snapshotOwnershipWhere");
-    expect(faStore.match(/snapshotOwnershipWhere\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  it("the FA eligibility predicate is defined ONCE (per-player re-check + grant + batch list share it)", () => {
+    // Single source of truth: liveOwnedWhere is the ONE predicate (pure faEligibility.ts, IO-free), imported
+    // by the Prisma adapter and counted in getFaTargetFacts (one player), claimFreeAgent (the grant
+    // re-check), AND listFaIneligiblePlayerIds (the pool) — so they cannot drift. Snapshot predicate gone.
+    expect(faElig).toContain("export function liveOwnedWhere");
+    expect(faStore).toContain('from "./faEligibility"');
+    expect(faStore).not.toContain("snapshotOwnershipWhere");
+    expect(faStore.match(/liveOwnedWhere\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(faStore).toContain("export async function listFaIneligiblePlayerIds");
   });
 

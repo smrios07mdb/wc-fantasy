@@ -129,13 +129,15 @@ export interface FaGrantSubmission {
   dropPosition: Position | null;
 }
 
-/** Everything the FA-grant validator needs (DECISIONS §D amendment, Prompt 48). No budget/amount: the
- *  cost is $0. Timing is the WINDOW (free-agency phase) + the snapshot ELIGIBILITY, both IO-resolved. */
+/** Everything the FA-grant validator needs (DECISIONS §D amendment, Prompt 48 + the Jun 18 2026
+ *  live-unowned amendment). No budget/amount: the cost is $0. Timing is the WINDOW (free-agency phase) +
+ *  the LIVE-UNOWNED ELIGIBILITY, both IO-resolved. */
 export interface FaGrantValidationContext {
   /** The add target's period acquisition window at `now` — the grant is accepted ONLY in free-agency. */
   windowState: AcquisitionWindow;
-  /** Is the target an OPEN free agent: unowned at this period's batch-clear AND currently unowned?
-   *  Snapshot rule (NOT live-unowned) — a player dropped during the window is NOT eligible. */
+  /** Is the target a LIVE free agent: holds NO active roster spot right now? Live-unowned rule (Jun 18
+   *  2026) — a player dropped during the window (batch droppee or manual drop) IS eligible immediately;
+   *  the IO layer resolves it via the single `liveOwnedWhere` predicate (`@app/faab/prisma`). */
   faEligible: boolean;
   counts: PositionCounts;
   squadSize: number;
@@ -153,7 +155,7 @@ export interface FaGrantValidationContext {
  * PURE validation for an instant $0 free-agency grant (DECISIONS §D amendment). Order:
  *  0. D4: a playoff non-participant may not grab (inert in group).
  *  1. window: the add target's period must be in its free-agency phase (post-batch, pre-first-kickoff).
- *  2. eligibility: the target must be an open FA per the batch-clear snapshot (not live-unowned).
+ *  2. eligibility: the target must be a LIVE free agent — no active roster spot (Jun 18 2026 amendment).
  *  3+4. the SAME drop + roster rules as a bid (shared `checkDropAndRoster`): drop ≠ add, drop owned,
  *       drop not locked-by-play, drop required when full, and the phase roster cap (15 group / 9 playoff).
  * No amount/budget check ($0 is always affordable) and no waiver-order concern (instant FA is bids-free).
@@ -168,7 +170,7 @@ export function validateFaGrant(
   // (1) window: accept ONLY in the free-agency phase.
   if (ctx.windowState !== "free-agency") return faWindowClosed(ctx.windowState);
 
-  // (2) eligibility: open FA per the batch-clear snapshot (not live-unowned).
+  // (2) eligibility: a LIVE free agent — the target holds no active roster spot (Jun 18 2026 amendment).
   if (!ctx.faEligible) return faNotEligible(sub.playerAddId);
 
   // (3)+(4) drop rules + roster legality — shared with the bid path.

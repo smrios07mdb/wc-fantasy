@@ -20,6 +20,7 @@
 import type { PrismaClient } from "@app/db";
 import { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { rosterCapForLeagueStatus, type LeagueStatus, type Position } from "@app/shared";
+import { liveOwnedWhere } from "./faEligibility";
 import type { BidInput, ManagerState } from "./resolve";
 import type {
   BatchContext,
@@ -432,9 +433,10 @@ function isUniqueViolation(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 }
 
-/** A specific period's FA window: its `batch_cleared_at` (the snapshot instant T) + its first kickoff
- *  (MIN over the period's fixtures). The shared tail of BOTH the next-fixture inference below and the
- *  commissioner `--period` pin. */
+/** A specific period's FA window: its `batch_cleared_at` (the sealed→free-agency LATCH instant) + its
+ *  first kickoff (MIN over the period's fixtures). The shared tail of BOTH the next-fixture inference
+ *  below and the commissioner `--period` pin. (This is the WINDOW phase, not FA eligibility — eligibility
+ *  is live-unowned per `liveOwnedWhere`.) */
 async function resolvePeriodWindow(
   db: Pick<Db, "fifaMatch" | "period">,
   periodId: string,
@@ -454,8 +456,8 @@ async function resolvePeriodWindow(
 }
 
 /** The add target's PERIOD window: the period his next still-acquirable fixture falls in → that
- *  period's `batch_cleared_at` (the FA snapshot instant T) + its first kickoff (MIN over the period).
- *  Resolved the same way the bid store derives the per-player / period kickoff (no second clock).
+ *  period's `batch_cleared_at` (the sealed→free-agency LATCH instant) + its first kickoff (MIN over the
+ *  period). Resolved the same way the bid store derives the per-player / period kickoff (no second clock).
  *
  *  A `pinnedPeriodId` (the commissioner `--period`) resolves THAT period directly and bypasses the
  *  next-fixture inference — whose `status IN (scheduled, in_progress)` filter EXCLUDES an already-played
@@ -482,33 +484,14 @@ async function resolveAddPeriodWindow(
   return { batchClearedAt: w.batchClearedAt, firstKickoffAt: w.firstKickoffAt ?? m.kickoffAt };
 }
 
-/** The roster-ownership WHERE that makes a player INELIGIBLE for a $0 FA grant at the batch-clear
- *  snapshot instant T: an ownership row that is active (dropped_at IS NULL) OR was dropped at/after T.
- *  The SINGLE definition of the FA snapshot predicate (DECISIONS §D) — shared by the per-player
- *  {@link FaGrantStore.getFaTargetFacts} re-check (one player) and the batch
- *  {@link listFaIneligiblePlayerIds} (the waivers loader's offered pool), so the list the UI shows and
- *  the grant the route accepts can never drift. */
-function snapshotOwnershipWhere(leagueId: string, snapshotAt: Date, playerId?: string) {
-  return {
-    leagueId,
-    ...(playerId ? { playerId } : {}),
-    OR: [{ droppedAt: null }, { droppedAt: { gte: snapshotAt } }],
-  };
-}
-
-/** The player ids that are NOT snapshot-eligible free agents at `snapshotAt` (= the current period's
- *  batch_cleared_at): every player with an ownership row matching the FA snapshot predicate (owned now,
- *  OR dropped during this window). The waivers loader subtracts this from the player pool to offer
- *  EXACTLY the free agents the $0 grant will accept — reusing the same predicate
- *  {@link FaGrantStore.getFaTargetFacts} re-checks, so the offered list and the accepted grant cannot
- *  drift (a stale list only ever falls through to the route's `fa-conflict` 409). */
-export async function listFaIneligiblePlayerIds(
-  db: Db,
-  leagueId: string,
-  snapshotAt: Date,
-): Promise<Set<string>> {
+/** The player ids that are NOT live-unowned free agents: every player holding an ACTIVE ownership row
+ *  (dropped_at IS NULL) in the league. The waivers loader subtracts this from the player pool to offer
+ *  EXACTLY the live free agents the $0 grant will accept — reusing the same {@link liveOwnedWhere}
+ *  predicate {@link FaGrantStore.getFaTargetFacts} re-checks, so the offered list and the accepted grant
+ *  cannot drift (a stale list only ever falls through to the route's `fa-conflict` 409). */
+export async function listFaIneligiblePlayerIds(db: Db, leagueId: string): Promise<Set<string>> {
   const rows = await db.rosterPlayer.findMany({
-    where: snapshotOwnershipWhere(leagueId, snapshotAt),
+    where: liveOwnedWhere(leagueId),
     distinct: ["playerId"],
     select: { playerId: true },
   });
@@ -558,18 +541,14 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
         batchClearedAt: null,
         firstKickoffAt: null,
       };
-      // FA-eligible = open at this period's batch-clear AND still unowned (the batch-clear SNAPSHOT, not
-      // live-unowned). The single immutable predicate lives in `snapshotOwnershipWhere` (also used by the
-      // batch `listFaIneligiblePlayerIds` the waivers loader offers, so the list + this re-check can't
-      // drift): NO ownership row touching or after T = batch_cleared_at — which holds batch winners/
-      // droppees, mid-window FA drops, and claimed-then-dropped, while letting genuinely-unclaimed players
-      // (and prior-period releases) through. False until the batch has cleared.
-      const T = window.batchClearedAt;
+      // FA-eligible = LIVE-UNOWNED: the target holds NO active roster row (dropped_at IS NULL) right now
+      // (commish decision Jun 18 2026 — the batch-clear snapshot + anti-snipe hold are retired). The single
+      // `liveOwnedWhere` predicate is shared with the batch `listFaIneligiblePlayerIds` (the waivers pool)
+      // and the `claimFreeAgent` re-check, so the offered list, this re-check, and the grant cannot drift.
+      // The free-agency WINDOW phase is gated separately by `validateFaGrant` (step 1), which is why the
+      // `window` (still returned) is no longer consulted for eligibility.
       const faEligible =
-        T !== null &&
-        (await prisma.rosterPlayer.count({
-          where: snapshotOwnershipWhere(leagueId, T, playerId),
-        })) === 0;
+        (await prisma.rosterPlayer.count({ where: liveOwnedWhere(leagueId, playerId) })) === 0;
       return { position: p.position, window, faEligible };
     },
 
@@ -599,28 +578,28 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
     }): Promise<"granted" | "conflict"> {
       try {
         await prisma.$transaction(async (tx) => {
-          // Resolve the add target's period batch-clear instant T (the snapshot) inside the tx. A pinned
-          // `periodId` (commish --period) resolves THAT period's batch_cleared_at directly; otherwise the
-          // add's next-still-acquirable fixture infers it (which for an already-played add points at a
-          // still-sealed later MD → the wrong fa-conflict the pin repairs).
+          // WINDOW guard (NOT eligibility): the add target's period must have cleared its batch (be in
+          // its free-agency phase) inside the tx. A pinned `periodId` (commish --period) resolves THAT
+          // period's batch_cleared_at directly; otherwise the add's next-still-acquirable fixture infers
+          // it (which for an already-played add points at a still-sealed later MD → the wrong fa-conflict
+          // the pin repairs). Unchanged by the live-unowned move — this is the sealed→FA latch, not the
+          // ownership predicate; the route already gated it (defensive belt-and-suspenders / commish path).
           const player = await tx.player.findUnique({
             where: { id: playerAddId },
             select: { teamId: true },
           });
           const window = await resolveAddPeriodWindow(tx, player?.teamId ?? null, periodId);
           const T = window?.batchClearedAt ?? null;
-          if (T === null) throw new FaConflict(); // window not open (defensive — the handler gated it)
+          if (T === null) throw new FaConflict(); // the period's batch window is not open
 
-          // Re-check FA eligibility under the SAME snapshot predicate (catches the claimed-then-dropped
-          // race the active-ownership unique alone would miss).
-          const stillOpen = await tx.rosterPlayer.count({
-            where: {
-              leagueId,
-              playerId: playerAddId,
-              OR: [{ droppedAt: null }, { droppedAt: { gte: T } }],
-            },
+          // Re-check FA eligibility under the LIVE-UNOWNED predicate (commish decision Jun 18 2026): the
+          // add must hold NO active roster row right now — the SAME `liveOwnedWhere` the pool + per-player
+          // re-check use (no longer snapshot-anchored). Catches the claimed-then-dropped race the
+          // active-ownership unique alone would miss.
+          const activeOwners = await tx.rosterPlayer.count({
+            where: liveOwnedWhere(leagueId, playerAddId),
           });
-          if (stillOpen !== 0) throw new FaConflict();
+          if (activeOwners !== 0) throw new FaConflict();
 
           if (playerDropId !== null) {
             const dropped = await tx.rosterPlayer.updateMany({

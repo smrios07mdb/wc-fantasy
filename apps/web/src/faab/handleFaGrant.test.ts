@@ -6,7 +6,7 @@ import { handleFaGrant } from "./handleFaGrant";
 /**
  * The gated $0 free-agency route (DECISIONS.md → Theme D amendment, Prompt 48). Identity FIRST — reject
  * 401/403 BEFORE any store access (the bid-route template) — then window gate (free-agency phase only)
- * + snapshot eligibility + drop/roster rules, then an atomic first-come claim. Exercised against the
+ * + live-unowned eligibility + drop/roster rules, then an atomic first-come claim. Exercised against the
  * in-memory FA store double.
  */
 
@@ -53,7 +53,8 @@ function freshStore(opts: { lockedDrops?: string[]; leagueOwned?: string[] } = {
         },
         faEligible: true,
       },
-      DROPPED_THIS_WINDOW: { position: "MID", window: FA_WINDOW, faEligible: false },
+      // Live-unowned (Jun 18 2026): a player dropped THIS window holds no active spot → eligible.
+      DROPPED_THIS_WINDOW: { position: "MID", window: FA_WINDOW, faEligible: true },
     },
     lockedDrops: opts.lockedDrops,
     leagueOwned: opts.leagueOwned,
@@ -136,14 +137,17 @@ describe("handleFaGrant — window + eligibility + grant", () => {
     expect((res.body as { error: string }).error).toBe("fa-window-closed");
   });
 
-  it("rejects a player dropped THIS window — not grabbable (409 fa-not-eligible, snapshot rule)", async () => {
+  it("grants a player dropped THIS window — live-unowned, no active spot (200)", async () => {
+    // The flip from the snapshot rule: the anti-snipe hold is retired (Jun 18 2026), so a player dropped
+    // during the window (a batch droppee or a manual mid-window drop) is a free agent immediately.
     const store = freshStore();
     const res = await handleFaGrant(
       { resolveManager: async () => okOutcome, store, now: NOW },
       { ...body, playerAddId: "DROPPED_THIS_WINDOW" },
     );
-    expect(res.status).toBe(409);
-    expect((res.body as { error: string }).error).toBe("fa-not-eligible");
+    expect(res.status).toBe(200);
+    expect(store.ownedBy("A")).toContain("DROPPED_THIS_WINDOW");
+    expect(store.ownedBy("A")).not.toContain("DROP");
   });
 
   it("enforces drop-lock (409 drop-locked) without granting", async () => {

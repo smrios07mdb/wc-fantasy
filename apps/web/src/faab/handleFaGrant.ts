@@ -7,9 +7,10 @@
  *      access (a $0 grab is a strict SELF op — a commissioner may not grab for another manager);
  *   2. window gate — the add target's period must be in its FREE-AGENCY phase (post-batch, pre-first-
  *      kickoff). Sealed-bid → bid instead; locked → window over;
- *   3. snapshot eligibility — the target must be an open FA (unowned at this period's batch-clear AND
- *      currently unowned; the IO layer resolves it from roster history). NOT live-unowned, so a player
- *      dropped during the window is not grabbable;
+ *   3. live-unowned eligibility — the target must hold NO active roster spot right now (the IO layer
+ *      resolves it from roster history). A player dropped during the window — by a winning batch bid or a
+ *      manual mid-window drop — IS grabbable (commish decision Jun 18 2026; the Prompt-48 batch-clear
+ *      snapshot + anti-snipe hold are retired);
  *   4. drop + roster rules (shared `validateFaGrant`);
  *   5. atomic first-come claim — `claimFreeAgent` applies the add/drop in ONE transaction gated on the
  *      active-ownership unique; the loser of a race gets a clean `fa-conflict` (409), fully rolled back.

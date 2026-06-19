@@ -328,11 +328,11 @@ interface MemFaManager {
 
 export interface MemoryFaGrantSeed {
   managers: MemFaManager[];
-  /** playerId → its FA facts (position, the add target's period window, FA-eligibility snapshot). */
+  /** playerId → its FA facts (position, the add target's period window, live-unowned FA-eligibility). */
   players: Record<string, FaTargetFacts>;
   /** periodId → that period's window, for the commissioner `--period` pin: `claimFreeAgent` resolves the
-   *  snapshot from the NAMED period's batch_cleared_at instead of the add's next-fixture-inferred one
-   *  (mirrors prismaStore.resolveAddPeriodWindow's pinned branch). */
+   *  WINDOW (the sealed→FA latch) from the NAMED period's batch_cleared_at instead of the add's
+   *  next-fixture-inferred one (mirrors prismaStore.resolveAddPeriodWindow's pinned branch). */
   periods?: Record<string, PeriodWindowView>;
   /** players LOCKED by play (lineup_slot.locked_at in an active matchday) — undroppable until it ends. */
   lockedDrops?: string[];
@@ -397,16 +397,18 @@ export class MemoryFaGrantStore implements FaGrantStore {
     runAt: Date;
     periodId?: string | null;
   }): Promise<"granted" | "conflict"> {
-    // Resolve the add's snapshot window the way prismaStore.claimFreeAgent does: a pinned period (commish
-    // --period) overrides the add's inferred next-fixture window. A null batch_cleared_at = the period is
-    // still sealed ("window not open") → conflict, mirroring the prismaStore `if (T === null)` guard.
+    // Resolve the add's WINDOW the way prismaStore.claimFreeAgent does: a pinned period (commish --period)
+    // overrides the add's inferred next-fixture window. A null batch_cleared_at = the period is still
+    // sealed ("window not open") → conflict, mirroring the prismaStore `if (T === null)` guard. This is the
+    // sealed→FA latch, NOT eligibility — unchanged by the live-unowned move.
     const window =
       input.periodId != null
         ? this.periods[input.periodId]
         : this.players[input.playerAddId]?.window;
     if (!window || window.batchClearedAt === null) return "conflict";
 
-    // First-come guard: the add target must still be unowned league-wide (the active-ownership unique).
+    // Live-unowned first-come guard: the add target must hold no active spot league-wide right now (the
+    // active-ownership unique). Already live (no snapshot term) — so it MATCHES the prismaStore re-check.
     if (this.leagueOwned.has(input.playerAddId)) return "conflict";
     const m = this.managers.get(input.managerId);
     if (!m) return "conflict";
