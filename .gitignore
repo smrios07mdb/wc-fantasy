@@ -39,6 +39,10 @@ coverage/
 # Keep the committed brain-file memory dir tracked via the negation.
 .claude/*
 !.claude/memory/
+!.claude/skills/
+!.claude/agents/
+!.claude/hooks/
+!.claude/settings.json
 
 # OS / editor
 .DS_Store
