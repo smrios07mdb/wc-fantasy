@@ -37,35 +37,41 @@ describe("comparePeriodPairwise (reusable H2H helper)", () => {
   });
 });
 
-describe("periodRecords — strict W/L (a tie is NEITHER)", () => {
-  it("W = strictly-below count, L = strictly-above count for distinct scores", () => {
+describe("periodRecords — W/L/D (a tie is a recorded Draw; W+L+D = opponents)", () => {
+  it("W = strictly-below, L = strictly-above, D = 0 for distinct scores", () => {
     const recs = periodRecords(pts({ A: 30, B: 20, C: 10 }));
     const byId = Object.fromEntries(recs.map((r) => [r.managerId, r]));
-    expect(byId.A).toMatchObject({ w: 2, l: 0 });
-    expect(byId.B).toMatchObject({ w: 1, l: 1 });
-    expect(byId.C).toMatchObject({ w: 0, l: 2 });
+    expect(byId.A).toMatchObject({ w: 2, l: 0, d: 0 });
+    expect(byId.B).toMatchObject({ w: 1, l: 1, d: 0 });
+    expect(byId.C).toMatchObject({ w: 0, l: 2, d: 0 });
+    // Every manager is compared against N−1 opponents: W+L+D must sum to that for each one.
+    for (const r of recs) expect(r.w + r.l + r.d).toBe(2);
   });
 
-  it("a tied pair gets neither a W nor an L — and L ≠ N−1−W", () => {
+  it("a tied pair is recorded as a Draw for BOTH — the tie lands in d, never in w/l", () => {
     // N=3: A above, B and C tied below.
     const recs = periodRecords(pts({ A: 50, B: 20, C: 20 }));
     const byId = Object.fromEntries(recs.map((r) => [r.managerId, r]));
 
-    expect(byId.B).toMatchObject({ w: 0, l: 1 }); // loses to A only; the B–C tie is neither
-    expect(byId.C).toMatchObject({ w: 0, l: 1 });
-    // The whole point of the spec: the buggy `L = N−1−W` would have charged B a 2nd loss.
+    expect(byId.A).toMatchObject({ w: 2, l: 0, d: 0 }); // beats both
+    expect(byId.B).toMatchObject({ w: 0, l: 1, d: 1 }); // loses to A; the B–C tie is now a Draw
+    expect(byId.C).toMatchObject({ w: 0, l: 1, d: 1 });
+    // A tie is still NEITHER folded into w NOR l (the old strict rule survives in w/l) — it is now
+    // also COUNTED, in d. The invariant W+L+D = N−1 holds for every manager.
     const N = 3;
+    for (const r of recs) expect(r.w + r.l + r.d).toBe(N - 1);
+    // The old buggy `L = N−1−W` would have charged each tied manager a 2nd loss; d absorbs it instead.
     const b = byId.B!;
     expect(b.l).not.toBe(N - 1 - b.w); // 1 ≠ (3−1−0)=2
-    expect(b.w + b.l).toBeLessThan(N - 1); // 0+1 < 2 because of the tie
   });
 
-  it("two inactive 0s tie (neither charged) while an active manager banks the free win", () => {
+  it("two inactive 0s draw each other (counted in d) while an active manager banks the free win", () => {
     const recs = periodRecords(pts({ Active: 12, IdleX: 0, IdleY: 0 }));
     const byId = Object.fromEntries(recs.map((r) => [r.managerId, r]));
-    expect(byId.Active).toMatchObject({ w: 2, l: 0 }); // free win over each idle 0
-    expect(byId.IdleX).toMatchObject({ w: 0, l: 1 }); // loses to Active; ties IdleY → neither
-    expect(byId.IdleY).toMatchObject({ w: 0, l: 1 });
+    expect(byId.Active).toMatchObject({ w: 2, l: 0, d: 0 }); // free win over each idle 0
+    expect(byId.IdleX).toMatchObject({ w: 0, l: 1, d: 1 }); // loses to Active; draws IdleY → d
+    expect(byId.IdleY).toMatchObject({ w: 0, l: 1, d: 1 });
+    for (const r of recs) expect(r.w + r.l + r.d).toBe(2);
   });
 });
 
@@ -73,7 +79,7 @@ describe("computeStandings — cumulative all-play-all + seeding", () => {
   const periods = (...maps: Record<string, number>[]): PeriodScores[] =>
     maps.map((m, i) => ({ periodId: `MD${i + 1}`, scores: pts(m) }));
 
-  it("sums Ws/Ls/points across periods", () => {
+  it("sums Ws/Ls/Ds/points across periods (no draws when all scores distinct ⇒ allPlayAllD = 0)", () => {
     const rows = computeStandings(
       periods(
         { A: 30, B: 20, C: 10 }, // A:2-0, B:1-1, C:0-2
@@ -81,9 +87,54 @@ describe("computeStandings — cumulative all-play-all + seeding", () => {
       ),
     );
     const byId = Object.fromEntries(rows.map((r) => [r.managerId, r]));
-    expect(byId.A).toMatchObject({ allPlayAllW: 2, allPlayAllL: 2, totalPoints: 35 });
-    expect(byId.B).toMatchObject({ allPlayAllW: 3, allPlayAllL: 1, totalPoints: 45 });
-    expect(byId.C).toMatchObject({ allPlayAllW: 1, allPlayAllL: 3, totalPoints: 25 });
+    expect(byId.A).toMatchObject({
+      allPlayAllW: 2,
+      allPlayAllL: 2,
+      allPlayAllD: 0,
+      totalPoints: 35,
+    });
+    expect(byId.B).toMatchObject({
+      allPlayAllW: 3,
+      allPlayAllL: 1,
+      allPlayAllD: 0,
+      totalPoints: 45,
+    });
+    expect(byId.C).toMatchObject({
+      allPlayAllW: 1,
+      allPlayAllL: 3,
+      allPlayAllD: 0,
+      totalPoints: 25,
+    });
+  });
+
+  it("sums DRAWS across periods, and the seed order is UNCHANGED by them (W → points → id)", () => {
+    // 3 managers, 2 periods. A & B tie each other BOTH periods (draws accumulate); C wins/loses outright.
+    //   MD1: A=20, B=20, C=10 → A:1-0-1, B:1-0-1, C:0-2-0
+    //   MD2: A=20, B=20, C=30 → A:0-1-1, B:0-1-1, C:2-0-0
+    // Cumulative: A 1-1-2 (40 pts), B 1-1-2 (40 pts), C 2-2-0 (40 pts). Equal points all round.
+    const rows = computeStandings(periods({ A: 20, B: 20, C: 10 }, { A: 20, B: 20, C: 30 }));
+    const byId = Object.fromEntries(rows.map((r) => [r.managerId, r]));
+    expect(byId.A).toMatchObject({
+      allPlayAllW: 1,
+      allPlayAllL: 1,
+      allPlayAllD: 2,
+      totalPoints: 40,
+    });
+    expect(byId.B).toMatchObject({
+      allPlayAllW: 1,
+      allPlayAllL: 1,
+      allPlayAllD: 2,
+      totalPoints: 40,
+    });
+    expect(byId.C).toMatchObject({
+      allPlayAllW: 2,
+      allPlayAllL: 2,
+      allPlayAllD: 0,
+      totalPoints: 40,
+    });
+    // Seed is decided by W (then points, then id) — draws are informational and NEVER tilt it: C (2W,
+    // 0D) seeds ABOVE A (1W, 2D) despite having fewer draws, and the A/B tie breaks on managerId.
+    expect(rows.map((r) => `${r.managerId}#${r.seed}`)).toEqual(["C#1", "A#2", "B#3"]);
   });
 
   it("seeds by W desc when records differ (the primary key)", () => {
@@ -109,9 +160,11 @@ describe("computeStandings — cumulative all-play-all + seeding", () => {
   it("resolves a fully-tied pair (equal W AND total_points) by the deterministic managerId fallback", () => {
     // Two managers with identical period scores → identical W and total_points.
     const rows = computeStandings(periods({ zeta: 20, alpha: 20 }));
-    // Both 0-0 (their mutual game is a tie), both 20 pts → fallback to managerId asc.
+    // Both 0-0 with a single mutual Draw (1D each), both 20 pts → fallback to managerId asc.
     expect(rows.map((r) => `${r.managerId}#${r.seed}`)).toEqual(["alpha#1", "zeta#2"]);
-    expect(rows.every((r) => r.allPlayAllW === 0 && r.allPlayAllL === 0)).toBe(true);
+    expect(
+      rows.every((r) => r.allPlayAllW === 0 && r.allPlayAllL === 0 && r.allPlayAllD === 1),
+    ).toBe(true);
   });
 
   it("is a pure function of its inputs (no mutation of the argument)", () => {

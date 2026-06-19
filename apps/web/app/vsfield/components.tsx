@@ -286,7 +286,9 @@ export function Leaderboard({
         <span>
           <b>You vs the field</b>
           <span>
-            {me ? `record ${me.record.w}–${me.record.l} · rank ${me.rank}` : "the aggregate view"}
+            {me
+              ? `record ${me.record.w}–${me.record.l}–${me.record.d} · rank ${me.rank}`
+              : "the aggregate view"}
           </span>
         </span>
       </button>
@@ -473,7 +475,7 @@ export function CompareBand({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
           <div className="v2-bp-id">
             <b>You</b>
             <span className="v2-bp-meta">
-              rank {me.rank} · {me.record.w}–{me.record.l} vs field
+              rank {me.rank} · {me.record.w}–{me.record.l}–{me.record.d} vs field
             </span>
           </div>
           <span className="v2-bp-score mono">{me.points}</span>
@@ -491,7 +493,7 @@ export function CompareBand({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
           <div className="v2-bp-id">
             <b>{opp.displayName}</b>
             <span className="v2-bp-meta">
-              rank {opp.rank} · {opp.record.w}–{opp.record.l} vs field
+              rank {opp.rank} · {opp.record.w}–{opp.record.l}–{opp.record.d} vs field
             </span>
           </div>
           <span className="v2-bp-score mono">{opp.points}</span>
@@ -666,7 +668,7 @@ export function SeasonTable({ season }: { season: SeasonEntry[] }) {
               </td>
               <td className="num">
                 <b className="mono">
-                  {s.allPlayAllW}-{s.allPlayAllL}
+                  {s.allPlayAllW}-{s.allPlayAllL}-{s.allPlayAllD}
                 </b>
               </td>
               <td className="num mono">{Math.round(s.winPct * 100)}%</td>
@@ -819,7 +821,9 @@ export function MaStandings({
         <span>
           <b>You vs the whole field</b>
           <span>
-            {me ? `record ${me.record.w}–${me.record.l} · rank ${me.rank}` : "the aggregate view"}
+            {me
+              ? `record ${me.record.w}–${me.record.l}–${me.record.d} · rank ${me.rank}`
+              : "the aggregate view"}
           </span>
         </span>
         <span className="ma-chev" aria-hidden="true">
@@ -856,7 +860,7 @@ function MaCompare({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
           <div className="ma-cmp-id">
             <b>You</b>
             <span>
-              {me.record.w}–{me.record.l} · rk {me.rank}
+              {me.record.w}–{me.record.l}–{me.record.d} · rk {me.rank}
             </span>
           </div>
         </div>
@@ -872,7 +876,7 @@ function MaCompare({ me, opp }: { me: FieldEntry; opp: FieldEntry }) {
           <div className="ma-cmp-id">
             <b>{opp.displayName}</b>
             <span>
-              {opp.record.w}–{opp.record.l} · rk {opp.rank}
+              {opp.record.w}–{opp.record.l}–{opp.record.d} · rk {opp.rank}
             </span>
           </div>
         </div>

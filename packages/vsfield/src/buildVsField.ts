@@ -172,6 +172,7 @@ export function buildVsField(input: BuildVsFieldInput): VsFieldView {
     const st = standingByManager.get(m.managerId);
     const w = st?.allPlayAllW ?? 0;
     const l = st?.allPlayAllL ?? 0;
+    const d = st?.allPlayAllD ?? 0;
     const byPeriod: SeasonPeriodChip[] = perPeriod.map((p) => {
       const r = p.byManager.get(m.managerId);
       return { periodId: p.periodId, w: r?.w ?? 0, l: r?.l ?? 0, points: r?.points ?? 0 };
@@ -184,7 +185,9 @@ export function buildVsField(input: BuildVsFieldInput): VsFieldView {
       rank: 0,
       allPlayAllW: w,
       allPlayAllL: l,
+      allPlayAllD: d,
       totalPoints: st?.totalPoints ?? 0,
+      // winPct intentionally stays w/(w+l) — draws are informational and excluded from win rate.
       winPct: w + l > 0 ? w / (w + l) : 0,
       byPeriod,
     };

@@ -7,9 +7,12 @@
  * `score_manager_period` rows and persists the result; the cross-manager arithmetic lives here.
  *
  * Regular season = "all-play-all power record": each `group_md` period, a manager's points are
- * compared against EVERY other manager; they bank a W for each one they STRICTLY outscore. A tie is
- * NEITHER a W nor an L for either side — so `W + L` can be `< N−1`. Cumulative across the periods,
- * then seeded by `W` desc, `total_points` desc.
+ * compared against EVERY other manager; they bank a W for each one they STRICTLY outscore, an L for
+ * each one that STRICTLY outscores them, and a D (Draw) for each tie. A tie is still NEITHER a W nor an
+ * L — it is now RECORDED as a Draw, so `W + L + D = N−1` (every comparison is accounted for). Cumulative
+ * across the periods, then seeded by `W` desc, `total_points` desc. DRAWS ARE INFORMATIONAL — they are
+ * summed for display but NEVER affect the seed (DECISIONS.md → Theme C amendment; this aligns the
+ * backend with design/design_reference/standings/data.jsx, which already models W/L/D, games = W+L+D).
  */
 
 /** One manager's points in one period — the `score_manager_period` row as the store hands it over. */
@@ -30,11 +33,16 @@ export interface PairwiseOutcome {
   opponentPoints: number;
 }
 
-/** Per-manager STRICT record for ONE period. A tie contributes to neither `w` nor `l`. */
+/**
+ * Per-manager all-play-all record for ONE period. A tie is NEITHER a `w` nor an `l` — it is recorded
+ * as a Draw in `d`. Invariant for every manager: `w + l + d` = opponents compared (`N−1`).
+ */
 export interface PeriodRecord {
   managerId: string;
   w: number;
   l: number;
+  /** Draws (ties) this period — informational; never folded into `w`/`l`, never affects the seed. */
+  d: number;
   points: number;
 }
 
@@ -48,6 +56,8 @@ export interface StandingComputation {
   managerId: string;
   allPlayAllW: number;
   allPlayAllL: number;
+  /** Cumulative Draws (ties) across periods — informational; does NOT affect the seed. */
+  allPlayAllD: number;
   totalPoints: number;
   seed: number;
 }
@@ -81,23 +91,27 @@ export function comparePeriodPairwise(scores: ManagerPeriodPoints[]): PairwiseOu
 }
 
 /**
- * Per-manager strict W/L for one period, derived FROM {@link comparePeriodPairwise} so the record and
- * the H2H view can never drift. `W` = #strictly-below, `L` = #strictly-above; a tie is neither — we do
- * NOT compute `L` as `N−1−W` (that would charge both tied managers a loss).
+ * Per-manager W/L/D for one period, derived FROM {@link comparePeriodPairwise} so the record and the
+ * H2H view can never drift. `W` = #strictly-below, `L` = #strictly-above, `D` = #ties. A tie is never
+ * folded into `w`/`l` (we do NOT compute `L` as `N−1−W`, which would charge both tied managers a loss)
+ * — it is counted in `d` instead, so `w + l + d` = opponents compared.
  */
 export function periodRecords(scores: ManagerPeriodPoints[]): PeriodRecord[] {
   const pointsById = new Map(scores.map((s) => [s.managerId, s.points] as const));
   const w = new Map<string, number>();
   const l = new Map<string, number>();
+  const d = new Map<string, number>();
   for (const o of comparePeriodPairwise(scores)) {
     if (o.result === "win") w.set(o.managerId, (w.get(o.managerId) ?? 0) + 1);
     else if (o.result === "loss") l.set(o.managerId, (l.get(o.managerId) ?? 0) + 1);
+    else d.set(o.managerId, (d.get(o.managerId) ?? 0) + 1); // "tie" → a recorded Draw
   }
   return [...pointsById.entries()]
     .map(([managerId, points]) => ({
       managerId,
       w: w.get(managerId) ?? 0,
       l: l.get(managerId) ?? 0,
+      d: d.get(managerId) ?? 0,
       points,
     }))
     .sort((a, b) => cmpId(a.managerId, b.managerId));
@@ -111,15 +125,16 @@ export function periodRecords(scores: ManagerPeriodPoints[]): PeriodRecord[] {
  * manager appears with a `0` row and is a free win for everyone strictly above — no special case).
  *
  * Seed order: `all_play_all_W` desc → `total_points` desc (the locked Theme-C tiebreak) → `managerId`
- * asc. TODO(confirm): Theme C defines no further regular-season tiebreak beyond total points; the
+ * asc. `all_play_all_D` is summed across periods but is INFORMATIONAL — it never enters the comparator.
+ * TODO(confirm): Theme C defines no further regular-season tiebreak beyond total points; the
  * `managerId` fallback only guarantees determinism — a true remaining tie is the commissioner's call.
  */
 export function computeStandings(periods: PeriodScores[]): StandingComputation[] {
-  const agg = new Map<string, { w: number; l: number; points: number }>();
-  const touch = (id: string): { w: number; l: number; points: number } => {
+  const agg = new Map<string, { w: number; l: number; d: number; points: number }>();
+  const touch = (id: string): { w: number; l: number; d: number; points: number } => {
     let a = agg.get(id);
     if (!a) {
-      a = { w: 0, l: 0, points: 0 };
+      a = { w: 0, l: 0, d: 0, points: 0 };
       agg.set(id, a);
     }
     return a;
@@ -130,6 +145,7 @@ export function computeStandings(periods: PeriodScores[]): StandingComputation[]
       const a = touch(rec.managerId);
       a.w += rec.w;
       a.l += rec.l;
+      a.d += rec.d;
       a.points += rec.points;
     }
   }
@@ -138,9 +154,11 @@ export function computeStandings(periods: PeriodScores[]): StandingComputation[]
     managerId,
     allPlayAllW: a.w,
     allPlayAllL: a.l,
+    allPlayAllD: a.d,
     totalPoints: a.points,
     seed: 0,
   }));
+  // Seed comparator UNCHANGED — `allPlayAllD` is summed for display but never enters the sort.
   rows.sort(
     (x, y) =>
       y.allPlayAllW - x.allPlayAllW ||

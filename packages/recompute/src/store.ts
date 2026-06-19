@@ -34,6 +34,7 @@ export interface StandingUpsert {
   managerId: string;
   allPlayAllW: number;
   allPlayAllL: number;
+  allPlayAllD: number;
   totalPoints: number;
   seed: number;
 }

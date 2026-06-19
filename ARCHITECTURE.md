@@ -544,8 +544,11 @@ not by hopeful application code:
   of the raw + manual + rating + role.
 - `score_manager_period` — `(manager_id, period_id)`; points, computed_at. Aggregation over the
   manager's **locked** lineup_slots for the period.
-- `standing` — league_id, manager_id, scope; all_play_all_W / _L, total_points, seed. Derived
-  across managers (all-play-all).
+- `standing` — league_id, manager_id, scope; all_play_all_W / _L / _D, total_points, seed. Derived
+  across managers (all-play-all). `all_play_all_d` (added 2026-06-19, migration
+  `20260619120000_standing_all_play_all_d`, `INTEGER NOT NULL DEFAULT 0`) records tied matchups as
+  informational Draws: per period `W + L + D` = opponents compared. **Seeding is UNCHANGED** (`W`
+  desc → `total_points` desc); draws never enter the comparator (DECISIONS.md → Theme C amendment).
 
 > **Late-correction freeze policy (DECIDED — Theme C):** because scores recompute, a stat/rating
 > correction landing *after* a period closes would restate that period. Policy: a period stays

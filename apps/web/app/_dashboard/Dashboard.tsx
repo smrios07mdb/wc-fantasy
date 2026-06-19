@@ -288,8 +288,10 @@ function RecordModule({ vsField }: { vsField: VsFieldView }) {
             <span>{me.allPlayAllW}</span>
             <span className="db-rec-dash">-</span>
             <span>{me.allPlayAllL}</span>
+            <span className="db-rec-dash">-</span>
+            <span>{me.allPlayAllD}</span>
           </div>
-          <span className="t-micro text-tertiary">season W-L</span>
+          <span className="t-micro text-tertiary">season W-L-D</span>
         </div>
         <div className="db-rec-split">
           <div className="db-rec-stat">
@@ -343,7 +345,7 @@ function StandingsModule({ vsField }: { vsField: VsFieldView }) {
             <MgrAvatar id={e.managerId} displayName={e.displayName} size="sm" />
             <span className="db-stand-name">{e.isMe ? "You" : e.displayName}</span>
             <span className="db-stand-wl">
-              {e.allPlayAllW}-{e.allPlayAllL}
+              {e.allPlayAllW}-{e.allPlayAllL}-{e.allPlayAllD}
             </span>
             <span className="db-stand-pts mono">{e.totalPoints}</span>
           </div>

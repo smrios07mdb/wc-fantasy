@@ -838,6 +838,7 @@ model Standing {
   scope       StandingScope
   allPlayAllW Int           @default(0) @map("all_play_all_w")
   allPlayAllL Int           @default(0) @map("all_play_all_l")
+  allPlayAllD Int           @default(0) @map("all_play_all_d")
   totalPoints Int           @default(0) @map("total_points")
   seed        Int?
   computedAt  DateTime      @default(now()) @map("computed_at") @db.Timestamptz(6)

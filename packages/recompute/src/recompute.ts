@@ -132,6 +132,7 @@ export async function recomputeStanding(store: RecomputeStore, leagueId: string)
       managerId: row.managerId,
       allPlayAllW: row.allPlayAllW,
       allPlayAllL: row.allPlayAllL,
+      allPlayAllD: row.allPlayAllD,
       totalPoints: row.totalPoints,
       seed: row.seed,
     });

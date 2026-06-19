@@ -114,10 +114,10 @@ const SCORES: ManagerPeriodPoints[] = [
 ];
 
 const STANDINGS = [
-  { managerId: "m1", allPlayAllW: 6, allPlayAllL: 1, totalPoints: 120, seed: 1 },
-  { managerId: "m2", allPlayAllW: 5, allPlayAllL: 2, totalPoints: 110, seed: 2 },
-  { managerId: "m3", allPlayAllW: 2, allPlayAllL: 5, totalPoints: 60, seed: 3 },
-  { managerId: "m4", allPlayAllW: 0, allPlayAllL: 7, totalPoints: 0, seed: 4 },
+  { managerId: "m1", allPlayAllW: 6, allPlayAllL: 1, allPlayAllD: 1, totalPoints: 120, seed: 1 },
+  { managerId: "m2", allPlayAllW: 5, allPlayAllL: 2, allPlayAllD: 0, totalPoints: 110, seed: 2 },
+  { managerId: "m3", allPlayAllW: 2, allPlayAllL: 5, allPlayAllD: 1, totalPoints: 60, seed: 3 },
+  { managerId: "m4", allPlayAllW: 0, allPlayAllL: 7, allPlayAllD: 0, totalPoints: 0, seed: 4 },
 ];
 
 const PER_PERIOD = [
@@ -483,9 +483,10 @@ describe("buildVsField — season view reads from standing", () => {
     const m1 = season(view, "m1");
     expect(m1.allPlayAllW).toBe(6);
     expect(m1.allPlayAllL).toBe(1);
+    expect(m1.allPlayAllD).toBe(1); // cumulative draws threaded straight off the standing row
     expect(m1.totalPoints).toBe(120);
     expect(m1.isMe).toBe(true);
-    expect(m1.winPct).toBeCloseTo(6 / 7, 5);
+    expect(m1.winPct).toBeCloseTo(6 / 7, 5); // draws excluded from win rate
   });
 
   it("derives the per-period chips from perPeriodScores (display enrichment)", () => {

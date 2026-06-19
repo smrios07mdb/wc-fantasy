@@ -496,6 +496,14 @@ an open question.
   1v1 framing.** Chosen because the group stage is only ~3 matchday-waves; all-play-all turns 3
   periods into 3×(N−1) head-to-heads, which sorts a field reliably — and *better* as the field
   grows.
+  - **AMENDMENT (2026-06-19, commissioner).** A TIED matchday matchup is now **recorded as a Draw**,
+    reversing the original "a tie is NEITHER a W nor an L" rule. Records read **W–L–D** where
+    **W + L + D = opponents compared** that period. **Seeding is UNCHANGED** — still `all_play_all_W`
+    desc → `total_points` desc → `managerId` asc; **draws are informational and never affect the
+    seed.** This resolves the prior design-vs-backend conflict **in the design's favor**: the backend
+    now matches `design/design_reference/standings/data.jsx`, which already models W/L/D with
+    `games = W + L + D`. Infra: new `standing.all_play_all_d` column (ARCHITECTURE.md §4); the pure
+    `computeStandings` sums per-period ties into `allPlayAllD` (the seed comparator is untouched).
 - **Scoring period = group "matchday," defined per fixture.** Each team plays exactly 3 group
   games, so MD1 = every team's 1st game (each player has exactly one); three waves. Close each
   wave when its last fixture ends. The staggered group calendar doesn't break this.

@@ -73,11 +73,12 @@ export interface PeriodMatchInput {
   awayScore: number | null;
 }
 
-/** A season standing row read from the `standing` table — the AUTHORITATIVE W/L/points/seed. */
+/** A season standing row read from the `standing` table — the AUTHORITATIVE W/L/D/points/seed. */
 export interface SeasonStandingInput {
   managerId: string;
   allPlayAllW: number;
   allPlayAllL: number;
+  allPlayAllD: number;
   totalPoints: number;
   seed: number | null;
 }
@@ -190,8 +191,10 @@ export interface SeasonEntry {
   rank: number;
   allPlayAllW: number;
   allPlayAllL: number;
+  /** Cumulative Draws across periods — informational; never affects seed/rank. */
+  allPlayAllD: number;
   totalPoints: number;
-  /** w / (w + l); 0 when nothing has been played. */
+  /** w / (w + l); 0 when nothing has been played. Draws are excluded from win rate. */
   winPct: number;
   byPeriod: SeasonPeriodChip[];
 }

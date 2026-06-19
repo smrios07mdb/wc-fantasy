@@ -182,18 +182,19 @@ function bannerContent(
         : (currentLabel ?? "—");
     const W = mySeasonEntry?.allPlayAllW ?? 0;
     const L = mySeasonEntry?.allPlayAllL ?? 0;
+    const D = mySeasonEntry?.allPlayAllD ?? 0;
     const pts = mySeasonEntry?.totalPoints ?? 0;
     const rank = mySeasonEntry?.rank ?? 0;
     return {
       eyebrow: PHASE_EYEBROW.group,
       title: myEntry ? `You're ranked #${rank}` : "Group stage underway",
-      sub: `All-play-all group stage · ${W}-${L} record · ${pts} pts total`,
+      sub: `All-play-all group stage · ${W}-${L}-${D} record · ${pts} pts total`,
       big: mdLabel,
       bigMono: true,
       ctaLabel: "Vs the field",
       ctaHref: "/vsfield",
       secondary: [
-        { l: "Record", v: `${W}-${L}` },
+        { l: "Record", v: `${W}-${L}-${D}` },
         { l: "Points", v: `${pts}` },
       ],
     };
