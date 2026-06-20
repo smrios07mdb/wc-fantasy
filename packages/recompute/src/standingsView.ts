@@ -34,12 +34,13 @@ import {
 } from "./standing";
 
 /**
- * The provisional playoff field size shown during the group stage (Theme C: the field is FLEXIBLE —
- * likely 8 or 10 — and is fixed ONLY at the group→playoff transition). The cut line is provisional
- * until then; 8 is the design's default (`standings/data.jsx` `ST_FIELD_DEFAULT`). The loader may pass
+ * The provisional playoff field size shown during the group stage. Theme C is now LOCKED at 10
+ * (commissioner-decided): the cut schedule `cutScheduleFor(10)` = {2,2,2,2,1} collapses the field
+ * 10→8→6→4→2→champion, and is applied for real only at the group→playoff transition (via `--field 10`).
+ * The cut line here is the same provisional 10-wide line surfaced on `/standings`. The loader may pass
  * an explicit `fieldSize`; absent that, this default is used.
  */
-export const DEFAULT_PLAYOFF_FIELD_SIZE = 8;
+export const DEFAULT_PLAYOFF_FIELD_SIZE = 10;
 
 /** Stable, deterministic id ordering — the seeding fallback / emitted-order tiebreak (mirrors standing.ts). */
 const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
