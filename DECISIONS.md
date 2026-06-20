@@ -2814,3 +2814,15 @@ subagent for audit work. Auto-invocation never drives a side-effectful action.
 **Supersedes.** Nothing; this is additive tooling config only. No app logic, no migration, no scoring change.
 
 **Auditor P2/P3 findings parked.** The 2026-06-19 auditor run surfaced two findings — P2 (`loadWaivers.ts` + `prismaStore.ts:678` read `league.status` violating the data-existence phase contract; see ARCHITECTURE.md §21 KNOWN-EXCEPTION) and P3 (no switch+never exhaustiveness on `league.status`; `"complete"` is a dead branch). Both are parked for their own clearance-required threads; neither is fixed inline here. Decision: scope isolation + live-FAAB caution (the waivers/FAAB path is live and the risk of an inline fix outweighs the drift).
+
+---
+
+## Pool leaderboard → manager picks drill-in = reveal-gate reuse, no new read path (2026-06-20)
+
+**Decision.** The `/pool` "tap a leaderboard manager → see their picks" drill-in (`feat/pool-manager-picks`, merged `f9ae476`) is a **pure re-projection of the already-gated `PoolView`** — it introduces **no new read path**. Opening the panel does not fetch, query, or hit `/api`; it derives entirely from the props the server already handed down.
+
+**Why it cannot leak pre-kickoff picks.** The anti-copying reveal gate is **inherited, not re-implemented**. Every per-manager prediction in `PoolView` already lives in two server-built fields: `fixture.myPick` (the viewer's own — always revealed) and `fixture.others[*]` (other managers' picks the server chose to reveal — ONLY for matches past kickoff, via the Prompt-40 §3 `store.readVisiblePicks` gated read that `loadPool` is built solely from). The pure `selectManagerPicks(view, managerId)` (`apps/web/src/pool/managerPicks.ts`) reads only those two fields, so a not-yet-kicked-off pick of **another** manager is simply absent from `fixture.others` and can never appear in the panel.
+
+**Self vs others = viewer identity, not the leaderboard flag.** `isViewer = (managerId === view.managerId)` is the SINGLE source of truth for BOTH the data branch (`myPick` vs `others`) AND the displayed `isMe` / panel title — so the picks shown can never diverge from whose name labels them. The leaderboard row supplies only the display name (`nameOf`, left-joined so every member resolves). The viewer's own pre-kickoff picks ARE shown (you may see your own predictions before lock); everyone else's are gate-withheld.
+
+**Scope.** READ-ONLY, pool-surface only (`apps/web/src/pool/*`): pure `selectManagerPicks` + `ManagerPicksView`/`ManagerPickRow` (chronological revealed rows, settled-only `outcome` grading) + the `components.tsx` panel + `PoolClient.tsx` wiring + `pool.css`. No engine/schema/migration/RLS/`/api`/scoring change. The drill-in also surfaces the **Completed archive** (unlike `poolLive.flattenPickFixtures`, which omits completed). Tests: `managerPicks.test.ts` (gate inheritance — other-manager pre-kickoff absent, self pre-kickoff present, grading, chronology) + `ManagerPicks.test.tsx` (RTL panel) + `poolContracts.test.ts`. **2415 passed | 21 skipped.** See PROJECT.md (2026-06-20 entry).
