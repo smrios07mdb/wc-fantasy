@@ -361,6 +361,23 @@ single hardcoded default formation can be **unfieldable** — it stranded MR. ZE
   no in-place undo post-save (one-way door by design); ~1-tick post-kickoff window where `hasPlayed` reads
   false until the first recompute row lands (≤60s, surfaced not worked around).
   Open: legend-copy wording ("Forfeited" vs "Played") — deferred to a UX pass.
+- **Forfeit-sub spurious-error fix — SHIPPED (`9935472`, merged to `main`, render-deployed).** A forfeit-sub
+  save SUCCEEDS (POST `/api/lineup` → 200 `{ok:true}`, slot voided server-side) but the screen then
+  re-painted a `forfeit-requires-confirm` error in the SaveBar reason span beside the "Lineup saved." toast.
+  Root cause: on success the client cleared `pendingForfeits`, so the post-save re-validation
+  (`evaluateProposal` → `validateLineup` rule 4c) ran against the **still-stale immutable SSR
+  `period.locks`/`slotMeta`** — which model the just-benched man as an un-voided played STARTER and are never
+  refetched after a save — and re-demanded a confirm. **Fix: do NOT clear `pendingForfeits` on success**
+  (client-only; validator/contract/persistence byte-untouched). Keeping the confirm keeps the no-op re-save
+  inert (the controller derives voids from its OWN authoritative slot state) and a full reload loads the slot
+  as voided + benched, which never re-trips the rule. Covered by an RTL regression in `ForfeitConfirm.test.tsx`
+  (drives the full forfeit→fill→save path, asserts success toast + NO `is-error` forfeit reason).
+  - **Known residual (tracked follow-up — its own thread):** switching period **away and back** re-arms the
+    same spurious error, because `onSelectPeriod` resets `pendingForfeits` while the SSR `slotMeta`/`locks`
+    remain stale (the just-forfeited slot still reads as a played, un-voided starter). The full fix is
+    **contract-adjacent** — it needs a post-save `slotMeta`/`locks` refetch (or lifting the period lineups
+    into refetchable state) so re-validation runs against authoritative state rather than frozen SSR props —
+    so it's deferred out of this client-only patch.
 
 ### "Set multiple lineups" — defined
 Pre-set lineups for **multiple upcoming match windows/periods in advance**; within a period,

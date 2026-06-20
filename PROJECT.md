@@ -138,7 +138,19 @@ is merged** (`b63f0a4` / `9811ff4` / `121f45f`) — earlier "merge HELD" notes a
 UI is merged and render-verified** (`9bee8d1`) — played starters show a pts badge + "Forfeit" affordance (no
 padlock — movable, not hard-locked); `ForfeitConfirmSheet` is the one-way confirm gate; Cancel reverts the bench
 swap fully; pre-flight `fillEligibleIds` empty → affordance disabled; voided slots render strikethrough +
-non-interactive. See ARCHITECTURE §16 (C2 section) + DECISIONS (forfeit amendment). The
+non-interactive. See ARCHITECTURE §16 (C2 section) + DECISIONS (forfeit amendment).
+
+**Forfeit-sub spurious-error fix (2026-06-20, `9935472`, merged + render-deployed):** a forfeit-sub save
+SUCCEEDS (200 `{ok:true}`, slot voided server-side) but the SaveBar then re-painted a
+`forfeit-requires-confirm` error beside the "Lineup saved." toast. Cause: clearing `pendingForfeits` on
+success made the post-save re-validation (`validateLineup` rule 4c) run against the stale, never-refetched
+SSR `slotMeta`/`locks` (which still model the benched man as a played, un-voided starter). Fix = **do NOT
+clear `pendingForfeits` on success** (client-only; validator/contract/persistence untouched). **Tracked
+residual:** period switch-away-and-back re-arms the same error (`onSelectPeriod` resets `pendingForfeits`
+while `slotMeta` stays stale) — full fix needs a post-save `slotMeta` refetch / period-state lift
+(contract-adjacent, its own thread). See DECISIONS (forfeit amendment).
+
+The
 throwaway branch **`fix/premature-locks-statusgate` is retired**: rebased onto `main` it showed **zero unique
 delta** and never carried the agreed four-layer fix — branch + worktree deleted. The **"four-layer fix" plan is
 superseded**: **Layer 2** (no stamp on a not-yet-kicked-off match) is **already met by the in-main now-gate**,
