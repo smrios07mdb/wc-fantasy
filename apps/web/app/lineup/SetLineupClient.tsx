@@ -272,8 +272,14 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       setSavedLineups((all) => ({ ...all, [activeId]: [...starterIds] }));
       setJustSaved(true);
       setToast({ kind: "success", text: "Lineup saved." });
-      // Clear pending forfeits after a successful save — they're now committed server-side.
-      setPendingForfeits(new Set());
+      // Deliberately DO NOT clear pendingForfeits here. The server has committed the forfeits, but the
+      // local `period.locks`/`slotMeta` are immutable SSR props that still model the just-benched player
+      // as an un-voided played STARTER (they aren't refetched after a save). Clearing the confirm would
+      // make the post-save re-validation (evaluateProposal → validateLineup, rule 4c) re-demand a confirm
+      // and paint a spurious `forfeit-requires-confirm` error beside the "Lineup saved." toast. Keeping
+      // the confirm keeps the no-op re-validation green; it's inert server-side on any re-save (the
+      // controller derives voids from its OWN authoritative slot state). A period switch resets these
+      // (period-scoped), and a full reload loads them as voided + benched — which never re-trips the rule.
     } else {
       setToast({ kind: "error", text: res.error.message });
     }

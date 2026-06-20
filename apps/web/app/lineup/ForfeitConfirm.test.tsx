@@ -9,14 +9,17 @@
  *      - Pre-flight block: no eligible fill → modal button shows a toast, no confirm sheet.
  *      - Cancel and confirm lifecycle on the ForfeitConfirmSheet are intact.
  */
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { classifySlot, fillEligibleIds } from "../../src/lineup/view";
 import { SetLineupClient } from "./SetLineupClient";
 import type { LineupPlayer, PeriodLineup, SetLineupState } from "../../src/lineup/types";
 import type { Position } from "@app/shared";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 // ── shared helpers ────────────────────────────────────────────────────────
 
@@ -288,5 +291,56 @@ describe("ForfeitConfirmSheet — open via modal / cancel / confirm lifecycle", 
     expect(screen.queryByRole("dialog")).toBeNull();
     const def1Token = screen.getByTitle(DEF1_TITLE);
     expect(def1Token.className).toMatch(/st-selected/);
+  });
+});
+
+// ── RTL: forfeit-sub save surfaces NO spurious error (T7) ──────────────────
+// The full destructive path: forfeit a played starter, fill his slot with an unplayed reserve, and SAVE.
+// The save returns 200 {ok:true} and the slot is voided server-side; the screen must NOT then re-surface
+// the `forfeit-requires-confirm` reason. (Regression: clearing the confirmed-forfeit set on save made the
+// post-save re-validation — run against the still-stale local lock state, which models the forfeited man
+// as an un-voided played STARTER — re-demand a confirm, painting an `is-error` reason beside the
+// "Lineup saved." toast.)
+describe("forfeit-sub save — succeeds without surfacing a spurious error (T7)", () => {
+  it("after a 200 save, shows the success toast and NO forfeit-requires-confirm error in the SaveBar", async () => {
+    // Stub the global fetch the client uses: a 200 {ok:true} for the lineup POST; a non-ok response for
+    // the score modal's player-box / tournament-stats reads so that modal degrades to its error branch
+    // (never crashing the test on an unexpected payload shape).
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/lineup")) {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
+      }
+      return { ok: false, status: 500, json: async () => ({}) } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SetLineupClient initialState={state()} />);
+
+    // Drive the forfeit: tap the played-starter token → score modal → "Bench & forfeit" → confirm sheet.
+    fireEvent.click(screen.getByTitle(DEF1_TITLE));
+    fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i })); // in-modal action
+    fireEvent.click(screen.getByRole("button", { name: /Bench.*forfeit/i })); // confirm sheet
+    // Fill step is armed (DEF1 selected). Tap an eligible unplayed DEF reserve to complete the sub.
+    const def5Btn = screen.getByText("X. def5").closest("button");
+    expect(def5Btn).not.toBeNull();
+    fireEvent.click(def5Btn!);
+
+    // Save — submitLineup → POST /api/lineup → 200 {ok:true}.
+    fireEvent.click(screen.getByRole("button", { name: /Save lineup/i }));
+
+    // The success toast confirms the 200 was read.
+    await screen.findByText("Lineup saved.");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/lineup",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    // The spurious surfacing: the SaveBar must NOT re-paint forfeit-requires-confirm after the save.
+    const reason = document.querySelector(".sl-savebar-reason");
+    expect(reason).not.toBeNull();
+    expect(reason!.className).not.toMatch(/is-error/);
+    expect(reason!.textContent ?? "").not.toMatch(/forfeit/i);
+    expect(screen.queryByText(/confirm the forfeit to proceed/i)).toBeNull();
   });
 });
