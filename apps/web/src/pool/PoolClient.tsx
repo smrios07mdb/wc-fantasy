@@ -32,7 +32,8 @@ import {
   startLeaderboardPoll,
   startRevealClock,
 } from "./poolLive";
-import { FixtureCard, LeaderboardTable } from "./components";
+import { selectManagerPicks } from "./managerPicks";
+import { FixtureCard, LeaderboardTable, ManagerPicksModal } from "./components";
 import type { PoolFixture, PoolView } from "./types";
 import "./pool.css";
 
@@ -59,6 +60,9 @@ export function PoolClient({ view }: { view: PoolView }) {
   const [tab, setTab] = useState<"picks" | "leaderboard">("picks");
   const [busyMatchId, setBusyMatchId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // T4 — the manager whose revealed picks the drill-in modal is showing (null = closed). The picks are
+  // re-projected from the already-gated `view` (selectManagerPicks); opening it triggers NO fetch.
+  const [openManagerId, setOpenManagerId] = useState<string | null>(null);
 
   // Live clock — seeded from server time (no hydration mismatch), ticked every 30s so a fixture's
   // control disables the moment kickoff passes even without a refresh.
@@ -98,6 +102,22 @@ export function PoolClient({ view }: { view: PoolView }) {
       stop();
     };
   }, [tab, router]);
+
+  // ── Manager picks drill-in (T4) ────────────────────────────────────────────────────────────
+  // Project the selected manager's REVEALED picks from the already-gated `view` — no fetch, no new read
+  // path. Escape closes the modal (backdrop click + the close button are wired in the component itself).
+  const openPicks = useMemo(
+    () => (openManagerId === null ? null : selectManagerPicks(view, openManagerId)),
+    [openManagerId, view],
+  );
+  useEffect(() => {
+    if (openManagerId === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenManagerId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [openManagerId]);
 
   // Deterministic kickoff formatter (explicit locale + fixed ET zone ⇒ identical SSR + client output, no mismatch).
   const fmtKickoff = useMemo(() => {
@@ -253,9 +273,11 @@ export function PoolClient({ view }: { view: PoolView }) {
             <span className="t-label">Standings</span>
             <span className="t-micro text-tertiary">+1 per correct result · ranked by points</span>
           </div>
-          <LeaderboardTable rows={view.leaderboard} />
+          <LeaderboardTable rows={view.leaderboard} onSelectManager={setOpenManagerId} />
         </div>
       )}
+
+      {openPicks && <ManagerPicksModal picks={openPicks} onClose={() => setOpenManagerId(null)} />}
     </div>
   );
 }

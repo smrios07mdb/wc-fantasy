@@ -8,6 +8,7 @@
 import type { PoolPrediction } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
 import { toIso2 } from "@/src/draft/flag";
+import type { ManagerPickRow, ManagerPicksView } from "./managerPicks";
 import type { PoolFixture, PoolLeaderRow, PoolTeam } from "./types";
 
 // ── icons ─────────────────────────────────────────────────────────────────────
@@ -228,7 +229,14 @@ export function FixtureCard({
 
 // ── leaderboard ─────────────────────────────────────────────────────────────────
 
-export function LeaderboardTable({ rows }: { rows: readonly PoolLeaderRow[] }) {
+export function LeaderboardTable({
+  rows,
+  onSelectManager,
+}: {
+  rows: readonly PoolLeaderRow[];
+  /** Open a manager's revealed-picks drill-in (T4). The picks themselves come from the gated view. */
+  onSelectManager: (managerId: string) => void;
+}) {
   if (rows.length === 0) {
     return (
       <div className="pl-empty">
@@ -255,7 +263,14 @@ export function LeaderboardTable({ rows }: { rows: readonly PoolLeaderRow[] }) {
           <tr key={r.managerId} className={r.isMe ? "row-me" : ""}>
             <td className="mono">{i + 1}</td>
             <td>
-              <b>{r.isMe ? "You" : r.managerName}</b>
+              <button
+                type="button"
+                className="pl-mgr-link"
+                onClick={() => onSelectManager(r.managerId)}
+                aria-label={`View ${r.isMe ? "your" : `${r.managerName}’s`} picks`}
+              >
+                {r.isMe ? "You" : r.managerName}
+              </button>
             </td>
             <td className="num mono">{r.played}</td>
             <td className="num mono">{r.correct}</td>
@@ -264,5 +279,104 @@ export function LeaderboardTable({ rows }: { rows: readonly PoolLeaderRow[] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ── manager picks drill-in (T4) ───────────────────────────────────────────────
+// A modal showing ONE manager's REVEALED picks, projected from the already-gated `PoolView` (see
+// `selectManagerPicks`). It renders only what the server revealed — for another manager that excludes
+// every not-yet-kicked-off pick — so the panel cannot expose a pre-kickoff prediction. No data fetching.
+
+/** Render a manager's prediction as the predicted side's name (Home/Away) or "Draw". */
+function predictionText(row: ManagerPickRow): string {
+  if (row.prediction === "HOME") return row.home?.name ?? "Home";
+  if (row.prediction === "AWAY") return row.away?.name ?? "Away";
+  return "Draw";
+}
+
+function OutcomeChip({ outcome }: { outcome: ManagerPickRow["outcome"] }) {
+  if (outcome === "correct")
+    return (
+      <span className="pl-mp-out is-correct">
+        <IcoCheck />
+        Correct
+      </span>
+    );
+  if (outcome === "wrong") return <span className="pl-mp-out is-wrong">Missed</span>;
+  return <span className="pl-mp-out is-pending">Pending</span>;
+}
+
+function ManagerPickLine({ row }: { row: ManagerPickRow }) {
+  const hasScore = row.homeScore !== null && row.awayScore !== null;
+  return (
+    <div className="pl-mp-row">
+      <div className="pl-mp-fx">
+        <TeamLabel team={row.home} align="l" />
+        <span className="pl-mp-mid">
+          {hasScore ? (
+            <span className="pl-score mono">
+              {row.homeScore}–{row.awayScore}
+            </span>
+          ) : (
+            <span className="pl-vs">v</span>
+          )}
+        </span>
+        <TeamLabel team={row.away} align="r" />
+      </div>
+      <div className="pl-mp-meta">
+        {row.periodLabel && <span className="t-micro text-tertiary">{row.periodLabel}</span>}
+        <span className="pl-mp-pred">
+          Picked <b>{predictionText(row)}</b>
+        </span>
+        <OutcomeChip outcome={row.outcome} />
+      </div>
+    </div>
+  );
+}
+
+export function ManagerPicksModal({
+  picks,
+  onClose,
+}: {
+  picks: ManagerPicksView;
+  onClose: () => void;
+}) {
+  const title = picks.isMe ? "Your picks" : `${picks.managerName}’s picks`;
+  return (
+    <div className="pl-modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="pl-modal card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="pl-modal-head">
+          <span className="t-h3 pl-modal-title">{title}</span>
+          <button
+            type="button"
+            className="pl-modal-close"
+            onClick={onClose}
+            aria-label="Close"
+            autoFocus
+          >
+            ✕
+          </button>
+        </div>
+        {picks.rows.length === 0 ? (
+          <div className="pl-modal-empty t-sm text-tertiary">
+            {picks.isMe
+              ? "You haven’t made any picks yet."
+              : "No revealed picks yet — a manager’s pick appears once that match kicks off."}
+          </div>
+        ) : (
+          <div className="pl-modal-list">
+            {picks.rows.map((row) => (
+              <ManagerPickLine key={row.matchId} row={row} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

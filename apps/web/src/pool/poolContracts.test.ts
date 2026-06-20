@@ -15,6 +15,7 @@ const read = (rel: string) => readFileSync(resolve(here, rel), "utf8");
 const loader = read("loadPool.ts");
 const client = read("PoolClient.tsx");
 const components = read("components.tsx");
+const managerPicks = read("managerPicks.ts");
 
 /**
  * Strip block + line comments so the NEGATIVE leak-guard greps target CODE, not the doc prose that names
@@ -103,5 +104,36 @@ describe("pool client — P43 live updates (clock-reveal + leaderboard poll) wit
     expect(code).not.toMatch(/postgres_changes|\.channel\(|\.subscribe\(|@supabase|createClient/i);
     // Reveal source is unchanged from P42: server-revealed others' picks, rendered in components.tsx.
     expect(components).toContain("fixture.others");
+  });
+});
+
+describe("pool — manager picks drill-in (T4) reuses the gated view, adds NO read path", () => {
+  it("the projection is pure: no fetch, no Prisma, no /api — it derives from the already-gated view", () => {
+    const code = codeOnly(managerPicks);
+    expect(code).not.toMatch(/fetch\(|prisma|@app\/db|\/api\/|readVisiblePicks|postgres_changes/i);
+  });
+
+  it("the drill-in opens from the already-loaded view (selectManagerPicks), not a new request", () => {
+    const code = codeOnly(client);
+    // The modal is fed by re-projecting `view` — opening it triggers no network call of its own.
+    expect(code).toContain("selectManagerPicks(view, openManagerId)");
+    expect(code).toContain("ManagerPicksModal");
+    // The ONLY fetch in the client remains the existing gated pick POST — the drill-in adds none.
+    const fetchCalls = code.match(/fetch\(/g) ?? [];
+    expect(fetchCalls).toHaveLength(1);
+    // Strong no-new-read-path guard: the ONLY /api path the client references is the existing pick POST.
+    // A regression that added e.g. `/api/pool/all-picks` (under ANY transport) would change this set.
+    const apiPaths = [...code.matchAll(/\/api\/[\w/-]+/g)].map((m) => m[0]);
+    expect(new Set(apiPaths)).toEqual(new Set(["/api/pool/pick"]));
+    // And no alternative read transport (client lib, subscription, server-data hook) sneaks a pick read in.
+    expect(code).not.toMatch(
+      /useSWR|useQuery|axios|EventSource|XMLHttpRequest|createClient|\.channel\(|\.subscribe\(/i,
+    );
+  });
+
+  it("another manager's pick is sourced from fixture.others (server-gated), the viewer's from myPick", () => {
+    const code = codeOnly(managerPicks);
+    expect(code).toContain("f.others.find");
+    expect(code).toContain("f.myPick");
   });
 });
