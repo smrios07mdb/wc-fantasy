@@ -531,6 +531,13 @@ an open question.
   8→6→4→3→2→1). The exact field size + cut schedule is **fixed once at the group→playoff transition**
   when the final manager count is known; the *derivation rule* is locked. (A 6-field with one cut
   per round, 6→5→4→3→2→1, remains a valid special case.)
+  - **AMENDMENT (2026-06-20, commissioner) — playoff field size now LOCKED at 10** (was "deferred /
+    likely 8 or 10"). The cut schedule is `cutScheduleFor(10)` = **{2,2,2,2,1}** — the field collapses
+    **10→8→6→4→2→champion** over the 5 knockout rounds. Applied for real at the group→playoff
+    transition via `--field 10`. This **10** is also the provisional cut line surfaced on `/standings`:
+    `DEFAULT_PLAYOFF_FIELD_SIZE` in `packages/recompute/src/standingsView.ts` is now `10` (the loader
+    still may pass an explicit `fieldSize`; absent that, 10 is used). The derivation rule and the
+    `cutScheduleFor` machinery are unchanged — only the chosen number is now fixed.
 
 > ✅ IMPLEMENTED — see the **Group→playoff transition + playoff lineup mode** block below.
 
@@ -550,9 +557,10 @@ an open question.
 - **Caution:** all-play-all punishes inactive managers (a non-setter is a free win for everyone
   compared against him that week, inflating records) → recruit for commitment.
 
-**Deferred by design (config, not a decision):** the final manager number is recruiting-dependent;
-it selects the playoff field size (8/10/…) and thus the exact per-round cut schedule at the
-transition. Nothing else in Theme C remains open.
+**Field size now LOCKED (2026-06-20):** the playoff field is **10** — `cutScheduleFor(10)` =
+{2,2,2,2,1}, applied at the transition via `--field 10` (see the AMENDMENT above). The final manager
+number remains recruiting-dependent, but the field/cut schedule no longer waits on it. Nothing else
+in Theme C remains open.
 
 **Resolved this thread (formerly open):** draft order/timer/autopick (snake; timer config; queue→best-available),
 the guillotine *elimination* tiebreak (lowest cumulative tournament total points; commissioner backstop),
