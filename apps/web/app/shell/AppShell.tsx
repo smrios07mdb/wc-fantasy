@@ -82,6 +82,14 @@ function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
         <path d="M8.5 12.5 11 15l4.5-5.5" />
       </>
     ),
+    // Standings = a leaderboard podium: three ranked bars (tallest in the middle = #1) — T10.
+    standings: (
+      <>
+        <rect x="4" y="11" width="4.2" height="9" rx="1" />
+        <rect x="9.9" y="6" width="4.2" height="14" rx="1" />
+        <rect x="15.8" y="14" width="4.2" height="6" rx="1" />
+      </>
+    ),
     // Playoffs = the guillotine: two posts + a dropping blade wedge (the screen's signature, Phase 4).
     playoffs: (
       <>

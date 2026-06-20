@@ -15,6 +15,7 @@ export type NavId =
   | "draft"
   | "lineup"
   | "vsfield"
+  | "standings"
   | "waivers"
   | "pool"
   | "playoffs"
@@ -33,6 +34,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: "draft", href: "/draft", label: "Draft room" },
   { id: "lineup", href: "/lineup", label: "Set lineup" },
   { id: "vsfield", href: "/vsfield", label: "Vs the field" },
+  // Dedicated all-play-all standings page (T10) — Matchday + Cumulative tabs. Grouped next to Vs field
+  // (its live companion), ahead of the reference pages; mirrors the design IA (The Field → Standings).
+  { id: "standings", href: "/standings", label: "Standings" },
   { id: "waivers", href: "/waivers", label: "Waivers" },
   // Match pick'em pool (Prompt 42) — grouped with the gameplay screens, ahead of the reference pages.
   // User-facing label is "Quiniela" (Prompt 45 copy rename); the NavId/route/id key stay "pool".
@@ -59,6 +63,8 @@ export const BOTTOM_TAB_ITEMS: readonly NavItem[] = [
 export const MORE_SHEET_ITEMS: readonly NavItem[] = [
   { id: "scoring", href: "/scoring", label: "Scoring" },
   { id: "waivers", href: "/waivers", label: "Waivers" },
+  // Standings + Playoffs are the two results/seeding screens — grouped together in the overflow.
+  { id: "standings", href: "/standings", label: "Standings" },
   { id: "playoffs", href: "/playoffs", label: "Playoffs" },
   { id: "draft", href: "/draft", label: "Draft room" },
   { id: "settings", href: "/settings", label: "Settings" },

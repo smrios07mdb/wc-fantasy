@@ -9,6 +9,7 @@ export * from "./resolver";
 export * from "./adapter";
 export * from "./store";
 export * from "./standing";
+export * from "./standingsView";
 export * from "./guillotine";
 export * from "./playoffRound";
 export * from "./playoffsView";

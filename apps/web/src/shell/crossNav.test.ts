@@ -14,6 +14,7 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
       "draft",
       "lineup",
       "vsfield",
+      "standings",
       "waivers",
       "pool",
       "playoffs",
@@ -27,6 +28,8 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
     expect(byId.draft).toMatchObject({ href: "/draft", label: "Draft room" });
     expect(byId.lineup).toMatchObject({ href: "/lineup", label: "Set lineup" });
     expect(byId.vsfield).toMatchObject({ href: "/vsfield", label: "Vs the field" });
+    // T10: dedicated all-play-all standings page.
+    expect(byId.standings).toMatchObject({ href: "/standings", label: "Standings" });
     expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
     // Prompt 42 / feat/pool-nav: the pick'em pool seam is now a real nav entry.
     // Prompt 45: user-facing label renamed to "Quiniela" (the id/href/key stay "pool").
@@ -53,10 +56,11 @@ describe("BOTTOM_TAB_ITEMS — primary mobile bottom bar destinations", () => {
 });
 
 describe("MORE_SHEET_ITEMS — secondary destinations in the More sheet", () => {
-  it("lists the More sheet items in spec order: Scoring · Waivers · Playoffs · Draft · Settings", () => {
+  it("lists the More sheet items in spec order: Scoring · Waivers · Standings · Playoffs · Draft · Settings", () => {
     expect(MORE_SHEET_ITEMS.map((i) => i.id)).toEqual([
       "scoring",
       "waivers",
+      "standings",
       "playoffs",
       "draft",
       "settings",
@@ -76,6 +80,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/draft")).toBe("draft");
     expect(selectActiveNav("/lineup")).toBe("lineup");
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
+    expect(selectActiveNav("/standings")).toBe("standings");
     expect(selectActiveNav("/waivers")).toBe("waivers");
     expect(selectActiveNav("/pool")).toBe("pool");
     expect(selectActiveNav("/playoffs")).toBe("playoffs");

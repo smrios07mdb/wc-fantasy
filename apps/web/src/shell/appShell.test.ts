@@ -47,10 +47,11 @@ describe("AppShell — the global nav chrome (server component, pure-presentatio
     }
   });
 
-  it("defines a glyph for every NavId — including the Prompt-42 pool entry", () => {
+  it("defines a glyph for every NavId — including the Prompt-42 pool + T10 standings entries", () => {
     // The glyph map is `Record<NavId, ReactNode>` (exhaustive), so a missing key is a tsc error too;
-    // this guards the source-level contract that adding "pool" to the union added its glyph here.
+    // this guards the source-level contract that adding "pool"/"standings" to the union added its glyph.
     expect(shell).toMatch(/pool:\s*\(/);
+    expect(shell).toMatch(/standings:\s*\(/);
   });
 
   it("labels the topbar banner so it's distinguishable from a screen's own <header>", () => {

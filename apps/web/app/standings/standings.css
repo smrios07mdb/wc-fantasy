@@ -1,0 +1,449 @@
+/*
+ * /standings — dedicated all-play-all standings screen CSS, ported from design/design_reference/
+ * standings/* (.st-* / .mst-*). The design's presenter STAGE and its own shell chrome (.st-top/.st-nav)
+ * are DROPPED — the production AppShell owns the topbar/nav/scroll, and ds.css is global (root layout).
+ * What remains is the screen BODY: the two tabs (Matchday + Cumulative), the context band, the power-
+ * record table (form strip, seed, move, expandable detail, the provisional cut line), and the matchday
+ * ranking. One responsive layout (no separate desktop/mobile trees): narrow viewports drop the Win% +
+ * Form columns via media queries.
+ *
+ * Tokens (--accent / --win / --loss / --draw / --elim / --live / --surface-x / --text-x / --hairline /
+ * --r-x) are the global ds. Accent (cobalt) marks ONLY you (.is-me); the cut is --elim (red); the live
+ * chip is --live (red). No gold (BRAND.md §1). Sits inside the shell's .sh-content (natural scroll).
+ */
+
+/* ── production page root (natural scroll inside .sh-content, like /playoffs /pool) ── */
+.st-app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  max-width: 1040px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.st-screenhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.st-screenhead-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.st-screenhead-title h1 {
+  margin: 0;
+}
+.st-screenhead-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.st-recon {
+  color: var(--loss);
+}
+.st-conn .dot {
+  background: currentColor;
+}
+
+.st-tabs {
+  align-self: flex-start;
+}
+
+/* ── live dot (matchday chip + form chip) ── */
+.st-fc-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+  margin-left: 5px;
+  vertical-align: middle;
+  animation: livepulse 1.4s var(--ease-standard) infinite;
+}
+
+/* ── shared table scaffold ── */
+.st-table {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.st-head,
+.st-head-md {
+  padding: 0 14px;
+  height: 36px;
+  align-items: center;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--fw-bold);
+  color: var(--text-tertiary);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+}
+.st-head {
+  display: grid;
+  grid-template-columns: 36px minmax(120px, 1fr) 96px 52px 52px minmax(116px, 1.3fr) 46px 24px;
+  gap: 8px;
+}
+.st-head-md {
+  display: grid;
+  grid-template-columns: 36px minmax(120px, 1fr) 100px 64px;
+  gap: 8px;
+}
+.st-num {
+  text-align: right;
+}
+
+/* ── cumulative row ── */
+.st-row {
+  border-bottom: 1px solid var(--hairline);
+}
+.st-row:last-child {
+  border-bottom: none;
+}
+.st-row-main {
+  display: grid;
+  grid-template-columns: 36px minmax(120px, 1fr) 96px 52px 52px minmax(116px, 1.3fr) 46px 24px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background var(--dur-fast, 0.12s) var(--ease-standard);
+}
+.st-row-main:hover {
+  background: var(--surface-2);
+}
+.st-row.is-me .st-row-main,
+.st-mdrow.is-me {
+  background: var(--accent-soft);
+}
+.st-row.is-me .st-row-main:hover {
+  background: var(--accent-soft);
+}
+.st-row.is-open .st-row-main {
+  background: var(--surface-2);
+}
+.st-row.is-out .st-row-main {
+  opacity: 0.74;
+}
+.st-row.is-open .st-chev {
+  transform: rotate(180deg);
+}
+.st-chev {
+  transition: transform var(--dur-fast, 0.12s) var(--ease-standard);
+  color: var(--text-tertiary);
+}
+
+/* ── matchday row ── */
+.st-mdrow {
+  display: grid;
+  grid-template-columns: 36px minmax(120px, 1fr) 100px 64px;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.st-mdrow:last-child {
+  border-bottom: none;
+}
+.st-c-mdpts {
+  text-align: right;
+  font-weight: var(--fw-bold);
+}
+
+/* ── seed badge ── */
+.st-seed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.st-seed.is-out {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+/* ── manager cell ── */
+.st-c-mgr {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.st-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  flex: none;
+}
+.st-mgr-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--fw-medium);
+}
+.st-you {
+  flex: none;
+  font-size: 9px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ── record (W–L–D) ── */
+.st-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.st-rec-w {
+  color: var(--win);
+}
+.st-rec-l {
+  color: var(--loss);
+}
+.st-rec-d {
+  color: var(--draw);
+}
+.st-rec-sep {
+  color: var(--text-tertiary);
+  margin: 0 1px;
+}
+
+.st-c-pct {
+  text-align: right;
+  color: var(--text-secondary);
+}
+.st-c-pct small {
+  color: var(--text-tertiary);
+  font-size: 0.78em;
+}
+.st-c-pf {
+  text-align: right;
+  font-weight: var(--fw-bold);
+}
+.st-c-pf.is-tiebreak {
+  text-decoration: underline dotted var(--text-tertiary);
+  text-underline-offset: 3px;
+}
+
+/* ── form strip ── */
+.st-form {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.st-fc {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  line-height: 1.1;
+}
+.st-fc-lab {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+.st-fc-rec {
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+}
+.st-fc-sep {
+  color: var(--text-tertiary);
+  margin: 0 1px;
+}
+.st-fc-win .st-fc-rec {
+  color: var(--win);
+}
+.st-fc-loss .st-fc-rec {
+  color: var(--loss);
+}
+.st-fc-draw .st-fc-rec {
+  color: var(--draw);
+}
+.st-fc.is-live {
+  border-color: var(--live);
+}
+
+/* ── movement ── */
+.st-move {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+.st-move-up {
+  color: var(--win);
+}
+.st-move-down {
+  color: var(--loss);
+}
+.st-move-flat {
+  color: var(--text-tertiary);
+}
+
+/* ── expandable detail ── */
+.st-detail {
+  padding: 4px 14px 14px 14px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--hairline);
+}
+.st-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.st-detail-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--hairline);
+}
+.st-detail-table th.st-num,
+.st-detail-table td.st-num {
+  text-align: right;
+}
+.st-detail-table td {
+  padding: 6px 8px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--hairline);
+}
+.st-detail-total td {
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+  border-bottom: none;
+}
+
+/* ── provisional cut line ── */
+.st-cutline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  background: var(--elim-soft);
+  border-top: 1px dashed var(--elim);
+  border-bottom: 1px dashed var(--elim);
+}
+.st-cutline-label {
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--elim);
+}
+
+/* ── context band ── */
+.st-band {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 12px 16px;
+}
+.st-band-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.st-band-mgr {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.st-band-name {
+  font-weight: var(--fw-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-band-in {
+  color: var(--win);
+}
+.st-band-out {
+  color: var(--elim);
+}
+
+/* ── matchday + cumulative panels ── */
+.st-md,
+.st-cumulative {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.st-mdsel {
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+.st-empty {
+  padding: 22px 16px;
+  text-align: center;
+}
+
+/* ── responsive: drop the Win% + Form columns on narrow viewports ── */
+@media (max-width: 720px) {
+  .st-head,
+  .st-row-main {
+    grid-template-columns: 32px minmax(96px, 1fr) 84px 46px 38px 22px;
+  }
+  .st-c-pct,
+  .st-c-form {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .st-app {
+    padding: 14px;
+  }
+  .st-band {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
