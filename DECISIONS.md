@@ -2766,7 +2766,7 @@ worktree, TDD/testing, documentation, and output conventions. Docs-only; `[skip 
 
 ---
 
-## P48 — Claude Code tooling layer (2026-06-19)
+## Claude Code tooling layer — hooks, skills, auditor subagent (2026-06-19)
 
 **Decision.** Adopt a three-tier automation model in `.claude/`: deterministic hooks
 for must-always rules, explicit skills for ergonomic gate runs, and a read-only
