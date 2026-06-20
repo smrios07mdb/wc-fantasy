@@ -8,12 +8,19 @@
  */
 import { redirect } from "next/navigation";
 import { getSessionManager } from "@/lib/auth/manager";
+import { seedManagerSelection } from "@/src/vsfield/seedSelection";
 import { loadVsField } from "./loadVsField";
 import { VsFieldClient } from "./VsFieldClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function VsFieldPage() {
+export default async function VsFieldPage({
+  searchParams,
+}: {
+  // Next 15: `searchParams` is a Promise. We read only `?manager=<id>` — the dashboard standings-row
+  // deep-link (T3) — and validate it against the loaded field before handing the client an H2H seed.
+  searchParams: Promise<{ manager?: string | string[] }>;
+}) {
   const outcome = await getSessionManager();
   if (outcome.kind === "no-session") redirect("/sign-in");
   if (outcome.kind !== "ok") redirect("/auth/denied");
@@ -35,5 +42,10 @@ export default async function VsFieldPage() {
     );
   }
 
-  return <VsFieldClient initialView={view} />;
+  // Validate the deep-link against the loaded field; an unknown/malformed id resolves to null so the
+  // client keeps its existing default selection (never a non-existent manager → empty H2H).
+  const { manager } = await searchParams;
+  const initialSelection = seedManagerSelection(manager, view.field);
+
+  return <VsFieldClient initialView={view} initialSelection={initialSelection} />;
 }

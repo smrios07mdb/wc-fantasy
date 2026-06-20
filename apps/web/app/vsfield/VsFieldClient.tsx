@@ -38,7 +38,18 @@ const VIEW_TABS: ["period" | "season", string][] = [
   ["season", "Season"],
 ];
 
-export function VsFieldClient({ initialView }: { initialView: VsFieldViewWithBenches }) {
+export function VsFieldClient({
+  initialView,
+  initialSelection = null,
+}: {
+  initialView: VsFieldViewWithBenches;
+  /**
+   * Server-validated deep-link seed for `effSel` (`?manager=<id>` → that manager's H2H, or `"field"`
+   * for your own row; null when absent/unknown). Mount-only — `useState`'s initializer ignores it on
+   * later renders, so live refetches and manual selection are never overridden / re-seeded.
+   */
+  initialSelection?: string | null;
+}) {
   const [view, setView] = useState<VsFieldViewWithBenches>(initialView);
   const [conn, setConn] = useState<ConnState>("loading");
   const [tab, setTab] = useState<"period" | "season">("period");
@@ -46,7 +57,7 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldViewWithBen
   // can never collide with the sentinel) = that opponent's H2H, null = nothing picked yet. Desktop
   // resolves null → "field" (the cockpit always shows something); mobile keeps null as the
   // leaderboard-first home and treats "field"/managerId as drill-ins with a back button.
-  const [effSel, setEffSel] = useState<string | null>(null);
+  const [effSel, setEffSel] = useState<string | null>(initialSelection);
   // Box-score modal target. INFO-ONLY on vsfield: opened from the H2H XI lists for a played/locked
   // player (own OR opponent's), rendered with NO forfeitProps — vsfield never edits lineups.
   const [boxPlayer, setBoxPlayer] = useState<string | null>(null);
