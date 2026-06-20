@@ -11,7 +11,7 @@
 import type { Position } from "@app/shared";
 import { Flag } from "../../app/draft/Flag";
 import { toIso2 } from "../draft/flag";
-import type { WvBatchWindow, WvPlayer } from "./types";
+import type { OpponentInfo, WvBatchWindow, WvPlayer } from "./types";
 import { isPlayerCutoffPassed } from "./waiversLogic";
 
 // ── icons (ported 1:1 from the design glyphs) ──────────────────────────────────
@@ -124,6 +124,32 @@ export function NationFlag({ nation, lg }: { nation: string | null; lg?: boolean
   return <Flag code={toIso2(nation)} label={nation ?? undefined} lg={lg} />;
 }
 
+/**
+ * A free agent's NEXT fixture opponent on the picker row — "vs 🇫🇷 France" (his team is home) /
+ * "@ 🇧🇷 Brazil" (away), mirroring the set-lineup `OpponentTag` field-for-field. Reuses the SAME
+ * `<NationFlag>` surface as every other flag on the screen. Renders "TBD" when the player's team has no
+ * still-acquirable fixture this period (eliminated / knockout side undecided) — never a broken glyph.
+ */
+export function OpponentLine({ opponent }: { opponent: OpponentInfo | null | undefined }) {
+  if (!opponent) {
+    return (
+      <span className="wv-fa-opp t-micro text-tertiary" aria-label="Next opponent TBD">
+        TBD
+      </span>
+    );
+  }
+  const prefix = opponent.isHome ? "vs" : "@";
+  return (
+    <span
+      className="wv-fa-opp t-micro text-tertiary"
+      title={`Next: ${prefix} ${opponent.opponentName}`}
+    >
+      {prefix} <NationFlag nation={opponent.opponentNation} />
+      {opponent.opponentName}
+    </span>
+  );
+}
+
 function fmtCountdown(ms: number): string {
   if (ms <= 0) return "now";
   const totalMin = Math.round(ms / 60000);
@@ -178,6 +204,7 @@ export function FaPickRow({
             {player.teamName ?? player.nation ?? ""} ·{" "}
             {player.seasonPoints === null ? "—" : `${player.seasonPoints} pts`}
           </span>
+          <OpponentLine opponent={player.opponent ?? null} />
         </div>
         <Pos p={player.position} />
       </button>

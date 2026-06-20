@@ -9,6 +9,11 @@
  */
 import type { AcquisitionWindow } from "@app/faab";
 import type { Position } from "@app/shared";
+// The opponent shape is the SAME one the set-lineup screen renders — reused read-only (never re-derived)
+// so the waivers "next opponent" tag matches lineup's OpponentTag field-for-field (Prompt 53 / T8).
+import type { OpponentInfo } from "../lineup/types";
+
+export type { OpponentInfo };
 
 /** A player as the waivers screen needs him — identity + the cutoff clock (his next fixture kickoff). */
 export interface WvPlayer {
@@ -29,6 +34,14 @@ export interface WvPlayer {
   readonly kickoffAt: string | null;
   /** Season fantasy points, when cheaply available; null renders as "—". */
   readonly seasonPoints: number | null;
+  /**
+   * The player's NEXT fixture opponent ("vs/@ + flag + name"), for the free-agent picker row (T8). Resolved
+   * by the shared `resolveOpponentByPlayer` (`@/src/lineup/view`) against the SAME still-acquirable fixture
+   * set as `kickoffAt`, so the row's cutoff clock + opponent reference one match. Optional + only populated
+   * for the free-agent pool (the lone consumer); null when the player's team has no fixture this period
+   * (eliminated / knockout side undecided) → the picker renders "TBD".
+   */
+  readonly opponent?: OpponentInfo | null;
 }
 
 /** One of the viewing manager's own PENDING bids (self-scoped — never another manager's pending). */

@@ -13,6 +13,9 @@ import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt }
 import { listFaIneligiblePlayerIds, loadIsPlayoffParticipant } from "@app/faab/prisma";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { rosterCapForLeagueStatus, selectCurrentPeriod, type Position } from "@app/shared";
+// Read-only reuse of the set-lineup opponent resolver (exported Prompt 53) so the FA picker's
+// "next opponent" tag is field-for-field the SAME derivation as lineup's OpponentTag — never re-derived.
+import { resolveOpponentByPlayer } from "../../src/lineup/view";
 import { buildBatchWindowView } from "@/src/waivers/waiversLogic";
 import type {
   WaiversView,
@@ -93,10 +96,17 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
         where: { managerId: viewerManagerId, droppedAt: null },
         select: { player: { select: PLAYER_SELECT } },
       }),
-      // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff.
+      // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff AND next
+      // opponent. The team-name joins feed `resolveOpponentByPlayer`'s "vs/@ + flag + name" label.
       prisma.fifaMatch.findMany({
         where: { status: { in: ["scheduled", "in_progress"] } },
-        select: { homeTeamId: true, awayTeamId: true, kickoffAt: true },
+        select: {
+          homeTeamId: true,
+          awayTeamId: true,
+          kickoffAt: true,
+          homeTeam: { select: { name: true } },
+          awayTeam: { select: { name: true } },
+        },
         orderBy: { kickoffAt: "asc" },
       }),
       // Season fantasy points per player (sum across matches) — "if available, else —".
@@ -152,6 +162,16 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       if (teamId && !kickoffByTeam.has(teamId)) kickoffByTeam.set(teamId, m.kickoffAt);
     }
   }
+  // The same fixture set reshaped into the lineup helper's `PeriodMatch` contract (ISO kickoff + team
+  // names). `resolveOpponentByPlayer` uses the SAME earliest-kickoff tie-break as the kickoff map above,
+  // so a free agent's cutoff clock and his "next opponent" always reference one and the same fixture.
+  const periodMatches = upcomingMatches.map((m) => ({
+    homeTeamId: m.homeTeamId,
+    awayTeamId: m.awayTeamId,
+    kickoffAt: m.kickoffAt.toISOString(),
+    homeTeamName: m.homeTeam?.name ?? null,
+    awayTeamName: m.awayTeam?.name ?? null,
+  }));
   const seasonByPlayer = new Map<string, number>();
   for (const s of seasonScores) seasonByPlayer.set(s.playerId, s._sum.points ?? 0);
 
@@ -190,7 +210,17 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     select: PLAYER_SELECT,
     orderBy: { displayName: "asc" },
   });
-  const freeAgents = freeAgentRows.map(toPlayer);
+  // Each free agent's NEXT opponent ("vs/@ + flag + name"), resolved per-player via the shared lineup
+  // helper (T8). Threaded only onto the free-agent pool — the lone picker that renders it; null when the
+  // player's team has no still-acquirable fixture (→ the row shows "TBD").
+  const opponentByFreeAgent = resolveOpponentByPlayer(
+    freeAgentRows.map((p) => ({ id: p.id, teamId: p.teamId })),
+    periodMatches,
+  );
+  const freeAgents = freeAgentRows.map((p) => ({
+    ...toPlayer(p),
+    opponent: opponentByFreeAgent[p.id] ?? null,
+  }));
 
   const claims: WvClaim[] = pendingBids.map((b) => ({
     bidId: b.id,

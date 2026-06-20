@@ -644,6 +644,15 @@
   gap: 1px;
   min-width: 0;
 }
+/* T8: the FA picker row's next-opponent line ("vs/@ flag NAME"), mirroring the set-lineup OpponentTag.
+   A flex item in .wv-comp-fa-id (so it's blockified → ellipsis applies); the shared .flag-emoji
+   (inline-flex) sits inline between the prefix and the team name. Ellipsize the whole run on overflow. */
+.wv-fa-opp {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Prompt 56: the FA picker row = the unchanged select button + a sibling card-open control. The wrap
    is the flex child of .wv-comp-list; the select button flexes, the info control is a fixed trailer. */
 .wv-comp-fa-wrap {
