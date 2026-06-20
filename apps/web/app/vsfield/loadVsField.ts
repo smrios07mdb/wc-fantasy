@@ -11,7 +11,8 @@
  * `buildVsField` suite cover the shapes it produces. It is shared by the SSR page AND `GET /api/vsfield`.
  */
 import { prisma } from "@app/db";
-import { selectCurrentPeriod, isLockedNow } from "@app/shared";
+import { selectCurrentPeriod, isLockedNow, type Position } from "@app/shared";
+import type { BenchPlayerView, ManagerBench, VsFieldViewWithBenches } from "@/src/vsfield/benches";
 
 /** Max wall-clock window to consider a period still live after its last scheduled kickoff. */
 const MATCH_DURATION_MS = 120 * 60 * 1000; // covers regulation + extra time
@@ -22,7 +23,6 @@ import {
   type ManagerPeriodPoints,
   type PeriodMatchInput,
   type PeriodScores,
-  type VsFieldView,
 } from "@app/vsfield";
 
 /**
@@ -43,8 +43,49 @@ export function playerPointsLookup(
   return (playerId) => byPlayer.get(playerId) ?? 0;
 }
 
+/** Canonical bench display order (GK → DEF → MID → FWD); within a position the read order is kept. */
+const BENCH_POS_RANK: Record<Position, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+
+/** The bench-relevant subset of a current-period `lineup_slot` row (a structural slice of the read). */
+export interface BenchSlotRow {
+  managerId: string;
+  isStarter: boolean;
+  playerId: string;
+  role: Position;
+  player: { displayName: string; team: { name: string } | null };
+}
+
+/**
+ * Group the current period's BENCH slots (`is_starter = false`) per manager, ordered GK→DEF→MID→FWD for a
+ * stable display. PURE — extracted + exported (same convention as `playerPointsLookup`) so the
+ * partition/sort is unit-tested without a live DB. STARTER rows are skipped here: they flow into
+ * `buildVsField` exactly as before, so benches never reach the @app/vsfield engine — they are a
+ * display-only sibling of the snapshot.
+ */
+export function groupBenchesByManager(rows: BenchSlotRow[]): ManagerBench[] {
+  const byManager = new Map<string, BenchPlayerView[]>();
+  for (const s of rows) {
+    if (s.isStarter) continue;
+    let list = byManager.get(s.managerId);
+    if (!list) {
+      list = [];
+      byManager.set(s.managerId, list);
+    }
+    list.push({
+      playerId: s.playerId,
+      name: s.player.displayName,
+      nation: s.player.team?.name ?? null,
+      role: s.role,
+    });
+  }
+  return [...byManager.entries()].map(([managerId, players]) => ({
+    managerId,
+    players: players.sort((a, b) => BENCH_POS_RANK[a.role] - BENCH_POS_RANK[b.role]),
+  }));
+}
+
 /** Build the whole-league vs-the-field snapshot for the league `viewerManagerId` belongs to. */
-export async function loadVsField(viewerManagerId: string): Promise<VsFieldView | null> {
+export async function loadVsField(viewerManagerId: string): Promise<VsFieldViewWithBenches | null> {
   const viewer = await prisma.manager.findUnique({
     where: { id: viewerManagerId },
     select: { id: true, leagueId: true },
@@ -117,13 +158,17 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
         })
       : Promise.resolve([]),
     currentPeriod
-      ? prisma.lineupSlot.findMany({
-          where: { periodId: currentPeriod.id, isStarter: true },
+      ? // Read the FULL current-period lineup (starters AND bench) in ONE query: the starters feed
+        // buildVsField exactly as before (filtered below), the `is_starter = false` rows are composed into
+        // the display-only `benches` sibling. `isStarter` is selected so the two are partitioned in JS.
+        prisma.lineupSlot.findMany({
+          where: { periodId: currentPeriod.id },
           select: {
             managerId: true,
             playerId: true,
             role: true,
             lockedAt: true,
+            isStarter: true,
             // displayName + the fifa_team name (NEVER player.country — P34) make the drill-in XI
             // identifiable. Per-player points are joined from the whole-field score_player_match read
             // below (path a) — SERVER-SIDE only; the box-score modal still serves the full breakdown.
@@ -171,9 +216,12 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
         .map((r) => ({ managerId: r.managerId, points: r.points }))
     : [];
 
-  // Group the current period's starters per manager.
+  // Group the current period's starters per manager. The read now also returns bench rows (for the
+  // `benches` sibling below), so the buildVsField input is restricted to `is_starter = true` here — the
+  // engine input is byte-identical to before (bench rows never enter buildVsField).
   const lineupsByManager = new Map<string, ManagerLineupInput>();
   for (const s of lineupRows) {
+    if (!s.isStarter) continue;
     let entry = lineupsByManager.get(s.managerId);
     if (!entry) {
       entry = { managerId: s.managerId, starters: [] };
@@ -234,5 +282,9 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldView 
     now,
   };
 
-  return buildVsField(input);
+  // benches: the display-only sibling composed from the bench rows in the SAME lineup read. buildVsField
+  // (the @app/vsfield engine) is untouched — its input/output never see the bench.
+  const benches: ManagerBench[] = groupBenchesByManager(lineupRows);
+
+  return { ...buildVsField(input), benches };
 }

@@ -594,6 +594,89 @@
   animation: none;
 }
 
+/* ─────────────────────── bench (substitutes under the H2H XI) ───────────────────────
+   Off-pitch substitutes shown at the bottom of the head-to-head. Desktop is a two-up grid (You | Opp)
+   mirroring `.da-teams2`; mobile shows the single shown-side bench under `.ma-pitchwrap`. The token reuses
+   the XI's flag-kit vocabulary (kitOf + the `.sl-jersey` clip-path + the global `--kit-outline`) at a
+   compact size, sat on a plain surface (not the turf). HEX-FREE: ds tokens + rgba only (gold-free guard). */
+.da-benches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
+.vf-bench {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 10px 12px 12px;
+}
+.vf-bench.is-me {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+}
+.vf-bench-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.vf-bench-who {
+  min-width: 0;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vf-bench-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vf-bench-tok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 10px 5px 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+/* GOTCHA (handoff README): the kit is a MULTI-LAYER background — never set its background-size to
+   "cover" (the layers collapse to a solid block). */
+.vf-bench-jersey {
+  flex: none;
+  width: 22px;
+  height: 26px;
+  background: var(--surface-4);
+  clip-path: polygon(27% 0, 73% 0, 100% 15%, 84% 33%, 84% 100%, 16% 100%, 16% 33%, 0 15%);
+  filter: drop-shadow(1.5px 0 0 var(--kit-outline)) drop-shadow(-1.5px 0 0 var(--kit-outline))
+    drop-shadow(0 1.5px 0 var(--kit-outline)) drop-shadow(0 -1.5px 0 var(--kit-outline))
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+.vf-bench-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.vf-bench-name {
+  min-width: 0;
+  max-width: 124px;
+  font: 600 12px/1.1 var(--font-sans);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vf-bench-empty {
+  margin: 2px 0 0;
+}
+.ma-benchwrap {
+  margin-top: 2px;
+}
+
 /* ───────────────────────────── compare band (ranked facts) ───────────────────────────── */
 .v2-band {
   background: var(--surface-1);

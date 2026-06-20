@@ -12,13 +12,15 @@
  * change-nudge→refetch + the poll are all inside the (unit-tested) `startVsFieldLive`.
  */
 import { useEffect, useState } from "react";
-import type { VsFieldView } from "@app/vsfield";
+import type { VsFieldViewWithBenches } from "@/src/vsfield/benches";
 import { createClient } from "@/lib/supabase/client";
 import { startVsFieldLive } from "@/src/vsfield/liveController";
 import { fetchVsField } from "@/src/vsfield/snapshotClient";
 import type { RealtimeClientLike } from "@/src/vsfield/realtime";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import {
+  BenchStrip,
+  benchFor,
   CompareBand,
   ConnPill,
   Leaderboard,
@@ -36,8 +38,8 @@ const VIEW_TABS: ["period" | "season", string][] = [
   ["season", "Season"],
 ];
 
-export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
-  const [view, setView] = useState<VsFieldView>(initialView);
+export function VsFieldClient({ initialView }: { initialView: VsFieldViewWithBenches }) {
+  const [view, setView] = useState<VsFieldViewWithBenches>(initialView);
   const [conn, setConn] = useState<ConnState>("loading");
   const [tab, setTab] = useState<"period" | "season">("period");
   // Direction-A selection (replaces `selected`): `"field"` = the aggregate view, a managerId (UUID —
@@ -65,7 +67,7 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
       teardown = undefined;
       // Gate on a real session: an anon socket receives zero RLS-gated postgres_changes.
       if (cancelled || !token) return;
-      teardown = startVsFieldLive({
+      teardown = startVsFieldLive<VsFieldViewWithBenches>({
         client: supabase as unknown as RealtimeClientLike,
         args: { leagueId, currentPeriodId },
         accessToken: token,
@@ -192,6 +194,15 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
                       Tap any player for the categories &amp; stats behind their points · kit
                       brightness shows lock-on-play
                     </p>
+                    {/* Benches under the H2H — your subs (left) and the opponent's (right), mirroring
+                        the You-left / Opp-right XI columns above. */}
+                    <div className="da-benches">
+                      <BenchStrip label="You" isMe players={benchFor(view.benches, me.managerId)} />
+                      <BenchStrip
+                        label={opp.displayName}
+                        players={benchFor(view.benches, opp.managerId)}
+                      />
+                    </div>
                   </>
                 ) : (
                   <YouVsField
@@ -232,6 +243,7 @@ export function VsFieldClient({ initialView }: { initialView: VsFieldView }) {
                 onBack={() => setEffSel(null)}
                 onOpenPlayer={setBoxPlayer}
                 dimLive={dimLive}
+                benches={view.benches}
               />
             )}
           </div>

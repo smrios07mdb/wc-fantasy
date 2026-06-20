@@ -14,13 +14,13 @@ import {
   type SubscribeVsFieldArgs,
 } from "./realtime";
 
-export interface VsFieldLiveDeps {
+export interface VsFieldLiveDeps<V = VsFieldView> {
   client: RealtimeClientLike;
   args: SubscribeVsFieldArgs;
   /** The signed-in user's JWT (gate the call on a real token; re-create on refresh). */
   accessToken: string | null;
-  fetchSnapshot: () => Promise<VsFieldView | null>;
-  onSnapshot: (view: VsFieldView) => void;
+  fetchSnapshot: () => Promise<V | null>;
+  onSnapshot: (view: V) => void;
   onStatus?: (status: string) => void;
   /** Polling-fallback cadence; defaults to POLLING_FALLBACK_MS. */
   pollMs?: number;
@@ -31,7 +31,7 @@ export interface VsFieldLiveDeps {
   };
 }
 
-export function startVsFieldLive(deps: VsFieldLiveDeps): () => void {
+export function startVsFieldLive<V = VsFieldView>(deps: VsFieldLiveDeps<V>): () => void {
   // Gate on a real session: an anon subscription joins but receives no RLS-gated postgres_changes, and
   // there's nothing to authorize a poll against either. The shell re-creates this on TOKEN_REFRESHED.
   if (!deps.accessToken) return () => {};

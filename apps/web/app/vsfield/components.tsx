@@ -40,6 +40,7 @@ import type {
   StillToCome,
 } from "@app/vsfield";
 import type { Position } from "@app/shared";
+import type { BenchPlayerView, ManagerBench } from "@/src/vsfield/benches";
 import { kitOf } from "./kitOf";
 
 export type ConnState = "live" | "reconnecting" | "stale" | "loading";
@@ -449,6 +450,67 @@ export function XIPanel({
       <XIPitch starters={entry.starters} onOpenPlayer={onOpenPlayer} dimLive={dimLive} />
     </div>
   );
+}
+
+/* ─────────────────────────── bench (substitutes under the H2H XI) ─────────────────────────── */
+
+/**
+ * One bench player as a compact off-pitch token: a small flag-kit jersey swatch (the SAME `kitOf` kit
+ * vocabulary the XI tokens use) + name + a `Pos` position badge (both existing surface components). Bench
+ * players don't score in fantasy, so this is INFO-ONLY — no points chip, no live state, not tappable
+ * (vsfield is read-only). It sits on a plain surface (not the pitch turf) so it reads as "on the bench".
+ */
+function BenchToken({ player }: { player: BenchPlayerView }) {
+  return (
+    <div className="vf-bench-tok" title={player.name}>
+      <span
+        className="vf-bench-jersey"
+        style={{ background: kitOf(player.nation) }}
+        aria-hidden="true"
+      />
+      <span className="vf-bench-meta">
+        <span className="vf-bench-name">{player.name}</span>
+        <Pos p={player.role} />
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One side's bench (substitutes) under the head-to-head XI. `label` names the side ("You" / the
+ * opponent); an empty bench shows a muted note so the two-up desktop columns stay aligned.
+ */
+export function BenchStrip({
+  label,
+  players,
+  isMe,
+}: {
+  label: string;
+  players: BenchPlayerView[];
+  isMe?: boolean;
+}) {
+  return (
+    <div className={"vf-bench" + (isMe ? " is-me" : "")}>
+      <div className="vf-bench-hd">
+        <span className="t-label">Bench</span>
+        <span className="vf-bench-who">{label}</span>
+      </div>
+      {players.length === 0 ? (
+        <p className="vf-bench-empty t-caption text-tertiary">No substitutes named.</p>
+      ) : (
+        <div className="vf-bench-list">
+          {players.map((p) => (
+            <BenchToken key={p.playerId} player={p} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Resolve one manager's bench from the snapshot's `benches` list (empty array when none present). */
+export function benchFor(benches: ManagerBench[], managerId: string): BenchPlayerView[] {
+  return benches.find((b) => b.managerId === managerId)?.players ?? [];
 }
 
 /* ─────────────────────────────── compare band (ranked facts) ─────────────────────────────── */
@@ -913,12 +975,15 @@ export function MaH2H({
   onBack,
   onOpenPlayer,
   dimLive,
+  benches = [],
 }: {
   field: FieldEntry[];
   oppId: string;
   onBack: () => void;
   onOpenPlayer: (playerId: string) => void;
   dimLive: boolean;
+  /** Per-manager benches (display-only sibling of the snapshot); the shown side's bench renders below. */
+  benches?: ManagerBench[];
 }) {
   // Open on the OPPONENT's XI: you tapped this row to scout them, so their team
   // leads; your own side is one tap away on the segment below. (Mobile only —
@@ -956,6 +1021,14 @@ export function MaH2H({
       <p className="t-micro text-tertiary" style={{ textAlign: "center", margin: "2px 0 0" }}>
         Tap a player for the points breakdown · kit brightness = lock-on-play
       </p>
+      {/* Bench follows the You/Opp toggle — the substitutes for whichever side's XI is on the pitch. */}
+      <div className="ma-benchwrap">
+        <BenchStrip
+          label={side === "me" ? "You" : opp.displayName}
+          isMe={side === "me"}
+          players={benchFor(benches, shown.managerId)}
+        />
+      </div>
     </div>
   );
 }

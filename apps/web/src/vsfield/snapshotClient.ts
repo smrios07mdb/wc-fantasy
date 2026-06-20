@@ -5,9 +5,11 @@
  * snapshot. `fetch` is injected so it is unit-testable without a network; it returns null on any failure
  * so a slow/failed response never throws into the subscription handler (the caller keeps prior state).
  */
-import type { VsFieldView } from "@app/vsfield";
+import type { VsFieldViewWithBenches } from "./benches";
 
-export async function fetchVsField(deps: { fetch: typeof fetch }): Promise<VsFieldView | null> {
+export async function fetchVsField(deps: {
+  fetch: typeof fetch;
+}): Promise<VsFieldViewWithBenches | null> {
   let res: Response;
   try {
     res = await deps.fetch("/api/vsfield", { method: "GET" });
@@ -16,5 +18,8 @@ export async function fetchVsField(deps: { fetch: typeof fetch }): Promise<VsFie
   }
   if (!res.ok) return null;
   const raw: unknown = await res.json().catch(() => null);
-  return raw && typeof raw === "object" ? (raw as VsFieldView) : null;
+  // The snapshot is the server-computed `buildVsField` view PLUS the loader's `benches` sibling; the
+  // route serializes loadVsField's return verbatim, so the parsed JSON carries benches at runtime. Like
+  // the original cast this trusts the server shape (no client-side validation — same as before).
+  return raw && typeof raw === "object" ? (raw as VsFieldViewWithBenches) : null;
 }
