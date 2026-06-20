@@ -504,6 +504,22 @@ an open question.
     now matches `design/design_reference/standings/data.jsx`, which already models W/L/D with
     `games = W + L + D`. Infra: new `standing.all_play_all_d` column (ARCHITECTURE.md §4); the pure
     `computeStandings` sums per-period ties into `allPlayAllD` (the seed comparator is untouched).
+  - **Matchday-ranking rule (2026-06-19, `feat/standings-tabs` — the dedicated `/standings` page).** The
+    new Matchday tab ranks managers WITHIN one period by **that period's W desc → that period's points
+    desc → `managerId` asc** — the locked all-play-all tiebreak, scoped to a single period (points-only
+    would diverge from the season comparator). The per-period record is the locked `periodRecords`
+    helper (tie = Draw), so a genuine matchday points-tie shows both managers a **Draw**, NOT a loss
+    (`L` is never `N−1−W` — the bug class T9 caught). The Cumulative tab reuses `computeStandings`
+    verbatim (no forked tiebreak); both tabs are computed from the SAME period point-maps in pure
+    `buildStandingsView`, so they cannot disagree (and the cumulative tab is byte-identical to the
+    persisted `standing`). See ARCHITECTURE.md §23.
+  - **Joint-rank DISPLAY (2026-06-19, `feat/standings-tabs`).** Both tabs use standard competition
+    ranking ("1224"): rows sharing the full `(W, points)` sort key share a **joint displayed `rank`**
+    and the next distinct row's rank skips. The underlying deterministic **`seed` is UNCHANGED** (the
+    `managerId` fallback still totally-orders the field for bracket/seeding purposes) — only the
+    *displayed* rank joins true ties. The provisional playoff cut admits exactly `fieldSize` managers by
+    deterministic seed POSITION (not by displayed rank), so a boundary tie never over-admits. This is a
+    presentation decision only; the seeding logic from the amendment above is not touched.
 - **Scoring period = group "matchday," defined per fixture.** Each team plays exactly 3 group
   games, so MD1 = every team's 1st game (each player has exactly one); three waves. Close each
   wave when its last fixture ends. The staggered group calendar doesn't break this.
