@@ -2783,3 +2783,5 @@ subagent for audit work. Auto-invocation never drives a side-effectful action.
 **Rationale.** Determinism matched to stakes: hooks enforce invariants that must NEVER break (no-force-push), skills handle things that are useful but don't need to run on every action, the subagent keeps audit work read-only and scoped. The Stop typecheck is informational only (`|| true`), never blocking.
 
 **Supersedes.** Nothing; this is additive tooling config only. No app logic, no migration, no scoring change.
+
+**Auditor P2/P3 findings parked.** The 2026-06-19 auditor run surfaced two findings — P2 (`loadWaivers.ts` + `prismaStore.ts:678` read `league.status` violating the data-existence phase contract; see ARCHITECTURE.md §21 KNOWN-EXCEPTION) and P3 (no switch+never exhaustiveness on `league.status`; `"complete"` is a dead branch). Both are parked for their own clearance-required threads; neither is fixed inline here. Decision: scope isolation + live-FAAB caution (the waivers/FAAB path is live and the risk of an inline fix outweighs the drift).
