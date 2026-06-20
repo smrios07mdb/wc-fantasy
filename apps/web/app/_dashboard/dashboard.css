@@ -418,10 +418,21 @@
   gap: 9px;
   padding: 6px 8px;
   border-radius: var(--r-sm);
+  /* Rows are now <a> links to the manager's scores: neutralise the default anchor styling so the
+     row reads identically to its former <div>, and add a row-level hover affordance. */
+  color: inherit;
+  text-decoration: none;
+}
+.db-stand-row:hover {
+  background: var(--surface-2);
 }
 .db-stand-row.is-me {
   background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent);
+}
+/* Keep the "you" accent tint on hover instead of letting the generic hover override it. */
+.db-stand-row.is-me:hover {
+  background: var(--accent-soft);
 }
 .db-stand-rank {
   color: var(--text-tertiary);

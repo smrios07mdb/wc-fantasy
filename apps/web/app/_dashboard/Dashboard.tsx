@@ -340,7 +340,17 @@ function StandingsModule({ vsField }: { vsField: VsFieldView }) {
     <Module title="Standings" cta={{ label: "Vs the field", href: "/vsfield" }}>
       <div className="db-stand">
         {entries.map((e) => (
-          <div className={"db-stand-row" + (e.isMe ? " is-me" : "")} key={e.managerId}>
+          // Each row links to that manager's scores on /vsfield (the live cockpit this module's CTA
+          // already points to). `?manager=<id>` carries the clicked manager — it is the exact key
+          // VsFieldClient's H2H selection (`effSel`) is keyed on, so the cockpit can deep-link to that
+          // opponent's score sheet. Consuming the param to auto-open the H2H is a one-line
+          // `searchParams` read in VsFieldClient — HELD as a vsfield-side follow-up (out of the
+          // dashboard surface). Pure <a> nav keeps this a server component (no client island).
+          <a
+            className={"db-stand-row" + (e.isMe ? " is-me" : "")}
+            href={`/vsfield?manager=${e.managerId}`}
+            key={e.managerId}
+          >
             <span className="db-stand-rank mono">{e.rank}</span>
             <MgrAvatar id={e.managerId} displayName={e.displayName} size="sm" />
             <span className="db-stand-name">{e.isMe ? "You" : e.displayName}</span>
@@ -348,7 +358,7 @@ function StandingsModule({ vsField }: { vsField: VsFieldView }) {
               {e.allPlayAllW}-{e.allPlayAllL}-{e.allPlayAllD}
             </span>
             <span className="db-stand-pts mono">{e.totalPoints}</span>
-          </div>
+          </a>
         ))}
       </div>
     </Module>

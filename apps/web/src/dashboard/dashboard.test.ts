@@ -463,3 +463,32 @@ describe("dashboard — playoffModules pure derivations stay read-model-faithful
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}(?:[^0-9a-fA-F]|$)/m);
   });
 });
+
+// ─── this prompt: dashboard standings rows link to the manager's scores (dead-click fix) ─────
+
+describe("dashboard — StandingsModule rows link to the manager's scores", () => {
+  it("each standings row is a navigable <a> to /vsfield?manager=<id> (no longer an inert <div>)", () => {
+    // The dead click is fixed: the former `<div className={"db-stand-row"...}>` is now an anchor
+    // wired with a template-literal href to the live scores cockpit, keyed on the row's managerId.
+    expect(dashboard).toContain("href={`/vsfield?manager=");
+    expect(dashboard).toContain("db-stand-row");
+    expect(dashboard).not.toContain('<div className={"db-stand-row"');
+  });
+
+  it("the row link carries the clicked manager's id (the per-manager scores key)", () => {
+    // `?manager=<id>` is the exact key VsFieldClient's H2H selection (`effSel`) is keyed on, so the
+    // cockpit can deep-link to that opponent's score sheet. The row still keys on e.managerId.
+    expect(dashboard).toContain("/vsfield?manager=");
+    expect(dashboard).toContain("key={e.managerId}");
+  });
+
+  it("the StandingsModule CTA target is unchanged (still /vsfield — no regression)", () => {
+    expect(dashboard).toContain('cta={{ label: "Vs the field", href: "/vsfield" }}');
+  });
+
+  it("the row-link affordance CSS is present and hex-free", () => {
+    expect(css).toContain(".db-stand-row:hover");
+    expect(css).toContain("text-decoration: none");
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}(?:[^0-9a-fA-F]|$)/m);
+  });
+});
