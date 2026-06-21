@@ -11,6 +11,7 @@ import {
   kickoffByTeam,
   resolveKickoffByPlayer,
   resolveOpponentByPlayer,
+  UNNAMED_OPPONENT,
   resolveStarterStatusByPlayer,
 } from "./view";
 import type { LineupPlayer, PeriodLineup } from "./types";
@@ -255,6 +256,42 @@ describe("resolveOpponentByPlayer — P53 opponent fixture per squad player", ()
     const tbd = [{ homeTeamId: null, awayTeamId: null, kickoffAt: "2026-07-01T18:00:00.000Z" }];
     const out = resolveOpponentByPlayer([{ id: "p-x", teamId: "ESP" }], tbd);
     expect(out["p-x"]).toBeNull();
+  });
+
+  // T8: a resolved opponent whose fifa_team.name is null must NEVER surface the raw team UUID — the
+  // shared resolver feeds BOTH the lineup OpponentTag and the waivers OpponentLine, so fixing it here
+  // fixes both consumers. We fall back to the neutral UNNAMED_OPPONENT label and drop the flag.
+  it("null opponent name → UNNAMED_OPPONENT, never the team UUID (both home and away sides)", () => {
+    const unnamed = [
+      {
+        homeTeamId: "team-uuid-home-0001",
+        awayTeamId: "team-uuid-away-0002",
+        kickoffAt: "2026-06-14T18:00:00.000Z",
+        homeTeamName: null,
+        awayTeamName: null,
+      },
+    ];
+    const out = resolveOpponentByPlayer(
+      [
+        { id: "p-home", teamId: "team-uuid-home-0001" },
+        { id: "p-away", teamId: "team-uuid-away-0002" },
+      ],
+      unnamed,
+    );
+    // Home player sees the (unnamed) away team; away player sees the (unnamed) home team.
+    expect(out["p-home"]).toEqual({
+      opponentName: UNNAMED_OPPONENT,
+      opponentNation: null,
+      isHome: true,
+    });
+    expect(out["p-away"]).toEqual({
+      opponentName: UNNAMED_OPPONENT,
+      opponentNation: null,
+      isHome: false,
+    });
+    // The UUID must not leak into the label under any side.
+    expect(out["p-home"]?.opponentName).not.toContain("team-uuid");
+    expect(out["p-away"]?.opponentName).not.toContain("team-uuid");
   });
 });
 

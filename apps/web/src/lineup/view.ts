@@ -151,11 +151,21 @@ export function resolveKickoffByPlayer(
 }
 
 /**
+ * Neutral label for a resolved opponent whose `fifa_team.name` is null. We know which team it is and
+ * whether the player is home/away, but we can't name it — so we show this rather than the raw team UUID.
+ */
+export const UNNAMED_OPPONENT = "Unknown";
+
+/**
  * Resolve each squad player's opponent for the period being viewed: player.teamId → the period fixture
  * his team plays in → the OTHER side of that match. Uses the same earliest-kickoff tie-break as
  * `kickoffByTeam` so kickoff and opponent always reference the same match row and can never diverge.
  * Null when: the player has no teamId, his team has no fixture this period, or either side of his
  * fixture is TBD (knockout bracket not yet determined). The UI renders null as "TBD" (no flag).
+ *
+ * When the opponent IS resolved but `fifa_team.name` is null (an unjoined/unnamed team row), the label
+ * falls back to {@link UNNAMED_OPPONENT} — NEVER the raw team UUID, which would otherwise leak into both
+ * the lineup `OpponentTag` and the waivers `OpponentLine` (they share this single resolver).
  */
 export function resolveOpponentByPlayer(
   squad: readonly { id: string; teamId: string | null }[],
@@ -168,7 +178,7 @@ export function resolveOpponentByPlayer(
     const homeEntry = {
       kickoffAt: m.kickoffAt,
       info: {
-        opponentName: m.awayTeamName ?? m.awayTeamId,
+        opponentName: m.awayTeamName ?? UNNAMED_OPPONENT,
         opponentNation: m.awayTeamName ?? null,
         isHome: true,
       } satisfies OpponentInfo,
@@ -176,7 +186,7 @@ export function resolveOpponentByPlayer(
     const awayEntry = {
       kickoffAt: m.kickoffAt,
       info: {
-        opponentName: m.homeTeamName ?? m.homeTeamId,
+        opponentName: m.homeTeamName ?? UNNAMED_OPPONENT,
         opponentNation: m.homeTeamName ?? null,
         isHome: false,
       } satisfies OpponentInfo,

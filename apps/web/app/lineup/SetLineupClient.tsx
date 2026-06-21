@@ -36,6 +36,9 @@ import {
 } from "./components";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 
+/** Stable empty set for periods with no forfeit confirms — keeps memo deps referentially clean. */
+const EMPTY_FORFEITS: ReadonlySet<string> = new Set();
+
 function sameSet(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false;
   const sb = new Set(b);
@@ -58,8 +61,15 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
   const [toast, setToast] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   // Score modal state: which player's breakdown is open (null = closed).
   const [scorePlayerId, setScorePlayerId] = useState<string | null>(null);
-  // C2 forfeit state: players confirmed for forfeit this session + the player awaiting confirm.
-  const [pendingForfeits, setPendingForfeits] = useState(() => new Set<string>());
+  // C2 forfeit state. Confirms are PER-PERIOD (keyed by periodId), exactly like `lineups` above — NOT a
+  // single global Set. The benched-and-saved working set in `lineups[periodId]` survives a period switch;
+  // its matching forfeit confirm must survive with it (T7). If it didn't, switching away and back would
+  // re-validate a benched played starter with NO confirm, and validateLineup rule 4c would paint a spurious
+  // `forfeit-requires-confirm` against stale (never-refetched) `slotMeta`/`locks`. `forfeitingPlayer` is the
+  // transient in-flight confirm (a modal); it stays a single value (only one sheet is ever open).
+  const [forfeitsByPeriod, setForfeitsByPeriod] = useState<Record<string, ReadonlySet<string>>>(
+    () => ({}),
+  );
   const [forfeitingPlayer, setForfeitingPlayer] = useState<{
     playerId: string;
     displayName: string;
@@ -68,6 +78,18 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
 
   const period = useMemo(() => periods.find((p) => p.periodId === activeId)!, [periods, activeId]);
   const starterIds = lineups[activeId] ?? period.starterIds;
+
+  // The forfeit confirms for the ACTIVE period (stable empty ref when none → clean memo deps below).
+  const pendingForfeits = forfeitsByPeriod[activeId] ?? EMPTY_FORFEITS;
+  const setActivePeriodForfeits = useCallback(
+    (update: (prev: ReadonlySet<string>) => ReadonlySet<string>) => {
+      setForfeitsByPeriod((all) => ({
+        ...all,
+        [activeId]: update(all[activeId] ?? EMPTY_FORFEITS),
+      }));
+    },
+    [activeId],
+  );
 
   const view = useMemo(
     () => buildPitch(squad, { ...period, starterIds }),
@@ -165,7 +187,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       if (selected !== null && pendingForfeits.has(selected)) {
         if (playerId === selected) {
           // Tap same player again → full undo: remove from pendingForfeits, return to played-starter state.
-          setPendingForfeits((prev) => {
+          setActivePeriodForfeits((prev) => {
             const next = new Set(prev);
             next.delete(selected);
             return next;
@@ -209,29 +231,29 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       }
       setSelected(playerId); // not a legal target → move the selection instead
     },
-    [period, squad, selected, starterIds, activeId, pendingForfeits],
+    [period, squad, selected, starterIds, activeId, pendingForfeits, setActivePeriodForfeits],
   );
 
   const onConfirmForfeit = useCallback(() => {
     if (!forfeitingPlayer) return;
     const { playerId } = forfeitingPlayer;
-    setPendingForfeits((prev) => new Set([...prev, playerId]));
+    setActivePeriodForfeits((prev) => new Set([...prev, playerId]));
     setSelected(playerId); // enter the fill step: selected = forfeit player, eligibles highlight
     setForfeitingPlayer(null);
     setJustSaved(false);
-  }, [forfeitingPlayer]);
+  }, [forfeitingPlayer, setActivePeriodForfeits]);
 
   const onCancelForfeit = useCallback(() => {
     // Full undo: if somehow pre-confirmed, remove; always close the sheet.
     if (forfeitingPlayer) {
-      setPendingForfeits((prev) => {
+      setActivePeriodForfeits((prev) => {
         const next = new Set(prev);
         next.delete(forfeitingPlayer.playerId);
         return next;
       });
     }
     setForfeitingPlayer(null);
-  }, [forfeitingPlayer]);
+  }, [forfeitingPlayer, setActivePeriodForfeits]);
 
   // Props forwarded to PlayerScoreSheet so the in-modal "Bench & forfeit" button appears only for
   // played starters (the one case where forfeit is a legal next action).
@@ -253,8 +275,10 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     setSelected(null);
     setJustSaved(false);
     setToast(null);
-    // C2: period switch resets all forfeit state — confirms are period-scoped.
-    setPendingForfeits(new Set());
+    // C2/T7: a period switch does NOT clear forfeit confirms — they're per-period state
+    // (forfeitsByPeriod), so each period keeps its own and returning here keeps rule 4c green against
+    // the stale (never-refetched) slotMeta/locks. Only the in-flight confirm sheet (a single open
+    // modal) is dismissed.
     setForfeitingPlayer(null);
     setScorePlayerId(null);
   }, []);
@@ -278,8 +302,9 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
       // make the post-save re-validation (evaluateProposal → validateLineup, rule 4c) re-demand a confirm
       // and paint a spurious `forfeit-requires-confirm` error beside the "Lineup saved." toast. Keeping
       // the confirm keeps the no-op re-validation green; it's inert server-side on any re-save (the
-      // controller derives voids from its OWN authoritative slot state). A period switch resets these
-      // (period-scoped), and a full reload loads them as voided + benched — which never re-trips the rule.
+      // controller derives voids from its OWN authoritative slot state). Confirms are per-period state
+      // (forfeitsByPeriod), so they survive a period switch too (T7) — returning to this period keeps the
+      // confirm; a full reload loads the slot as voided + benched, which never re-trips the rule.
     } else {
       setToast({ kind: "error", text: res.error.message });
     }
