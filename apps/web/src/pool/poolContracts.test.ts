@@ -72,6 +72,12 @@ describe("pool client — lock disable + reveal render + route 409 surfacing", (
   it("disables the pick buttons when locked (the lock-on-play affordance)", () => {
     expect(components).toContain("disabled={locked || busy}");
   });
+
+  it("links the teams-score area to the real-match detail (T6) as a SEPARATE tap target from the picks", () => {
+    // A dedicated <a> on .pl-fx-view → /games/<matchId>; the HOME/DRAW/AWAY buttons stay their own controls.
+    expect(components).toContain("pl-fx-view");
+    expect(components).toContain("href={`/games/${fixture.matchId}`}");
+  });
 });
 
 describe("pool client — P43 live updates (clock-reveal + leaderboard poll) with NO Realtime", () => {

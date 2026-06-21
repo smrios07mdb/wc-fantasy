@@ -197,7 +197,13 @@ export function FixtureCard({
     <div className={"pl-fx" + (locked ? " is-locked" : "")}>
       <div className="pl-fx-top">
         <TeamLabel team={fixture.home} align="l" />
-        <div className="pl-fx-mid">
+        {/* The teams-score area is a SEPARATE tap target → the real-match detail (T6). It is NOT a
+            card-wide link: the HOME/DRAW/AWAY pick buttons below stay their own controls, untouched. */}
+        <a
+          className="pl-fx-mid pl-fx-view"
+          href={`/games/${fixture.matchId}`}
+          aria-label="View match detail"
+        >
           {hasScore ? (
             <span className="pl-score mono">
               {fixture.homeScore}–{fixture.awayScore}
@@ -205,8 +211,13 @@ export function FixtureCard({
           ) : (
             <span className="pl-vs">v</span>
           )}
-          <span className="pl-fx-when t-micro text-tertiary">{kickoffText}</span>
-        </div>
+          <span className="pl-fx-when t-micro text-tertiary">
+            {kickoffText}{" "}
+            <span className="pl-fx-chev" aria-hidden="true">
+              ›
+            </span>
+          </span>
+        </a>
         <TeamLabel team={fixture.away} align="r" />
       </div>
 

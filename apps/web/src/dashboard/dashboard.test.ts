@@ -291,6 +291,11 @@ describe("dashboard — group phase modules are built (P38)", () => {
     expect(dashboard).toContain("lockedCount");
   });
 
+  it("each match row links to the real-match detail view (T5)", () => {
+    // The MatchRow is now an <a> to /games/<matchId> (matchId is a real fifa_match id).
+    expect(dashboard).toContain("href={`/games/${match.matchId}`}");
+  });
+
   it("modulesFor 'group' returns record + standings + matchday", () => {
     expect(dashboard).toContain('case "group"');
     expect(dashboard).toContain('"record"');

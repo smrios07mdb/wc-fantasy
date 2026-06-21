@@ -331,8 +331,19 @@
   padding: 5px 6px;
   border-radius: var(--r-sm);
   font-size: var(--fs-caption);
+  /* Rows are now <a> links to the match detail (T5): neutralise default anchor styling so the row
+     reads identically to its former <div>, and add a row-level hover affordance. */
+  color: inherit;
+  text-decoration: none;
+}
+.db-match-row:hover {
+  background: var(--surface-2);
 }
 .db-match-row.is-live {
+  background: var(--live-soft);
+}
+/* Keep the live tint on hover instead of letting the generic hover override it. */
+.db-match-row.is-live:hover {
   background: var(--live-soft);
 }
 .db-match-home {

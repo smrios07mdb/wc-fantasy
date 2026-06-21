@@ -142,6 +142,25 @@
 .pl-fx-when {
   white-space: nowrap;
 }
+/* The teams-score area doubles as a link to the match detail (T6) — a SEPARATE tap target from the
+   pick buttons. Neutralise default anchor styling; a subtle chevron + hover signals it is tappable. */
+.pl-fx-view {
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.pl-fx-view:hover {
+  background: var(--surface-2);
+}
+.pl-fx-view:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pl-fx-chev {
+  color: var(--text-tertiary);
+  font-weight: var(--fw-bold);
+}
 
 /* the pick control */
 .pl-fx-act {

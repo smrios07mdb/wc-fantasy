@@ -425,8 +425,9 @@ function MatchRow({ match }: { match: MatchView }) {
   const isDone = match.status === "completed";
   const hasScore = match.homeScore !== null && match.awayScore !== null;
 
+  // The whole row links to the real-match detail view (T5). matchId is a real fifa_match id.
   return (
-    <div className={"db-match-row" + (isLive ? " is-live" : "")}>
+    <a className={"db-match-row" + (isLive ? " is-live" : "")} href={`/games/${match.matchId}`}>
       <span className="db-match-team db-match-home">{match.homeTeamName ?? "—"}</span>
       <span className="db-match-score mono">
         {hasScore ? (
@@ -451,7 +452,7 @@ function MatchRow({ match }: { match: MatchView }) {
       </span>
       <span className="db-match-team db-match-away">{match.awayTeamName ?? "—"}</span>
       <MatchStatusPill status={match.status} />
-    </div>
+    </a>
   );
 }
 
