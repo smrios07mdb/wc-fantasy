@@ -768,6 +768,14 @@ confirm-in-code:** the feed carries NO second-yellow class token (classes are on
 of Q4), so a two-yellow dismissal arrives as two `card/yellow` rows — detecting it (the first-yellow −1
 plus the second-yellow minute band) is **cross-row pairing in the discipline aggregation, not per-row
 classification**, an unbuilt seam (see the SEAM comment in `classifyCard` and DECISIONS.md).
+**`classifyCard` is single-sourced (T-CARD1).** It is `export`ed from `@app/recompute`
+(`packages/recompute/src/adapter.ts`) and imported by BOTH the scoring adapter and the read-only web
+Game-Detail box score (`apps/web/src/games/buildGameDetail.ts`) — so the two can never drift. The param
+was widened off `EventRow` to the structural `CardEvent` (just the two incident discriminators, which
+`EventRow` and the web event row both satisfy); that is a **type-only** change — the body is
+byte-identical and `second_yellow` is still never minted, so scoring is unaffected. The main
+`@app/recompute` entry stays IO-free (Prisma lives behind the `@app/recompute/prisma` subpath), so the
+web bundle takes on no server-only dependency by importing the classifier.
 
 ### ⚠️ Gaps — forced calls (all minor/rare). See SCORING.md amendments.
 | SCORING line | Status | Call |
@@ -1760,7 +1768,7 @@ The hourly **`wc-fantasy-period-close`** cron (`apps/worker/src/jobs/periodClose
 **What it is.** A drill-in over a single real `fifa_match`: both teams' squads (starting XI + subs who came on + named bench, with sub on/off minutes and cards) with each player's **real stat line, fantasy points, and a fantasy-owner tag**. Reached from the dashboard matchday rows and the Quiniela (`/pool`) fixtures. The per-player breakdown reuses `PlayerScoreSheet` verbatim (§17/§19) — no fork.
 
 **Layering (pure core + thin edge, mirrors §17 player-box and §21 playoffs).**
-- **Pure view-model `apps/web/src/games/{types,buildGameDetail}.ts` (`buildGameDetail.test.ts`).** Injected rows in, `GameDetailView` out — no DB/clock/IO. Groups each side into `starters` / `subs` (came on) / `bench` (named, did not feature) by position order; folds stat chips (G/A/SV), cards, and sub on/off minutes; echoes the loader-built owner overlay. **Card classification mirrors recompute's private `classifyCard` exactly** (`incident_type "card"`, class red/yellow; rescinded ignored; non-card ignored) — and deliberately does NOT attempt the two-yellow→red banding (that needs cross-row pairing at the aggregation layer; OUT OF SCOPE, rows shown as classified). Role inference: sheet `is_starter` wins; with no sheet entry, a `player_in` event ⇒ `sub`, else an appearance ⇒ inferred `starter`, else unused `bench`. A deterministic UTC `kickoffLabel` is emitted so the client never re-formats a Date (no hydration mismatch).
+- **Pure view-model `apps/web/src/games/{types,buildGameDetail}.ts` (`buildGameDetail.test.ts`).** Injected rows in, `GameDetailView` out — no DB/clock/IO. Groups each side into `starters` / `subs` (came on) / `bench` (named, did not feature) by position order; folds stat chips (G/A/SV), cards, and sub on/off minutes; echoes the loader-built owner overlay. **Card classification REUSES recompute's exported `classifyCard`** — the single source of truth (`@app/recompute`, T-CARD1; no longer a private mirror) (`incident_type "card"`, class red/yellow; rescinded ignored; non-card ignored) — and deliberately does NOT attempt the two-yellow→red banding (that needs cross-row pairing at the aggregation layer; OUT OF SCOPE, rows shown as classified). Role inference: sheet `is_starter` wins; with no sheet entry, a `player_in` event ⇒ `sub`, else an appearance ⇒ inferred `starter`, else unused `bench`. A deterministic UTC `kickoffLabel` is emitted so the client never re-formats a Date (no hydration mismatch).
 - **Thin loader `apps/web/app/games/[matchId]/loadGameDetail.ts` (`loadGameDetail.contract.test.ts`).** `import "server-only"`, Prisma owner-bypass, **read-only** — reads `fifa_match` (header + home/away `fifa_team` join for names) + `match_lineup_entry` (full squad, `is_starter`) + `stat_player_match` + `score_player_match` + `event_match`, then the union of referenced players (`displayName/position/teamId` + `team.name` → nation). **NO engine re-run, NO recompute, NO dirty-marking, NO writes.**
 - **Route `page.tsx` (auth gate, `force-dynamic`, `notFound()` on unknown matchId) + `layout.tsx` (`AppShell active="pool"` — the drill-in has no own NavId; the dedicated per-match surface is Quiniela — and imports `PlayerScoreSheet.css`, the vsfield precedent) + `GameDetailClient.tsx` + `apps/web/src/games/games.css` (route-scoped `.gd-*`, ds tokens only; booking-card glyphs are content imagery like flags).**
 
