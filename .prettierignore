@@ -16,6 +16,7 @@ packages/db/prisma/migrations
 PROJECT.md
 ARCHITECTURE.md
 DECISIONS.md
+BACKLOG.md
 SCORING.md
 BRAND.md
 prompts/
