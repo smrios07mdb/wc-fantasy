@@ -1038,9 +1038,7 @@ Realtime **client** are **Prompt 41**.
 
 **`pool_pick` table** (`prediction PoolPrediction {HOME DRAW AWAY}`; `UNIQUE(manager_id, match_id)`;
 indexes `(league_id, match_id)` + `match_id`; FKs → league / manager / fifa_match, all cascade). RLS
-mirrors `faab_bid` (auth.uid() → manager → league): a **league-scoped `authenticated` SELECT** (a
-member reads the whole field's picks — for the leaderboard + the post-kickoff reveal — the
-`standing_select_league_member` shape, no SECURITY DEFINER helper since the row carries `league_id`),
+mirrors `faab_bid` (auth.uid() → manager → league): a **league-scoped `authenticated` SELECT**,
 **own-`manager_id` INSERT/UPDATE**, no DELETE. `pool_pick` is added to the `supabase_realtime`
 publication now so Prompt 41's subscription isn't silently empty — the **Realtime-RLS trap**: a table
 outside the publication delivers zero `postgres_changes`, and a browser-read table needs its own SELECT
@@ -1048,6 +1046,19 @@ policy or the client sees zero rows (P41 also: `realtime.setAuth(token)` before 
 `INITIAL_SESSION`, re-subscribe on `TOKEN_REFRESHED`). The migration (`20260610130000_pool_pick`)
 carries the Theme-F embedded self-test (cross-league isolation + own-row write), verified against a
 uuid-returning `auth.uid()`.
+
+**⚠️ SELECT policy clock-gated (P1, `4cb29e5` / migration `20260621120000_fix_pool_pick_realtime_rls`,
+deployed + live-verified 2026-06-21) — supersedes the original "member reads the whole field's picks"
+SELECT above.** The original league-member-only SELECT, combined with `pool_pick` being in the
+`supabase_realtime` publication, leaked a rival's **pre-kickoff** picks cross-member through the Data API /
+Realtime — bypassing the `readVisiblePicks` loader gate (anon = 0, but cross-member = leak). The reveal
+rule is now enforced **at the DB layer**, matching `readVisiblePicks` exactly: USING = `league-member AND
+(own-pick OR pool_pick_match_kicked_off(match_id))` — own picks always, others' only after their fixture
+kicks off. The kickoff check is a **`SECURITY DEFINER` helper** (`pool_pick_match_kicked_off`, `prosecdef=t`)
+**not** an in-policy join to `fifa_match`: `fifa_match` is RLS default-deny, so an in-policy subquery would
+evaluate under the caller's RLS, find zero rows for everyone, and silently hide every not-own pick forever
+(the `score_manager_period` nested-RLS trap). The helper returns only a boolean — no `fifa_match` rows leak.
+Regression coverage: `poolPickRls.integration.test.ts` (DB-gated, role-switched).
 
 **`@app/pool` (pure engine)** mirrors `recompute/standing.ts` purity — no IO/clock/DB, grep-proven by
 `purity.test.ts`: `derivePoolResult` (group → H/D/A; knockout → advancer via FT→ET→pens; pending or
@@ -1192,6 +1203,14 @@ not yet determined) — the UI renders "TBD" with no flag. The `OpponentInfo` ty
 `src/lineup/types.ts`; `<OpponentTag>` in `app/lineup/components.tsx` renders "vs/@ + Flag + name` via
 the sole `<Flag>`/`toIso2` surface (no new flag IP). Display-only; engine, resolver, and purity matrix
 byte-untouched.
+
+**Never surfaces a team UUID (T8, 2026-06-21).** `resolveOpponentByPlayer` is shared by the lineup
+`<OpponentTag>` and the waivers `<OpponentLine>` (the waivers picker imports the same pure resolver —
+single derivation, no second resolver to drift). When the opponent's `fifa_team.name` is null it now
+falls back to a fixed **`UNNAMED_OPPONENT`** sentinel — never the raw `away/homeTeamId` UUID — and the
+flag is suppressed. Fixed once in the shared resolver (`0003f50`), so both surfaces are corrected at
+once; in practice `fifa_team.name` is populated by roster ingestion, so this is a defensive edge, not an
+observed defect.
 
 ---
 
