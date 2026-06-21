@@ -105,7 +105,11 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     [squad, period, starterIds, now, pendingForfeits],
   );
 
+  // T11: a fully-completed prior matchday is STRICTLY READ-ONLY (period.readOnly, anchored on the fixtures'
+  // clock in the loader — not period.status). This disables the formation picker + Save below; combined
+  // with every slot being locked-on-play it makes a prior period view-only. The box-score drill-down stays.
   const editable =
+    !period.readOnly &&
     period.status !== "closed" &&
     (!period.closesAt || now.getTime() < new Date(period.closesAt).getTime());
   const dirty = !sameSet(starterIds, savedLineups[activeId] ?? period.starterIds);
@@ -183,6 +187,12 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
         return;
       }
 
+      // T11: a prior (completed) matchday is STRICTLY READ-ONLY. Tapping a played player above still opens
+      // his box score (the whole point of the historical view); but no SWAP/selection is allowed — without
+      // this a never-played bench player (no locked_at → isMovable true) could be dragged onto the pitch,
+      // visibly misrepresenting the past XI. (Save is already disabled, so it could never persist.)
+      if (period.readOnly) return;
+
       // C2 path B: post-confirm fill step — selected player is a pending forfeit (still in XI).
       if (selected !== null && pendingForfeits.has(selected)) {
         if (playerId === selected) {
@@ -256,9 +266,10 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
   }, [forfeitingPlayer, setActivePeriodForfeits]);
 
   // Props forwarded to PlayerScoreSheet so the in-modal "Bench & forfeit" button appears only for
-  // played starters (the one case where forfeit is a legal next action).
+  // played starters (the one case where forfeit is a legal next action). T11: never offer it on a prior
+  // (read-only) matchday — a past forfeit is not a legal action, so the historical box score is view-only.
   const forfeitPropsForModal = useMemo(() => {
-    if (!scorePlayerId) return undefined;
+    if (!scorePlayerId || period.readOnly) return undefined;
     const kind = classifySlot(period, scorePlayerId, starterIds.includes(scorePlayerId));
     if (kind !== "played-starter") return undefined;
     const p = squad.find((q) => q.id === scorePlayerId);

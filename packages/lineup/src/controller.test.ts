@@ -197,6 +197,90 @@ describe("setLineup — the forfeit model (server-authoritative; the client can'
   });
 });
 
+describe("setLineup — a PRIOR (completed) matchday is read-only at the write path (T11 data integrity)", () => {
+  // The T11 prior-matchday selector surfaces completed matchdays read-only. This proves the WRITE path
+  // (POST /api/lineup → this controller) rejects any edit that touches a PLAYED slot of such a period — the
+  // data-integrity line. The guard rests on the play-state forfeit rules (`hasPlayed` = a score_player_match
+  // row exists) + the lock-on-play latch, NOT on `period.status`: the period below is seeded "pending" with
+  // NO `closesAt`, exactly as a just-finished matchday looks in prod before the hourly close cron. (The
+  // validator has no period-done gate, so a crafted POST swapping two NEVER-appeared squad players in a
+  // completed period is not rejected here — benign: non-appearing players score nothing, and the UI never
+  // sends it since Save is disabled on a read-only period. Hardening that is a separate BACKLOG item.)
+  function seedPlayedPeriod(): MemoryLineupStore {
+    const store = new MemoryLineupStore();
+    store.seedManager("mgr-1", "L1");
+    // status "pending" + closesAt null → the validator's status/closesAt window checks are BOTH no-ops here.
+    store.seedPeriod("L1", { id: "prior", status: "pending", closesAt: null });
+    for (const [playerId, position] of SQUAD) store.seedRoster("L1", "mgr-1", playerId, position);
+    // A fully-completed matchday: every squad player has a score_player_match row (hasPlayed → locked), the
+    // saved XI as starters, the rest benched. There is no un-played reserve to promote.
+    for (const [playerId, position] of SQUAD) {
+      store.seedSlot("mgr-1", "prior", playerId, position, {
+        isStarter: XI.includes(playerId),
+        hasPlayed: true,
+      });
+    }
+    return store;
+  }
+
+  it("rejects ANY XI change (every player has played → no legal swap), nothing written", async () => {
+    const store = seedPlayedPeriod();
+    // Bench d4 (played starter) and start d5 (played bench) — a legal 4-4-2 SHAPE, but both transitions are
+    // illegal on a completed matchday (a played starter can't be benched without a confirm; a played bench
+    // player can't be promoted). Whichever the validator hits first, the whole commit is refused.
+    const proposal = ["gk1", "d1", "d2", "d3", "d5", "m1", "m2", "m3", "m4", "f1", "f2"];
+    const res = await setLineup(
+      store,
+      { managerId: "mgr-1", periodId: "prior", starterIds: proposal },
+      NOW,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected failure");
+    expect(["played-player-started", "forfeit-requires-confirm"]).toContain(res.error.code);
+    // The saved XI is untouched — d4 still a starter, d5 still benched, nothing voided.
+    expect(store.slotsOf("mgr-1", "prior").find((s) => s.playerId === "d4")?.isStarter).toBe(true);
+    expect(store.slotsOf("mgr-1", "prior").find((s) => s.playerId === "d5")?.isStarter).toBe(false);
+    expect(store.voidedIdsOf("mgr-1", "prior")).toEqual([]);
+    expect(store.enqueuedRecomputes()).toEqual([]);
+  });
+
+  it("rejects a confirmed forfeit on a completed matchday too (the bench target has also played)", async () => {
+    const store = seedPlayedPeriod();
+    // Even WITH a confirm for the benched starter, the replacement (d5) has played → played-player-started.
+    const proposal = ["gk1", "d1", "d2", "d3", "d5", "m1", "m2", "m3", "m4", "f1", "f2"];
+    const res = await setLineup(
+      store,
+      {
+        managerId: "mgr-1",
+        periodId: "prior",
+        starterIds: proposal,
+        forfeitConfirmedPlayerIds: ["d4"],
+      },
+      NOW,
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error("expected failure");
+    expect(res.error.code).toBe("played-player-started");
+    expect(store.voidedIdsOf("mgr-1", "prior")).toEqual([]);
+  });
+
+  it("accepts the identical XI but writes nothing (an inert no-op, never a mutation)", async () => {
+    const store = seedPlayedPeriod();
+    const before = store.slotsOf("mgr-1", "prior").map((s) => ({ ...s }));
+    const res = await setLineup(
+      store,
+      { managerId: "mgr-1", periodId: "prior", starterIds: XI },
+      NOW,
+    );
+    // Re-submitting the SAME XI passes (no transition) — but it is inert: no role flips, nothing voided,
+    // no recompute enqueued. The only "accepted" write to a completed matchday changes nothing.
+    expect(res.ok).toBe(true);
+    expect(store.slotsOf("mgr-1", "prior")).toEqual(before);
+    expect(store.voidedIdsOf("mgr-1", "prior")).toEqual([]);
+    expect(store.enqueuedRecomputes()).toEqual([]);
+  });
+});
+
 describe("MemoryLineupStore.saveLineup — the write-time latch (mirrors the DB trigger)", () => {
   it("refuses a NON-forfeit flip of a locked slot and reports the conflict (write-time re-check)", async () => {
     const store = seedStore();

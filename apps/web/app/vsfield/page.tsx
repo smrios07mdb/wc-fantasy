@@ -17,15 +17,18 @@ export const dynamic = "force-dynamic";
 export default async function VsFieldPage({
   searchParams,
 }: {
-  // Next 15: `searchParams` is a Promise. We read only `?manager=<id>` — the dashboard standings-row
-  // deep-link (T3) — and validate it against the loaded field before handing the client an H2H seed.
-  searchParams: Promise<{ manager?: string | string[] }>;
+  // Next 15: `searchParams` is a Promise. We read `?manager=<id>` (the dashboard standings-row deep-link,
+  // T3) and `?period=<id>` (the T11 prior-matchday selector — a STARTED prior is honoured by loadVsField;
+  // a future/unstarted id is rejected there and falls back to the live wave).
+  searchParams: Promise<{ manager?: string | string[]; period?: string | string[] }>;
 }) {
   const outcome = await getSessionManager();
   if (outcome.kind === "no-session") redirect("/sign-in");
   if (outcome.kind !== "ok") redirect("/auth/denied");
 
-  const view = await loadVsField(outcome.manager.id);
+  const { manager, period } = await searchParams;
+  const requestedPeriodId = Array.isArray(period) ? period[0] : period;
+  const view = await loadVsField(outcome.manager.id, requestedPeriodId ?? null);
   if (!view) {
     return (
       <div className="vf-app">
@@ -44,8 +47,16 @@ export default async function VsFieldPage({
 
   // Validate the deep-link against the loaded field; an unknown/malformed id resolves to null so the
   // client keeps its existing default selection (never a non-existent manager → empty H2H).
-  const { manager } = await searchParams;
   const initialSelection = seedManagerSelection(manager, view.field);
 
-  return <VsFieldClient initialView={view} initialSelection={initialSelection} />;
+  // Key on the displayed period so a prior-matchday switch (a new SSR with a different ?period) REMOUNTS
+  // the client with the fresh snapshot — the client seeds `view` from `initialView` via useState, which
+  // would otherwise ignore the new prop. A normal live refetch (same period) keeps the key stable.
+  return (
+    <VsFieldClient
+      key={view.currentPeriod?.id ?? "no-period"}
+      initialView={view}
+      initialSelection={initialSelection}
+    />
+  );
 }

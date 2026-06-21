@@ -13,6 +13,7 @@ import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt }
 import { listFaIneligiblePlayerIds, loadIsPlayoffParticipant } from "@app/faab/prisma";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { rosterCapForLeagueStatus, selectCurrentPeriod, type Position } from "@app/shared";
+import { selectableStartedPeriods, type PeriodForSelect } from "@/src/period/selectablePeriods";
 // Read-only reuse of the set-lineup opponent resolver (exported Prompt 53) so the FA picker's
 // "next opponent" tag is field-for-field the SAME derivation as lineup's OpponentTag — never re-derived.
 import { resolveOpponentByPlayer } from "../../src/lineup/view";
@@ -121,7 +122,10 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
           status: true,
           waiverBatchAt: true,
           batchClearedAt: true,
-          matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
+          // All fixtures (kickoff-ascending) with status: matches[0] still feeds the batch-window first
+          // kickoff + selectCurrentPeriod, and the full list feeds the T11 started-set selector
+          // (isPickLocked on the first fixture; done when the last fixture's window elapses).
+          matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
         },
         orderBy: [{ opensAt: "asc" }, { label: "asc" }],
       }),
@@ -134,6 +138,23 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   // re-sorts by firstKickoffAt in JS. The phase + time come from @app/faab so the screen shows
   // the identical instant the worker's per-period batch trigger fires.
   const currentPeriodRow = selectCurrentPeriod(periodRows, (p) => p.batchClearedAt === null);
+
+  // T11 prior-matchday selector. The FA pool / claims / batch window stay UNCHANGED (live/global, the
+  // commish Jun 18 2026 decision) — the only thing the period selection re-scopes is the per-player
+  // stat-sheet drill-down (PlayerScoreSheet, already period-aware via /api/player-box). selectablePeriods
+  // is the started-set (completed priors + the live one, future excluded); currentPeriodId marks the live
+  // wave so the client renders the prior box score only for a non-current selection (default = current →
+  // the existing FaPlayerCardSheet, byte-identical).
+  const periodsForSelect: PeriodForSelect[] = periodRows.map((p) => ({
+    id: p.id,
+    label: p.label,
+    matches: p.matches,
+  }));
+  const selectablePeriods = selectableStartedPeriods(
+    periodsForSelect,
+    now,
+    currentPeriodRow?.id ?? null,
+  );
 
   let batchWindow: WvBatchWindow | null = null;
   if (currentPeriodRow) {
@@ -310,5 +331,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     isParticipant,
     playoffForfeitDeadlineIso,
     nowIso: now.toISOString(),
+    selectablePeriods,
+    currentPeriodId: currentPeriodRow?.id ?? null,
   };
 }

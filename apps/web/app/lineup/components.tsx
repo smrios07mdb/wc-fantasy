@@ -463,7 +463,11 @@ export function PeriodTabs({ periods, activeId, onSelect }: PeriodTabsProps) {
           onClick={() => onSelect(p.periodId)}
         >
           {p.label}
-          {p.status === "pending" && <span className="sl-tab-sub t-micro">upcoming</span>}
+          {p.readOnly ? (
+            <span className="sl-tab-sub t-micro">final</span>
+          ) : (
+            p.status === "pending" && <span className="sl-tab-sub t-micro">upcoming</span>
+          )}
         </button>
       ))}
     </div>

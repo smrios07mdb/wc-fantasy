@@ -12,6 +12,7 @@
  * change-nudge→refetch + the poll are all inside the (unit-tested) `startVsFieldLive`.
  */
 import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { VsFieldViewWithBenches } from "@/src/vsfield/benches";
 import { createClient } from "@/lib/supabase/client";
 import { startVsFieldLive } from "@/src/vsfield/liveController";
@@ -67,8 +68,16 @@ export function VsFieldClient({
   // (or pre-season → first matchday) changes this id, so the effect tears down + re-subscribes the
   // score binding to the new period. Normal refetches keep the same id → no re-subscribe thrash.
   const currentPeriodId = view.currentPeriod?.id ?? null;
+  // T11: the live Realtime subscription runs ONLY for the live wave. A selected prior matchday is static
+  // (fully scored, fully revealed because locked), so there is nothing to subscribe to — and the refetch
+  // path (GET /api/vsfield, which always loads the live wave) must not overwrite the historical snapshot.
+  const isLivePeriod = view.isLivePeriod;
 
   useEffect(() => {
+    if (!isLivePeriod) {
+      setConn("historical");
+      return;
+    }
     const supabase = createClient();
     let teardown: (() => void) | undefined;
     let cancelled = false;
@@ -107,7 +116,7 @@ export function VsFieldClient({
       teardown?.();
       subscription.unsubscribe();
     };
-  }, [leagueId, currentPeriodId]);
+  }, [leagueId, currentPeriodId, isLivePeriod]);
 
   // Compute the "updated" label CLIENT-ONLY (after mount) so the server (UTC) and the browser (local
   // tz) don't disagree on the SSR text node — a hydration mismatch. asOf is a tz-stable UTC ISO string.
@@ -127,7 +136,22 @@ export function VsFieldClient({
   const opp =
     desktopSel !== "field" ? view.field.find((e) => e.managerId === desktopSel) : undefined;
   const me = view.field.find((e) => e.isMe);
-  const dimLive = conn !== "live";
+  // Dim only while a LIVE wave is mid-reconnect. A prior matchday is settled (everything locked/played), so
+  // it shows at full brightness regardless of `conn`.
+  const dimLive = isLivePeriod && conn !== "live";
+
+  // T11 prior-matchday selector. The default (live) view carries no `?period`, so the first load is
+  // byte-identical; selecting any option navigates with `?period=<id>` (preserving `?manager`), which
+  // re-runs the server component through the SAME loadVsField read path. Shown only when a prior exists.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectPeriod = (periodId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("period", periodId);
+    router.push(`${pathname}?${params.toString()}`);
+  };
+  const displayedPeriodId = view.currentPeriod?.id ?? null;
 
   return (
     <div className="vf-app">
@@ -155,10 +179,31 @@ export function VsFieldClient({
         </div>
         <div style={{ flex: 1 }} />
         <div className="vf-top-right">
-          <span className="t-micro text-tertiary">Updated {updated ?? "…"}</span>
+          {isLivePeriod && <span className="t-micro text-tertiary">Updated {updated ?? "…"}</span>}
           <ConnPill state={conn} />
         </div>
       </div>
+
+      {/* T11 prior-matchday selector — completed priors + the live one, in canonical order. Shown only on
+          the period tab and only when a prior exists. Selecting one re-runs loadVsField for that period;
+          a prior is fully revealed because it is over, and future matchdays are never offered. */}
+      {tab === "period" && view.selectablePeriods.length > 1 && (
+        <div className="tabs vf-periodtabs" role="tablist" aria-label="Matchday">
+          {view.selectablePeriods.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="tab"
+              aria-selected={p.id === displayedPeriodId}
+              className={"tab" + (p.id === displayedPeriodId ? " is-active" : "")}
+              onClick={() => selectPeriod(p.id)}
+            >
+              {p.label}
+              {p.isLive && <span className="vf-tab-sub t-micro"> · live</span>}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab === "season" ? (
         <div className="vf-scroll">
@@ -173,7 +218,8 @@ export function VsFieldClient({
               The season standings are under the Season tab.
             </div>
           ) : (
-            empty && (
+            empty &&
+            isLivePeriod && (
               <div className="vf-banner vf-banner-empty">
                 Scoring hasn’t started — points begin at kickoff. Every manager’s full XI is still
                 swappable right now.

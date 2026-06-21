@@ -18,6 +18,7 @@ import { BidComposer, type BidPayload } from "./BidComposer";
 import { FreeAgentPanel, type FaGrantPayload } from "./FreeAgentPanel";
 import { FaPlayerCardSheet } from "./FaPlayerCardSheet";
 import { ReleasePanel } from "./ReleasePanel";
+import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import "./waivers.css";
 
 const FAAB_ALLOTMENT = 100; // the $100 budget — the FAAB bar's track denominator (design/CLAUDE.md §2).
@@ -64,6 +65,13 @@ export function WaiversClient({ view }: { view: WaiversView }) {
   // The view-only player card (Prompt 56): opened from a picker row's dedicated info control. Purely
   // informational — separate from the composer's acquisition selection, which it never touches.
   const [cardPlayer, setCardPlayer] = useState<WvPlayer | null>(null);
+  // T11 prior-matchday selector. Drives ONLY which matchday the player drill-down shows — the FA pool,
+  // claims, and batch window are all live/global and never re-scoped. Defaults to the live wave, so the
+  // drill-down stays the existing period-less FaPlayerCardSheet until a PRIOR matchday is picked.
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(view.currentPeriodId);
+  // A prior (historical) matchday is selected when the choice is a real period that is NOT the live wave.
+  const priorPeriodId =
+    selectedPeriodId && selectedPeriodId !== view.currentPeriodId ? selectedPeriodId : null;
   const [submitting, setSubmitting] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -236,6 +244,30 @@ export function WaiversClient({ view }: { view: WaiversView }) {
           Batch results
         </button>
       </div>
+
+      {/* T11 prior-matchday selector — pick a matchday, then open any player's info to see their stat
+          sheet for it. Only the drill-down changes; the FA pool / claims / batch window are unaffected.
+          Shown only when a completed prior exists (the started-set has more than the live wave). */}
+      {view.selectablePeriods.length > 1 && (
+        <div className="wv-periodsel">
+          <span className="t-micro text-tertiary wv-periodsel-label">Stat sheet</span>
+          <div className="tabs wv-periodtabs" role="tablist" aria-label="Matchday stat sheet">
+            {view.selectablePeriods.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="tab"
+                aria-selected={p.id === selectedPeriodId}
+                className={"tab" + (p.id === selectedPeriodId ? " is-active" : "")}
+                onClick={() => setSelectedPeriodId(p.id)}
+              >
+                {p.label}
+                {p.isLive && <span className="wv-tab-sub t-micro"> · live</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {view.isPlayoffPhase && (
         <div className="wv-resetbanner">
@@ -416,9 +448,20 @@ export function WaiversClient({ view }: { view: WaiversView }) {
         />
       )}
 
-      {cardPlayer && (
-        <FaPlayerCardSheet player={cardPlayer} now={now} onClose={() => setCardPlayer(null)} />
-      )}
+      {/* The player drill-down. For a PRIOR matchday selection it is the period-aware PlayerScoreSheet
+          (reused verbatim — the same per-period box score lineup/vsfield use, served by /api/player-box for
+          the selected period). For the live wave (default) it stays the period-less FaPlayerCardSheet, so
+          the no-prior-selected behaviour is byte-identical to before T11. */}
+      {cardPlayer &&
+        (priorPeriodId ? (
+          <PlayerScoreSheet
+            periodId={priorPeriodId}
+            playerId={cardPlayer.id}
+            onClose={() => setCardPlayer(null)}
+          />
+        ) : (
+          <FaPlayerCardSheet player={cardPlayer} now={now} onClose={() => setCardPlayer(null)} />
+        ))}
     </div>
   );
 }

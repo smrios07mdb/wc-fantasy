@@ -71,6 +71,10 @@ export interface PeriodLineup {
    *  the formation offer-set. */
   kind: PeriodKind;
   status: PeriodStatus;
+  /** T11: a fully-completed prior matchday — STRICTLY READ-ONLY. Derived from the fixtures' clock
+   *  (last kickoff + match window) in the loader, NOT from `status` (which lags in prod). The client gates
+   *  every mutation (formation picker, swap, save) off this; the box-score drill-down stays available. */
+  readOnly: boolean;
   closesAt: string | null; // ISO; null = no explicit close
   /** The currently-saved starters (the other squad players are the bench). */
   starterIds: string[];

@@ -42,6 +42,7 @@ function stateFor(squad: LineupPlayer[]): SetLineupState {
     label: "MD1",
     kind: "group_md",
     status: "open",
+    readOnly: false,
     closesAt: "2099-01-01T00:00:00.000Z", // far future → the window is editable
     starterIds: defaultStarterIds(squad), // mirrors the SSR loader's seed
     locks: [],

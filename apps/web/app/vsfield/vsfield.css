@@ -62,6 +62,22 @@
   gap: 12px;
 }
 
+/* T11 prior-matchday selector — a horizontally-scrollable tab strip under the top bar (completed priors +
+   the live one). Reuses the global `.tabs`/`.tab` vocabulary; this only adds the strip chrome + scroll. */
+.vf-periodtabs {
+  flex: none;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-1);
+  overflow-x: auto;
+}
+.vf-tab-sub {
+  margin-left: 4px;
+  color: var(--accent, currentColor);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* connection banners */
 .vf-banner {
   display: flex;

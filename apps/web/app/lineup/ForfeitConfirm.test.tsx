@@ -78,6 +78,7 @@ const BASE_PERIOD: PeriodLineup = {
   label: "MD1",
   kind: "group_md",
   status: "open",
+  readOnly: false,
   closesAt: "2099-01-01T00:00:00.000Z",
   starterIds: STARTERS,
   locks: [{ playerId: DEF1, isStarter: true }],

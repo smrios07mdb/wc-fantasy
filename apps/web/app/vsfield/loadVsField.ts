@@ -12,6 +12,11 @@
  */
 import { prisma } from "@app/db";
 import { selectCurrentPeriod, isLockedNow, type Position } from "@app/shared";
+import {
+  resolveDisplayedPeriodId,
+  selectableStartedPeriods,
+  type PeriodForSelect,
+} from "@/src/period/selectablePeriods";
 import type { BenchPlayerView, ManagerBench, VsFieldViewWithBenches } from "@/src/vsfield/benches";
 
 /** Max wall-clock window to consider a period still live after its last scheduled kickoff. */
@@ -84,8 +89,20 @@ export function groupBenchesByManager(rows: BenchSlotRow[]): ManagerBench[] {
   }));
 }
 
-/** Build the whole-league vs-the-field snapshot for the league `viewerManagerId` belongs to. */
-export async function loadVsField(viewerManagerId: string): Promise<VsFieldViewWithBenches | null> {
+/**
+ * Build the whole-league vs-the-field snapshot for the league `viewerManagerId` belongs to.
+ *
+ * `requestedPeriodId` (T11) selects which period the field shows. Omitted (or pointing at the live wave) →
+ * byte-identical to the pre-T11 behaviour: the live wave is pinned via `selectCurrentPeriod`. A STARTED
+ * prior period id is honoured (the whole field, fully revealed because the matchday is over). A
+ * future/unstarted id is rejected by `resolveDisplayedPeriodId` and falls back to the live wave — the
+ * server-side guarantee that the selector can never reveal a not-yet-locked matchday. There is ONE read
+ * path: this loader, parameterised by the displayed period; no parallel ungated read exists.
+ */
+export async function loadVsField(
+  viewerManagerId: string,
+  requestedPeriodId?: string | null,
+): Promise<VsFieldViewWithBenches | null> {
   const viewer = await prisma.manager.findUnique({
     where: { id: viewerManagerId },
     select: { id: true, leagueId: true },
@@ -111,7 +128,9 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldViewW
         label: true,
         kind: true,
         status: true,
-        matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true } },
+        // status is selected alongside kickoffAt so the T11 started-set predicate (isPickLocked on the
+        // first fixture) can run on these rows without a second read.
+        matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
       },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
     }),
@@ -136,13 +155,42 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldViewW
   // ~6h BEFORE first kickoff; using it as the latch would drop the live wave while MD1 matches are
   // still being played, binding the Realtime subscription and lineup/score reads to MD2 instead.
   // TODO(confirm): overlapping group waves ("which wave is the field") — sequential periods only.
-  const currentPeriodRow = selectCurrentPeriod(periodRows, (p) => {
+  const livePeriodRow = selectCurrentPeriod(periodRows, (p) => {
     const lastKickoffMs = p.matches.at(-1)?.kickoffAt.getTime() ?? 0;
     return now.getTime() < lastKickoffMs + MATCH_DURATION_MS;
   });
+
+  // T11 prior-matchday selector. The DISPLAYED period is the caller's requested started prior (if any),
+  // else the live wave; a future/unstarted request is rejected (resolveDisplayedPeriodId) so the selector
+  // can never reveal a not-yet-locked matchday. periodRows already carries every league period (no status
+  // filter), so the selectable set + the displayed row are derived without an extra read.
+  const periodsForSelect: PeriodForSelect[] = periodRows.map((p) => ({
+    id: p.id,
+    label: p.label,
+    matches: p.matches,
+  }));
+  const displayedId = resolveDisplayedPeriodId(
+    periodsForSelect,
+    requestedPeriodId,
+    livePeriodRow?.id ?? null,
+    now,
+  );
+  const currentPeriodRow = periodRows.find((p) => p.id === displayedId) ?? null;
   const currentPeriod = currentPeriodRow
     ? { id: currentPeriodRow.id, label: currentPeriodRow.label }
     : null;
+  // The displayed period is the live wave only when it IS the computed live wave; a prior is static, so the
+  // client suppresses the Realtime subscription for it. The selector force-includes the computed live wave
+  // (alwaysIncludeId below) so the default view always has a tab. During the inter-matchday gap the live
+  // wave can itself be a not-yet-kicked-off period — it is force-included (tagged isLive:false) because it
+  // is already the default reveal, NOT a new exposure; a period that is neither started NOR the live-wave
+  // default is never in the set. (The gap-window default reveal is a PRE-EXISTING behaviour, see BACKLOG.)
+  const isLivePeriod = currentPeriod !== null && currentPeriod.id === livePeriodRow?.id;
+  const selectablePeriods = selectableStartedPeriods(
+    periodsForSelect,
+    now,
+    livePeriodRow?.id ?? null,
+  );
 
   // group_md periods feed the season "by period" chips (display enrichment over the standing headline).
   const groupMdPeriodIds = periodRows.filter((p) => p.kind === "group_md").map((p) => p.id);
@@ -286,5 +334,5 @@ export async function loadVsField(viewerManagerId: string): Promise<VsFieldViewW
   // (the @app/vsfield engine) is untouched — its input/output never see the bench.
   const benches: ManagerBench[] = groupBenchesByManager(lineupRows);
 
-  return { ...buildVsField(input), benches };
+  return { ...buildVsField(input), benches, selectablePeriods, isLivePeriod };
 }

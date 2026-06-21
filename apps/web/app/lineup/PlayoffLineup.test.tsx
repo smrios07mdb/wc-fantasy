@@ -51,6 +51,7 @@ function stateFor(squad: LineupPlayer[], kind: PeriodKind): SetLineupState {
     label: kind === "knockout_round" ? "R32" : "MD1",
     kind,
     status: "open",
+    readOnly: false,
     closesAt: "2099-01-01T00:00:00.000Z", // far future → the window is editable
     starterIds: defaultStarterIds(squad, formationSetForKind(kind)),
     locks: [],

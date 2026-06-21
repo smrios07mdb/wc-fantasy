@@ -43,7 +43,9 @@ import type { Position } from "@app/shared";
 import type { BenchPlayerView, ManagerBench } from "@/src/vsfield/benches";
 import { kitOf } from "./kitOf";
 
-export type ConnState = "live" | "reconnecting" | "stale" | "loading";
+// "historical" (T11) is set when a PRIOR matchday is selected: the view is static (no live subscription),
+// so the pill reads "Final" rather than a connection state.
+export type ConnState = "live" | "reconnecting" | "stale" | "loading" | "historical";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -87,6 +89,12 @@ export function ConnPill({ state }: { state: ConnState }) {
     return (
       <span className="pill vf-conn vf-conn-stale">
         <span aria-hidden="true">◷</span>Delayed
+      </span>
+    );
+  if (state === "historical")
+    return (
+      <span className="pill pill-neutral vf-conn">
+        <span aria-hidden="true">✓</span>Final
       </span>
     );
   return (

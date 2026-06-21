@@ -7,7 +7,8 @@
  * edge has no unit test (it needs a live DB); `tsc` + the pure-logic suites cover the shapes it produces.
  */
 import { prisma } from "@app/db";
-import { sortByPeriodOrder, isLockedNow } from "@app/shared";
+import { sortByPeriodOrder, isLockedNow, selectCurrentPeriod } from "@app/shared";
+import { MATCH_DURATION_MS, periodIsDone } from "../../src/period/selectablePeriods";
 import {
   defaultStarterIds,
   formationSetForKind,
@@ -29,7 +30,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
   // (isLockedNow), never on presence alone — a future-dated stamp is still movable (DECISIONS Theme B).
   const now = new Date();
 
-  const [rosterRows, periodRows] = await Promise.all([
+  const [rosterRows, allPeriodRows, allSlotRows] = await Promise.all([
     prisma.rosterPlayer.findMany({
       where: { managerId: sessionManagerId, droppedAt: null },
       select: {
@@ -49,15 +50,41 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
         },
       },
     }),
-    // The editable windows: the current OPEN period + upcoming PENDING ones, soonest first.
+    // ALL league periods (T11) — no status filter. The editable windows (current + upcoming, NOT yet done)
+    // plus the started/completed PRIOR matchdays the selector exposes read-only. `period.status` is NOT the
+    // filter (it stays "pending" in prod until the hourly close cron); started/done is derived from the
+    // fixtures' clock (matches[].kickoffAt + isPickLocked / MATCH_DURATION_MS via periodIsDone). frozenAt
+    // feeds the forfeit-model movability gate; `kind` selects the roster MODE (knockout_round → playoff).
     prisma.period.findMany({
-      where: { leagueId: manager.leagueId, status: { in: ["open", "pending"] } },
+      where: { leagueId: manager.leagueId },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
-      // frozenAt feeds the forfeit-model movability gate (frozen period → nothing movable). `kind`
-      // selects the roster MODE downstream: knockout_round → playoff reduced roster (7+2, FORMATIONS_PO).
-      select: { id: true, label: true, status: true, closesAt: true, frozenAt: true, kind: true },
+      select: {
+        id: true,
+        label: true,
+        status: true,
+        closesAt: true,
+        frozenAt: true,
+        kind: true,
+        matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
+      },
+    }),
+    // The manager's saved slots across ALL periods (managerId alone — his slots only exist in his league's
+    // periods). Used to (a) decide which DONE periods to surface (only matchdays he actually played, never
+    // a back-dateable never-set one) and (b) build each shown period's saved XI / locks below.
+    prisma.lineupSlot.findMany({
+      where: { managerId: sessionManagerId },
+      select: { periodId: true, playerId: true, isStarter: true, lockedAt: true, voidedAt: true },
     }),
   ]);
+
+  // Which periods reach the selector: every NOT-yet-done window (current + upcoming, editable) plus any
+  // DONE prior the manager actually played (has ≥1 saved slot). A done period he never set is NOT shown —
+  // there is nothing to view and it must never become a back-dateable target. Done periods render strictly
+  // read-only (every slot locked-on-play; the client gates edits off `readOnly`).
+  const playedPeriodIds = new Set(allSlotRows.map((s) => s.periodId));
+  const periodRows = allPeriodRows.filter(
+    (p) => !periodIsDone(p, now) || playedPeriodIds.has(p.id),
+  );
 
   const squad: LineupPlayer[] = rosterRows.map((r) => ({
     id: r.player.id,
@@ -73,20 +100,9 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
 
   const periodIds = periodRows.map((p) => p.id);
   const squadIds = squad.map((p) => p.id);
-  const [slotRows, matchRows, scoreRows, lineupEntryRows] = await Promise.all([
-    periodIds.length
-      ? prisma.lineupSlot.findMany({
-          where: { managerId: sessionManagerId, periodId: { in: periodIds } },
-          // voidedAt is the forfeit latch (the C2 read contract); lockedAt still drives `locks` (unchanged).
-          select: {
-            periodId: true,
-            playerId: true,
-            isStarter: true,
-            lockedAt: true,
-            voidedAt: true,
-          },
-        })
-      : Promise.resolve([]),
+  // The saved slots scoped to the SHOWN periods (allSlotRows was read by managerId across all periods).
+  const slotRows = allSlotRows.filter((s) => periodIds.includes(s.periodId));
+  const [matchRows, scoreRows, lineupEntryRows] = await Promise.all([
     // Each period's fixtures — drives both the per-player kickoff (= lock/sub deadline) and the
     // per-player opponent label. homeTeam/awayTeam names are the flag-resolver inputs (same source
     // as player.country on the roster side — fifa_team.name). One read, two outputs.
@@ -176,6 +192,13 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       // knockout_round drives the playoff reduced-roster mode (7+2, FORMATIONS_PO) in the validator + UI.
       kind: p.kind,
       status: p.status,
+      // T11: a fully-completed prior matchday is STRICTLY READ-ONLY — anchored on the fixtures' clock
+      // (periodIsDone: last kickoff + MATCH_DURATION_MS), NOT period.status (which lags). The client gates
+      // EVERY mutation off this (formation picker, the tap-to-swap onSelect, and Save) — this is what makes
+      // the historical view non-editable, since a never-appeared bench player has no locked_at. The server
+      // write path is the independent backstop for any PLAYED slot (lock-on-play latch + the forfeit
+      // play-state rules); the box-score drill-down stays available.
+      readOnly: periodIsDone(p, now),
       closesAt: p.closesAt ? p.closesAt.toISOString() : null,
       // A period the manager hasn't set yet starts from the first FILLABLE formation in its mode's offer
       // set (group: canonical 4-3-3 when his squad can field it, else a shape it can — e.g. a 3-DEF squad
@@ -204,7 +227,21 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
   // single source in @app/shared. NOT alphabetical (which mis-sorts Final/QF/R16/R32/SF) and NOT by
   // opens_at (null until fixtures sync → silently falls back to the alphabetical bug).
   const periods = sortByPeriodOrder(unorderedPeriods, (p) => p.label);
-  const active = periods.find((p) => p.status === "open") ?? periods[0];
+  // Default to the CURRENT live wave so the screen opens on the editable period (the prior matchdays are now
+  // also in `periods`, so `periods[0]` could be an old read-only one). Derived from the fixtures' clock —
+  // the live wave (now within its window), else the earliest upcoming editable, else the first shown period.
+  // Mirrors loadVsField's current-period selection; never period.status alone. NOTE: this is the live wave,
+  // not a literal byte-for-byte match of the old `find(status==="open") ?? periods[0]` — in prod, status is
+  // stuck "pending", so the old default was always `periods[0]` (canonical MD1) even mid-tournament; this
+  // intentionally opens on the genuinely-live wave instead (the same period the screen meant to show).
+  const liveRow = selectCurrentPeriod(allPeriodRows, (p) => {
+    const lastKickoffMs = p.matches.at(-1)?.kickoffAt.getTime() ?? 0;
+    return now.getTime() < lastKickoffMs + MATCH_DURATION_MS;
+  });
+  const active =
+    (liveRow && periods.find((p) => p.periodId === liveRow.id)) ??
+    periods.find((p) => !p.readOnly) ??
+    periods[0];
   return {
     sessionManagerId,
     displayName: manager.displayName,

@@ -13,6 +13,7 @@
  */
 import type { Position } from "@app/shared";
 import type { VsFieldView } from "@app/vsfield";
+import type { SelectablePeriod } from "@/src/period/selectablePeriods";
 
 /** One bench player (a current-period `lineup_slot` with `is_starter = false`) — display-only. */
 export interface BenchPlayerView {
@@ -31,7 +32,19 @@ export interface ManagerBench {
 }
 
 /**
- * `loadVsField`'s return: the pure `buildVsField` snapshot PLUS the loader-composed `benches`. `benches`
- * is a sibling field — it never enters the engine's input or output, so @app/vsfield stays untouched.
+ * `loadVsField`'s return: the pure `buildVsField` snapshot PLUS the loader-composed `benches`, and (T11)
+ * the prior-matchday selector metadata. `benches`, `selectablePeriods`, and `isLivePeriod` are all sibling
+ * fields — none enters the engine's input or output, so @app/vsfield stays untouched.
+ *
+ * `currentPeriod` (from the engine) is the period being DISPLAYED — the live wave by default, or a
+ * caller-selected started prior. `selectablePeriods` is the started-set the selector offers (completed
+ * priors + the live one, future excluded). `isLivePeriod` is true only when the displayed period is the
+ * actual live wave — the client drives the Realtime subscription off it (a prior period is static).
  */
-export type VsFieldViewWithBenches = VsFieldView & { benches: ManagerBench[] };
+export type VsFieldViewWithBenches = VsFieldView & {
+  benches: ManagerBench[];
+  /** The prior-matchday selector options (T11) — started periods only, canonical order. */
+  selectablePeriods: SelectablePeriod[];
+  /** True when the displayed period is the live wave (drives the live subscription; false for a prior). */
+  isLivePeriod: boolean;
+};

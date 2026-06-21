@@ -76,6 +76,7 @@ function period(
     label: "MD1",
     kind: "group_md",
     status: "open",
+    readOnly: false,
     closesAt: "2026-06-12T18:00:00.000Z",
     starterIds,
     locks,
