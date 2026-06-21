@@ -8,11 +8,13 @@
  * the `playerAppearedInMatch` gate, with NO roster join (see DECISIONS → Game Detail). So a full 22+ box
  * score is fully backed by stored data; the owner overlay is the only piece that needs a fantasy period.
  *
- * Card classification mirrors recompute's (private) `classifyCard` EXACTLY — incident_type "card" with
- * incident_class red/yellow. Two-yellow→red banding is OUT OF SCOPE (it needs cross-row pairing at the
- * aggregation layer); rows are shown as classified (a 2nd booking is a second yellow, never auto-folded).
+ * Card classification REUSES recompute's shared `classifyCard` (@app/recompute) — the single source of
+ * truth (T-CARD1): incident_type "card" with incident_class red/yellow. Two-yellow→red banding is OUT OF
+ * SCOPE (it needs cross-row pairing at the aggregation layer); rows are shown as classified (a 2nd booking
+ * is a second yellow, never auto-folded).
  */
 import { UNNAMED_OPPONENT } from "@/src/lineup/view";
+import { classifyCard } from "@app/recompute";
 import type { Position } from "@app/shared";
 import type {
   BuildGameDetailInput,
@@ -25,23 +27,6 @@ import type {
   SquadSide,
   StatChip,
 } from "./types";
-
-// ─── card classification (mirrors recompute/src/adapter.ts classifyCard) ──────────
-
-/** Lowercase + strip non-alphanumerics — the same `norm()` the engine applies before matching. */
-function norm(s: string | null | undefined): string {
-  return (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-type CardKind = "yellow" | "red";
-
-function classifyCard(e: GdEventInput): CardKind | null {
-  if (norm(e.incidentType) !== "card") return null;
-  const cls = norm(e.incidentClass);
-  if (cls === "red") return "red";
-  if (cls === "yellow") return "yellow";
-  return null;
-}
 
 // ─── ordering ─────────────────────────────────────────────────────────────────────
 

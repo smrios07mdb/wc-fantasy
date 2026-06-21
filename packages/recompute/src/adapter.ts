@@ -117,7 +117,18 @@ const label = (e: EventRow): string => `${norm(e.incidentType)} ${norm(e.inciden
 
 // CardKind keeps its full vocabulary: `second_yellow` is still read by onPitchWindow/cardsFor even
 // though classifyCard can no longer mint it (no feed class token for it — see the SEAM note below).
-type CardKind = "yellow" | "second_yellow" | "red";
+export type CardKind = "yellow" | "second_yellow" | "red";
+
+/**
+ * The minimal row shape {@link classifyCard} reads — just the two incident discriminators. Both the
+ * engine's {@link EventRow} and the web Game-Detail event row are structurally assignable to it, which is
+ * what lets ONE classifier serve recompute (scoring) and the read-only box score (T-CARD1). The classifier
+ * is the single source of truth; widening the param off `EventRow` is type-only — the body is unchanged.
+ */
+export interface CardEvent {
+  incidentType: string;
+  incidentClass: string | null;
+}
 
 /**
  * Classify a card event, keyed on `incident_type` EXACTLY (`'card'`) — the sibling of
@@ -134,7 +145,7 @@ type CardKind = "yellow" | "second_yellow" | "red";
  * cross-row pairing of two `card/yellow` rows for the same (player, match), which is aggregation-layer
  * work (the discipline rollup), NOT a per-row classification. So second_yellow is not produced here.
  */
-function classifyCard(e: EventRow): CardKind | null {
+export function classifyCard(e: CardEvent): CardKind | null {
   if (norm(e.incidentType) !== "card") return null; // exact gate — mirrors isGoalEvent; non-card types never enter
   const cls = norm(e.incidentClass);
   if (cls === "red") return "red";
