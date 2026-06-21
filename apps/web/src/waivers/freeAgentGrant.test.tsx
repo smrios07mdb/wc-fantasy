@@ -87,8 +87,6 @@ function view(over: Partial<WaiversView> = {}): WaiversView {
     isParticipant: true,
     playoffForfeitDeadlineIso: null,
     nowIso: "2026-06-11T17:30:00.000Z",
-    selectablePeriods: [],
-    currentPeriodId: null,
     ...over,
   };
 }

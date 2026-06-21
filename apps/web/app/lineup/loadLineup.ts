@@ -102,7 +102,21 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
   const squadIds = squad.map((p) => p.id);
   // The saved slots scoped to the SHOWN periods (allSlotRows was read by managerId across all periods).
   const slotRows = allSlotRows.filter((s) => periodIds.includes(s.periodId));
-  const [matchRows, scoreRows, lineupEntryRows] = await Promise.all([
+  // T11 Fix A: players who appear in a shown period's `lineup_slot` but are NOT in the current active
+  // roster — i.e. SINCE-DROPPED players who were fielded in a prior (completed) matchday. A fielded
+  // player's slot is locked-on-play at kickoff, so it survives the later drop (releaseDroppedPlayerSlots
+  // deletes only UNLOCKED slots), and `allSlotRows` is read by managerId alone — so his locked historical
+  // row is already in `slotRows`. He's missing only his identity (name/position/nation/team), because that
+  // came from roster_player (dropped_at IS NULL). We fetch it here so a prior matchday can render him.
+  const rosterIdSet = new Set(squadIds);
+  const droppedSlotPlayerIds = [...new Set(slotRows.map((s) => s.playerId))].filter(
+    (id) => !rosterIdSet.has(id),
+  );
+  // The display universe for the per-period maps (scores / kickoff / opponent / availability): the live
+  // squad PLUS the since-dropped fielded players. For editable periods buildPitch reads only `squad`, so
+  // the extra entries are inert there — the current-period path is unchanged.
+  const displayPlayerIds = [...squadIds, ...droppedSlotPlayerIds];
+  const [matchRows, scoreRows, lineupEntryRows, droppedPlayerRows] = await Promise.all([
     // Each period's fixtures — drives both the per-player kickoff (= lock/sub deadline) and the
     // per-player opponent label. homeTeam/awayTeam names are the flag-resolver inputs (same source
     // as player.country on the roster side — fifa_team.name). One read, two outputs.
@@ -120,12 +134,14 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
           },
         })
       : Promise.resolve([]),
-    // Each squad player's earned points per period — the authoritative "has played" (row exists) + the
+    // Each display player's earned points per period — the authoritative "has played" (row exists) + the
     // "points at stake" (the score) for the C2 forfeit contract. Joined through the player's match in the
-    // period (fifa_match.period_id). A player plays at most one match per period.
-    periodIds.length && squadIds.length
+    // period (fifa_match.period_id). A player plays at most one match per period. Keyed on the full display
+    // universe (squad + since-dropped fielded players) so a dropped starter's prior-matchday points resolve
+    // rather than reading 0.
+    periodIds.length && displayPlayerIds.length
       ? prisma.scorePlayerMatch.findMany({
-          where: { playerId: { in: squadIds }, match: { periodId: { in: periodIds } } },
+          where: { playerId: { in: displayPlayerIds }, match: { periodId: { in: periodIds } } },
           select: { playerId: true, points: true, match: { select: { periodId: true } } },
         })
       : Promise.resolve([]),
@@ -138,7 +154,41 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
           select: { matchId: true, playerId: true, isStarter: true },
         })
       : Promise.resolve([]),
+    // T11 Fix A: identity for the since-dropped fielded players (name/position/teamId + fifa_team.name for
+    // nation), mirroring the roster `player` select above. They have no roster_player row, so this is the
+    // only source for their LineupPlayer fields — used to render a prior matchday's historical snapshot.
+    droppedSlotPlayerIds.length
+      ? prisma.player.findMany({
+          where: { id: { in: droppedSlotPlayerIds } },
+          select: {
+            id: true,
+            displayName: true,
+            firstName: true,
+            lastName: true,
+            position: true,
+            teamId: true,
+            team: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
+
+  // Resolve the since-dropped players to LineupPlayer (country via the fifa_team join, exactly as the roster
+  // squad above) + their team link (for kickoff/opponent resolution). `playersById` is the full display
+  // lookup the per-period snapshot is built from; `displayTeams` widens kickoff/opponent to cover them.
+  const droppedPlayers: LineupPlayer[] = droppedPlayerRows.map((r) => ({
+    id: r.id,
+    displayName: r.displayName,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    position: r.position,
+    country: r.team?.name ?? null,
+  }));
+  const droppedTeams = droppedPlayerRows.map((r) => ({ id: r.id, teamId: r.teamId }));
+  const displayTeams = [...squadTeams, ...droppedTeams];
+  const playersById = new Map<string, LineupPlayer>(
+    [...squad, ...droppedPlayers].map((p) => [p.id, p]),
+  );
 
   // matchId → { playerId → is_starter }: the per-fixture snapshot the resolver keys on. A populated map
   // for a match ⇔ its lineup has been announced (the peek writes nothing on an empty sheet).
@@ -165,7 +215,10 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
     const voidedByPlayer = new Map(slots.map((s) => [s.playerId, s.voidedAt !== null] as const));
     const periodFrozen = p.frozenAt !== null;
     const slotMeta: Record<string, SlotMeta> = {};
-    for (const player of squad) {
+    // Built over the full display universe (squad + since-dropped fielded players). Extra entries for
+    // dropped players are inert on editable periods (buildPitch reads only `squad` there); a read-only
+    // prior renders the snapshot, so its dropped starters need real hasPlayed/pointsAtStake meta.
+    for (const player of playersById.values()) {
       const voided = voidedByPlayer.get(player.id) ?? false;
       slotMeta[player.id] = {
         hasPlayed: pointsByPlayer.has(player.id),
@@ -186,6 +239,17 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
         // This fixture's official-lineup snapshot (or undefined when not yet peeked) — drives the badge.
         starterByPlayer: entriesByMatch.get(m.id),
       }));
+    // T11 Fix A: a read-only PRIOR matchday renders its OWN lineup_slot snapshot (the players actually set
+    // that matchday — starters + bench, INCLUDING since-dropped ones), resolved via the full display
+    // lookup. Editable periods stay roster-bound (undefined → the client falls back to `squad`), so the
+    // current-period path is byte-unchanged. A slot whose player can't resolve (shouldn't happen) is
+    // dropped rather than rendered as a blank.
+    const readOnly = periodIsDone(p, now);
+    const snapshotPlayers = readOnly
+      ? [...new Set(slots.map((s) => s.playerId))]
+          .map((id) => playersById.get(id))
+          .filter((pl): pl is LineupPlayer => pl !== undefined)
+      : undefined;
     return {
       periodId: p.id,
       label: p.label,
@@ -198,7 +262,7 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       // the historical view non-editable, since a never-appeared bench player has no locked_at. The server
       // write path is the independent backstop for any PLAYED slot (lock-on-play latch + the forfeit
       // play-state rules); the box-score drill-down stays available.
-      readOnly: periodIsDone(p, now),
+      readOnly,
       closesAt: p.closesAt ? p.closesAt.toISOString() : null,
       // A period the manager hasn't set yet starts from the first FILLABLE formation in its mode's offer
       // set (group: canonical 4-3-3 when his squad can field it, else a shape it can — e.g. a 3-DEF squad
@@ -213,13 +277,17 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       slotMeta,
       // Per-player kickoff = his team's fixture kickoff in THIS period (ISO), or null when his team
       // isn't playing yet (knockout TBD). The client formats it in the league tz as the lock/sub deadline.
-      kickoffByPlayer: resolveKickoffByPlayer(squadTeams, periodMatches),
+      // Resolved over the full display universe (squad + since-dropped fielded players) so a snapshot's
+      // dropped starter resolves his kickoff/opponent too; extra entries are inert on editable periods.
+      kickoffByPlayer: resolveKickoffByPlayer(displayTeams, periodMatches),
       // Per-player opponent = the OTHER side of the same match row. Null for TBD/unplaying teams.
       // Resolved from the same periodMatches array — kickoff and opponent always reference the same row.
-      opponentByPlayer: resolveOpponentByPlayer(squadTeams, periodMatches),
+      opponentByPlayer: resolveOpponentByPlayer(displayTeams, periodMatches),
       // Per-player availability badge state, resolved against the SAME fixture row (same earliest-kickoff
       // tie-break) as kickoff/opponent above. null = lineup not announced for his match → no badge.
-      starterStatusByPlayer: resolveStarterStatusByPlayer(squadTeams, periodMatches),
+      starterStatusByPlayer: resolveStarterStatusByPlayer(displayTeams, periodMatches),
+      // The historical snapshot for a read-only prior matchday (undefined for editable periods).
+      snapshotPlayers,
     };
   });
 

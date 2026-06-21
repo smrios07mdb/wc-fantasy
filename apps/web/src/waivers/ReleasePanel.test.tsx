@@ -117,8 +117,6 @@ describe("WaiversClient release-panel mount condition", () => {
       isParticipant: true,
       playoffForfeitDeadlineIso: "2026-06-20T15:00:00.000Z",
       nowIso: "2026-06-20T08:00:00.000Z",
-      selectablePeriods: [],
-      currentPeriodId: null,
       ...over,
     };
   }

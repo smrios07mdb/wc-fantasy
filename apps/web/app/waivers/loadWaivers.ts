@@ -13,7 +13,6 @@ import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt }
 import { listFaIneligiblePlayerIds, loadIsPlayoffParticipant } from "@app/faab/prisma";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { rosterCapForLeagueStatus, selectCurrentPeriod, type Position } from "@app/shared";
-import { selectableStartedPeriods, type PeriodForSelect } from "@/src/period/selectablePeriods";
 // Read-only reuse of the set-lineup opponent resolver (exported Prompt 53) so the FA picker's
 // "next opponent" tag is field-for-field the SAME derivation as lineup's OpponentTag — never re-derived.
 import { resolveOpponentByPlayer } from "../../src/lineup/view";
@@ -122,10 +121,9 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
           status: true,
           waiverBatchAt: true,
           batchClearedAt: true,
-          // All fixtures (kickoff-ascending) with status: matches[0] still feeds the batch-window first
-          // kickoff + selectCurrentPeriod, and the full list feeds the T11 started-set selector
-          // (isPickLocked on the first fixture; done when the last fixture's window elapses).
-          matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
+          // matches[0].kickoffAt feeds the batch-window first kickoff + selectCurrentPeriod. batchClearedAt
+          // (above) keys the per-matchday Batch results labels (T11 Fix B); no other period read is needed.
+          matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
         },
         orderBy: [{ opensAt: "asc" }, { label: "asc" }],
       }),
@@ -139,22 +137,14 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   // the identical instant the worker's per-period batch trigger fires.
   const currentPeriodRow = selectCurrentPeriod(periodRows, (p) => p.batchClearedAt === null);
 
-  // T11 prior-matchday selector. The FA pool / claims / batch window stay UNCHANGED (live/global, the
-  // commish Jun 18 2026 decision) — the only thing the period selection re-scopes is the per-player
-  // stat-sheet drill-down (PlayerScoreSheet, already period-aware via /api/player-box). selectablePeriods
-  // is the started-set (completed priors + the live one, future excluded); currentPeriodId marks the live
-  // wave so the client renders the prior box score only for a non-current selection (default = current →
-  // the existing FaPlayerCardSheet, byte-identical).
-  const periodsForSelect: PeriodForSelect[] = periodRows.map((p) => ({
-    id: p.id,
-    label: p.label,
-    matches: p.matches,
-  }));
-  const selectablePeriods = selectableStartedPeriods(
-    periodsForSelect,
-    now,
-    currentPeriodRow?.id ?? null,
-  );
+  // T11 Fix B: map each settled batch to the matchday it cleared. A period stamps its `batch_cleared_at`
+  // with the batch's `run_at` in the SAME settlement transaction, so equality of those instants is the
+  // batch↔period key (faab_batch has no period_id). This is the ONLY period concept on /waivers — the FA
+  // pool / claims / player cards stay live/global (the over-applied prior-matchday selector was removed).
+  const periodLabelByClearedAt = new Map<string, string>();
+  for (const p of periodRows) {
+    if (p.batchClearedAt) periodLabelByClearedAt.set(p.batchClearedAt.toISOString(), p.label);
+  }
 
   let batchWindow: WvBatchWindow | null = null;
   if (currentPeriodRow) {
@@ -276,6 +266,8 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   const batches: WvBatch[] = batchRows.map((batch) => ({
     batchId: batch.id,
     runAt: batch.runAt.toISOString(),
+    // The matchday this batch settled (period whose batch_cleared_at == this run_at); null if none maps.
+    matchdayLabel: periodLabelByClearedAt.get(batch.runAt.toISOString()) ?? null,
     results: batch.bids.map(
       (b): WvResult => ({
         bidId: b.id,
@@ -331,7 +323,5 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     isParticipant,
     playoffForfeitDeadlineIso,
     nowIso: now.toISOString(),
-    selectablePeriods,
-    currentPeriodId: currentPeriodRow?.id ?? null,
   };
 }

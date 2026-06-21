@@ -472,6 +472,7 @@ export function ResultsBatch({
   batch: {
     batchId: string;
     runAt: string;
+    matchdayLabel: string | null;
     results: ReadonlyArray<{
       bidId: string;
       managerName: string;
@@ -487,7 +488,12 @@ export function ResultsBatch({
   return (
     <section className="wv-batch">
       <header className="wv-batch-head">
-        <b className="wv-batch-when">{formatRunAt(batch.runAt)}</b>
+        {/* T11 Fix B: the matchday/round this batch settled leads, with the run time alongside (or alone
+            when no period maps). This is the only period concept on /waivers. */}
+        <b className="wv-batch-when">
+          {batch.matchdayLabel ? `${batch.matchdayLabel} · ` : ""}
+          {formatRunAt(batch.runAt)}
+        </b>
         <span className="t-micro text-tertiary">{batch.results.length} claims</span>
       </header>
       <div className="wv-batch-list">

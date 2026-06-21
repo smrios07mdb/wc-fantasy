@@ -9,7 +9,6 @@
  */
 import type { AcquisitionWindow } from "@app/faab";
 import type { Position } from "@app/shared";
-import type { SelectablePeriod } from "../period/selectablePeriods";
 // The opponent shape is the SAME one the set-lineup screen renders — reused read-only (never re-derived)
 // so the waivers "next opponent" tag matches lineup's OpponentTag field-for-field (Prompt 53 / T8).
 import type { OpponentInfo } from "../lineup/types";
@@ -72,6 +71,11 @@ export interface WvBatch {
   readonly batchId: string;
   /** ISO run time; the client formats it league-local. */
   readonly runAt: string;
+  /** T11 Fix B: the matchday/round this batch settled (the period whose `batch_cleared_at` equals this
+   *  batch's `run_at` — stamped together in one transaction). Null if no period maps (graceful: the card
+   *  then shows the run time alone). This is the only period concept on /waivers — the FA pool / claims /
+   *  player cards stay live/global. */
+  readonly matchdayLabel: string | null;
   readonly results: readonly WvResult[];
 }
 
@@ -145,10 +149,4 @@ export interface WaiversView {
   readonly playoffForfeitDeadlineIso: string | null;
   /** Server render time (ISO) — seeds the client's live clock so SSR + hydration agree (no mismatch). */
   readonly nowIso: string;
-  /** T11 prior-matchday selector: the started-set (completed priors + the live one, future excluded), in
-   *  canonical order. Drives ONLY the per-player stat-sheet drill-down; the FA pool/claims stay global. */
-  readonly selectablePeriods: readonly SelectablePeriod[];
-  /** The live wave's period id (or null). The drill-down shows the prior box score (PlayerScoreSheet) only
-   *  for a selection ≠ this; the default (current) keeps the existing period-less FaPlayerCardSheet. */
-  readonly currentPeriodId: string | null;
 }

@@ -91,9 +91,17 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     [activeId],
   );
 
+  // T11 Fix A: a read-only PRIOR matchday renders its OWN `lineup_slot` snapshot — which includes players
+  // since dropped from the roster (a fielded player's slot is locked-on-play at kickoff, so it survives the
+  // later drop), so the historical XI is shown in full. The editable current/upcoming periods have no
+  // snapshot (`snapshotPlayers` undefined) and fall back to the roster-bound `squad`, leaving the editable
+  // path byte-unchanged. Only display reads this set; every edit handler stays on `squad` (inert when
+  // read-only, identical to `squad` otherwise).
+  const renderSquad = period.readOnly && period.snapshotPlayers ? period.snapshotPlayers : squad;
+
   const view = useMemo(
-    () => buildPitch(squad, { ...period, starterIds }),
-    [squad, period, starterIds],
+    () => buildPitch(renderSquad, { ...period, starterIds }),
+    [renderSquad, period, starterIds],
   );
 
   // Re-sample the clock on each edit / period switch so the window check stays fresh (presentation only;
@@ -321,7 +329,9 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     }
   }, [sessionManagerId, activeId, starterIds, pendingForfeits]);
 
-  const movable = squad.filter((p) => isMovable(period, p.id)).length;
+  // Hero movable/locked counts reflect what's on screen: `renderSquad` (= `squad` for editable periods,
+  // the historical snapshot for a read-only prior). Identical to the old `squad` count on editable periods.
+  const movable = renderSquad.filter((p) => isMovable(period, p.id)).length;
 
   // Reduced-roster mode is period-driven (DECISIONS Theme B): a knockout window is the 7+2 guillotine
   // squad, not the 11-man group XI. Surface it in the hero so the manager knows which roster he's setting.
@@ -345,7 +355,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
         formationLabel={view.formationLabel}
         rosterLabel={rosterLabel}
         movable={movable}
-        locked={squad.length - movable}
+        locked={renderSquad.length - movable}
         dirty={dirty}
         justSaved={justSaved && !dirty}
       />

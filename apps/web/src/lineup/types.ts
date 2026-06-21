@@ -93,6 +93,14 @@ export interface PeriodLineup {
    *  lineup not announced for his match → no badge. Optional so existing fixtures stay valid; buildPitch
    *  defaults a missing entry to null (no badge). */
   starterStatusByPlayer?: Record<string, StarterStatus | null>;
+  /** T11 Fix A — the historical snapshot for a read-only PRIOR matchday: the FULL set of players in THAT
+   *  period's `lineup_slot` rows (starters + bench), resolved to {@link LineupPlayer}, INCLUDING players
+   *  since dropped from the roster (a fielded player's slot is locked-on-play at kickoff, so it survives
+   *  the later drop — see `slotRelease.releaseDroppedPlayerSlots`, which deletes only UNLOCKED slots). The
+   *  client renders a prior matchday from THIS set instead of the live `squad`, so a fielded-then-dropped
+   *  player still appears. Undefined for editable periods — they render from the roster-bound `squad`, so
+   *  the current-period (editable) path is byte-unchanged. */
+  snapshotPlayers?: LineupPlayer[];
 }
 
 export interface SetLineupState {
