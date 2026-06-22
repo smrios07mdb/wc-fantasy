@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemoryIngestStore } from "./memoryStore";
-import { ingestLineups, ingestLive, ingestSettle, ingestSchedule, ingestRosters } from "./ingest";
+import {
+  ingestLineups,
+  ingestLive,
+  ingestSettle,
+  ingestSchedule,
+  ingestRosters,
+  ingestTeamStats,
+} from "./ingest";
 import type { FeedClient } from "@app/feed";
 
 /** A FeedClient whose endpoints return empty pages unless overridden. */
@@ -392,5 +399,59 @@ describe("ingestSettle", () => {
       now: liveNow,
     });
     expect(store.lockedAt(50, 7)).toEqual(entry); // NOT overwritten with kickoff
+  });
+});
+
+describe("ingestTeamStats (team-stats backfill, T17)", () => {
+  it("upserts a match's team rows (typed columns + retained extra), drops foreign rows, and reports counts", async () => {
+    const feed = fakeFeed({
+      teamMatchStats: () =>
+        Promise.resolve({
+          data: [
+            {
+              match_id: 50,
+              team_id: 36,
+              possession_pct: 60,
+              offsides: 2,
+              shots_blocked: 3,
+              expected_goals: 1.4,
+              corners: 6,
+            },
+            { match_id: 50, team_id: 10, possession_pct: 40, offsides: 1, shots_blocked: 1 },
+            // a row whose own match_id is a DIFFERENT match → must be foreign-skipped, not written.
+            { match_id: 99, team_id: 7, possession_pct: 55 },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+
+    const result = await ingestTeamStats(feed, store, 50);
+
+    expect(result).toEqual({ upserted: 2, foreignSkipped: 1 });
+    const rows = store.allTeamStats();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.teamBdlId).sort((a, b) => a - b)).toEqual([10, 36]);
+    expect(rows.find((r) => r.teamBdlId === 7)).toBeUndefined(); // foreign row never written
+    // The promoted typed columns + the catch-all `extra` both land (mapTeamStat reuse).
+    const t36 = rows.find((r) => r.teamBdlId === 36)!;
+    expect(t36).toMatchObject({ possession: 60, offsides: 2, shotsBlocked: 3 });
+    expect(t36.extra).toEqual({ expected_goals: 1.4, corners: 6 });
+  });
+
+  it("writes stat_team_match ONLY — never marks a player dirty (no recompute trigger)", async () => {
+    const feed = fakeFeed({
+      teamMatchStats: () =>
+        Promise.resolve({
+          data: [{ match_id: 50, team_id: 36, possession_pct: 60 }],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    const dirtySpy = vi.spyOn(store, "markPlayersDirty");
+
+    await ingestTeamStats(feed, store, 50);
+
+    expect(dirtySpy).not.toHaveBeenCalled(); // display-only path: zero fantasy-state mutation
   });
 });

@@ -15,6 +15,7 @@
     "job:period-close": "tsx src/jobs/periodClose.ts",
     "job:recompute": "tsx src/jobs/recompute.ts",
     "job:rosters": "tsx src/jobs/syncRosters.ts",
+    "job:ingest-team-stats": "tsx src/jobs/ingestTeamStats.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

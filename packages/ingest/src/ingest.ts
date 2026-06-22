@@ -249,3 +249,30 @@ export async function ingestSettle(
   // every appeared player here. This is what fixes the partially-locked completed-match XI going forward.
   await reconcileAppearanceLocks(store, ctx);
 }
+
+/**
+ * Team-stats-only backfill for ONE match (T17). Pulls the BALLDONTLIE team aggregates and upserts them
+ * via the SAME {@link mapTeamStat} + `store.upsertTeamStat` path ingestLive's team block uses — same
+ * per-item isolation ({@link eachItem}) and the same FOREIGN-EVENT GUARD (drop rows whose own match ≠
+ * this match). It pulls ONLY `team_match_stats` and writes ONLY `stat_team_match`: it does NOT touch
+ * player stats/events/shots, does NOT mark any player dirty, and triggers NO recompute (stat_team_match
+ * is display-only). Exists because the `settle` path deliberately does not re-pull team stats, so matches
+ * completed before `mapTeamStat` began retaining `extra` need an explicit re-ingest to enrich it.
+ * Idempotent via the `(matchId, teamId)` upsert. Returns counts for operator logging.
+ */
+export async function ingestTeamStats(
+  feed: FeedClient,
+  store: IngestStore,
+  matchBdlId: number,
+): Promise<{ upserted: number; foreignSkipped: number }> {
+  const teamStats = await feed.teamMatchStats({ matchId: matchBdlId });
+  let upserted = 0;
+  let foreignSkipped = 0;
+  await eachItem(teamStats.data, async (f) => {
+    const ts = mapTeamStat(f);
+    if (ts.matchBdlId !== matchBdlId) return void foreignSkipped++;
+    await store.upsertTeamStat(ts);
+    upserted++;
+  });
+  return { upserted, foreignSkipped };
+}
