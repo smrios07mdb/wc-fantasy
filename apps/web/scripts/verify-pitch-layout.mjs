@@ -5,10 +5,8 @@
  * engine — `getBoundingClientRect()` returns zeros there. So a unit test can be green while the rendered
  * pitch overflows, clips, or overlaps on a phone (exactly the failure this lane removed). `pitchRows()`
  * unit tests pin the SPLIT MATH; they cannot pin rendered GEOMETRY. This script is that geometry gate: it
- * renders a faithful replica of the FULL screen chain (shell content area → `.gd-app` → fixed scoreboard /
- * stake / tabs → the flex `.gd-tabwrap` → `.gd-lineups`) with the REAL `ds.css` + `shell.css` + `games.css`
- * in headless Chromium, so the pitch FLEX-FILLS the real leftover exactly like the app, and asserts true
- * `getBoundingClientRect()` bounds — the thing jsdom structurally can't.
+ * renders a faithful replica of the pitch DOM with the REAL `ds.css` + `games.css` in headless Chromium
+ * and asserts true `getBoundingClientRect()` bounds — the thing jsdom structurally can't.
  *
  * It is OPT-IN: NOT part of `pnpm test` (that must stay browser-free for CI). Run it explicitly:
  *
@@ -20,17 +18,16 @@
  * For a battery of representative formations (4-3-3, 4-2-3-1 = mid 2+3, 3-5-2, 4-4-2 = flat back-4 + flat
  * mid-4, 4-5-1, 3-4-3 = flat mid-4 squeeze), rendered symmetric (same XI both halves, away on top / home
  * on bottom, one subbed-off + one red-carded + one owned starter to exercise every badge), it asserts at
- * 360 AND 390 across a ROOMY (844) and a TIGHT (667, iPhone-SE class) viewport height — so the flex-fill
- * is exercised in both regimes, not just the roomy one — and shows 1280 (desktop):
+ * 360 / 390 (phones) and shows 1280 (desktop):
  *   (a) the FULL pitch fits — no vertical scroll, no clip: content height ≤ the pitch box, every token
- *       within the pitch bounds, and the pitch box ≤ the viewport (one screen). Checked at BOTH heights.
+ *       within the pitch bounds, and the pitch box ≤ the viewport (one screen).
  *   (b) ZERO overlap — no two tokens' effective boxes intersect, AND the rating square (left shoulder)
  *       never intersects the subbed-off/red badge (right shoulder) on the SAME token.
  *   (c) ZERO horizontal clip — no token's box exceeds the pitch / viewport width.
  *   (d) the right LINE STRUCTURE — each band renders the convention split (4-2-3-1 → MID [2,3], 3-5-2 →
  *       DEF [3] · MID [2,3], 4-4-2 → flat [4]/[4], etc.), per half.
  *
- * Rendered screenshots for the mockup review are saved to /tmp at 360 × {667, 844} for 4-2-3-1, 4-4-2, 3-4-3.
+ * Rendered screenshots for the mockup review are saved to /tmp at 360 + 390 for 4-2-3-1, 4-4-2, 3-4-3.
  */
 /* eslint-disable no-undef */
 // The PROBE() callback runs inside Chromium via page.evaluate(), not Node — `document` is a browser
@@ -47,20 +44,10 @@ const TMP = "/tmp";
 
 const dsCSS = readFileSync(resolve(appDir, "app/styles/ds.css"), "utf8");
 const gamesCSS = readFileSync(resolve(appDir, "src/games/games.css"), "utf8");
-const shellCSS = readFileSync(resolve(appDir, "app/shell/shell.css"), "utf8");
 
+const WIDTHS = [360, 390, 1280];
 const NARROW_MAX = 720; // games.css pitch breakpoint
-// The pitch FLEX-FILLS the real leftover (no chrome constant), so the guard must exercise it at a
-// roomy AND a tight viewport height — the tight one (667, iPhone-SE class) is where the fit is hardest.
-// [width, height] pairs: phones at both heights, desktop shown at the tall height.
-const VIEWPORTS = [
-  [360, 844],
-  [360, 667],
-  [390, 844],
-  [390, 667],
-  [1280, 844],
-];
-const SHOT_WIDTH = 360; // the phone width whose 667 + 844 renders are saved to /tmp for the review
+const VH = 844; // iPhone-class viewport height
 
 // ── faithful replica of pitchRows(players, band) (apps/web/src/games/pitchRows.ts) ──
 function pitchRows(players, band) {
@@ -148,53 +135,21 @@ function half(which, players) {
   return `<div class="gd-phalf is-${which}">${lanes}</div>`;
 }
 
-// Representative .gd-app chrome (REAL classes — their heights come from the real games.css) so the pitch
-// flex-fills a realistic leftover, exactly like the app. Not asserted; they exist to squeeze the pitch.
-const CHROME =
-  `<button class="gd-back" type="button">‹ Back</button>` +
-  `<div class="gd-board"><div class="gd-board-main"><span class="gd-team-nm">Argentina</span>` +
-  `<div class="gd-board-center"><span class="gd-score">2 – 1</span></div>` +
-  `<span class="gd-team-nm">Austria</span></div>` +
-  `<div class="gd-board-meta"><span>Group A · Matchday 3</span><span>Full time</span></div></div>` +
-  `<div class="gd-stake"><span class="gd-stake-lab">YOUR XI</span><span class="gd-stake-total">+18</span></div>` +
-  `<div class="gd-tabbar"><button class="gd-tabbtn is-active" type="button">Lineups</button>` +
-  `<button class="gd-tabbtn" type="button">Ratings</button></div>`;
-
-// A tall team-lists stand-in so .gd-tabwrap genuinely overflows — proving the pitch FILLS the viewport
-// and the lists scroll BELOW it, rather than the lists squeezing the pitch (a literal flex:1 failure).
-function tallLists() {
-  let rows = "";
-  for (let i = 0; i < 24; i += 1)
-    rows += `<div class="gd-tl-row" style="height:34px;border-top:1px solid var(--hairline)">Player ${i + 1}</div>`;
-  return `<div class="gd-tl-grid"><div class="gd-tl">${rows}</div><div class="gd-tl">${rows}</div></div>`;
-}
-
 function buildHTML(home, away) {
   const hm = metrics(home);
   const am = metrics(away);
   const rows = Math.max(hm.rows, am.rows, 1);
   const cols = Math.max(hm.cols, am.cols, 1);
-  const pitch =
-    `<div class="gd-pitch" style="--pitch-rows:${rows};--pitch-cols:${cols}">` +
-    `<div class="gd-pitch-lines" aria-hidden="true"><span class="gd-pl-mid"></span><span class="gd-pl-circle"></span><span class="gd-pl-box gd-pl-box-l"></span><span class="gd-pl-box gd-pl-box-r"></span></div>` +
-    `<div class="gd-pitch-grid">${half("home", home)}${half("away", away)}</div></div>`;
-  // Full shell chain so the flex-fill + cqh resolve exactly like the app: .sh-app → .sh-content (the
-  // bounded, scrollable shell content area, with the fixed-bottom-nav padding) → .gd-app → chrome rows +
-  // .gd-tabwrap (flex:1 size container) → .gd-lineups (pitch fills via 100cqh; lists scroll below).
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<style>${dsCSS}</style><style>${shellCSS}</style><style>${gamesCSS}</style>
-<style>html,body{margin:0;height:100%}</style></head>
+<style>${dsCSS}</style><style>${gamesCSS}</style>
+<style>html,body{margin:0}</style></head>
 <body data-theme="dark" data-accent="cobalt" data-density="comfortable">
-<div class="sh-app sh-app-top"><div class="sh-content"><div class="gd-app">
-${CHROME}
-<div class="gd-tabwrap"><div class="gd-lineups">
-${pitch}
-<div class="gd-legend"><span class="gd-lg"><span class="gd-lg-rate" style="background:#46A05A">7.0</span>Rating</span></div>
-${tallLists()}
-</div></div>
-</div></div><nav class="sh-btmnav"></nav></div>
-</body></html>`;
+<div class="gd-app"><div class="gd-lineups">
+<div class="gd-pitch" style="--pitch-rows:${rows};--pitch-cols:${cols}">
+<div class="gd-pitch-lines" aria-hidden="true"><span class="gd-pl-mid"></span><span class="gd-pl-circle"></span><span class="gd-pl-box gd-pl-box-l"></span><span class="gd-pl-box gd-pl-box-r"></span></div>
+<div class="gd-pitch-grid">${half("home", home)}${half("away", away)}</div>
+</div></div></div></body></html>`;
 }
 
 // ── fixtures ──
@@ -391,28 +346,25 @@ async function main() {
     const f = FORMATIONS[formationName];
     const xi = squad(f.def, f.mid, f.fwd);
     writeFileSync(tmpHtml, buildHTML(xi, xi)); // symmetric: same XI both halves
-    for (const [width, height] of VIEWPORTS) {
+    for (const width of WIDTHS) {
       const narrow = width <= NARROW_MAX;
       const page = await browser.newPage();
-      await page.setViewportSize({ width, height });
+      await page.setViewportSize({ width, height: VH });
       await page.goto(`file://${tmpHtml}`);
       await page.waitForTimeout(120);
-      const data = await page.evaluate(PROBE);
-      const label = `${formationName} @ ${width}×${height} ${narrow ? "(phone)" : "(desktop)"}`;
-      const fails = check(label, narrow, formationName, data);
+      const label = `${formationName} @ ${width}px ${narrow ? "(phone)" : "(desktop)"}`;
+      const fails = check(label, narrow, formationName, await page.evaluate(PROBE));
       if (fails.length) {
         failures.push(`FAIL [${label}]`);
         for (const f2 of fails) failures.push(`    ${f2}`);
       } else {
         passed += 1;
-        console.log(
-          `  ✓ [${label}] pitch ${data.pitchClientH}px — fits, no overlap, no clip, structure OK`,
-        );
+        console.log(`  ✓ [${label}] fits, no overlap, no clip, structure OK`);
       }
-      // Save the review screenshots at BOTH heights (chrome + pitch in context = the real fold).
-      if (width === SHOT_WIDTH && SHOT_FORMATIONS.includes(formationName)) {
-        const out = resolve(TMP, `pitch_${formationName}_${width}x${height}.png`);
-        await page.screenshot({ path: out });
+      if (narrow && SHOT_FORMATIONS.includes(formationName)) {
+        const el = await page.$(".gd-pitch");
+        const out = resolve(TMP, `pitch_${formationName}_${width}.png`);
+        if (el) await el.screenshot({ path: out });
         console.log(`    📸 ${out}`);
       }
       await page.close();
@@ -423,12 +375,14 @@ async function main() {
 
   console.log("");
   if (failures.length) {
-    console.error(`✗ pitch layout guard: ${passed} passed, FAILURES below`);
+    console.error(
+      `✗ pitch layout guard: ${passed} passed, ${failures.length ? "FAILURES below" : ""}`,
+    );
     for (const f of failures) console.error(f);
     process.exit(1);
   }
   console.log(
-    `✓ pitch layout guard: all ${passed} render checks passed (360 & 390 @ 667 + 844, 1280; 6 formations).`,
+    `✓ pitch layout guard: all ${passed} render checks passed (360 / 390 / 1280, 6 formations).`,
   );
   process.exit(0);
 }

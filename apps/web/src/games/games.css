@@ -1197,34 +1197,6 @@
   .gd-app {
     padding: var(--sp-3);
   }
-  /* ── Lineups tab: flex-fill the pitch to the REAL leftover height (no chrome constant) ──
-     Scoped to the lineups tab via :has(.gd-lineups) so the Statistics / Ratings tabs keep the normal
-     page scroll, untouched. The frame (.gd-app) is bounded to the shell content area; the back /
-     scoreboard / stake / tab bar are fixed rows; the tab body (.gd-tabwrap) takes whatever is left and
-     becomes a SIZE CONTAINER, so the pitch fills it via `height:100cqh` and the team lists scroll BELOW
-     the pitch inside the tab. A literal flex:1 on the pitch can't be used — `.gd-tl-grid` (the team
-     lists) is the pitch's flex SIBLING in `.gd-lineups` and would collapse it — so the bounded flex:1
-     region is `.gd-tabwrap`, and the pitch fills it with cqh. The leftover is whatever the real shell +
-     scoreboard + tabs leave; nothing is hardcoded. */
-  .gd-app:has(.gd-lineups) {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    gap: 10px;
-  }
-  .gd-app:has(.gd-lineups) > .gd-back,
-  .gd-app:has(.gd-lineups) > .gd-board,
-  .gd-app:has(.gd-lineups) > .gd-note,
-  .gd-app:has(.gd-lineups) > .gd-stake,
-  .gd-app:has(.gd-lineups) > .gd-tabbar {
-    flex: 0 0 auto;
-  }
-  .gd-app:has(.gd-lineups) > .gd-tabwrap {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
-    container-type: size;
-  }
   .gd-board {
     padding: 14px 14px 12px;
   }
@@ -1242,27 +1214,23 @@
   /* ════════════ MOBILE PITCH = FORMATION GRID ════════════
      The pitch turns vertical (away on top, home on bottom, halfway split). Bands stack DOWN the short
      axis (GK→FWD toward the halfway line per side) and each band's players spread ACROSS the width. The
-     pitch FILLS the bounded tab body (height:100cqh) — it gets the REAL leftover height, never grows or
-     scrolls (overflow:hidden clips), and there is no hardcoded chrome estimate. Every token is sized off
-     the pitch's TRUE rendered height (cqh) so the full XI of BOTH sides fits with no scroll. Token size
-     is the variable; legibility yields to the fit. `--pitch-rows` / `--pitch-cols` are fed in by the
-     component (the busier side's line / widest-line counts). */
+     pitch is a FIXED height that fits one screen and NEVER grows/scrolls (overflow:hidden clips); every
+     token is sized to `min(width / cols, height / rows)` so the full XI of BOTH sides fits with no
+     scroll. Token size is the variable; legibility yields to the fit. `--pitch-rows` / `--pitch-cols`
+     are fed in by the component (the busier side's line / widest-line counts). */
   .gd-pitch {
-    /* fill the bounded tab body — the height comes from the flex chain (.gd-tabwrap), not a viewport or
-       chrome constant. container-type:size makes the pitch a query container so the tokens below size off
-       its REAL height (cqh), at any leftover. */
-    height: 100cqh;
+    /* fit one screen: shrink with the real viewport (dvh) minus the page chrome above the pitch + the
+       fixed bottom nav, capped. NOT a content floor — see overflow:hidden (no internal scroll, ever). */
+    --gd-pitch-h: min(540px, calc(100dvh - 232px));
+    height: var(--gd-pitch-h);
     min-height: 0;
-    container-type: size;
-    /* token unit: budget the WHOLE token (jersey + name + pts strip) into ONE formation line so the fit
-       always wins. --gd-shirt-h is a fraction of the line height (the strip below scales proportionally
-       off --shirt, never with a fixed reserve), so even at the legibility floor a full 5-line side can't
-       be pushed past the half-pitch budget — the strip shrinks instead of clipping. Width budget caps
-       a dense line so it never clips sideways; the smaller of the two wins. */
-    --gd-line-h: calc(50cqh / var(--pitch-rows));
-    --gd-shirt-h: calc(var(--gd-line-h) * 0.42);
+    /* token unit: the SMALLER of the per-line height budget (half the pitch / rows, less the name+pts
+       strip) and the per-column width budget; clamped so it stays legible but the no-scroll fit wins. */
+    --gd-half-h: calc(var(--gd-pitch-h) / 2);
+    --gd-line-h: calc(var(--gd-half-h) / var(--pitch-rows));
+    --gd-shirt-h: calc(var(--gd-line-h) - 34px);
     --gd-shirt-w: calc((100vw - 2 * var(--sp-3) - 14px) / var(--pitch-cols) - 12px);
-    --shirt: clamp(11px, min(var(--gd-shirt-h), var(--gd-shirt-w)), 42px);
+    --shirt: clamp(15px, min(var(--gd-shirt-h), var(--gd-shirt-w)), 44px);
   }
   .gd-pl-mid {
     top: 50%;
@@ -1342,7 +1310,7 @@
   /* token: every part scales proportionally off --shirt so it reads as a jersey at any fit size */
   .gd-tok {
     max-width: calc((100vw - 2 * var(--sp-3)) / var(--pitch-cols));
-    gap: 1px;
+    gap: 2px;
     padding: 0;
   }
   .gd-tok-shirt-wrap {
@@ -1390,19 +1358,17 @@
     bottom: 0;
     left: 0;
   }
-  /* name + pts strip scales with --shirt down to a low floor — so on a tight screen the strip shrinks
-     with the jersey and the line budget is never exceeded (fit wins; never clip). */
   .gd-tok-name {
-    font-size: clamp(5px, calc(var(--shirt) * 0.32), 12px);
-    line-height: 1.02;
+    font-size: clamp(8px, calc(var(--shirt) * 0.3), 12px);
+    line-height: 1.04;
     max-width: 100%;
   }
   .gd-tok-foot {
-    min-height: calc(var(--shirt) * 0.3);
+    min-height: calc(var(--shirt) * 0.34);
   }
   .gd-tok-foot .gd-fpts {
-    font-size: clamp(5px, calc(var(--shirt) * 0.3), 11px);
-    padding: 0 calc(var(--shirt) * 0.12);
+    font-size: clamp(8px, calc(var(--shirt) * 0.28), 11px);
+    padding: 0 calc(var(--shirt) * 0.13);
   }
 
   .gd-tl-grid {
