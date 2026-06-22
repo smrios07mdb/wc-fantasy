@@ -532,13 +532,24 @@ not by hopeful application code:
 - `event_match` — feed event id; incident_type/class, time_minute, added_time, period,
   player_id, assist_player_id, player_in_id, player_out_id, rescinded.
 - `shot_match` — feed shot id; match_id, player_id, shot_type, situation, … (penalty detection).
-- `stat_team_match` — `(match_id, team_id)`; team aggregates. EXISTS and is populated, **but the
-  team-stat mapper promotes only `possession` / `offsides` / `shots_blocked` (typed columns) and
-  writes NOTHING to `extra`** — the rich BALLDONTLIE team payload (xG, shots, passes, corners, etc.)
-  is discarded at ingest, UNLIKE the player-stat path (`stat_player_match`, above) which retains every
-  un-promoted field verbatim in `extra`. Consequence (T16 finding): a match-Statistics surface is NOT
-  backable today without a team-stat mapper change + a re-ingest backfill of completed matches. See
-  BACKLOG → Statistics tab.
+- `stat_team_match` — `(match_id, team_id)`; team aggregates. The mapper promotes three typed columns
+  (`possession` ← `possession_pct` / `offsides` / `shots_blocked`) **and, since T17, RETAINS the full
+  remaining BALLDONTLIE team payload verbatim in `extra` (JSONB)** — xG, big chances, shots, corners,
+  fouls, cards, passes/long-balls/crosses (total + accurate), tackles, interceptions, clearances,
+  saves, duels (ground + aerial), dribbles, etc. — via `mapTeamStat`'s catch-all `buildTeamStatExtra`
+  (omit-set = the three typed feed keys + `match_id`/`team_id`/`is_home`), mirroring the player-stat
+  `extra` path. **Display-only — ZERO engine reads (grep-confirmed):** `stat_team_match` is
+  feed→ingest→DB; the only Prisma accessor is the ingest `upsert`, and the recompute/resolver read
+  surface provably excludes it. The **`/games/[matchId]` loader is its first consumer** (T17 — a
+  read-only `statTeamMatch.findMany` mapped to home/away in the pure `buildGameDetail`, powering the
+  Statistics tab). Backfill note: completed matches ingested **before** the T17 mapper landed carry an
+  empty `extra` (the rich rows render "–" until re-ingested) — and **`ingestSettle` does NOT pull team
+  stats by design** (only `ingestLive` does), so the settle path won't self-heal them. The on-demand
+  **`job:ingest-team-stats` worker CLI** repopulates them: it lists `fifa_match WHERE status='completed'`
+  and runs `@app/ingest`'s `ingestTeamStats` per match — the SAME `mapTeamStat` + `upsertTeamStat` path
+  (+ the foreign-event guard), writing `stat_team_match` ONLY (no player dirty-mark, no recompute),
+  idempotent via the `(match_id, team_id)` upsert. Run from the worker Shell:
+  `pnpm --filter @app/worker job:ingest-team-stats`. See BACKLOG → T17.
 - `rating_player_match` — `(match_id, player_id, source)`; rating, source
   (`balldontlie`/`scrape`/`manual`), updated_at. Resolver reads this.
 - `manual_stat_player_match` — `(match_id, player_id)`; the feed-gap fields (penalty_won,
