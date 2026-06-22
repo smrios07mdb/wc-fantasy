@@ -6,7 +6,7 @@
  * Dates cross the server→client boundary as ISO strings; the builder ALSO emits a deterministic UTC
  * `kickoffLabel` so the client never re-formats a Date (no hydration mismatch).
  */
-import type { MatchStatus, PeriodKind, Position } from "@app/shared";
+import type { MatchStatus, PeriodKind, Position, RatingSource } from "@app/shared";
 
 // ─── owner overlay ──────────────────────────────────────────────────────────────
 
@@ -54,6 +54,12 @@ export interface PlayerLine {
   readonly minutes: number | null;
   readonly yellowCards: number;
   readonly redCard: boolean;
+  /**
+   * 0–10 real-match rating resolved from rating_player_match (manual > balldontlie via the shared
+   * resolver), or null until the feed posts one. The RATING lens — kept distinct from the FANTASY
+   * points lens below; the two numbers are never blurred (handoff README §Overview).
+   */
+  readonly rating: number | null;
   /** score_player_match.points for this match; null until the score row lands. */
   readonly fantasyPoints: number | null;
   readonly chips: readonly StatChip[];
@@ -149,6 +155,18 @@ export interface GdScoreInput {
   readonly points: number;
 }
 
+/**
+ * A source-tagged rating row (mirrors `rating_player_match`). The loader passes every source's row
+ * through verbatim; the pure builder resolves ONE rating per player via the shared `resolveRating`
+ * (manual > balldontlie) so the displayed number matches what scoring would use.
+ */
+export interface GdRatingInput {
+  readonly playerId: string;
+  readonly source: RatingSource;
+  /** 0–10 value for this source, or null/absent when the source has no rating for this player-match. */
+  readonly rating: number | null;
+}
+
 export interface GdLineupEntryInput {
   readonly playerId: string;
   readonly isStarter: boolean;
@@ -170,6 +188,8 @@ export interface BuildGameDetailInput {
   readonly players: readonly GdPlayerInput[];
   readonly stats: readonly GdStatInput[];
   readonly scores: readonly GdScoreInput[];
+  /** rating_player_match rows (source-tagged) for this match; the builder resolves one per player. */
+  readonly ratings: readonly GdRatingInput[];
   readonly lineupEntries: readonly GdLineupEntryInput[];
   readonly events: readonly GdEventInput[];
   /** playerId → owner tag (already name-resolved by the loader; empty when no period link). */

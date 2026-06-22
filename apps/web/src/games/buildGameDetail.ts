@@ -14,13 +14,14 @@
  * is a second yellow, never auto-folded).
  */
 import { UNNAMED_OPPONENT } from "@/src/lineup/view";
-import { classifyCard } from "@app/recompute";
+import { classifyCard, resolveRating, type RatingRow } from "@app/recompute";
 import type { Position } from "@app/shared";
 import type {
   BuildGameDetailInput,
   GameDetailView,
   GdEventInput,
   GdPlayerInput,
+  GdRatingInput,
   GdStatInput,
   PlayerLine,
   PlayerRole,
@@ -91,6 +92,22 @@ function cameOn(playerId: string, events: readonly GdEventInput[]): boolean {
   return events.some((e) => !e.rescinded && e.playerInId === playerId);
 }
 
+/**
+ * Group source-tagged rating rows by player into the `RatingRow[]` the shared resolver consumes. The
+ * actual pick (manual > balldontlie) is delegated to `resolveRating` so the displayed rating is the
+ * same number scoring would read — no second priority table here.
+ */
+function groupRatingRows(ratings: readonly GdRatingInput[]): Map<string, RatingRow[]> {
+  const byPlayer = new Map<string, RatingRow[]>();
+  for (const r of ratings) {
+    const row: RatingRow = { source: r.source, rating: r.rating };
+    const rows = byPlayer.get(r.playerId);
+    if (rows) rows.push(row);
+    else byPlayer.set(r.playerId, [row]);
+  }
+  return byPlayer;
+}
+
 function chipsFor(position: Position, stat: GdStatInput | undefined): StatChip[] {
   const chips: StatChip[] = [];
   if (!stat) return chips;
@@ -138,6 +155,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     players,
     stats,
     scores,
+    ratings,
     lineupEntries,
     events,
     ownerByPlayer,
@@ -146,6 +164,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
 
   const statByPlayer = new Map(stats.map((s) => [s.playerId, s]));
   const scoreByPlayer = new Map(scores.map((s) => [s.playerId, s.points]));
+  const ratingRowsByPlayer = groupRatingRows(ratings);
   const lineupByPlayer = new Map(lineupEntries.map((e) => [e.playerId, e.isStarter]));
 
   const homeLines: PlayerLine[] = [];
@@ -179,6 +198,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
       minutes: stat?.minutesPlayed ?? null,
       yellowCards: facts.yellowCards,
       redCard: facts.redCard,
+      rating: resolveRating(ratingRowsByPlayer.get(p.id) ?? []),
       fantasyPoints: scoreByPlayer.get(p.id) ?? null,
       chips: chipsFor(p.position, stat),
       owner: ownerByPlayer[p.id] ?? null,

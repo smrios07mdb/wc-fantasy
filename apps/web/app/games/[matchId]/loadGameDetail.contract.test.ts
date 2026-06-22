@@ -29,6 +29,8 @@ describe("loadGameDetail — assembly contract", () => {
     expect(codeOnly).toContain("prisma.statPlayerMatch.findMany");
     expect(codeOnly).toContain("prisma.scorePlayerMatch.findMany");
     expect(codeOnly).toContain("prisma.eventMatch.findMany");
+    // T16: the ONE approved additive read — source-tagged 0–10 ratings (resolved in the pure builder).
+    expect(codeOnly).toContain("prisma.ratingPlayerMatch.findMany");
   });
 
   it("derives nation from the fifa_team join — NEVER the player.country scalar", () => {

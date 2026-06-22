@@ -17,7 +17,7 @@
  */
 import "server-only";
 import { prisma } from "@app/db";
-import type { MatchStatus, PeriodKind, Position } from "@app/shared";
+import type { MatchStatus, PeriodKind, Position, RatingSource } from "@app/shared";
 import { buildGameDetail } from "@/src/games/buildGameDetail";
 import type { GameDetailView, OwnerTag } from "@/src/games/types";
 
@@ -55,7 +55,9 @@ export async function loadGameDetail(
   if (!match) return null;
 
   // All match-keyed participant/squad reads in parallel (each already-scored / already-ingested).
-  const [lineupEntries, statRows, scoreRows, eventRows] = await Promise.all([
+  // ratingPlayerMatch is the ONE additive read (T16): source-tagged 0–10 ratings, already populated by
+  // balldontlie ingestion. Read-only + Prisma owner-bypass like the rest — NO migration/RLS/Realtime.
+  const [lineupEntries, statRows, scoreRows, eventRows, ratingRows] = await Promise.all([
     prisma.matchLineupEntry.findMany({
       where: { matchId },
       select: { playerId: true, isStarter: true },
@@ -81,6 +83,10 @@ export async function loadGameDetail(
         rescinded: true,
       },
     }),
+    prisma.ratingPlayerMatch.findMany({
+      where: { matchId },
+      select: { playerId: true, rating: true, source: true },
+    }),
   ]);
 
   // Union of every referenced player id (squad sheet ∪ stats ∪ scores ∪ event participants).
@@ -88,6 +94,7 @@ export async function loadGameDetail(
   for (const e of lineupEntries) idSet.add(e.playerId);
   for (const s of statRows) idSet.add(s.playerId);
   for (const s of scoreRows) idSet.add(s.playerId);
+  for (const r of ratingRows) idSet.add(r.playerId);
   for (const e of eventRows) {
     if (e.playerId) idSet.add(e.playerId);
     if (e.playerInId) idSet.add(e.playerInId);
@@ -198,6 +205,11 @@ export async function loadGameDetail(
       saves: s.saves,
     })),
     scores: scoreRows.map((s) => ({ playerId: s.playerId, points: s.points })),
+    ratings: ratingRows.map((r) => ({
+      playerId: r.playerId,
+      source: r.source as RatingSource,
+      rating: r.rating,
+    })),
     lineupEntries: lineupEntries.map((e) => ({ playerId: e.playerId, isStarter: e.isStarter })),
     events: eventRows.map((e) => ({
       playerId: e.playerId,

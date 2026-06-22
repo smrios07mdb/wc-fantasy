@@ -118,6 +118,14 @@ function fullInput(): BuildGameDetailInput {
       { playerId: "p5", points: 2 },
       { playerId: "p6", points: 4 },
     ],
+    ratings: [
+      { playerId: "p1", source: "balldontlie", rating: 6.8 },
+      // p6 has BOTH sources — manual must win over balldontlie (DEFAULT_RATING_SOURCE_PRIORITY).
+      { playerId: "p6", source: "balldontlie", rating: 8.0 },
+      { playerId: "p6", source: "manual", rating: 7.5 },
+      // p2 has a present-but-null balldontlie row → falls through to "no rating".
+      { playerId: "p2", source: "balldontlie", rating: null },
+    ],
     lineupEntries: [
       { playerId: "p1", isStarter: true },
       { playerId: "p2", isStarter: true },
@@ -229,6 +237,18 @@ describe("buildGameDetail — assembly", () => {
     expect(p4.appeared).toBe(false);
   });
 
+  it("resolves the per-player rating via the shared resolver (manual > balldontlie; null when absent or present-but-null)", () => {
+    const v = buildGameDetail(fullInput());
+    const p1 = v.home.starters.find((l) => l.playerId === "p1")!;
+    expect(p1.rating).toBe(6.8); // single balldontlie source
+    const p6 = v.away.starters.find((l) => l.playerId === "p6")!;
+    expect(p6.rating).toBe(7.5); // manual (7.5) overrides balldontlie (8.0) per DEFAULT priority
+    const p2 = v.home.starters.find((l) => l.playerId === "p2")!;
+    expect(p2.rating).toBeNull(); // present-but-null source falls through to "no rating"
+    const p3 = v.home.subs[0]!;
+    expect(p3.rating).toBeNull(); // no rating row at all → null (renders "–")
+  });
+
   it("classifies cards exactly (rescinded ignored, non-card ignored, 2nd yellow stays a 2nd yellow)", () => {
     const v = buildGameDetail(fullInput());
     const p1 = v.home.starters.find((l) => l.playerId === "p1")!;
@@ -317,6 +337,7 @@ describe("buildGameDetail — assembly", () => {
       players: [],
       stats: [],
       scores: [],
+      ratings: [],
       lineupEntries: [],
       events: [],
       ownerByPlayer: {},
