@@ -18,7 +18,7 @@
  * period (the modal is period-keyed). No data fetching here beyond that modal's own `/api/player-box`
  * round-trip.
  */
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { MatchStatus } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
@@ -247,44 +247,12 @@ function KitToken({ line, live, onOpen }: { line: PlayerLine; live: boolean; onO
   return <div className={`gd-tok${me ? " is-me" : ""}`}>{inner}</div>;
 }
 
-/** Group a side's pitch XI into its four position bands (GK→FWD), preserving source order. */
-function groupByLane(pitch: readonly PlayerLine[]): Record<(typeof LANES)[number], PlayerLine[]> {
-  const byLane: Record<(typeof LANES)[number], PlayerLine[]> = {
-    GK: [],
-    DEF: [],
-    MID: [],
-    FWD: [],
-  };
-  for (const l of pitch) byLane[l.position].push(l);
-  return byLane;
-}
-
 /**
- * Sizing inputs for one side: the number of formation LINES (the GK line + each band's convention
- * sub-lines) and the widest single line. The mobile pitch sizes every token to
- * `min(width / cols, height / rows)` so the FULL XI of BOTH sides fits one phone screen with no scroll;
- * the grid is fed the busier side's counts so the two halves size their tokens identically.
- */
-function pitchMetrics(side: SquadSide): { rows: number; cols: number } {
-  const byLane = groupByLane(side.pitch);
-  let rows = 0;
-  let cols = 0;
-  for (const lane of LANES) {
-    const lines = pitchRows(byLane[lane], lane);
-    rows += lines.length;
-    for (const line of lines) cols = Math.max(cols, line.length);
-  }
-  return { rows, cols };
-}
-
-/**
- * One side's named starting XI as position bands (GK→FWD). Sources `side.pitch` (the reconciled KICKOFF
- * XI — sheet ∪ player_out − come-ons − no-minute phantoms, NOT the raw is_starter sheet, which the feed
- * over-marks). On a sheet side `side.pitch === side.starters`. Subbed-off / sent-off starters keep their
- * lane; a come-on substitute never gets a pitch token. Empty pitch = no sheet.
- *
- * Each band is one `.gd-pcol`; a populous band splits into its convention lines (back→front), so the half
- * renders identically on phone and desktop — only the token SIZE changes (no axis-dependent dual-render).
+ * One side's named starting XI as position lanes (GK→FWD); CSS orients them per side + viewport.
+ * Sources `side.pitch` (the reconciled KICKOFF XI — sheet ∪ player_out − come-ons − no-minute phantoms,
+ * NOT the raw is_starter sheet, which the feed over-marks). On a sheet side `side.pitch === side.starters`.
+ * Subbed-off / sent-off starters keep their lane; a come-on substitute never gets a pitch token. Empty
+ * pitch = no sheet.
  */
 function PitchHalf({
   side,
@@ -297,31 +265,55 @@ function PitchHalf({
   live: boolean;
   onOpen: OpenFn;
 }) {
-  const byLane = groupByLane(side.pitch);
+  const byLane: Record<PlayerLine["position"], PlayerLine[]> = {
+    GK: [],
+    DEF: [],
+    MID: [],
+    FWD: [],
+  };
+  for (const l of side.pitch) byLane[l.position].push(l);
   return (
     <div className={`gd-phalf is-${which}`}>
-      {LANES.map((lane) => (
-        <LaneColumn key={lane} lines={pitchRows(byLane[lane], lane)} live={live} onOpen={onOpen} />
-      ))}
+      {LANES.map((lane) => {
+        // A populous band wraps into balanced formation lines (back→front) so it never overflows the
+        // pitch. The wide (desktop) and narrow (mobile) splits differ only for a flat back-4 (one line
+        // vs a balanced 2+2): when they match, render once; when they don't, render both and let the
+        // same breakpoint that flips the half's flex-direction show the right one (no SSR-unsafe
+        // viewport probing, no greedy CSS wrap).
+        const players = byLane[lane];
+        const wide = pitchRows(players, false);
+        const narrow = pitchRows(players, true);
+        if (wide.length === narrow.length) {
+          return <LaneColumn key={lane} lines={wide} live={live} onOpen={onOpen} />;
+        }
+        return (
+          <Fragment key={lane}>
+            <LaneColumn lines={wide} live={live} onOpen={onOpen} variant="wide-only" />
+            <LaneColumn lines={narrow} live={live} onOpen={onOpen} variant="narrow-only" />
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
 
 /**
- * One position band: a `.gd-pcol` holding one `.gd-pline` per formation line (each line spreads its
- * tokens across the pitch width on mobile / its height on desktop). `is-wide` gives a multi-line band
- * (a back-5 → 3+2, a mid-5 → 2+3) the extra room its two sub-lines need.
+ * One position lane: a `.gd-pcol` holding one `.gd-pline` per formation line. `is-wide` gives a
+ * wrapped (multi-line) band the extra depth its sub-lines need; `variant` scopes a dual-rendered
+ * back-4 to its axis (CSS shows `wide-only` on desktop, `narrow-only` on mobile).
  */
 function LaneColumn({
   lines,
   live,
   onOpen,
+  variant,
 }: {
   lines: readonly PlayerLine[][];
   live: boolean;
   onOpen: OpenFn;
+  variant?: "wide-only" | "narrow-only";
 }) {
-  const cls = `gd-pcol${lines.length > 1 ? " is-wide" : ""}`;
+  const cls = `gd-pcol${lines.length > 1 ? " is-wide" : ""}${variant ? ` is-${variant}` : ""}`;
   return (
     <div className={cls}>
       {lines.map((linePlayers) => (
@@ -336,17 +328,8 @@ function LaneColumn({
 }
 
 function Pitch({ view, live, onOpen }: { view: GameDetailView; live: boolean; onOpen: OpenFn }) {
-  const hm = pitchMetrics(view.home);
-  const am = pitchMetrics(view.away);
-  // The busier side drives the shared token size (more lines → shorter tokens, denser line → narrower)
-  // so both halves match and the whole XI fits one screen. Floored at 1 so the CSS calc() never divides
-  // by zero on an empty pitch.
-  const gridVars = {
-    "--pitch-rows": Math.max(hm.rows, am.rows, 1),
-    "--pitch-cols": Math.max(hm.cols, am.cols, 1),
-  } as CSSProperties;
   return (
-    <div className="gd-pitch" style={gridVars}>
+    <div className="gd-pitch">
       <div className="gd-pitch-lines" aria-hidden="true">
         <span className="gd-pl-mid" />
         <span className="gd-pl-circle" />
