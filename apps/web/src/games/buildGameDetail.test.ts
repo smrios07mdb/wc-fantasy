@@ -5,9 +5,17 @@
  * fallback, and the period-null degradation.
  */
 import { describe, it, expect } from "vitest";
+import type { Position } from "@app/shared";
 import { buildGameDetail } from "./buildGameDetail";
 import { UNNAMED_OPPONENT } from "@/src/lineup/view";
-import type { BuildGameDetailInput, OwnerTag } from "./types";
+import type {
+  BuildGameDetailInput,
+  GdEventInput,
+  GdLineupEntryInput,
+  GdPlayerInput,
+  GdStatInput,
+  OwnerTag,
+} from "./types";
 
 function baseMatch(
   over: Partial<BuildGameDetailInput["match"]> = {},
@@ -519,5 +527,366 @@ describe("buildGameDetail — assembly", () => {
     expect(v.home.starters).toEqual([]);
     expect(v.away.starters).toEqual([]);
     expect(v.unresolvedParticipants).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Kickoff-XI reconciliation cascade.
+//
+// The official `is_starter` sheet is OVER-MARKED by the feed on some completed matches (a side can show
+// 12+ flagged starters). The kickoff XI is the deterministic cascade: candidates = (`is_starter` rows) ∪
+// (any `player_out`, who was on at kickoff); a candidate is KEPT iff NOT a `player_in` (a come-on is a
+// Sub) AND (he was withdrawn, OR logged minutes > 0, OR is named in an on-field event — a card/goal). A
+// flagged starter with no minutes + no events is a feed phantom (dropped, once the match has minute data;
+// a pre-kickoff match with no data keeps the sheet as-is). The pitch == the Starting XI list (the §25
+// invariant). When the cascade can't reach 11 the kept set is rendered as-is + a LineupAnomaly surfaces.
+//
+// England / Czechia / Croatia below are the real confirmed shapes (validated in SQL → exactly 11/side).
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+// ── compact fixture factories (all action on the HOME side; away left empty) ──
+const P = (id: string, position: Position): GdPlayerInput => ({
+  id,
+  displayName: id,
+  firstName: null,
+  lastName: id, // surname == id so the sub-pairing badges read naturally ("for Madueke")
+  position,
+  teamId: "home",
+  nation: "HT",
+});
+const ST = (playerId: string, isStarter = true): GdLineupEntryInput => ({ playerId, isStarter });
+const MIN = (playerId: string, minutesPlayed: number | null): GdStatInput => ({
+  playerId,
+  minutesPlayed,
+  goals: null,
+  assists: null,
+  saves: null,
+});
+const SUB = (
+  playerOutId: string | null,
+  playerInId: string | null,
+  minute: number,
+): GdEventInput => ({
+  playerId: null,
+  playerInId,
+  playerOutId,
+  incidentType: "substitution",
+  incidentClass: null,
+  minute,
+  rescinded: false,
+});
+const CARD = (playerId: string, incidentClass: "yellow" | "red", minute: number): GdEventInput => ({
+  playerId,
+  playerInId: null,
+  playerOutId: null,
+  incidentType: "card",
+  incidentClass,
+  minute,
+  rescinded: false,
+});
+
+/** id, position, minutes-played (null ⇒ no stat row). Every row is flagged `is_starter`. */
+type Row = readonly [string, Position, number | null];
+function squad(rows: readonly Row[]): {
+  players: GdPlayerInput[];
+  lineupEntries: GdLineupEntryInput[];
+  stats: GdStatInput[];
+} {
+  return {
+    players: rows.map(([id, pos]) => P(id, pos)),
+    lineupEntries: rows.map(([id]) => ST(id, true)),
+    stats: rows.filter(([, , m]) => m !== null).map(([id, , m]) => MIN(id, m)),
+  };
+}
+
+/** An all-home input (away side empty) from explicit players / sheet / stats / events. */
+function homeOnly(over: {
+  players: readonly GdPlayerInput[];
+  lineupEntries: readonly GdLineupEntryInput[];
+  stats: readonly GdStatInput[];
+  events?: readonly GdEventInput[];
+  status?: BuildGameDetailInput["match"]["status"];
+}): BuildGameDetailInput {
+  return {
+    match: baseMatch(over.status ? { status: over.status } : {}),
+    players: [...over.players],
+    stats: [...over.stats],
+    scores: [],
+    ratings: [],
+    teamStats: [],
+    lineupEntries: [...over.lineupEntries],
+    events: over.events ? [...over.events] : [],
+    ownerByPlayer: {},
+    unresolvedFromPool: 0,
+  };
+}
+
+describe("buildGameDetail — kickoff XI reconciliation (cascade)", () => {
+  it("England-shape: an over-flagged is_starter who actually CAME ON is dropped (12 → 11) and moved to Subs with an ↑ 'for' badge", () => {
+    // 11 real starters (Madueke withdrawn at 60'); the feed ALSO flags Saka is_starter though he came on
+    // for Madueke. Cascade: Saka (player_in) removed; Madueke (player_out) kept → exactly 11.
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", 90],
+      ["h2", "DEF", 90],
+      ["h3", "DEF", 90],
+      ["h4", "DEF", 90],
+      ["h5", "DEF", 90],
+      ["h6", "MID", 90],
+      ["h7", "MID", 90],
+      ["h8", "MID", 90],
+      ["h9", "FWD", 90],
+      ["h10", "FWD", 90],
+      ["Madueke", "FWD", 60],
+      ["Saka", "FWD", 30], // 12th flagged is_starter — but a come-on
+    ]);
+    const v = buildGameDetail(
+      homeOnly({ players, lineupEntries, stats, events: [SUB("Madueke", "Saka", 60)] }),
+    );
+
+    expect(v.home.pitch).toHaveLength(11);
+    const pitchIds = v.home.pitch.map((l) => l.playerId);
+    expect(pitchIds).toContain("Madueke");
+    expect(pitchIds).not.toContain("Saka");
+    // §25 invariant: the Starting XI list and the pitch carry the identical set.
+    expect(v.home.starters.map((l) => l.playerId)).toEqual(pitchIds);
+
+    const saka = v.home.subs.find((l) => l.playerId === "Saka")!;
+    expect(saka.role).toBe("sub");
+    expect(saka.cameOnMinute).toBe(60);
+    expect(saka.subbedOnForName).toBe("Madueke"); // ↑ for the man he replaced
+
+    const mad = v.home.pitch.find((l) => l.playerId === "Madueke")!;
+    expect(mad.wentOffMinute).toBe(60);
+    expect(mad.subbedOffForName).toBe("Saka"); // ↓ for the man who came on
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("Czechia-shape: a flagged is_starter with null minutes and no events is a feed phantom — dropped (12 → 11), listed on the bench (never silently vanished)", () => {
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", 90],
+      ["h2", "DEF", 90],
+      ["h3", "DEF", 90],
+      ["h4", "DEF", 90],
+      ["h5", "DEF", 90],
+      ["h6", "MID", 90],
+      ["h7", "MID", 90],
+      ["h8", "MID", 90],
+      ["h9", "FWD", 90],
+      ["h10", "FWD", 90],
+      ["h11", "FWD", 90],
+      ["Jurasek", "DEF", null], // 12th flagged is_starter — null minutes, no events
+    ]);
+    const v = buildGameDetail(homeOnly({ players, lineupEntries, stats }));
+
+    expect(v.home.pitch).toHaveLength(11);
+    expect(v.home.pitch.map((l) => l.playerId)).not.toContain("Jurasek");
+    // Dropped from the XI but NOT dropped from the screen — he surfaces on the bench (did not feature).
+    expect(v.home.bench.map((l) => l.playerId)).toContain("Jurasek");
+    expect(v.home.starters.map((l) => l.playerId)).toEqual(v.home.pitch.map((l) => l.playerId));
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("Croatia-shape: a withdrawn starter the feed left OFF the sheet is re-added via the player_out union (would-be 10 → 11)", () => {
+    // 11 flagged incl Kovačić (a player_in who never went off). The man he replaced, Modrić, is a
+    // player_out ABSENT from is_starter. Cascade: Kovačić (came on) removed; Modrić (player_out) added.
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", 90],
+      ["h2", "DEF", 90],
+      ["h3", "DEF", 90],
+      ["h4", "DEF", 90],
+      ["h5", "DEF", 90],
+      ["h6", "MID", 90],
+      ["h7", "MID", 90],
+      ["Kovacic", "MID", 20], // flagged is_starter, but a come-on
+      ["h9", "FWD", 90],
+      ["h10", "FWD", 90],
+      ["h11", "FWD", 90],
+    ]);
+    const modric = P("Modric", "MID"); // off-sheet, started, withdrawn for Kovačić
+    const v = buildGameDetail(
+      homeOnly({
+        players: [...players, modric],
+        lineupEntries, // Modrić NOT flagged
+        stats: [...stats, MIN("Modric", 70)],
+        events: [SUB("Modric", "Kovacic", 70)],
+      }),
+    );
+
+    expect(v.home.pitch).toHaveLength(11); // NOT 10
+    const pitchIds = v.home.pitch.map((l) => l.playerId);
+    expect(pitchIds).toContain("Modric"); // event-union re-added the withdrawn off-sheet starter
+    expect(pitchIds).not.toContain("Kovacic");
+    expect(v.home.starters.map((l) => l.playerId)).toEqual(pitchIds); // invariant
+
+    const kov = v.home.subs.find((l) => l.playerId === "Kovacic")!;
+    expect(kov.role).toBe("sub");
+    expect(kov.cameOnMinute).toBe(70);
+    expect(kov.subbedOnForName).toBe("Modric");
+
+    const mod = v.home.pitch.find((l) => l.playerId === "Modric")!;
+    expect(mod.role).toBe("starter");
+    expect(mod.wentOffMinute).toBe(70);
+    expect(mod.subbedOffForName).toBe("Kovacic");
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("keeps a red-carded starter on the pitch even with null minutes (a card proves he was on), with NO ↓ 'for' badge (no replacement)", () => {
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", 90],
+      ["h2", "DEF", 90],
+      ["h3", "DEF", 90],
+      ["h4", "DEF", 90],
+      ["h5", "DEF", 90],
+      ["h6", "MID", 90],
+      ["h7", "MID", 90],
+      ["h8", "MID", 90],
+      ["h9", "FWD", 90],
+      ["h10", "FWD", 90],
+      ["Lewa", "FWD", null], // starter, red-carded, no stat row
+    ]);
+    const v = buildGameDetail(
+      homeOnly({ players, lineupEntries, stats, events: [CARD("Lewa", "red", 80)] }),
+    );
+
+    expect(v.home.pitch).toHaveLength(11);
+    const lewa = v.home.pitch.find((l) => l.playerId === "Lewa")!;
+    expect(lewa.role).toBe("starter");
+    expect(lewa.redCard).toBe(true);
+    expect(lewa.wentOffMinute).toBeNull(); // a red card is not a substitution → no ↓ badge
+    expect(lewa.subbedOffForName).toBeNull();
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("SAFETY NET: when the cascade can't resolve to 11 it renders the kept set as-is (no fabrication) and surfaces a LineupAnomaly", () => {
+    // The feed flags 12 starters who ALL logged minutes and none came on — irreducible.
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", 90],
+      ["h2", "DEF", 90],
+      ["h3", "DEF", 90],
+      ["h4", "DEF", 90],
+      ["h5", "DEF", 90],
+      ["h6", "MID", 90],
+      ["h7", "MID", 90],
+      ["h8", "MID", 90],
+      ["h9", "FWD", 90],
+      ["h10", "FWD", 90],
+      ["h11", "FWD", 90],
+      ["h12", "FWD", 90],
+    ]);
+    const v = buildGameDetail(homeOnly({ players, lineupEntries, stats }));
+
+    expect(v.home.pitch).toHaveLength(12); // rendered as-is — NOT silently trimmed to 11
+    expect(v.home.starters.map((l) => l.playerId)).toEqual(v.home.pitch.map((l) => l.playerId));
+    expect(v.lineupAnomalies).toHaveLength(1);
+    const a = v.lineupAnomalies[0]!;
+    expect(a.side).toBe("home");
+    expect(a.teamId).toBe("home");
+    expect(a.count).toBe(12);
+    expect(a.keptPlayerIds).toHaveLength(12);
+    expect(a.removedPlayerIds).toEqual([]); // none removed — every candidate kept (the net, not a drop)
+  });
+
+  it("PRE-KICKOFF: a scheduled match (sheet present, zero events, zero minutes) keeps is_starter as-is — no phantom drops, no anomaly", () => {
+    const rows: Row[] = [
+      ["h1", "GK", null],
+      ["h2", "DEF", null],
+      ["h3", "DEF", null],
+      ["h4", "DEF", null],
+      ["h5", "DEF", null],
+      ["h6", "MID", null],
+      ["h7", "MID", null],
+      ["h8", "MID", null],
+      ["h9", "FWD", null],
+      ["h10", "FWD", null],
+      ["h11", "FWD", null],
+    ];
+    const { players, lineupEntries } = squad(rows);
+    const v = buildGameDetail(
+      homeOnly({ players, lineupEntries, stats: [], events: [], status: "scheduled" }),
+    );
+
+    expect(v.home.pitch).toHaveLength(11); // the announced XI, untouched
+    expect(v.home.pitch.map((l) => l.playerId).sort()).toEqual(rows.map((r) => r[0]).sort());
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("a no-sheet side has an empty pitch by design — that is NOT flagged as an anomaly", () => {
+    const v = buildGameDetail({ ...fullInput(), lineupEntries: [] });
+    expect(v.home.pitch).toEqual([]);
+    expect(v.away.pitch).toEqual([]);
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("LIVE/partial ingest: a not-yet-terminal match keeps its announced XI when only some starters have minutes (no collapse, no anomaly)", () => {
+    // in_progress: only h9 has logged a minute; the other 10 are null with no events. The phantom drop is
+    // disabled off a terminal status, so the live XI is kept whole instead of collapsing to the 1 with data.
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", null],
+      ["h2", "DEF", null],
+      ["h3", "DEF", null],
+      ["h4", "DEF", null],
+      ["h5", "DEF", null],
+      ["h6", "MID", null],
+      ["h7", "MID", null],
+      ["h8", "MID", null],
+      ["h9", "FWD", 5], // an early goalscorer's minute lands first
+      ["h10", "FWD", null],
+      ["h11", "FWD", null],
+    ]);
+    const v = buildGameDetail(
+      homeOnly({ players, lineupEntries, stats, events: [], status: "in_progress" }),
+    );
+    expect(v.home.pitch).toHaveLength(11);
+    expect(v.home.starters.map((l) => l.playerId)).toEqual(v.home.pitch.map((l) => l.playerId));
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("a TERMINAL match with NO ingested minutes keeps the sheet as-is (a drop can't be justified without minute data)", () => {
+    const rows: Row[] = [
+      ["h1", "GK", null],
+      ["h2", "DEF", null],
+      ["h3", "DEF", null],
+      ["h4", "DEF", null],
+      ["h5", "DEF", null],
+      ["h6", "MID", null],
+      ["h7", "MID", null],
+      ["h8", "MID", null],
+      ["h9", "FWD", null],
+      ["h10", "FWD", null],
+      ["h11", "FWD", null],
+    ];
+    const { players, lineupEntries } = squad(rows);
+    const v = buildGameDetail(
+      homeOnly({ players, lineupEntries, stats: [], events: [], status: "completed" }),
+    );
+    expect(v.home.pitch).toHaveLength(11);
+    expect(v.lineupAnomalies).toEqual([]);
+  });
+
+  it("SAFETY NET removed-split: a terminal side that still can't reach 11 lists the dropped candidates in removedPlayerIds", () => {
+    // 13 flagged: 12 genuine (minutes) + a Jurásek-style phantom (null minutes, no events). The phantom is
+    // dropped → pitch 12 (still ≠ 11) → anomaly that names the removed candidate, kept set rendered as-is.
+    const { players, lineupEntries, stats } = squad([
+      ["h1", "GK", 90],
+      ["h2", "DEF", 90],
+      ["h3", "DEF", 90],
+      ["h4", "DEF", 90],
+      ["h5", "DEF", 90],
+      ["h6", "MID", 90],
+      ["h7", "MID", 90],
+      ["h8", "MID", 90],
+      ["h9", "FWD", 90],
+      ["h10", "FWD", 90],
+      ["h11", "FWD", 90],
+      ["h12", "FWD", 90],
+      ["Jurasek", "DEF", null],
+    ]);
+    const v = buildGameDetail(homeOnly({ players, lineupEntries, stats }));
+    expect(v.home.pitch).toHaveLength(12); // the phantom dropped, but 12 genuine remain — rendered as-is
+    const a = v.lineupAnomalies[0]!;
+    expect(a.count).toBe(12);
+    expect(a.removedPlayerIds).toEqual(["Jurasek"]);
+    expect(a.keptPlayerIds).not.toContain("Jurasek");
+    expect(v.home.bench.map((l) => l.playerId)).toContain("Jurasek"); // not silently vanished
   });
 });

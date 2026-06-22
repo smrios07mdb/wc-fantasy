@@ -233,9 +233,10 @@ function KitToken({ line, live, onOpen }: { line: PlayerLine; live: boolean; onO
 
 /**
  * One side's named starting XI as position lanes (GK→FWD); CSS orients them per side + viewport.
- * Sources `side.pitch` (the official is_starter sheet) — NOT `side.starters`, which also carries
- * inferred/come-on starters and would over-fill a side past 11 tokens. Subbed-off / sent-off
- * starters keep their lane; a come-on substitute never gets a pitch token. Empty pitch = no sheet.
+ * Sources `side.pitch` (the reconciled KICKOFF XI — sheet ∪ player_out − come-ons − no-minute phantoms,
+ * NOT the raw is_starter sheet, which the feed over-marks). On a sheet side `side.pitch === side.starters`.
+ * Subbed-off / sent-off starters keep their lane; a come-on substitute never gets a pitch token. Empty
+ * pitch = no sheet.
  */
 function PitchHalf({
   side,
@@ -338,14 +339,24 @@ function RowGlyphs({ line }: { line: PlayerLine }) {
     glyphs.push(<span key="r" className="gd-rev is-red" title="Red card" aria-label="red card" />);
   if (line.wentOffMinute !== null)
     glyphs.push(
-      <span key="off" className="gd-rev is-off" title={`Subbed off ${line.wentOffMinute}'`}>
+      <span
+        key="off"
+        className="gd-rev is-off"
+        title={`Subbed off ${line.wentOffMinute}'${line.subbedOffForName ? ` for ${line.subbedOffForName}` : ""}`}
+      >
         ▾{line.wentOffMinute}&apos;
+        {line.subbedOffForName && <em className="gd-rev-for"> {line.subbedOffForName}</em>}
       </span>,
     );
   if (line.cameOnMinute !== null)
     glyphs.push(
-      <span key="on" className="gd-rev is-on" title={`Subbed on ${line.cameOnMinute}'`}>
+      <span
+        key="on"
+        className="gd-rev is-on"
+        title={`Subbed on ${line.cameOnMinute}'${line.subbedOnForName ? ` for ${line.subbedOnForName}` : ""}`}
+      >
         ▴{line.cameOnMinute}&apos;
+        {line.subbedOnForName && <em className="gd-rev-for"> {line.subbedOnForName}</em>}
       </span>,
     );
   return glyphs.length ? <span className="gd-revs">{glyphs}</span> : null;

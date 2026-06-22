@@ -832,6 +832,12 @@
   color: var(--win);
   font: var(--fw-bold) 9px / 1 var(--font-mono);
 }
+/* "for <name>" sub-pairing label that rides the ↓/↑ badge — softer than the coloured minute. */
+.gd-rev-for {
+  font-style: normal;
+  font-weight: var(--fw-medium);
+  color: var(--text-tertiary);
+}
 
 /* ════════════════ RATINGS BOARD ════════════════ */
 .gd-ratings {

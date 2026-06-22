@@ -180,7 +180,7 @@ export async function loadGameDetail(
     }
   }
 
-  return buildGameDetail({
+  const view = buildGameDetail({
     match: {
       matchId: match.id,
       status: match.status as MatchStatus,
@@ -239,4 +239,20 @@ export async function loadGameDetail(
     ownerByPlayer,
     unresolvedFromPool,
   });
+
+  // Safety net (read-only): the kickoff-XI reconciliation cascade flagged a side whose computed XI ≠ 11.
+  // Surface it in the server log (match_id / team_id / count / kept / removed) — observable, never
+  // swallowed; the builder still renders the kept set (no padding, no silent drop).
+  for (const anomaly of view.lineupAnomalies) {
+    console.warn("[game-detail] kickoff XI reconciliation anomaly", {
+      matchId: view.header.matchId,
+      side: anomaly.side,
+      teamId: anomaly.teamId,
+      count: anomaly.count,
+      kept: anomaly.keptPlayerIds,
+      removed: anomaly.removedPlayerIds,
+    });
+  }
+
+  return view;
 }

@@ -12,6 +12,13 @@
  * truth (T-CARD1): incident_type "card" with incident_class red/yellow. Two-yellow→red banding is OUT OF
  * SCOPE (it needs cross-row pairing at the aggregation layer); rows are shown as classified (a 2nd booking
  * is a second yellow, never auto-folded).
+ *
+ * The formation PITCH is the reconciled KICKOFF XI, NOT the raw `is_starter` sheet: the feed over-marks
+ * `is_starter` on some completed matches (a side can carry 12+ flagged starters). The kickoff XI is a
+ * deterministic cascade over the injected sheet + substitution events + minutes (see {@link keptOnPitch});
+ * `side.starters` === `side.pitch` on a sheet side. The root cause is feed over-marking — this fixes it at
+ * READ time only; ingest and the stored `is_starter` data are untouched. A side that can't resolve to 11
+ * renders the kept set as-is (never padded/trimmed) and surfaces a {@link LineupAnomaly}.
  */
 import { UNNAMED_OPPONENT } from "@/src/lineup/view";
 import { classifyCard, resolveRating, type RatingRow } from "@app/recompute";
@@ -27,6 +34,7 @@ import type {
   GdRatingInput,
   GdStatInput,
   GdTeamStatInput,
+  LineupAnomaly,
   PlayerLine,
   PlayerRole,
   SquadSide,
@@ -56,15 +64,28 @@ function byEntryThenName(a: PlayerLine, b: PlayerLine): number {
 interface EventFacts {
   yellowCards: number;
   redCard: boolean;
+  /** Player is the playerIn side of a non-rescinded substitution → he came ON after kickoff (a Sub). */
+  cameOn: boolean;
+  /** Player is the playerOut side of a non-rescinded substitution → he was ON at kickoff, withdrawn. */
+  wentOff: boolean;
+  /**
+   * Player is the subject (playerId) of a non-rescinded NON-substitution event (a card / goal / VAR row;
+   * substitution rows carry no playerId). Proof he was physically on the pitch, independent of whether
+   * minutes were ingested — keeps a null-minute red-carded starter from being dropped as a phantom.
+   */
+  onFieldEvent: boolean;
   cameOnMinute: number | null;
   wentOffMinute: number | null;
   named: boolean;
 }
 
-/** Fold one player's events into card counts + sub on/off minutes + a "named in any event" signal. */
+/** Fold one player's events into card counts + sub on/off minutes/booleans + on-field / "named" signals. */
 function eventFactsFor(playerId: string, events: readonly GdEventInput[]): EventFacts {
   let yellowCards = 0;
   let redCard = false;
+  let cameOn = false;
+  let wentOff = false;
+  let onFieldEvent = false;
   let cameOnMinute: number | null = null;
   let wentOffMinute: number | null = null;
   let named = false;
@@ -73,28 +94,55 @@ function eventFactsFor(playerId: string, events: readonly GdEventInput[]): Event
     if (e.rescinded) continue;
     if (e.playerInId === playerId) {
       named = true;
-      // Came on; minute may be unknown (the boolean `cameOn()` still flags the role from the event).
+      cameOn = true; // came on; the minute may be unknown but the boolean still flags the role
       if (e.minute !== null)
         cameOnMinute = cameOnMinute === null ? e.minute : Math.min(cameOnMinute, e.minute);
     }
     if (e.playerOutId === playerId) {
       named = true;
+      wentOff = true;
       if (e.minute !== null)
         wentOffMinute = wentOffMinute === null ? e.minute : Math.min(wentOffMinute, e.minute);
     }
     if (e.playerId === playerId) {
       named = true;
+      onFieldEvent = true;
       const kind = classifyCard(e);
       if (kind === "yellow") yellowCards += 1;
       else if (kind === "red") redCard = true;
     }
   }
-  return { yellowCards, redCard, cameOnMinute, wentOffMinute, named };
+  return {
+    yellowCards,
+    redCard,
+    cameOn,
+    wentOff,
+    onFieldEvent,
+    cameOnMinute,
+    wentOffMinute,
+    named,
+  };
 }
 
-/** "Came on" is true whenever the player is the playerIn side of any non-rescinded event. */
-function cameOn(playerId: string, events: readonly GdEventInput[]): boolean {
-  return events.some((e) => !e.rescinded && e.playerInId === playerId);
+/**
+ * Pair each substitution (player_out ↔ player_in) so a lineup row can name its counterpart: who came on
+ * for a withdrawn starter, and who a come-on sub replaced. Only events carrying BOTH ids are paired (a
+ * come-on whose player_in id is missing yields no pairing). Names are resolved against the player union.
+ */
+function subPairings(events: readonly GdEventInput[]): {
+  replacementOf: Map<string, string>; // player_out id → the player_in who came on for him
+  replacedOf: Map<string, string>; // player_in id → the player_out he replaced
+} {
+  const replacementOf = new Map<string, string>();
+  const replacedOf = new Map<string, string>();
+  for (const e of events) {
+    if (e.rescinded) continue;
+    if (e.playerInId !== null && e.playerOutId !== null) {
+      replacementOf.set(e.playerOutId, e.playerInId);
+      replacedOf.set(e.playerInId, e.playerOutId);
+    }
+  }
+  return { replacementOf, replacedOf };
 }
 
 /**
@@ -124,25 +172,53 @@ function chipsFor(position: Position, stat: GdStatInput | undefined): StatChip[]
 }
 
 /**
- * Classify one player's role for this match. The official `match_lineup_entry` sheet is AUTHORITATIVE
- * for a side when present (`sideHasSheet`): an explicit entry decides directly, and a player NOT on the
- * sheet is — by definition — not an official starter, so an appearance means he came on (→ `sub`),
- * NEVER an inferred `starter`. Appearance-inference (an appearance ⇒ `starter`) survives only as the
- * FALLBACK for a side with NO sheet at all, so the squad still shows rather than rendering nothing.
+ * The kickoff-XI cascade decision for a CANDIDATE on a side WITH a sheet (candidates = `is_starter` rows
+ * ∪ any `player_out`). A candidate is on the kickoff pitch iff:
+ *   (a) he did NOT come on after kickoff — a `player_in` is a Sub; came-on WINS even if he later went off
+ *       (so this gate is evaluated first, not subsumed by (b)), AND
+ *   (b) there is evidence he was on AT kickoff: he was withdrawn (`player_out`), OR logged minutes > 0,
+ *       OR is named in an on-field event (a card/goal proves presence — this keeps a null-minute
+ *       red-carded starter). A flagged starter with NO minutes AND no events is a feed mislabel →
+ *       dropped, but ONLY when `phantomDropEnabled` (the match is TERMINAL — completed/abandoned — AND
+ *       has minute data). This guard is the difference between "didn't play" and "data not in yet": a
+ *       LIVE match ingests minutes per-player incrementally, so a genuine starter may legitimately have
+ *       null minutes mid-match — dropping him would collapse the live XI. So before the match ends (pre-
+ *       kickoff OR in-progress) the sheet is kept as-is; a terminal match with no minute data at all is
+ *       likewise left untouched (a drop can't be justified). The came-on removal (a) and the player_out
+ *       add-back are event-driven and ALWAYS apply, so a live pitch still updates as substitutions land.
+ */
+function keptOnPitch(
+  facts: EventFacts,
+  minutes: number | null,
+  phantomDropEnabled: boolean,
+): boolean {
+  if (facts.cameOn) return false; // (a) came on after kickoff → a Sub, never the kickoff XI
+  if (facts.wentOff) return true; // (b) withdrawn ⇒ was on at kickoff
+  if (minutes !== null && minutes > 0) return true; // (b) logged minutes
+  if (facts.onFieldEvent) return true; // (b) a card / goal ⇒ on the pitch (null-minute red card)
+  return !phantomDropEnabled; // no evidence: drop a flagged starter ONLY when the drop is enabled
+}
+
+/**
+ * Final role from the kickoff-XI membership. On a side WITH a sheet, `role: "starter"` ⟺ `onPitch`, so
+ * the Starting XI list and the formation pitch carry the IDENTICAL set (the §25 invariant). A side with
+ * NO sheet keeps the appearance-inference fallback (graceful: show a squad) with the pitch left empty.
  */
 function roleFor(
+  onPitch: boolean,
   isStarterEntry: boolean | undefined,
   didCameOn: boolean,
   appeared: boolean,
   sideHasSheet: boolean,
 ): PlayerRole {
-  if (isStarterEntry === true) return "starter";
-  if (isStarterEntry === false) return didCameOn ? "sub" : "bench";
-  // No sheet entry for THIS player.
+  if (onPitch) return "starter";
   if (sideHasSheet) {
-    // ...but the side HAS a sheet, so he is not an official starter. An appearance ⇒ he came on (even
-    // if his player_in event lacked an id) → Subs, never the Starting XI; otherwise off-sheet + absent.
-    return appeared ? "sub" : "bench";
+    // Not on the kickoff pitch. A come-on is a Sub; so is an off-sheet appearance (a come-on whose
+    // player_in event lacked an id). A sheet bench, a dropped feed-phantom starter, or an off-sheet
+    // non-appearance is Bench — listed (named, did not feature), never silently dropped.
+    if (didCameOn) return "sub";
+    if (isStarterEntry === undefined && appeared) return "sub";
+    return "bench";
   }
   // No official sheet for the side at all → infer from match signals (graceful: show a squad).
   if (didCameOn) return "sub";
@@ -186,16 +262,23 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
   const scoreByPlayer = new Map(scores.map((s) => [s.playerId, s.points]));
   const ratingRowsByPlayer = groupRatingRows(ratings);
   const lineupByPlayer = new Map(lineupEntries.map((e) => [e.playerId, e.isStarter]));
-  // The official starting XI per the `match_lineup_entry` sheet (is_starter) — drives the formation
-  // PITCH selection. NEVER the inferred `role: "starter"`, which also catches off-sheet appearances
-  // (e.g. a come-on substitute whose substitution event lacked a playerIn id) and would over-fill it.
-  const officialStarterIds = new Set(
-    lineupEntries.filter((e) => e.isStarter).map((e) => e.playerId),
-  );
+  const { replacementOf, replacedOf } = subPairings(events);
+  // Short label (surname, else display name) for the sub-pairing badges, resolved from the player union.
+  const nameById = new Map(players.map((p) => [p.id, p.lastName ?? p.displayName]));
+  // The "no-minute phantom" drop is enabled ONLY for a TERMINAL match (completed/abandoned) that also
+  // has minute data. The bug this reconciles is the FEED over-marking `is_starter` on COMPLETED matches,
+  // fixed here at READ time only. The terminal gate is essential: a LIVE match ingests minutes per-player
+  // incrementally, so a genuine starter can momentarily have null minutes mid-match — without the gate the
+  // first posted minute would flip the whole match into "drop" mode and collapse the live XI. Pre-kickoff
+  // (no status, no minutes) and a terminal-but-no-minutes match both fall through to the sheet as-is. The
+  // came-on removal / player_out add-back are event-driven and apply regardless, so a live pitch still
+  // tracks substitutions.
+  const matchIsTerminal = match.status === "completed" || match.status === "abandoned";
+  const matchHasMinutes = stats.some((s) => s.minutesPlayed !== null && s.minutesPlayed > 0);
+  const phantomDropEnabled = matchIsTerminal && matchHasMinutes;
   // Whether each SIDE has an official sheet at all (any `match_lineup_entry` row for a player on that
-  // side). When present the sheet is authoritative for that side: `roleFor` classifies strictly by it
-  // and never infers an off-sheet appearance into the Starting XI. A side with no sheet keeps the
-  // appearance-inference fallback (graceful). Sides are independent — one may be posted before the other.
+  // side). When present the sheet anchors the kickoff-XI cascade; a side with no sheet keeps the
+  // appearance-inference fallback (graceful) and an empty pitch. Sides are independent.
   let homeHasSheet = false;
   let awayHasSheet = false;
   for (const p of players) {
@@ -207,6 +290,10 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
 
   const homeLines: PlayerLine[] = [];
   const awayLines: PlayerLine[] = [];
+  // Kickoff-XI candidate ids per side (is_starter sheet rows ∪ withdrawn player_outs) — used to report
+  // the kept/removed split when a side's computed XI ≠ 11 (the safety net).
+  const homeCandidates: string[] = [];
+  const awayCandidates: string[] = [];
   let unplaced = 0; // resolved player, but team is neither side of the match
 
   for (const p of players) {
@@ -220,7 +307,18 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     const hasScore = scoreByPlayer.has(p.id);
     const facts = eventFactsFor(p.id, events);
     const appeared = stat !== undefined || hasScore || facts.named;
-    const didCameOn = cameOn(p.id, events);
+    const minutes = stat?.minutesPlayed ?? null;
+    const isStarterEntry = lineupByPlayer.get(p.id);
+    const sideHasSheet = side === "home" ? homeHasSheet : awayHasSheet;
+
+    // A kickoff-XI candidate is an official starter OR anyone withdrawn (a player_out was on at kickoff,
+    // even if the feed left him off the sheet — Croatia's re-added Modrić). The cascade then decides who
+    // is actually kept on the pitch.
+    const isCandidate = isStarterEntry === true || facts.wentOff;
+    const onPitch = sideHasSheet && isCandidate && keptOnPitch(facts, minutes, phantomDropEnabled);
+    if (sideHasSheet && isCandidate) {
+      (side === "home" ? homeCandidates : awayCandidates).push(p.id);
+    }
 
     const line: PlayerLine = {
       playerId: p.id,
@@ -229,16 +327,14 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
       lastName: p.lastName,
       position: p.position,
       nation: p.nation,
-      role: roleFor(
-        lineupByPlayer.get(p.id),
-        didCameOn,
-        appeared,
-        side === "home" ? homeHasSheet : awayHasSheet,
-      ),
+      role: roleFor(onPitch, isStarterEntry, facts.cameOn, appeared, sideHasSheet),
       appeared,
       cameOnMinute: facts.cameOnMinute,
       wentOffMinute: facts.wentOffMinute,
-      minutes: stat?.minutesPlayed ?? null,
+      // Sub-pairing labels: who came on for him (when withdrawn) / who he replaced (when he came on).
+      subbedOffForName: nameById.get(replacementOf.get(p.id) ?? "") ?? null,
+      subbedOnForName: nameById.get(replacedOf.get(p.id) ?? "") ?? null,
+      minutes,
       yellowCards: facts.yellowCards,
       redCard: facts.redCard,
       rating: resolveRating(ratingRowsByPlayer.get(p.id) ?? []),
@@ -249,8 +345,13 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     (side === "home" ? homeLines : awayLines).push(line);
   }
 
-  const home = buildSide(match.homeTeamName, match.homeScore, homeLines, officialStarterIds);
-  const away = buildSide(match.awayTeamName, match.awayScore, awayLines, officialStarterIds);
+  const home = buildSide(match.homeTeamName, match.homeScore, homeLines, homeHasSheet);
+  const away = buildSide(match.awayTeamName, match.awayScore, awayLines, awayHasSheet);
+  // Safety net: surface (don't swallow) any side whose reconciled XI ≠ 11 so the loader can log it.
+  const lineupAnomalies = [
+    anomalyFor("home", match.homeTeamId, homeHasSheet, homeCandidates, home.pitch),
+    anomalyFor("away", match.awayTeamId, awayHasSheet, awayCandidates, away.pitch),
+  ].filter((a): a is LineupAnomaly => a !== null);
 
   return {
     header: {
@@ -268,6 +369,32 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     empty: homeLines.length === 0 && awayLines.length === 0,
     periodId: match.periodId,
     unresolvedParticipants: unresolvedFromPool + unplaced,
+    lineupAnomalies,
+  };
+}
+
+/**
+ * A side's reconciled kickoff XI must be 11. When it isn't (a feed contradiction the cascade can't
+ * resolve), surface the mismatch rather than padding or silently dropping — the builder renders exactly
+ * the kept set and the loader logs this (match_id / team_id / count / kept / removed). Only fires for a
+ * side WITH a sheet (a no-sheet side has an empty pitch BY DESIGN, not an anomaly).
+ */
+function anomalyFor(
+  side: "home" | "away",
+  teamId: string | null,
+  hasSheet: boolean,
+  candidateIds: readonly string[],
+  pitch: readonly PlayerLine[],
+): LineupAnomaly | null {
+  if (!hasSheet) return null;
+  if (pitch.length === 11) return null;
+  const keptSet = new Set(pitch.map((l) => l.playerId));
+  return {
+    side,
+    teamId,
+    count: pitch.length,
+    keptPlayerIds: pitch.map((l) => l.playerId),
+    removedPlayerIds: candidateIds.filter((id) => !keptSet.has(id)),
   };
 }
 
@@ -287,18 +414,19 @@ function buildSide(
   teamName: string | null,
   score: number | null,
   lines: PlayerLine[],
-  officialStarterIds: ReadonlySet<string>,
+  hasSheet: boolean,
 ): SquadSide {
+  const starters = lines.filter((l) => l.role === "starter").sort(byPositionThenName);
   return {
     // Never surface a raw team UUID: an unjoined/unnamed team falls back to the shared constant.
     teamName: teamName ?? UNNAMED_OPPONENT,
     teamCode: teamName ?? null,
     score,
-    starters: lines.filter((l) => l.role === "starter").sort(byPositionThenName),
-    // PITCH: only the players the official sheet names in the starting XI (is_starter) — a strict
-    // subset of `starters` that excludes inferred/come-on starters, so a side never renders more
-    // than its ≤11 named starters. Empty when no sheet has been posted (pitch renders empty).
-    pitch: lines.filter((l) => officialStarterIds.has(l.playerId)).sort(byPositionThenName),
+    starters,
+    // PITCH = the reconciled kickoff XI, IDENTICAL to `starters` on a side with a sheet (`role: "starter"`
+    // ⟺ on the kickoff pitch — see `keptOnPitch`). A side with no sheet has no formation to draw → empty
+    // pitch (its lists still render via the appearance-inference fallback).
+    pitch: hasSheet ? starters : [],
     subs: lines.filter((l) => l.role === "sub").sort(byEntryThenName),
     bench: lines.filter((l) => l.role === "bench").sort(byPositionThenName),
   };

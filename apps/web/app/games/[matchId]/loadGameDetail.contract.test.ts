@@ -35,6 +35,20 @@ describe("loadGameDetail — assembly contract", () => {
     expect(codeOnly).toContain("prisma.statTeamMatch.findMany");
   });
 
+  it("selects the columns the kickoff-XI reconciliation cascade needs (substitution player_in/out + minutes)", () => {
+    // The cascade pairs substitutions (player_out ↔ player_in) and re-adds withdrawn off-sheet starters,
+    // so BOTH sub ids must be read; the "no-minute phantom" drop needs minutes_played.
+    expect(codeOnly).toContain("playerInId: true");
+    expect(codeOnly).toContain("playerOutId: true");
+    expect(codeOnly).toContain("minutesPlayed: true");
+  });
+
+  it("surfaces the kickoff-XI reconciliation safety net (logs ≠11 anomalies, never swallowed)", () => {
+    // The builder returns lineupAnomalies; the loader logs each one (observable) and still renders the view.
+    expect(codeOnly).toContain("view.lineupAnomalies");
+    expect(codeOnly).toContain("console.warn");
+  });
+
   it("derives nation from the fifa_team join — NEVER the player.country scalar", () => {
     expect(codeOnly).toContain("team: { select: { name: true } }");
     // The country scalar is never selected off player (the P34 discipline).
