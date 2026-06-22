@@ -18,7 +18,7 @@
  * period (the modal is period-keyed). No data fetching here beyond that modal's own `/api/player-box`
  * round-trip.
  */
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { MatchStatus } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
@@ -34,6 +34,7 @@ import type {
   SquadSide,
   StatFormat,
 } from "@/src/games/types";
+import { pitchRows } from "@/src/games/pitchRows";
 import "@/src/games/games.css";
 
 type Tab = "lineups" | "statistics" | "ratings";
@@ -210,6 +211,21 @@ function KitToken({ line, live, onOpen }: { line: PlayerLine; live: boolean; onO
               aria-hidden="true"
             />
           ))}
+        {(line.redCard || line.wentOffMinute !== null) && (
+          <span className="gd-tok-status">
+            {line.redCard && (
+              <span className="gd-rev is-red" title="Red card" aria-label="red card" />
+            )}
+            {line.wentOffMinute !== null && (
+              <span
+                className="gd-rev is-off"
+                title={`Subbed off ${line.wentOffMinute}'${line.subbedOffForName ? ` for ${line.subbedOffForName}` : ""}`}
+              >
+                ▾{line.wentOffMinute}&apos;
+              </span>
+            )}
+          </span>
+        )}
       </span>
       <span className="gd-tok-name">{shortName(line)}</span>
       <span className="gd-tok-foot">
@@ -258,9 +274,51 @@ function PitchHalf({
   for (const l of side.pitch) byLane[l.position].push(l);
   return (
     <div className={`gd-phalf is-${which}`}>
-      {LANES.map((lane) => (
-        <div key={lane} className="gd-pcol">
-          {byLane[lane].map((l) => (
+      {LANES.map((lane) => {
+        // A populous band wraps into balanced formation lines (back→front) so it never overflows the
+        // pitch. The wide (desktop) and narrow (mobile) splits differ only for a flat back-4 (one line
+        // vs a balanced 2+2): when they match, render once; when they don't, render both and let the
+        // same breakpoint that flips the half's flex-direction show the right one (no SSR-unsafe
+        // viewport probing, no greedy CSS wrap).
+        const players = byLane[lane];
+        const wide = pitchRows(players, false);
+        const narrow = pitchRows(players, true);
+        if (wide.length === narrow.length) {
+          return <LaneColumn key={lane} lines={wide} live={live} onOpen={onOpen} />;
+        }
+        return (
+          <Fragment key={lane}>
+            <LaneColumn lines={wide} live={live} onOpen={onOpen} variant="wide-only" />
+            <LaneColumn lines={narrow} live={live} onOpen={onOpen} variant="narrow-only" />
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * One position lane: a `.gd-pcol` holding one `.gd-pline` per formation line. `is-wide` gives a
+ * wrapped (multi-line) band the extra depth its sub-lines need; `variant` scopes a dual-rendered
+ * back-4 to its axis (CSS shows `wide-only` on desktop, `narrow-only` on mobile).
+ */
+function LaneColumn({
+  lines,
+  live,
+  onOpen,
+  variant,
+}: {
+  lines: readonly PlayerLine[][];
+  live: boolean;
+  onOpen: OpenFn;
+  variant?: "wide-only" | "narrow-only";
+}) {
+  const cls = `gd-pcol${lines.length > 1 ? " is-wide" : ""}${variant ? ` is-${variant}` : ""}`;
+  return (
+    <div className={cls}>
+      {lines.map((linePlayers) => (
+        <div key={linePlayers[0]?.playerId ?? "empty"} className="gd-pline">
+          {linePlayers.map((l) => (
             <KitToken key={l.playerId} line={l} live={live} onOpen={onOpen} />
           ))}
         </div>

@@ -510,13 +510,36 @@
   flex-direction: row-reverse;
 }
 .gd-pcol {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row; /* sub-lines run back→front; tokens stack inside each .gd-pline */
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+}
+/* a wrapped (multi-line) band gets extra depth so each sub-line stays as roomy as a normal lane */
+.gd-pcol.is-wide {
+  flex-grow: 2;
+}
+/* a flat back-4 is dual-rendered (one line desktop / balanced 2+2 mobile); show the wide one here */
+.gd-pcol.is-narrow-only {
+  display: none;
+}
+/* away half mirrors the back→front order so the fuller line still lands toward the halfway line */
+.gd-phalf.is-away .gd-pcol {
+  flex-direction: row-reverse;
+}
+.gd-pline {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column; /* one formation line: tokens spread across the pitch height */
   align-items: center;
   justify-content: space-around;
   gap: 6px;
   min-width: 0;
+  min-height: 0;
 }
 
 /* pitch token */
@@ -598,6 +621,26 @@
   top: -5px;
   right: -5px;
   background: var(--locked);
+}
+/* subbed-off (▾min) / red-card status, overlaid on the jersey hem — clearly visible at any token size */
+.gd-tok-status {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: rgba(7, 11, 17, 0.82);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  white-space: nowrap;
+  z-index: 3;
+}
+.gd-tok-status .gd-rev.is-off {
+  color: #ff9b9b; /* brighter than --loss so the minute reads on the dark hem pill */
 }
 .gd-tok-name {
   font: var(--fw-bold) 11px / 1.1 var(--font-sans);
@@ -1171,9 +1214,11 @@
     font-size: 34px;
   }
 
-  /* pitch flips to vertical: away on top, home on bottom; lanes become rows */
+  /* pitch flips to vertical: away on top, home on bottom; lanes become rows.
+     Height is a floor, not a cap, so a wrapped (multi-line) band grows the pitch instead of clipping. */
   .gd-pitch {
-    height: 600px;
+    height: auto;
+    min-height: 600px;
   }
   .gd-pl-mid {
     top: 50%;
@@ -1204,7 +1249,14 @@
     border-radius: 5px 5px 0 0;
   }
   .gd-pitch-grid {
+    height: auto;
+    min-height: 600px;
     flex-direction: column;
+  }
+  /* size each half (and lane) to its content so wrapped bands grow downward instead of clipping */
+  .gd-phalf {
+    flex-shrink: 0;
+    flex-basis: auto;
   }
   .gd-phalf.is-away {
     order: -1;
@@ -1213,8 +1265,30 @@
   .gd-phalf.is-home {
     flex-direction: column-reverse;
   }
+  /* lane axis is now vertical: sub-lines stack back→front, matching each half's direction */
   .gd-pcol {
+    flex-shrink: 0;
+    flex-basis: auto;
+  }
+  .gd-phalf.is-away .gd-pcol {
+    flex-direction: column;
+  }
+  .gd-phalf.is-home .gd-pcol {
+    flex-direction: column-reverse;
+  }
+  /* show the narrow (2+2) back-4 variant here, hide the wide (single-line) one */
+  .gd-pcol.is-wide-only {
+    display: none;
+  }
+  .gd-pcol.is-narrow-only {
+    display: flex;
+  }
+  /* one formation line is now a horizontal row of tokens. The back-4's 2+2 is helper-driven (balanced);
+     flex-wrap stays only as a last-resort clamp so an unusually wide sub-line can't clip on a tiny phone. */
+  .gd-pline {
+    flex: 0 0 auto;
     flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .gd-tl-grid {
