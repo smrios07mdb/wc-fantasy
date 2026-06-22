@@ -532,8 +532,13 @@ not by hopeful application code:
 - `event_match` — feed event id; incident_type/class, time_minute, added_time, period,
   player_id, assist_player_id, player_in_id, player_out_id, rescinded.
 - `shot_match` — feed shot id; match_id, player_id, shot_type, situation, … (penalty detection).
-- `stat_team_match` — `(match_id, team_id)`; team aggregates (any team-derived lines, offsides
-  at team level, etc.).
+- `stat_team_match` — `(match_id, team_id)`; team aggregates. EXISTS and is populated, **but the
+  team-stat mapper promotes only `possession` / `offsides` / `shots_blocked` (typed columns) and
+  writes NOTHING to `extra`** — the rich BALLDONTLIE team payload (xG, shots, passes, corners, etc.)
+  is discarded at ingest, UNLIKE the player-stat path (`stat_player_match`, above) which retains every
+  un-promoted field verbatim in `extra`. Consequence (T16 finding): a match-Statistics surface is NOT
+  backable today without a team-stat mapper change + a re-ingest backfill of completed matches. See
+  BACKLOG → Statistics tab.
 - `rating_player_match` — `(match_id, player_id, source)`; rating, source
   (`balldontlie`/`scrape`/`manual`), updated_at. Resolver reads this.
 - `manual_stat_player_match` — `(match_id, player_id)`; the feed-gap fields (penalty_won,
