@@ -447,3 +447,125 @@
     gap: 10px;
   }
 }
+
+/* ── season grid (managers × matchdays score matrix; T12) ── */
+/* A real <table> for the variable-width matrix: horizontal scroll on narrow viewports with a sticky
+ * Manager column so names stay anchored. Read-only (no expansion). Accent (cobalt) marks only YOU. */
+.st-season {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.st-season-scroll {
+  overflow-x: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+}
+.st-season-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.st-season-h {
+  height: 36px;
+  padding: 0 12px;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--fw-bold);
+  color: var(--text-tertiary);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+.st-season-md-h,
+.st-season-tot-h {
+  text-align: right;
+}
+.st-season-md-h.is-upcoming {
+  opacity: 0.55;
+}
+/* sticky Manager column — both the header corner and each row header */
+.st-season-mgr-h,
+.st-season-mgr {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  text-align: left;
+  /* The sticky-column divider is drawn with an inset box-shadow, NOT border-right: with
+     `border-collapse: collapse` a collapsed border is owned by the table grid and isn't reliably
+     carried with a position:sticky cell during horizontal scroll (Chromium/WebKit) — box-shadow
+     travels with the cell. */
+  box-shadow: inset -1px 0 0 var(--hairline);
+}
+.st-season-mgr-h {
+  z-index: 2; /* the corner sits above the scrolling header cells */
+}
+.st-season-tot-h,
+.st-season-tot {
+  border-left: 1px solid var(--hairline);
+}
+.st-season-tot {
+  font-weight: var(--fw-bold);
+  color: var(--text-primary);
+}
+.st-season-cell {
+  padding: 9px 12px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--hairline);
+}
+.st-season-mgr {
+  padding: 9px 12px;
+  background: var(--surface-1); /* opaque so scrolled cells slide under it */
+  border-bottom: 1px solid var(--hairline);
+}
+.st-season-row:last-child .st-season-cell,
+.st-season-row:last-child .st-season-mgr {
+  border-bottom: none;
+}
+.st-season-mgr-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  /* Cap the sticky Manager column so an unusually long display name ellipses (via `.st-mgr-name`)
+     instead of widening the column and squeezing the scrollable matchday cells. The table is
+     auto-layout, so the cap lives on this inner flex box (a bare `max-width` on the <th> isn't
+     reliably honoured); `min-width: 0` above lets `.st-mgr-name`'s ellipsis engage. */
+  max-width: 200px;
+}
+.st-season-rank {
+  min-width: 18px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-micro);
+}
+.st-season-blank {
+  color: var(--text-tertiary);
+}
+.st-season-row:hover .st-season-cell,
+.st-season-row:hover .st-season-mgr {
+  background: var(--surface-2);
+}
+/* YOU — accent wash; declared last so it wins over :hover for the viewer's own row */
+.st-season-row.is-me .st-season-cell {
+  background: var(--accent-soft);
+}
+/* The sticky Manager cell composites the (translucent) accent wash over an OPAQUE base, so
+   horizontally-scrolled is-me data cells (also accent-soft) can't bleed through it — same visible
+   tint, fully opaque (the plain `var(--surface-1)` base would be wrong: accent-soft is rgba 0.16). */
+.st-season-row.is-me .st-season-mgr {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface-1);
+}
+
+/* Tighten the sticky Manager column on phones so the scrollable matchday cells keep room.
+   (Placed after the base rule so it wins at this width; full mobile polish is T15.) */
+@media (max-width: 480px) {
+  .st-season-mgr-inner {
+    max-width: 150px;
+  }
+}

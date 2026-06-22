@@ -18,17 +18,18 @@ import { createClient } from "@/lib/supabase/client";
 import { startStandingsLive } from "@/src/standings/liveController";
 import { fetchStandings } from "@/src/standings/snapshotClient";
 import type { RealtimeClientLike } from "@/src/standings/realtime";
-import type { StandingsView } from "@app/recompute";
+import { buildSeasonGrid, type StandingsView } from "@app/recompute";
 import {
   ConnPill,
   ContextBand,
   CumulativeTable,
   MatchdayPanel,
+  SeasonGridPanel,
   type ConnState,
 } from "./components";
 import "./standings.css";
 
-type Tab = "matchday" | "cumulative";
+type Tab = "matchday" | "cumulative" | "season";
 
 export function StandingsClient({ initial }: { initial: StandingsView }) {
   const [view, setView] = useState<StandingsView>(initial);
@@ -123,16 +124,26 @@ export function StandingsClient({ initial }: { initial: StandingsView }) {
         >
           Cumulative
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "season"}
+          className={"tab" + (tab === "season" ? " is-active" : "")}
+          onClick={() => setTab("season")}
+        >
+          Season
+        </button>
       </div>
 
-      {tab === "matchday" ? (
+      {tab === "matchday" && (
         <MatchdayPanel
           periods={view.periods}
           selectedId={effectiveSelected}
           onSelect={setSelectedPeriodId}
           rows={matchdayRows}
         />
-      ) : (
+      )}
+      {tab === "cumulative" && (
         <div className="st-cumulative">
           <ContextBand rows={view.cumulative} fieldSize={view.fieldSize} />
           <CumulativeTable
@@ -143,6 +154,7 @@ export function StandingsClient({ initial }: { initial: StandingsView }) {
           />
         </div>
       )}
+      {tab === "season" && <SeasonGridPanel grid={buildSeasonGrid(view)} />}
     </div>
   );
 }

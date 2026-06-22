@@ -8,7 +8,7 @@
  * provisional cut line); the matchday panel is the within-period all-play-all ranking. Accent (cobalt)
  * marks only YOU (`.is-me`); the cut is `--elim`, the live chip is `--live`. No gold (BRAND.md §1).
  */
-import type { StandingsRow, StandingsPeriodInput } from "@app/recompute";
+import type { StandingsRow, StandingsPeriodInput, SeasonGrid } from "@app/recompute";
 
 export type ConnState = "live" | "reconnecting" | "loading";
 
@@ -399,6 +399,84 @@ export function MatchdayPanel({
         ) : (
           rows.map((row) => <MatchdayRow key={row.managerId} row={row} />)
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Season tab (T12): a managers × matchdays score matrix — rows = managers in season-seed order,
+ * columns = matchdays in canonical order, each cell = that manager's points for that matchday. Read-only
+ * (no expansion); a horizontally-scrollable table with a sticky Manager column so names stay anchored.
+ * Unstarted (future) matchday cells render an em-dash; the trailing Total column echoes the season PF.
+ */
+export function SeasonGridPanel({ grid }: { grid: SeasonGrid }) {
+  if (grid.rows.length === 0) {
+    return <p className="st-empty text-secondary">No standings yet.</p>;
+  }
+  // Pre-tournament: managers exist (rows non-empty) but no matchdays are threaded yet → a columns-less
+  // grid would be degenerate. Mirror the Matchday tab's empty state for parity.
+  if (grid.columns.length === 0) {
+    return <p className="st-empty text-secondary">No matchdays have been scored yet.</p>;
+  }
+  return (
+    <div className="st-season">
+      <div className="st-season-scroll">
+        <table className="st-season-table" aria-label="Season standings by matchday">
+          <thead>
+            <tr>
+              <th scope="col" className="st-season-h st-season-mgr-h">
+                Manager
+              </th>
+              {grid.columns.map((col) => (
+                <th
+                  key={col.periodId}
+                  scope="col"
+                  className={"st-season-h st-season-md-h" + (col.started ? "" : " is-upcoming")}
+                  title={
+                    col.live
+                      ? `${col.name} (live)`
+                      : col.started
+                        ? col.name
+                        : `${col.name} — not started`
+                  }
+                >
+                  {col.label}
+                  {col.live && <span className="st-fc-dot" aria-hidden="true" />}
+                </th>
+              ))}
+              <th scope="col" className="st-season-h st-season-tot-h">
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {grid.rows.map((row) => (
+              <tr key={row.managerId} className={"st-season-row" + (row.isMe ? " is-me" : "")}>
+                <th scope="row" className="st-season-mgr">
+                  <span className="st-season-mgr-inner">
+                    <span className="st-season-rank mono">{row.rank}</span>
+                    <MgrAvatar name={row.displayName} />
+                    <span className="st-mgr-name">{row.displayName}</span>
+                    {row.isMe && <span className="st-you">YOU</span>}
+                  </span>
+                </th>
+                {row.cells.map((cell, i) => (
+                  <td key={grid.columns[i]!.periodId} className="st-season-cell mono">
+                    {cell.points === null ? (
+                      <span className="st-season-blank" role="img" aria-label="Not started">
+                        –
+                      </span>
+                    ) : (
+                      cell.points
+                    )}
+                  </td>
+                ))}
+                <td className="st-season-cell st-season-tot mono">{row.total}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

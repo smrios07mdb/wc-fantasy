@@ -334,3 +334,96 @@ export function buildStandingsView(input: StandingsViewInput): StandingsView {
     cumulative,
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Season grid (T12) — a PURE re-projection of the SAME StandingsView into a
+ * managers × matchdays score matrix (rows = managers in season-seed order,
+ * columns = matchdays in canonical order, cell = that manager's points that
+ * matchday). It adds NO query and NO new arithmetic: every number is read back
+ * off the cumulative rows' `perPeriod` strip (already aligned to `view.periods`)
+ * and the `view.matchday` map. The "Season" tab on /standings renders this.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** One matchday column of the season grid. */
+export interface SeasonGridColumn {
+  periodId: string;
+  /** Short header label, e.g. "MD1". */
+  label: string;
+  /** Longer display name (column tooltip), e.g. "Matchday 1". */
+  name: string;
+  /** True while this matchday's matches are underway now. */
+  live: boolean;
+  /**
+   * Has this matchday started? Live OR it has at least one scored row
+   * (`view.matchday[id].length > 0`). Unstarted (future) columns render an empty
+   * cell — the same started-set convention the Matchday tab uses (an unstarted
+   * period shows "No scores … yet").
+   */
+  started: boolean;
+}
+
+/** One manager's points for one matchday column (`null` = that matchday hasn't started). */
+export interface SeasonGridCell {
+  points: number | null;
+}
+
+/** One manager row of the season grid — in the cumulative season-seed order. */
+export interface SeasonGridRow {
+  managerId: string;
+  displayName: string;
+  isMe: boolean;
+  /** The displayed season rank (mirrors the cumulative tab's joint rank). */
+  rank: number;
+  /** Within the provisional playoff field (mirrors the cumulative tab). */
+  qualified: boolean;
+  /** One cell per {@link SeasonGridColumn}, in column order. */
+  cells: SeasonGridCell[];
+  /** Season total points (= Σ started-column points = the cumulative PF) — the row summary column. */
+  total: number;
+}
+
+export interface SeasonGrid {
+  columns: SeasonGridColumn[];
+  rows: SeasonGridRow[];
+}
+
+/**
+ * Re-project a {@link StandingsView} into the season-by-matchday score grid (T12). PURE: a pure read of
+ * the already-computed view — NO new query, NO new scoring. Columns follow `view.periods` (canonical
+ * order); rows follow `view.cumulative` (season-seed order). A column is `started` when it's live or has
+ * any scored row (`view.matchday[id].length > 0`); unstarted columns get `points: null` cells (rendered
+ * empty). Each started cell is the manager's points that matchday, read off the cumulative row's
+ * `perPeriod` strip; the total column echoes the cumulative PF (= Σ of the started cells, so the grid can
+ * never disagree with the Cumulative tab).
+ */
+export function buildSeasonGrid(view: StandingsView): SeasonGrid {
+  const columns: SeasonGridColumn[] = view.periods.map((p) => ({
+    periodId: p.id,
+    label: p.label,
+    name: p.name,
+    live: p.live,
+    started: p.live || (view.matchday[p.id]?.length ?? 0) > 0,
+  }));
+  const startedIds = new Set(columns.filter((c) => c.started).map((c) => c.periodId));
+
+  const rows: SeasonGridRow[] = view.cumulative.map((row) => {
+    // Re-key the cumulative row's per-period strip by periodId so cells align to the column order even if
+    // the strip and `periods` order ever diverge (today they're built from the same canonical list).
+    const pointsByPeriod = new Map(
+      (row.perPeriod ?? []).map((c) => [c.periodId, c.points] as const),
+    );
+    return {
+      managerId: row.managerId,
+      displayName: row.displayName,
+      isMe: row.isMe,
+      rank: row.rank,
+      qualified: row.qualified,
+      cells: columns.map((col) => ({
+        points: startedIds.has(col.periodId) ? (pointsByPeriod.get(col.periodId) ?? 0) : null,
+      })),
+      total: row.points,
+    };
+  });
+
+  return { columns, rows };
+}

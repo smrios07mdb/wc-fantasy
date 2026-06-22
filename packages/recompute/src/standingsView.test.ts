@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import {
   buildStandingsView,
+  buildSeasonGrid,
   DEFAULT_PLAYOFF_FIELD_SIZE,
   type StandingsViewInput,
 } from "./standingsView";
@@ -274,5 +275,115 @@ describe("standingsView.ts — purity (no IO / clock / env / db / feed)", () => 
   it("reuses the locked all-play-all helpers (proof of no re-derivation)", () => {
     expect(raw).toMatch(/periodRecords/);
     expect(raw).toMatch(/computeStandings/);
+  });
+});
+
+describe("buildSeasonGrid — season-by-matchday score grid (T12)", () => {
+  it("projects managers × matchdays off the same view: columns in canonical order, rows in season-seed order", () => {
+    const view = buildStandingsView(baseInput());
+    const grid = buildSeasonGrid(view);
+    // Columns mirror the canonical period order (the loader's sortByPeriodOrder, threaded as authoritative).
+    expect(grid.columns.map((c) => c.periodId)).toEqual(["md1", "md2", "md3"]);
+    expect(grid.columns.map((c) => c.label)).toEqual(["MD1", "MD2", "MD3"]);
+    // Rows mirror the cumulative season-seed order exactly (no re-sort).
+    expect(grid.rows.map((r) => r.managerId)).toEqual(view.cumulative.map((r) => r.managerId));
+  });
+
+  it("fills each started cell with that manager's points for that matchday (aligned to columns)", () => {
+    const view = buildStandingsView(baseInput());
+    const grid = buildSeasonGrid(view);
+    const a = grid.rows.find((r) => r.managerId === "A")!;
+    // A scored 10 (MD1), 5 (MD2), 12 (MD3-live).
+    expect(a.cells.map((c) => c.points)).toEqual([10, 5, 12]);
+    // The total column echoes the cumulative PF (= Σ of the matchday cells) — the two can never disagree.
+    expect(a.total).toBe(view.cumulative.find((r) => r.managerId === "A")!.points);
+    expect(a.total).toBe(10 + 5 + 12);
+  });
+
+  it("renders an UNSTARTED (future, unscored, not-live) matchday as an empty (null) cell", () => {
+    // md3 has no scores and isn't live → unstarted → null cells; md1/md2 scored → started.
+    const view = buildStandingsView({
+      periods: [
+        { id: "md1", label: "MD1", name: "Matchday 1", live: false },
+        { id: "md2", label: "MD2", name: "Matchday 2", live: false },
+        { id: "md3", label: "MD3", name: "Matchday 3", live: false },
+      ],
+      pointsByPeriod: { md1: MD1, md2: MD2, md3: [] },
+      managers,
+      meId: "A",
+    });
+    const grid = buildSeasonGrid(view);
+    expect(grid.columns.map((c) => c.started)).toEqual([true, true, false]);
+    const a = grid.rows.find((r) => r.managerId === "A")!;
+    expect(a.cells[2]!.points).toBeNull(); // unstarted matchday → empty cell
+    expect(a.cells[0]!.points).toBe(10);
+    // The total still only sums the started matchdays (= the cumulative PF).
+    expect(a.total).toBe(view.cumulative.find((r) => r.managerId === "A")!.points);
+  });
+
+  it("treats a LIVE but unscored matchday as started — a real 0, not an empty cell", () => {
+    const view = buildStandingsView({
+      periods: [{ id: "md1", label: "MD1", name: "Matchday 1", live: true }],
+      pointsByPeriod: { md1: [] }, // kicked off, no points yet
+      managers,
+      meId: "A",
+    });
+    const grid = buildSeasonGrid(view);
+    expect(grid.columns[0]!.started).toBe(true);
+    expect(grid.columns[0]!.live).toBe(true);
+    // Every manager shows a real 0 (not an empty cell) for the live-but-unscored matchday.
+    for (const row of grid.rows) expect(row.cells[0]!.points).toBe(0);
+  });
+
+  it("carries rank + qualified + isMe through from the cumulative tab", () => {
+    const view = buildStandingsView(baseInput({ fieldSize: 2 }));
+    const grid = buildSeasonGrid(view);
+    const a = grid.rows.find((r) => r.managerId === "A")!;
+    expect(a.isMe).toBe(true);
+    expect(a.qualified).toBe(true); // seed 1, within field 2
+    expect(a.rank).toBe(view.cumulative.find((r) => r.managerId === "A")!.rank);
+    expect(grid.rows.find((r) => r.managerId === "D")!.qualified).toBe(false); // seed 4, outside field 2
+  });
+
+  it("lists every directory manager and emits no columns when there are no periods", () => {
+    const view = buildStandingsView({ periods: [], pointsByPeriod: {}, managers, meId: "A" });
+    const grid = buildSeasonGrid(view);
+    expect(grid.columns).toHaveLength(0);
+    expect(grid.rows).toHaveLength(managers.length);
+    for (const row of grid.rows) {
+      expect(row.cells).toHaveLength(0);
+      expect(row.total).toBe(0);
+    }
+  });
+
+  it("fills a STARTED-but-absent manager's cell with a real 0 (not null) and keeps total = cumulative PF", () => {
+    // md1 + md2 both started, but manager D has NO score row in md2 (inactive/late) → his md2 cell must
+    // be a real 0 (started column, absent-row fallback), NOT an empty cell, and his Total must still
+    // equal the cumulative PF (= Σ of the started cells). Locks the `?? 0` fallback against regression.
+    const view = buildStandingsView({
+      periods: [
+        { id: "md1", label: "MD1", name: "Matchday 1", live: false },
+        { id: "md2", label: "MD2", name: "Matchday 2", live: false },
+      ],
+      pointsByPeriod: {
+        md1: MD1,
+        md2: [
+          { managerId: "A", points: 5 },
+          { managerId: "B", points: 8 },
+          { managerId: "C", points: 8 },
+          // D omitted from md2
+        ],
+      },
+      managers,
+      meId: "A",
+    });
+    const grid = buildSeasonGrid(view);
+    expect(grid.columns.map((c) => c.started)).toEqual([true, true]);
+    const d = grid.rows.find((r) => r.managerId === "D")!;
+    expect(d.cells[1]!.points).toBe(0); // started column, absent row → real 0 (NOT null)
+    expect(d.cells[1]!.points).not.toBeNull();
+    const summed = d.cells.reduce((acc, c) => acc + (c.points ?? 0), 0);
+    expect(d.total).toBe(summed); // total = Σ started cells
+    expect(d.total).toBe(view.cumulative.find((r) => r.managerId === "D")!.points); // = cumulative PF
   });
 });
