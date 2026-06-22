@@ -123,14 +123,28 @@ function chipsFor(position: Position, stat: GdStatInput | undefined): StatChip[]
   return chips;
 }
 
+/**
+ * Classify one player's role for this match. The official `match_lineup_entry` sheet is AUTHORITATIVE
+ * for a side when present (`sideHasSheet`): an explicit entry decides directly, and a player NOT on the
+ * sheet is — by definition — not an official starter, so an appearance means he came on (→ `sub`),
+ * NEVER an inferred `starter`. Appearance-inference (an appearance ⇒ `starter`) survives only as the
+ * FALLBACK for a side with NO sheet at all, so the squad still shows rather than rendering nothing.
+ */
 function roleFor(
   isStarterEntry: boolean | undefined,
   didCameOn: boolean,
   appeared: boolean,
+  sideHasSheet: boolean,
 ): PlayerRole {
   if (isStarterEntry === true) return "starter";
   if (isStarterEntry === false) return didCameOn ? "sub" : "bench";
-  // No official-sheet entry: infer from match signals.
+  // No sheet entry for THIS player.
+  if (sideHasSheet) {
+    // ...but the side HAS a sheet, so he is not an official starter. An appearance ⇒ he came on (even
+    // if his player_in event lacked an id) → Subs, never the Starting XI; otherwise off-sheet + absent.
+    return appeared ? "sub" : "bench";
+  }
+  // No official sheet for the side at all → infer from match signals (graceful: show a squad).
   if (didCameOn) return "sub";
   if (appeared) return "starter"; // appeared, not subbed on, no sheet → treat as a starter
   return "bench";
@@ -178,6 +192,18 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
   const officialStarterIds = new Set(
     lineupEntries.filter((e) => e.isStarter).map((e) => e.playerId),
   );
+  // Whether each SIDE has an official sheet at all (any `match_lineup_entry` row for a player on that
+  // side). When present the sheet is authoritative for that side: `roleFor` classifies strictly by it
+  // and never infers an off-sheet appearance into the Starting XI. A side with no sheet keeps the
+  // appearance-inference fallback (graceful). Sides are independent — one may be posted before the other.
+  let homeHasSheet = false;
+  let awayHasSheet = false;
+  for (const p of players) {
+    if (!lineupByPlayer.has(p.id)) continue;
+    const s = sideOf(p, match.homeTeamId, match.awayTeamId);
+    if (s === "home") homeHasSheet = true;
+    else if (s === "away") awayHasSheet = true;
+  }
 
   const homeLines: PlayerLine[] = [];
   const awayLines: PlayerLine[] = [];
@@ -203,7 +229,12 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
       lastName: p.lastName,
       position: p.position,
       nation: p.nation,
-      role: roleFor(lineupByPlayer.get(p.id), didCameOn, appeared),
+      role: roleFor(
+        lineupByPlayer.get(p.id),
+        didCameOn,
+        appeared,
+        side === "home" ? homeHasSheet : awayHasSheet,
+      ),
       appeared,
       cameOnMinute: facts.cameOnMinute,
       wentOffMinute: facts.wentOffMinute,

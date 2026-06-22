@@ -213,7 +213,7 @@ function fullInput(): BuildGameDetailInput {
       },
       {
         playerId: null,
-        playerInId: null, // p6 did NOT come on (he appeared via a stat row, no sheet → inferred starter)
+        playerInId: null, // p6's come-on lacks an id; he's OFF the sheet but the side HAS one → Sub, not XI
         playerOutId: "p5", // p5 (sheet starter) is withdrawn at 75'
         incidentType: "substitution",
         incidentClass: null,
@@ -265,22 +265,49 @@ describe("buildGameDetail — assembly", () => {
     expect(v.home.starters.map((l) => l.playerId)).toEqual(["p1", "p2"]); // GK then DEF
     expect(v.home.subs.map((l) => l.playerId)).toEqual(["p3"]); // came on at 60'
     expect(v.home.bench.map((l) => l.playerId)).toEqual(["p4"]); // sheet bench, never appeared
-    // p5 (lineup starter) + p6 (appeared, no sheet → inferred starter), ordered MID before FWD.
-    expect(v.away.starters.map((l) => l.playerId)).toEqual(["p5", "p6"]);
-    expect(v.away.subs).toEqual([]);
+    // away HAS a sheet (p5): only p5 is an official starter. p6 appeared but is OFF the sheet (a
+    // come-on with no player_in id) → Subs, never inferred into the Starting XI.
+    expect(v.away.starters.map((l) => l.playerId)).toEqual(["p5"]);
+    expect(v.away.subs.map((l) => l.playerId)).toEqual(["p6"]);
     expect(v.away.bench).toEqual([]);
     expect(v.empty).toBe(false);
+  });
+
+  // ── lists honor the official sheet when present (Starting XI == pitch; off-sheet come-on → Subs) ──
+  it("classifies STRICTLY by the official sheet when the side has one — an off-sheet appearance is a Sub, never a starter", () => {
+    const v = buildGameDetail(fullInput());
+    // away HAS an official sheet (p5 ∈ match_lineup_entry). p6 appeared with NO sheet entry — a come-on
+    // whose player_in event lacked an id — so he belongs in Subs, NEVER the Starting XI.
+    expect(v.away.starters.map((l) => l.playerId)).toEqual(["p5"]);
+    expect(v.away.subs.map((l) => l.playerId)).toEqual(["p6"]);
+    expect(v.away.starters.map((l) => l.playerId)).not.toContain("p6");
+  });
+
+  it("Starting XI list converges with the pitch on a side WITH an official sheet (no inferred 12th starter)", () => {
+    const v = buildGameDetail(fullInput());
+    for (const side of [v.home, v.away]) {
+      expect(side.starters.map((l) => l.playerId)).toEqual(side.pitch.map((l) => l.playerId));
+    }
+  });
+
+  it("falls back to appearance-inference for the LISTS only when the side has NO official sheet", () => {
+    const v = buildGameDetail({ ...fullInput(), lineupEntries: [] });
+    // No sheet on either side → graceful inference (show a squad), with the pitch empty (T-PITCH).
+    expect(v.away.starters.map((l) => l.playerId)).toEqual(["p5", "p6"]); // both inferred as starters
+    expect(v.home.starters.length + v.home.subs.length + v.home.bench.length).toBeGreaterThan(0);
+    expect(v.home.pitch).toEqual([]);
+    expect(v.away.pitch).toEqual([]);
   });
 
   // ── formation PITCH = the official starting XI only (never inferred/come-on starters) ──
   it("pitch renders ONLY the official is_starter sheet — excludes an inferred/come-on starter", () => {
     const v = buildGameDetail(fullInput());
-    // Sheet starters: p1, p2 (home), p5 (away). p6 appeared with NO sheet entry → inferred INTO
-    // `starters` (the list, pinned above) but kept OFF the pitch, so a side never shows >11 tokens.
+    // Sheet starters: p1, p2 (home), p5 (away). p6 appeared with NO sheet entry → classified into
+    // `subs` (the side has a sheet, pinned above) and kept OFF the pitch — a side never shows >11.
     expect(v.home.pitch.map((l) => l.playerId)).toEqual(["p1", "p2"]);
     expect(v.away.pitch.map((l) => l.playerId)).toEqual(["p5"]);
     expect(v.away.pitch.map((l) => l.playerId)).not.toContain("p6");
-    expect(v.away.starters.map((l) => l.playerId)).toContain("p6"); // still listed, just not on pitch
+    expect(v.away.subs.map((l) => l.playerId)).toContain("p6"); // listed in Subs, just not on pitch
     // Invariant: pitch ⊆ starters, ≤ 11 per side.
     for (const side of [v.home, v.away]) {
       const starterIds = new Set(side.starters.map((l) => l.playerId));
@@ -289,12 +316,14 @@ describe("buildGameDetail — assembly", () => {
     }
   });
 
-  it("keeps a subbed-off / sent-off STARTER on the pitch (the formation is fixed at kickoff)", () => {
+  it("keeps a subbed-off / sent-off STARTER in BOTH the Starting XI list and the pitch", () => {
     const v = buildGameDetail(fullInput());
-    // p5 is an official starter withdrawn at 75' — he keeps his lane on the pitch.
+    // p5 is an official starter withdrawn at 75' — he stays in the Starting XI list AND on the pitch.
+    expect(v.away.starters.map((l) => l.playerId)).toContain("p5");
     const p5 = v.away.pitch.find((l) => l.playerId === "p5");
     expect(p5?.wentOffMinute).toBe(75);
-    // p2 is an official starter sent off (red, 80') — also keeps his lane.
+    // p2 is an official starter sent off (red, 80') — also stays in the list AND on the pitch.
+    expect(v.home.starters.map((l) => l.playerId)).toContain("p2");
     const p2 = v.home.pitch.find((l) => l.playerId === "p2");
     expect(p2?.redCard).toBe(true);
   });
@@ -312,7 +341,7 @@ describe("buildGameDetail — assembly", () => {
     const p1 = v.home.starters.find((l) => l.playerId === "p1")!;
     expect(p1.fantasyPoints).toBe(6);
     expect(p1.chips).toEqual([{ label: "SV", value: "3" }]); // GK saves chip
-    const p6 = v.away.starters.find((l) => l.playerId === "p6")!;
+    const p6 = v.away.subs.find((l) => l.playerId === "p6")!;
     expect(p6.fantasyPoints).toBe(4);
     expect(p6.chips).toEqual([
       { label: "G", value: "1" },
@@ -327,7 +356,7 @@ describe("buildGameDetail — assembly", () => {
     const v = buildGameDetail(fullInput());
     const p1 = v.home.starters.find((l) => l.playerId === "p1")!;
     expect(p1.rating).toBe(6.8); // single balldontlie source
-    const p6 = v.away.starters.find((l) => l.playerId === "p6")!;
+    const p6 = v.away.subs.find((l) => l.playerId === "p6")!;
     expect(p6.rating).toBe(7.5); // manual (7.5) overrides balldontlie (8.0) per DEFAULT priority
     const p2 = v.home.starters.find((l) => l.playerId === "p2")!;
     expect(p2.rating).toBeNull(); // present-but-null source falls through to "no rating"
@@ -414,7 +443,7 @@ describe("buildGameDetail — assembly", () => {
     expect(p2.owner?.state).toBe("benched");
     const p3 = v.home.subs[0]!;
     expect(p3.owner?.state).toBe("owned");
-    const p6 = v.away.starters.find((l) => l.playerId === "p6")!;
+    const p6 = v.away.subs.find((l) => l.playerId === "p6")!;
     expect(p6.owner).toBeNull(); // unowned by any manager
   });
 
@@ -422,9 +451,14 @@ describe("buildGameDetail — assembly", () => {
     const v = buildGameDetail(fullInput());
     // p7 plays for neither side → unplaced(1); plus unresolvedFromPool(1).
     expect(v.unresolvedParticipants).toBe(2);
-    const ids = [...v.home.starters, ...v.home.subs, ...v.home.bench, ...v.away.starters].map(
-      (l) => l.playerId,
-    );
+    const ids = [
+      ...v.home.starters,
+      ...v.home.subs,
+      ...v.home.bench,
+      ...v.away.starters,
+      ...v.away.subs,
+      ...v.away.bench,
+    ].map((l) => l.playerId);
     expect(ids).not.toContain("p7");
   });
 
@@ -455,7 +489,14 @@ describe("buildGameDetail — assembly", () => {
     });
     expect(v.periodId).toBeNull();
     expect(v.header.hasFantasyOverlay).toBe(false);
-    const allLines = [...v.home.starters, ...v.home.subs, ...v.home.bench, ...v.away.starters];
+    const allLines = [
+      ...v.home.starters,
+      ...v.home.subs,
+      ...v.home.bench,
+      ...v.away.starters,
+      ...v.away.subs,
+      ...v.away.bench,
+    ];
     expect(allLines.every((l) => l.owner === null)).toBe(true);
     // Fantasy POINTS still render — they are match-keyed and exist independently of the period.
     expect(v.home.starters.find((l) => l.playerId === "p1")!.fantasyPoints).toBe(6);
