@@ -82,6 +82,32 @@
   margin-left: auto;
 }
 
+/* ── matchday total banner (T11 R2 / Fix A-2; any scored period — prior or current) ── */
+.sl-mdtotal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 18px;
+  border-left: 3px solid var(--accent);
+}
+.sl-mdtotal-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sl-mdtotal-fig {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.sl-mdtotal-num {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── formation picker (segmented; offered = fillable ∩ lock-legal shapes) ─ */
 .sl-formation {
   display: flex;

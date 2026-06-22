@@ -249,6 +249,22 @@ export function positionOf(squad: readonly LineupPlayer[], playerId: string): Po
   return squad.find((p) => p.id === playerId)?.position;
 }
 
+/**
+ * The manager's CANONICAL total for a period — read VERBATIM from the matching `score_manager_period`
+ * row's `points` column, the SAME value the standings page sums per matchday (see `loadStandings`).
+ * Single-sourced by construction: it PICKS the stored total, it never re-sums per-player points, so
+ * the prior-matchday lineup header can never silently diverge from standings. Returns null when no
+ * row exists (an editable / future period that hasn't been scored). Zero / negative totals are
+ * preserved (a real result), never coerced to null.
+ */
+export function selectManagerPeriodTotal(
+  rows: readonly { periodId: string; points: number }[],
+  periodId: string,
+): number | null {
+  const row = rows.find((r) => r.periodId === periodId);
+  return row ? row.points : null;
+}
+
 /** Build the formation lanes + bench for the period's saved XI, with per-player lock state. */
 export function buildPitch(squad: readonly LineupPlayer[], period: PeriodLineup): PitchView {
   const starters = new Set(period.starterIds);

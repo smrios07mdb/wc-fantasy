@@ -26,7 +26,9 @@ describe("components.tsx — NationFlag reuses the sole <Flag> surface", () => {
   it("renders the flag beside the player on the claim + result rows", () => {
     expect(components).toContain("<NationFlag nation={claim.add.nation} />");
     expect(components).toContain("<NationFlag nation={claim.drop.nation} />");
-    expect(components).toContain("<NationFlag nation={result.add.nation} />");
+    // T11 R2 (Fix B-2): batch results are grouped by player, so the contested player's flag renders
+    // ONCE on the group header (`add` = the group's added player), not per-bid.
+    expect(components).toContain("<NationFlag nation={add.nation} />");
   });
 
   it("keeps the kit chip free of a background-image (the project-wide cover gotcha)", () => {

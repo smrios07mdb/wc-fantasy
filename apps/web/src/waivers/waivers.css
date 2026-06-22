@@ -920,6 +920,53 @@
   line-height: 1;
 }
 
+/* ── player-grouped batch results (T11 R2 / Fix B-2) ────────────────────────
+   One entry per contested player: a player header once, then every bid beneath. */
+.wv-resgroup {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.wv-resgroup-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+}
+.wv-resgroup-head .wv-res-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.wv-resgroup-count {
+  margin-left: auto;
+}
+.wv-resgroup-bids {
+  display: flex;
+  flex-direction: column;
+}
+.wv-bidline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+}
+.wv-bidline + .wv-bidline {
+  border-top: 1px solid var(--hairline);
+}
+.wv-bidline.is-mine {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.wv-bidline .wv-res-mid {
+  justify-content: flex-start;
+}
+
 /* ===================== responsive: stack under 768px ===================== */
 @media (max-width: 768px) {
   .wv-claims-page {

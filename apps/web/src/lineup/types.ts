@@ -101,6 +101,12 @@ export interface PeriodLineup {
    *  player still appears. Undefined for editable periods — they render from the roster-bound `squad`, so
    *  the current-period (editable) path is byte-unchanged. */
   snapshotPlayers?: LineupPlayer[];
+  /** T11 R2 (Fix A-2) — the manager's CANONICAL total for this matchday, read verbatim from
+   *  `score_manager_period.points` (the SAME column the standings page sums per matchday — see
+   *  `loadStandings`). Single-sourced: never re-summed from per-player points, so the prior-matchday
+   *  lineup header always reconciles with the standings number. null when no score row exists yet
+   *  (editable / future period). Shown only in the read-only prior view. */
+  matchdayTotal?: number | null;
 }
 
 export interface SetLineupState {

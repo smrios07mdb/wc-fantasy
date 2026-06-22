@@ -16,7 +16,7 @@
  */
 import type { AcquisitionWindow } from "@app/faab";
 import { formatInLeagueTz } from "@app/shared";
-import type { WvBatchWindow, WvBudget, WvClaim, WvPlayer } from "./types";
+import type { WvBatchWindow, WvBudget, WvClaim, WvPlayer, WvResult, WvResultGroup } from "./types";
 
 /** True when the add target's acquisition cutoff has passed (his match kicked off at/under `now`). */
 export function isPlayerCutoffPassed(player: WvPlayer, now: Date): boolean {
@@ -160,4 +160,37 @@ export function droppableRoster(
   return roster
     .filter((p) => !locked.has(p.id))
     .sort((a, b) => (a.seasonPoints ?? 0) - (b.seasonPoints ?? 0) || a.name.localeCompare(b.name));
+}
+
+/**
+ * T11 R2 (Fix B-2): regroup a settled batch's flat `WvResult[]` (one row per bid) into one entry per
+ * CONTESTED PLAYER, with ALL his bids beneath him — so e.g. a player won by one manager and lost by
+ * another reads as a single contest instead of two scattered rows. Pure presentation: no new query;
+ * the loader already hands every winning + losing + voided bid.
+ *
+ * Ordering: within a player, bids sort amount-desc (winner on top — the FAAB winner is the top bid;
+ * `bidId` tiebreaks for determinism). Across players, groups sort by their top bid amount desc
+ * (highest-stakes contest first), `playerId` tiebreaking. The dropped-player detail is already carried
+ * per-bid on the winning bid, so it rides along untouched.
+ */
+export function groupResultsByPlayer(results: readonly WvResult[]): WvResultGroup[] {
+  const byPlayer = new Map<string, WvResult[]>();
+  for (const r of results) {
+    const bucket = byPlayer.get(r.add.id);
+    if (bucket) bucket.push(r);
+    else byPlayer.set(r.add.id, [r]);
+  }
+  const groups: WvResultGroup[] = [];
+  for (const [playerId, bids] of byPlayer) {
+    const sorted = [...bids].sort((a, b) => b.amount - a.amount || a.bidId.localeCompare(b.bidId));
+    const top = sorted[0];
+    if (!top) continue; // unreachable (each bucket holds ≥1 bid) — satisfies noUncheckedIndexedAccess
+    groups.push({ playerId, add: top.add, results: sorted });
+  }
+  // Highest-stakes contest first; the top bid (index 0) always exists per the guard above.
+  return groups.sort(
+    (a, b) =>
+      (b.results[0]?.amount ?? 0) - (a.results[0]?.amount ?? 0) ||
+      a.playerId.localeCompare(b.playerId),
+  );
 }

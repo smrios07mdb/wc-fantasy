@@ -30,6 +30,7 @@ import {
   ForfeitConfirmSheet,
   FormationPicker,
   LockHero,
+  MatchdayTotalBanner,
   PeriodTabs,
   Pitch,
   SaveBar,
@@ -359,6 +360,13 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
         dirty={dirty}
         justSaved={justSaved && !dirty}
       />
+
+      {/* T11 R2 (Fix A-2): once a matchday has a stored total (a completed PRIOR matchday OR the
+          CURRENT one once scoring starts) lead with the manager's canonical total
+          (score_manager_period.points — the SAME number standings shows). Absent pre-kickoff. */}
+      {period.matchdayTotal != null && (
+        <MatchdayTotalBanner label={period.label} total={period.matchdayTotal} />
+      )}
 
       {/* The formation picker sits directly under the FORMATION panel (the LockHero) — where a manager
           looks to change shape. It offers only fieldable ∩ lock-legal shapes; a pick reshapes the XI. */}

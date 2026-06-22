@@ -11,8 +11,8 @@
 import type { Position } from "@app/shared";
 import { Flag } from "../../app/draft/Flag";
 import { toIso2 } from "../draft/flag";
-import type { OpponentInfo, WvBatchWindow, WvPlayer } from "./types";
-import { isPlayerCutoffPassed } from "./waiversLogic";
+import type { OpponentInfo, WvBatchWindow, WvPlayer, WvResult, WvResultGroup } from "./types";
+import { groupResultsByPlayer, isPlayerCutoffPassed } from "./waiversLogic";
 
 // ── icons (ported 1:1 from the design glyphs) ──────────────────────────────────
 function Sealed() {
@@ -414,32 +414,13 @@ export function ClaimRow({
 }
 
 // ── results history ──────────────────────────────────────────────────────────────
-function ResultRow({
-  result,
-}: {
-  result: {
-    bidId: string;
-    managerName: string;
-    isMine: boolean;
-    add: WvPlayer;
-    drop: WvPlayer | null;
-    amount: number;
-    outcome: "won" | "lost" | "void";
-  };
-}) {
+// T11 R2 (Fix B-2): one bid line WITHIN a player's group — manager + outcome + amount (+ dropped
+// player on the winning bid). The contested player's identity is shown ONCE on the group header
+// above, so a bid line no longer repeats the player chip.
+function BidLine({ result }: { result: WvResult }) {
   const { outcome } = result;
   return (
-    <div className={"wv-res" + (result.isMine ? " is-mine" : "")}>
-      <div className="wv-res-add">
-        <KitChip player={result.add} sm />
-        <NationFlag nation={result.add.nation} />
-        <div className="wv-res-id">
-          <b className="wv-name">{result.add.shortName}</b>
-          <span className="t-micro text-tertiary">
-            <Pos p={result.add.position} /> {result.add.nation ?? ""}
-          </span>
-        </div>
-      </div>
+    <div className={"wv-bidline" + (result.isMine ? " is-mine" : "")}>
       <div className="wv-res-mid">
         {outcome === "void" ? (
           <span className="wv-res-out wv-out-void">
@@ -465,6 +446,34 @@ function ResultRow({
   );
 }
 
+// T11 R2 (Fix B-2): a single contested player — identity once, then EVERY bid for him (winner +
+// losers + voids) beneath, so the whole contest reads at a glance.
+function ResultGroup({ group }: { group: WvResultGroup }) {
+  const { add, results } = group;
+  return (
+    <div className="wv-resgroup">
+      <header className="wv-resgroup-head">
+        <KitChip player={add} sm />
+        <NationFlag nation={add.nation} />
+        <div className="wv-res-id">
+          <b className="wv-name">{add.shortName}</b>
+          <span className="t-micro text-tertiary">
+            <Pos p={add.position} /> {add.nation ?? ""}
+          </span>
+        </div>
+        <span className="wv-resgroup-count t-micro text-tertiary">
+          {results.length === 1 ? "1 bid" : `${results.length} bids`}
+        </span>
+      </header>
+      <div className="wv-resgroup-bids">
+        {results.map((r) => (
+          <BidLine key={r.bidId} result={r} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ResultsBatch({
   batch,
   formatRunAt,
@@ -473,18 +482,12 @@ export function ResultsBatch({
     batchId: string;
     runAt: string;
     matchdayLabel: string | null;
-    results: ReadonlyArray<{
-      bidId: string;
-      managerName: string;
-      isMine: boolean;
-      add: WvPlayer;
-      drop: WvPlayer | null;
-      amount: number;
-      outcome: "won" | "lost" | "void";
-    }>;
+    results: readonly WvResult[];
   };
   formatRunAt: (iso: string) => string;
 }) {
+  // Pure presentation regroup: one entry per contested player rather than one row per bid.
+  const groups = groupResultsByPlayer(batch.results);
   return (
     <section className="wv-batch">
       <header className="wv-batch-head">
@@ -497,8 +500,8 @@ export function ResultsBatch({
         <span className="t-micro text-tertiary">{batch.results.length} claims</span>
       </header>
       <div className="wv-batch-list">
-        {batch.results.map((r) => (
-          <ResultRow key={r.bidId} result={r} />
+        {groups.map((g) => (
+          <ResultGroup key={g.playerId} group={g} />
         ))}
       </div>
     </section>

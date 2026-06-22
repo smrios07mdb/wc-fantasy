@@ -15,6 +15,7 @@ import {
   resolveKickoffByPlayer,
   resolveOpponentByPlayer,
   resolveStarterStatusByPlayer,
+  selectManagerPeriodTotal,
 } from "../../src/lineup/view";
 import type { LineupPlayer, PeriodLineup, SetLineupState, SlotMeta } from "../../src/lineup/types";
 
@@ -116,62 +117,73 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
   // squad PLUS the since-dropped fielded players. For editable periods buildPitch reads only `squad`, so
   // the extra entries are inert there — the current-period path is unchanged.
   const displayPlayerIds = [...squadIds, ...droppedSlotPlayerIds];
-  const [matchRows, scoreRows, lineupEntryRows, droppedPlayerRows] = await Promise.all([
-    // Each period's fixtures — drives both the per-player kickoff (= lock/sub deadline) and the
-    // per-player opponent label. homeTeam/awayTeam names are the flag-resolver inputs (same source
-    // as player.country on the roster side — fifa_team.name). One read, two outputs.
-    periodIds.length
-      ? prisma.fifaMatch.findMany({
-          where: { periodId: { in: periodIds } },
-          select: {
-            id: true,
-            periodId: true,
-            homeTeamId: true,
-            awayTeamId: true,
-            kickoffAt: true,
-            homeTeam: { select: { name: true } },
-            awayTeam: { select: { name: true } },
-          },
-        })
-      : Promise.resolve([]),
-    // Each display player's earned points per period — the authoritative "has played" (row exists) + the
-    // "points at stake" (the score) for the C2 forfeit contract. Joined through the player's match in the
-    // period (fifa_match.period_id). A player plays at most one match per period. Keyed on the full display
-    // universe (squad + since-dropped fielded players) so a dropped starter's prior-matchday points resolve
-    // rather than reading 0.
-    periodIds.length && displayPlayerIds.length
-      ? prisma.scorePlayerMatch.findMany({
-          where: { playerId: { in: displayPlayerIds }, match: { periodId: { in: periodIds } } },
-          select: { playerId: true, points: true, match: { select: { periodId: true } } },
-        })
-      : Promise.resolve([]),
-    // The pre-kickoff availability snapshot for this period's fixtures (the worker's T-75 peek). ALL
-    // entries (both teams, XI + bench) — so "match has entries" is judged on the whole sheet, not just
-    // the squad's players. Drives each player's Starting / Not starting badge; no rows → no badge.
-    periodIds.length
-      ? prisma.matchLineupEntry.findMany({
-          where: { match: { periodId: { in: periodIds } } },
-          select: { matchId: true, playerId: true, isStarter: true },
-        })
-      : Promise.resolve([]),
-    // T11 Fix A: identity for the since-dropped fielded players (name/position/teamId + fifa_team.name for
-    // nation), mirroring the roster `player` select above. They have no roster_player row, so this is the
-    // only source for their LineupPlayer fields — used to render a prior matchday's historical snapshot.
-    droppedSlotPlayerIds.length
-      ? prisma.player.findMany({
-          where: { id: { in: droppedSlotPlayerIds } },
-          select: {
-            id: true,
-            displayName: true,
-            firstName: true,
-            lastName: true,
-            position: true,
-            teamId: true,
-            team: { select: { name: true } },
-          },
-        })
-      : Promise.resolve([]),
-  ]);
+  const [matchRows, scoreRows, lineupEntryRows, droppedPlayerRows, managerPeriodRows] =
+    await Promise.all([
+      // Each period's fixtures — drives both the per-player kickoff (= lock/sub deadline) and the
+      // per-player opponent label. homeTeam/awayTeam names are the flag-resolver inputs (same source
+      // as player.country on the roster side — fifa_team.name). One read, two outputs.
+      periodIds.length
+        ? prisma.fifaMatch.findMany({
+            where: { periodId: { in: periodIds } },
+            select: {
+              id: true,
+              periodId: true,
+              homeTeamId: true,
+              awayTeamId: true,
+              kickoffAt: true,
+              homeTeam: { select: { name: true } },
+              awayTeam: { select: { name: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // Each display player's earned points per period — the authoritative "has played" (row exists) + the
+      // "points at stake" (the score) for the C2 forfeit contract. Joined through the player's match in the
+      // period (fifa_match.period_id). A player plays at most one match per period. Keyed on the full display
+      // universe (squad + since-dropped fielded players) so a dropped starter's prior-matchday points resolve
+      // rather than reading 0.
+      periodIds.length && displayPlayerIds.length
+        ? prisma.scorePlayerMatch.findMany({
+            where: { playerId: { in: displayPlayerIds }, match: { periodId: { in: periodIds } } },
+            select: { playerId: true, points: true, match: { select: { periodId: true } } },
+          })
+        : Promise.resolve([]),
+      // The pre-kickoff availability snapshot for this period's fixtures (the worker's T-75 peek). ALL
+      // entries (both teams, XI + bench) — so "match has entries" is judged on the whole sheet, not just
+      // the squad's players. Drives each player's Starting / Not starting badge; no rows → no badge.
+      periodIds.length
+        ? prisma.matchLineupEntry.findMany({
+            where: { match: { periodId: { in: periodIds } } },
+            select: { matchId: true, playerId: true, isStarter: true },
+          })
+        : Promise.resolve([]),
+      // T11 Fix A: identity for the since-dropped fielded players (name/position/teamId + fifa_team.name for
+      // nation), mirroring the roster `player` select above. They have no roster_player row, so this is the
+      // only source for their LineupPlayer fields — used to render a prior matchday's historical snapshot.
+      droppedSlotPlayerIds.length
+        ? prisma.player.findMany({
+            where: { id: { in: droppedSlotPlayerIds } },
+            select: {
+              id: true,
+              displayName: true,
+              firstName: true,
+              lastName: true,
+              position: true,
+              teamId: true,
+              team: { select: { name: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // T11 R2 (Fix A-2): the manager's CANONICAL per-matchday total — the SAME `score_manager_period`
+      // row the standings page reads (see `loadStandings`). Surfaced (read-only) on prior matchdays so
+      // the snapshot shows the result. Single-sourced: this is the stored total, never re-summed from
+      // the per-player `scorePlayerMatch` points above, so it always matches the standings number.
+      periodIds.length
+        ? prisma.scoreManagerPeriod.findMany({
+            where: { managerId: sessionManagerId, periodId: { in: periodIds } },
+            select: { periodId: true, points: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
   // Resolve the since-dropped players to LineupPlayer (country via the fifa_team join, exactly as the roster
   // squad above) + their team link (for kickoff/opponent resolution). `playersById` is the full display
@@ -288,6 +300,9 @@ export async function loadLineup(sessionManagerId: string): Promise<SetLineupSta
       starterStatusByPlayer: resolveStarterStatusByPlayer(displayTeams, periodMatches),
       // The historical snapshot for a read-only prior matchday (undefined for editable periods).
       snapshotPlayers,
+      // The canonical matchday total (score_manager_period.points) — the SAME number standings shows.
+      // Rendered (read-only) on prior matchdays; null on as-yet-unscored editable/future periods.
+      matchdayTotal: selectManagerPeriodTotal(managerPeriodRows, p.id),
     };
   });
 

@@ -261,7 +261,12 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
   const isPlayedStarter = slotKind === "played-starter";
   // Locked tokens (kicked off, no appearance yet) now open the score modal on tap.
   const isLocked = slotKind === "locked";
-  const tappable = movable || eligible || isPlayedStarter || isLocked;
+  // T11 R2 (Fix A-2, corrected): a tile that's locked-on-play (its match has kicked off → `!movable`,
+  // the SAME condition the bench keys on) is a RESULT tile — it shows its points pill (tap → box score)
+  // instead of a bare padlock, on BOTH a prior matchday AND the current one once matches are played.
+  // This is decoupled from the period-level read-only flag and from slotKind, exactly like the bench.
+  const lockedOnPlay = !movable;
+  const tappable = movable || eligible || lockedOnPlay;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
 
   let kindClass: string;
@@ -277,9 +282,9 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
       ? `${player.displayName} · ${player.position} · locked — tap for score breakdown`
       : `${player.displayName} · ${player.position} · ${movable ? "movable" : "locked"}`;
 
-  // Played/locked tokens open the score modal; forfeit is accessible from within the modal.
-  const handleClick = () =>
-    isLocked || isPlayedStarter ? onScore(player.id) : onSelect(player.id);
+  // Locked-on-play tiles open the score modal (forfeit is reachable from within it); movable tiles
+  // select for a swap. Same split the bench uses (`movable ? onSelect : onScore`).
+  const handleClick = () => (lockedOnPlay ? onScore(player.id) : onSelect(player.id));
 
   return (
     <button
@@ -305,10 +310,17 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
           />
           {avail && <AvailabilityMedallion status={avail} />}
         </span>
-        {/* Padlock for frozen/locked slots; played starters show a clickable ScorePill instead. */}
-        {!movable && !isPlayedStarter && <IcoLock />}
-        {isPlayedStarter && pointsAtStake > 0 && (
-          <ScorePill points={pointsAtStake} playerId={player.id} isLive={false} onOpen={onScore} />
+        {/* T11 R2 (Fix A-2, corrected): a locked-on-play tile shows its clickable points pill — the
+            SAME `!movable` condition the bench uses — instead of a bare padlock, on the current AND
+            prior matchday. The score may legitimately be 0 / negative. Not-yet-kicked-off (movable)
+            starters keep their plain editable token (no pill). */}
+        {lockedOnPlay && (
+          <ScorePill
+            points={pointsAtStake}
+            playerId={player.id}
+            isLive={slotKind === "locked"}
+            onOpen={onScore}
+          />
         )}
       </span>
       <span className="sl-tok-name">{shortName(player)}</span>
@@ -522,6 +534,28 @@ export function LockHero({
         ) : (
           <span className="pill">Up to date</span>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * T11 R2 (Fix A-2): the headline RESULT — the manager's canonical total for the displayed matchday.
+ * `total` is the stored `score_manager_period.points` value (single-sourced via the loader, never
+ * re-summed), so this number matches the standings page for the same matchday by construction. Mounted
+ * whenever the period has a stored total — a completed PRIOR matchday OR the CURRENT one once scoring
+ * has started (the loader returns null until then, so the banner is simply absent pre-kickoff).
+ */
+export function MatchdayTotalBanner({ label, total }: { label: string; total: number | null }) {
+  return (
+    <div className="sl-mdtotal card" role="status">
+      <div className="sl-mdtotal-id">
+        <span className="t-label text-tertiary">Matchday total</span>
+        <span className="t-sm text-secondary">{label}</span>
+      </div>
+      <div className="sl-mdtotal-fig">
+        <span className="sl-mdtotal-num mono">{total ?? "—"}</span>
+        <span className="t-caption text-tertiary">points</span>
       </div>
     </div>
   );

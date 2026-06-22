@@ -66,6 +66,17 @@ export interface WvResult {
   readonly outcome: "won" | "lost" | "void";
 }
 
+/** T11 R2 (Fix B-2): one CONTESTED PLAYER inside a settled batch, with EVERY bid for him (winner +
+ *  losers + voids) grouped together so the whole contest reads at a glance instead of being scattered
+ *  across amount-ordered rows. Pure presentation regroup of `WvResult[]` — see `groupResultsByPlayer`. */
+export interface WvResultGroup {
+  readonly playerId: string;
+  /** The added player's identity (taken from the top bid — all bids in the group share one add). */
+  readonly add: WvPlayer;
+  /** This player's bids, amount-desc (winner on top); the dropped-player detail rides the winning bid. */
+  readonly results: readonly WvResult[];
+}
+
 /** A processed batch + its revealed result rows, newest first. */
 export interface WvBatch {
   readonly batchId: string;
