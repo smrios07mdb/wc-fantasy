@@ -211,6 +211,9 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
         offsides: row.offsides,
         shotsBlocked: row.shotsBlocked,
         possession: row.possession,
+        // Un-promoted feed fields (mapTeamStat catch-all). null → SQL NULL (DbNull); refreshed on
+        // re-poll like the typed columns. Mirrors the player-stat `extra` write. Display-only.
+        extra: row.extra === null ? Prisma.DbNull : (row.extra as unknown as Prisma.InputJsonValue),
       };
       await prisma.statTeamMatch.upsert({
         where: { matchId_teamId: { matchId, teamId } },

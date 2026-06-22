@@ -55,39 +55,47 @@ export async function loadGameDetail(
   if (!match) return null;
 
   // All match-keyed participant/squad reads in parallel (each already-scored / already-ingested).
-  // ratingPlayerMatch is the ONE additive read (T16): source-tagged 0–10 ratings, already populated by
-  // balldontlie ingestion. Read-only + Prisma owner-bypass like the rest — NO migration/RLS/Realtime.
-  const [lineupEntries, statRows, scoreRows, eventRows, ratingRows] = await Promise.all([
-    prisma.matchLineupEntry.findMany({
-      where: { matchId },
-      select: { playerId: true, isStarter: true },
-    }),
-    prisma.statPlayerMatch.findMany({
-      where: { matchId },
-      select: { playerId: true, minutesPlayed: true, goals: true, assists: true, saves: true },
-    }),
-    prisma.scorePlayerMatch.findMany({
-      where: { matchId },
-      select: { playerId: true, points: true },
-    }),
-    prisma.eventMatch.findMany({
-      where: { matchId },
-      select: {
-        playerId: true,
-        playerInId: true,
-        playerOutId: true,
-        incidentType: true,
-        incidentClass: true,
-        timeMinute: true,
-        addedTime: true,
-        rescinded: true,
-      },
-    }),
-    prisma.ratingPlayerMatch.findMany({
-      where: { matchId },
-      select: { playerId: true, rating: true, source: true },
-    }),
-  ]);
+  // ratingPlayerMatch (T16) + statTeamMatch (T17) are the additive reads: source-tagged 0–10 ratings
+  // and home-vs-away team aggregates, both already populated by ingestion. Read-only + Prisma owner-bypass
+  // like the rest — NO migration/RLS/Realtime. statTeamMatch is display-only (never read by scoring).
+  const [lineupEntries, statRows, scoreRows, eventRows, ratingRows, teamStatRows] =
+    await Promise.all([
+      prisma.matchLineupEntry.findMany({
+        where: { matchId },
+        select: { playerId: true, isStarter: true },
+      }),
+      prisma.statPlayerMatch.findMany({
+        where: { matchId },
+        select: { playerId: true, minutesPlayed: true, goals: true, assists: true, saves: true },
+      }),
+      prisma.scorePlayerMatch.findMany({
+        where: { matchId },
+        select: { playerId: true, points: true },
+      }),
+      prisma.eventMatch.findMany({
+        where: { matchId },
+        select: {
+          playerId: true,
+          playerInId: true,
+          playerOutId: true,
+          incidentType: true,
+          incidentClass: true,
+          timeMinute: true,
+          addedTime: true,
+          rescinded: true,
+        },
+      }),
+      prisma.ratingPlayerMatch.findMany({
+        where: { matchId },
+        select: { playerId: true, rating: true, source: true },
+      }),
+      // T17: per-team match aggregates (one row per side). Typed columns + the retained `extra` jsonb;
+      // the pure builder maps each teamId to home/away and resolves the Statistics rows.
+      prisma.statTeamMatch.findMany({
+        where: { matchId },
+        select: { teamId: true, possession: true, offsides: true, shotsBlocked: true, extra: true },
+      }),
+    ]);
 
   // Union of every referenced player id (squad sheet ∪ stats ∪ scores ∪ event participants).
   const idSet = new Set<string>();
@@ -209,6 +217,14 @@ export async function loadGameDetail(
       playerId: r.playerId,
       source: r.source as RatingSource,
       rating: r.rating,
+    })),
+    teamStats: teamStatRows.map((t) => ({
+      teamId: t.teamId,
+      possession: t.possession,
+      offsides: t.offsides,
+      shotsBlocked: t.shotsBlocked,
+      // `extra` is the retained un-promoted feed jsonb; the builder reads keys defensively.
+      extra: t.extra as unknown as Readonly<Record<string, unknown>> | null,
     })),
     lineupEntries: lineupEntries.map((e) => ({ playerId: e.playerId, isStarter: e.isStarter })),
     events: eventRows.map((e) => ({

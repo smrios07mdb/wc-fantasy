@@ -1019,6 +1019,133 @@
   padding: var(--sp-10) var(--sp-5);
 }
 
+/* ════════════════ STATISTICS TAB (T17 — home-vs-away team aggregates) ════════════════ */
+/* Two data hues (teal home / violet away), ported from the match-detail design reference. They
+   colour the toolbar swatches AND the comparison-bar fills — distinct from the cobalt --accent
+   (which marks only the active tab + primary actions). */
+.gd-stats {
+  --gd-st-h: #3fa6b5;
+  --gd-st-a: #a98bd8;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gd-st-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gd-st-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: var(--fw-bold) var(--fs-sm) / 1 var(--font-sans);
+  color: var(--text-primary);
+}
+.gd-st-team .flag-emoji {
+  font-size: 16px;
+  line-height: 1;
+}
+.gd-st-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+}
+.gd-st-swatch.is-h {
+  background: var(--gd-st-h);
+}
+.gd-st-swatch.is-a {
+  background: var(--gd-st-a);
+}
+.gd-st-livenote {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+.gd-st-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 32px;
+}
+.gd-st-group {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 6px 16px 12px;
+}
+.gd-st-gtitle {
+  font: var(--fw-bold) 10px / 1 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 12px 0 6px;
+}
+.gd-stat {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.gd-stat:last-child {
+  border-bottom: none;
+}
+.gd-stat-top {
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  gap: 8px;
+}
+.gd-stat-v {
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.gd-stat-top .gd-stat-v:first-child {
+  text-align: left;
+}
+.gd-stat-top .gd-stat-v:last-child {
+  text-align: right;
+}
+.gd-stat-v.is-lead {
+  color: var(--text-primary);
+}
+.gd-stat-lab {
+  text-align: center;
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+.gd-stat-bars {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.gd-stat-track {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+}
+.gd-stat-track.is-h {
+  justify-content: flex-end;
+}
+.gd-stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width var(--dur-base) var(--ease-standard);
+}
+.gd-stat-fill.is-h {
+  background: var(--gd-st-h);
+}
+.gd-stat-fill.is-a {
+  background: var(--gd-st-a);
+}
+
 /* ════════════════ RESPONSIVE (mobile: vertical pitch + single-column lists) ════════════════ */
 @media (max-width: 720px) {
   .gd-app {
@@ -1085,6 +1212,9 @@
   }
 
   .gd-tl-grid {
+    grid-template-columns: 1fr;
+  }
+  .gd-st-groups {
     grid-template-columns: 1fr;
   }
 }

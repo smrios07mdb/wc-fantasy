@@ -277,7 +277,46 @@ export interface TeamStatRowIn {
   offsides: number | null;
   shotsBlocked: number | null;
   possession: number | null;
+  /** Un-promoted feed fields, verbatim (see {@link buildTeamStatExtra}). null when none. Unscored. */
+  extra: Record<string, unknown> | null;
 }
+
+/**
+ * Feed keys that already have a home and must NEVER leak into a team-stat `extra`: the three promoted
+ * typed columns (possession_pct→possession, offsides, shots_blocked) plus the identity / structural
+ * fields. Mirrors {@link STAT_EXTRA_OMIT} on the player side. NOTE the FEED key is `possession_pct`
+ * (omit that), NOT the row/DB key `possession`.
+ */
+const TEAM_STAT_EXTRA_OMIT: ReadonlySet<string> = new Set([
+  // promoted typed columns
+  "possession_pct",
+  "offsides",
+  "shots_blocked",
+  // identity / structural
+  "match_id",
+  "team_id",
+  "is_home",
+]);
+
+/**
+ * CATCH-ALL for the un-promoted FIFATeamMatchStats fields (expected_goals, big_chances, shots_total,
+ * corners, fouls, yellow_cards, passes_*, long_balls_*, crosses_*, tackles, interceptions, clearances,
+ * saves, *_duels_*, dribbles_*, …). Every own key the feed actually sent that isn't in
+ * {@link TEAM_STAT_EXTRA_OMIT} is retained VERBATIM — including any field a future feed edition adds
+ * (forward-compat). Values are kept as-sent (nulls retained); only keys the feed didn't send are
+ * omitted. Empty result → null. Display-only — stat_team_match is never read by scoring.
+ */
+function buildTeamStatExtra(f: FIFATeamMatchStats): Record<string, unknown> | null {
+  const extra: Record<string, unknown> = {};
+  for (const key of Object.keys(f)) {
+    if (TEAM_STAT_EXTRA_OMIT.has(key)) continue;
+    const value = f[key];
+    if (value === undefined) continue; // a key the feed didn't send (keep explicit nulls)
+    extra[key] = value;
+  }
+  return Object.keys(extra).length > 0 ? extra : null;
+}
+
 export function mapTeamStat(f: FIFATeamMatchStats): TeamStatRowIn {
   const ctx: Ctx = { match_id: f.match_id, team_id: f.team_id };
   return {
@@ -286,6 +325,7 @@ export function mapTeamStat(f: FIFATeamMatchStats): TeamStatRowIn {
     offsides: n(f.offsides),
     shotsBlocked: n(f.shots_blocked),
     possession: n(f.possession_pct), // documented field is `possession_pct`, NOT `possession`
+    extra: buildTeamStatExtra(f),
   };
 }
 

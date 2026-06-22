@@ -19,14 +19,19 @@ import type { Position } from "@app/shared";
 import type {
   BuildGameDetailInput,
   GameDetailView,
+  GameStatGroup,
+  GameStatistics,
+  GameStatRow,
   GdEventInput,
   GdPlayerInput,
   GdRatingInput,
   GdStatInput,
+  GdTeamStatInput,
   PlayerLine,
   PlayerRole,
   SquadSide,
   StatChip,
+  StatFormat,
 } from "./types";
 
 // ─── ordering ─────────────────────────────────────────────────────────────────────
@@ -156,6 +161,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     stats,
     scores,
     ratings,
+    teamStats,
     lineupEntries,
     events,
     ownerByPlayer,
@@ -221,6 +227,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     },
     home,
     away,
+    statistics: buildTeamStatistics(teamStats, match.homeTeamId, match.awayTeamId),
     empty: homeLines.length === 0 && awayLines.length === 0,
     periodId: match.periodId,
     unresolvedParticipants: unresolvedFromPool + unplaced,
@@ -249,4 +256,204 @@ function buildSide(teamName: string | null, score: number | null, lines: PlayerL
     subs: lines.filter((l) => l.role === "sub").sort(byEntryThenName),
     bench: lines.filter((l) => l.role === "bench").sort(byPositionThenName),
   };
+}
+
+// ─── team statistics (T17) ────────────────────────────────────────────────────────
+//
+// Display-only home-vs-away team aggregates for the Statistics tab. Sourced from the three typed
+// stat_team_match columns (possession / offsides / shotsBlocked) + the retained `extra` jsonb
+// (everything else the feed sent). NO scoring read — stat_team_match is feed→ingest→DB display data
+// (grep-confirmed in ARCHITECTURE). Pure + deterministic; a metric the feed omits resolves to null
+// (the UI renders "–"). Row order, labels and the neutral set mirror design/design_reference/match_detail.
+
+/** Read a finite number from a team row's `extra` jsonb; null when the row, key, or value is absent. */
+function teamExtraNum(row: GdTeamStatInput | undefined, key: string): number | null {
+  if (row === undefined || row.extra === null) return null;
+  const v = row.extra[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+/** Percentage = numer/denom × 100, rounded; null when either side is missing or denom is 0. */
+function statPct(numer: number | null, denom: number | null): number | null {
+  if (numer === null || denom === null || denom === 0) return null;
+  return Math.round((numer / denom) * 100);
+}
+
+/** Sum of two nullable values; null only when BOTH are null (a present 0 counts). */
+function sumNullable(a: number | null, b: number | null): number | null {
+  if (a === null && b === null) return null;
+  return (a ?? 0) + (b ?? 0);
+}
+
+type TeamStatKey =
+  | "poss"
+  | "xg"
+  | "bigCh"
+  | "shots"
+  | "sot"
+  | "blocked"
+  | "woodwork"
+  | "corners"
+  | "offsides"
+  | "passes"
+  | "accPct"
+  | "tackles"
+  | "interc"
+  | "clear"
+  | "duelPct"
+  | "saves"
+  | "fouls"
+  | "yellow";
+
+interface TeamStatSpec {
+  readonly label: string;
+  readonly format: StatFormat;
+  readonly neutral: boolean;
+  readonly pick: (row: GdTeamStatInput | undefined) => number | null;
+}
+
+/** Per-key metadata + resolver. Accuracy/duels are derived percentages (own rate, like the design). */
+const TEAM_STAT_SPECS: Record<TeamStatKey, TeamStatSpec> = {
+  poss: {
+    label: "Ball possession",
+    format: "pct",
+    neutral: false,
+    pick: (r) => r?.possession ?? null,
+  },
+  xg: {
+    label: "Expected goals (xG)",
+    format: "dec",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "expected_goals"),
+  },
+  bigCh: {
+    label: "Big chances",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "big_chances"),
+  },
+  shots: {
+    label: "Total shots",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "shots_total"),
+  },
+  sot: {
+    label: "Shots on target",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "shots_on_target"),
+  },
+  blocked: {
+    label: "Blocked shots",
+    format: "int",
+    neutral: false,
+    pick: (r) => r?.shotsBlocked ?? null,
+  },
+  woodwork: {
+    label: "Hit woodwork",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "hit_woodwork"),
+  },
+  corners: {
+    label: "Corner kicks",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "corners"),
+  },
+  offsides: { label: "Offsides", format: "int", neutral: true, pick: (r) => r?.offsides ?? null },
+  passes: {
+    label: "Passes",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "passes_total"),
+  },
+  accPct: {
+    label: "Accurate passes",
+    format: "pct",
+    neutral: false,
+    pick: (r) => statPct(teamExtraNum(r, "passes_accurate"), teamExtraNum(r, "passes_total")),
+  },
+  tackles: {
+    label: "Tackles",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "tackles"),
+  },
+  interc: {
+    label: "Interceptions",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "interceptions"),
+  },
+  clear: {
+    label: "Clearances",
+    format: "int",
+    neutral: false,
+    pick: (r) => teamExtraNum(r, "clearances"),
+  },
+  duelPct: {
+    label: "Duels won",
+    format: "pct",
+    neutral: false,
+    pick: (r) =>
+      statPct(
+        sumNullable(teamExtraNum(r, "ground_duels_won"), teamExtraNum(r, "aerial_duels_won")),
+        sumNullable(teamExtraNum(r, "ground_duels_total"), teamExtraNum(r, "aerial_duels_total")),
+      ),
+  },
+  saves: {
+    label: "Goalkeeper saves",
+    format: "int",
+    neutral: true,
+    pick: (r) => teamExtraNum(r, "saves"),
+  },
+  fouls: { label: "Fouls", format: "int", neutral: true, pick: (r) => teamExtraNum(r, "fouls") },
+  yellow: {
+    label: "Yellow cards",
+    format: "int",
+    neutral: true,
+    pick: (r) => teamExtraNum(r, "yellow_cards"),
+  },
+};
+
+/** Row groups, in design order. Overview (the first) has no title. */
+const TEAM_STAT_GROUPS: readonly {
+  readonly title: string | null;
+  readonly keys: readonly TeamStatKey[];
+}[] = [
+  { title: null, keys: ["poss", "xg", "bigCh"] },
+  { title: "Shots", keys: ["shots", "sot", "blocked", "woodwork"] },
+  { title: "Attacking", keys: ["corners", "offsides"] },
+  { title: "Passing", keys: ["passes", "accPct"] },
+  { title: "Defending", keys: ["tackles", "interc", "clear", "duelPct", "saves"] },
+  { title: "Discipline", keys: ["fouls", "yellow"] },
+];
+
+/**
+ * Build the home-vs-away Statistics view-model. Returns null when neither side has a stat_team_match row
+ * OR every resolved value is null (nothing to show) — the tab is hidden in that case.
+ */
+function buildTeamStatistics(
+  teamStats: readonly GdTeamStatInput[],
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+): GameStatistics | null {
+  const homeRow = homeTeamId === null ? undefined : teamStats.find((t) => t.teamId === homeTeamId);
+  const awayRow = awayTeamId === null ? undefined : teamStats.find((t) => t.teamId === awayTeamId);
+  if (homeRow === undefined && awayRow === undefined) return null;
+
+  let anyValue = false;
+  const groups: GameStatGroup[] = TEAM_STAT_GROUPS.map((g) => ({
+    title: g.title,
+    rows: g.keys.map((key): GameStatRow => {
+      const spec = TEAM_STAT_SPECS[key];
+      const home = spec.pick(homeRow);
+      const away = spec.pick(awayRow);
+      if (home !== null || away !== null) anyValue = true;
+      return { key, label: spec.label, format: spec.format, neutral: spec.neutral, home, away };
+    }),
+  }));
+  return anyValue ? { groups } : null;
 }

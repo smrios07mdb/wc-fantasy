@@ -4,17 +4,19 @@
  * Client shell for the single-match Game Detail screen — re-skinned to the match-detail design handoff
  * (T16). Renders the server-assembled {@link GameDetailView} as: a Sofascore-style SCOREBOARD (teams /
  * kit crests / score that turns live-red in progress / status pill / matchday + kickoff labels), a
- * FANTASY exposure line, the personal YOUR-XI stake strip, then a tab bar over two surviving tabs —
- * LINEUPS (formation pitch with flag-kit jersey tokens + enriched team lists) and RATINGS (podium +
- * fantasy-MVP banner + ranked board). Every player carries the two clearly-separated lenses the product
- * is about: the 0–10 RATING square (real match) and the FANTASY points + owner tag (league).
+ * FANTASY exposure line, the personal YOUR-XI stake strip, then a tab bar over LINEUPS (formation pitch
+ * with flag-kit jersey tokens + enriched team lists), STATISTICS (T17 — home-vs-away team comparison
+ * bars; shown only when the feed has posted team stats), and RATINGS (podium + fantasy-MVP banner +
+ * ranked board). Every player carries the two clearly-separated lenses the product is about: the 0–10
+ * RATING square (real match) and the FANTASY points + owner tag (league).
  *
- * VISUAL re-skin only: the loader/`buildGameDetail` contract is reused verbatim except the one approved
- * additive read (per-player `rating`). The Statistics / Events / Standings tabs are out of scope (the
- * data isn't loaded — see BACKLOG / T16b). The per-player drill-down reuses the SHARED `<PlayerScoreSheet>`
- * modal unchanged (info-only, like /vsfield), opened on a token / row / chip / podium tap — but ONLY when
- * the match links to a fantasy period (the modal is period-keyed). No data fetching here beyond that
- * modal's own `/api/player-box` round-trip.
+ * VISUAL re-skin only: the loader/`buildGameDetail` contract is reused verbatim except the two approved
+ * read-only additive reads (per-player `rating` [T16]; per-team `statistics` [T17], display-only). The
+ * Events / Standings tabs are still out of scope (the data isn't loaded — see BACKLOG / T16b / T18). The
+ * per-player drill-down reuses the SHARED `<PlayerScoreSheet>` modal unchanged (info-only, like
+ * /vsfield), opened on a token / row / chip / podium tap — but ONLY when the match links to a fantasy
+ * period (the modal is period-keyed). No data fetching here beyond that modal's own `/api/player-box`
+ * round-trip.
  */
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -23,10 +25,18 @@ import { Flag } from "@/app/draft/Flag";
 import { toIso2 } from "@/src/draft/flag";
 import { kitOf } from "@/app/vsfield/kitOf";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
-import type { GameDetailView, OwnerTag, PlayerLine, SquadSide } from "@/src/games/types";
+import type {
+  GameDetailView,
+  GameStatistics,
+  GameStatRow,
+  OwnerTag,
+  PlayerLine,
+  SquadSide,
+  StatFormat,
+} from "@/src/games/types";
 import "@/src/games/games.css";
 
-type Tab = "lineups" | "ratings";
+type Tab = "lineups" | "statistics" | "ratings";
 type OpenFn = ((playerId: string) => void) | null;
 
 // ─── name + rating helpers (pure, presentational) ──────────────────────────────────
@@ -536,6 +546,103 @@ function surnameLabel(l: PlayerLine): string {
   return l.lastName ?? l.displayName;
 }
 
+// ─── statistics tab ───────────────────────────────────────────────────────────────
+
+/** Display a team-stat value; null → "–". Possession/accuracy/duels show as whole percentages. */
+function fmtStat(v: number | null, format: StatFormat): string {
+  if (v === null) return "–";
+  if (format === "pct") return `${Math.round(v)}%`;
+  if (format === "dec") return v.toFixed(2);
+  return String(v);
+}
+/** Bar-fill width (%) for one side: a percentage fills to its own value; a count to its share of the pair. */
+function statFillPct(value: number | null, other: number | null, format: StatFormat): number {
+  if (value === null) return 0;
+  if (format === "pct") return Math.max(0, Math.min(100, value));
+  const total = value + (other ?? 0);
+  return total > 0 ? (value / total) * 100 : 0;
+}
+
+/**
+ * One home-vs-away comparison row: home value · centred label · away value over two separate proportional
+ * tracks (home fills toward the centre, away away from it). The LEADING side's number brightens — for the
+ * lower-is-better (neutral) stats the lower side leads. A null side shows "–" with an empty track.
+ */
+function StatBar({ row }: { row: GameStatRow }) {
+  const { home, away, format, neutral } = row;
+  const bothPresent = home !== null && away !== null;
+  const homeLead = bothPresent && (neutral ? home < away : home > away);
+  const awayLead = bothPresent && (neutral ? away < home : away > home);
+  return (
+    <div className="gd-stat">
+      <div className="gd-stat-top">
+        <span className={`gd-stat-v${homeLead ? " is-lead" : ""}`}>{fmtStat(home, format)}</span>
+        <span className="gd-stat-lab">{row.label}</span>
+        <span className={`gd-stat-v${awayLead ? " is-lead" : ""}`}>{fmtStat(away, format)}</span>
+      </div>
+      <div className="gd-stat-bars">
+        <div className="gd-stat-track is-h">
+          <span
+            className="gd-stat-fill is-h"
+            style={{ width: `${statFillPct(home, away, format)}%` }}
+          />
+        </div>
+        <div className="gd-stat-track is-a">
+          <span
+            className="gd-stat-fill is-a"
+            style={{ width: `${statFillPct(away, home, format)}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The Statistics tab — team match aggregates as home-vs-away comparison bars (rendered only when present). */
+function StatisticsTab({
+  view,
+  statistics,
+  live,
+}: {
+  view: GameDetailView;
+  statistics: GameStatistics;
+  live: boolean;
+}) {
+  const { home, away } = view;
+  return (
+    <div className="gd-stats">
+      <div className="gd-st-toolbar">
+        <span className="gd-st-team">
+          <span className="gd-st-swatch is-h" aria-hidden="true" />
+          {home.teamCode && <Flag code={toIso2(home.teamCode)} label={home.teamName} />}
+          {home.teamName}
+        </span>
+        <span className="gd-st-team is-away">
+          {away.teamCode && <Flag code={toIso2(away.teamCode)} label={away.teamName} />}
+          {away.teamName}
+          <span className="gd-st-swatch is-a" aria-hidden="true" />
+        </span>
+      </div>
+      {live && (
+        <div className="gd-st-livenote">
+          <span className="gd-livedot" aria-hidden="true" />
+          Live totals — updating as the match plays
+        </div>
+      )}
+      <div className="gd-st-groups">
+        {statistics.groups.map((g, gi) => (
+          <div className="gd-st-group" key={gi}>
+            {g.title && <div className="gd-st-gtitle">{g.title}</div>}
+            {g.rows.map((r) => (
+              <StatBar key={r.key} row={r} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── scoreboard + stake ───────────────────────────────────────────────────────────
 
 function ClockPill({ status }: { status: MatchStatus }) {
@@ -721,6 +828,18 @@ export function GameDetailClient({ view }: { view: GameDetailView }) {
             >
               Lineups
             </button>
+            {/* Statistics tab appears only once the feed has posted team stats for this match. */}
+            {view.statistics && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "statistics"}
+                className={`gd-tabbtn${tab === "statistics" ? " is-active" : ""}`}
+                onClick={() => setTab("statistics")}
+              >
+                Statistics
+              </button>
+            )}
             <button
               type="button"
               role="tab"
@@ -733,10 +852,14 @@ export function GameDetailClient({ view }: { view: GameDetailView }) {
           </div>
 
           <div className="gd-tabwrap">
-            {tab === "lineups" ? (
-              <LineupsTab view={view} live={live} onOpen={onOpen} />
-            ) : (
+            {/* LineupsTab is the default fall-through, so a stale "statistics" tab (after the block
+                disappears on refresh) degrades cleanly rather than rendering blank. */}
+            {tab === "ratings" ? (
               <RatingsTab view={view} live={live} onOpen={onOpen} />
+            ) : tab === "statistics" && view.statistics ? (
+              <StatisticsTab view={view} statistics={view.statistics} live={live} />
+            ) : (
+              <LineupsTab view={view} live={live} onOpen={onOpen} />
             )}
           </div>
         </>

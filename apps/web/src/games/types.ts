@@ -97,10 +97,48 @@ export interface GameDetailHeader {
   readonly hasFantasyOverlay: boolean;
 }
 
+// ─── team statistics (T17) ────────────────────────────────────────────────────────
+
+/** How a stat row's value is rendered + how its lead highlight + bar fill behave. */
+export type StatFormat = "pct" | "dec" | "int";
+
+/**
+ * One home-vs-away team-stat row (mirrors the design-reference StatBar). Values come from the three
+ * typed stat_team_match columns + the retained `extra` jsonb (a derived percentage for accuracy/duels).
+ * Either side null = "not reported by the feed" → the UI renders "–" and an empty bar. Display-only.
+ */
+export interface GameStatRow {
+  /** Stable key (e.g. "poss", "xg") — React key + UI hooks; never a raw feed field name to render. */
+  readonly key: string;
+  readonly label: string;
+  readonly format: StatFormat;
+  /** Lower-is-better (fouls / offsides / yellow / saves) → the LOWER side gets the lead highlight. */
+  readonly neutral: boolean;
+  readonly home: number | null;
+  readonly away: number | null;
+}
+
+/** A titled group of stat rows (Overview has a null title). */
+export interface GameStatGroup {
+  readonly title: string | null;
+  readonly rows: readonly GameStatRow[];
+}
+
+/** The Statistics tab view-model — grouped home-vs-away team aggregates. */
+export interface GameStatistics {
+  readonly groups: readonly GameStatGroup[];
+}
+
 export interface GameDetailView {
   readonly header: GameDetailHeader;
   readonly home: SquadSide;
   readonly away: SquadSide;
+  /**
+   * Home-vs-away team match statistics, or null when the feed has posted NO team-stat row for either
+   * side yet (not-played / early-live) — the Statistics tab is hidden entirely in that case. When
+   * present, individual rows may still be null (a metric the feed omits) and render "–".
+   */
+  readonly statistics: GameStatistics | null;
   /** True when neither side has a single player line (no lineup announced + nobody scored yet). */
   readonly empty: boolean;
   /** periodId for the PlayerScoreSheet modal; null = no tap-to-breakdown (and no owner overlay). */
@@ -167,6 +205,19 @@ export interface GdRatingInput {
   readonly rating: number | null;
 }
 
+/**
+ * One team's stat_team_match row (keyed by teamId), passed through verbatim by the loader. The three
+ * typed columns plus the retained `extra` jsonb (everything else the feed sent). The pure builder
+ * matches teamId to the match's home/away side and resolves the displayed rows. Display-only.
+ */
+export interface GdTeamStatInput {
+  readonly teamId: string;
+  readonly possession: number | null;
+  readonly offsides: number | null;
+  readonly shotsBlocked: number | null;
+  readonly extra: Readonly<Record<string, unknown>> | null;
+}
+
 export interface GdLineupEntryInput {
   readonly playerId: string;
   readonly isStarter: boolean;
@@ -190,6 +241,8 @@ export interface BuildGameDetailInput {
   readonly scores: readonly GdScoreInput[];
   /** rating_player_match rows (source-tagged) for this match; the builder resolves one per player. */
   readonly ratings: readonly GdRatingInput[];
+  /** stat_team_match rows (one per team) for this match; the builder maps each to home/away. */
+  readonly teamStats: readonly GdTeamStatInput[];
   readonly lineupEntries: readonly GdLineupEntryInput[];
   readonly events: readonly GdEventInput[];
   /** playerId → owner tag (already name-resolved by the loader; empty when no period link). */
