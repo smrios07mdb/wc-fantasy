@@ -523,10 +523,6 @@
 .gd-pcol.is-wide {
   flex-grow: 2;
 }
-/* a flat back-4 is dual-rendered (one line desktop / balanced 2+2 mobile); show the wide one here */
-.gd-pcol.is-narrow-only {
-  display: none;
-}
 /* away half mirrors the back→front order so the fuller line still lands toward the halfway line */
 .gd-phalf.is-away .gd-pcol {
   flex-direction: row-reverse;
@@ -593,10 +589,11 @@
   box-shadow: 0 0 0 1.5px var(--surface-0);
   z-index: 2;
 }
+/* ownership sits at the BOTTOM-LEFT corner, clear of the rating (top-left) and the status (top-right) */
 .gd-tok-own {
   position: absolute;
-  top: -6px;
-  right: -7px;
+  bottom: -5px;
+  left: -6px;
   min-width: 17px;
   height: 17px;
   padding: 0 3px;
@@ -618,21 +615,21 @@
   height: 11px;
   padding: 0;
   border-radius: 50%;
-  top: -5px;
-  right: -5px;
+  bottom: -4px;
+  left: -4px;
   background: var(--locked);
 }
-/* subbed-off (▾min) / red-card status, overlaid on the jersey hem — clearly visible at any token size */
+/* subbed-off (▾min) / red-card status hugs the RIGHT shoulder, opposite the rating square — the two
+   never overlap (each overhangs its own side of the jersey). Clearly visible at any token size. */
 .gd-tok-status {
   position: absolute;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
+  top: -6px;
+  right: -7px;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  max-width: 100%;
-  padding: 1px 5px;
+  gap: 2px;
+  max-width: 150%;
+  padding: 1px 4px;
   border-radius: var(--r-pill);
   background: rgba(7, 11, 17, 0.82);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
@@ -1214,11 +1211,26 @@
     font-size: 34px;
   }
 
-  /* pitch flips to vertical: away on top, home on bottom; lanes become rows.
-     Height is a floor, not a cap, so a wrapped (multi-line) band grows the pitch instead of clipping. */
+  /* ════════════ MOBILE PITCH = FORMATION GRID ════════════
+     The pitch turns vertical (away on top, home on bottom, halfway split). Bands stack DOWN the short
+     axis (GK→FWD toward the halfway line per side) and each band's players spread ACROSS the width. The
+     pitch is a FIXED height that fits one screen and NEVER grows/scrolls (overflow:hidden clips); every
+     token is sized to `min(width / cols, height / rows)` so the full XI of BOTH sides fits with no
+     scroll. Token size is the variable; legibility yields to the fit. `--pitch-rows` / `--pitch-cols`
+     are fed in by the component (the busier side's line / widest-line counts). */
   .gd-pitch {
-    height: auto;
-    min-height: 600px;
+    /* fit one screen: shrink with the real viewport (dvh) minus the page chrome above the pitch + the
+       fixed bottom nav, capped. NOT a content floor — see overflow:hidden (no internal scroll, ever). */
+    --gd-pitch-h: min(540px, calc(100dvh - 232px));
+    height: var(--gd-pitch-h);
+    min-height: 0;
+    /* token unit: the SMALLER of the per-line height budget (half the pitch / rows, less the name+pts
+       strip) and the per-column width budget; clamped so it stays legible but the no-scroll fit wins. */
+    --gd-half-h: calc(var(--gd-pitch-h) / 2);
+    --gd-line-h: calc(var(--gd-half-h) / var(--pitch-rows));
+    --gd-shirt-h: calc(var(--gd-line-h) - 34px);
+    --gd-shirt-w: calc((100vw - 2 * var(--sp-3) - 14px) / var(--pitch-cols) - 12px);
+    --shirt: clamp(15px, min(var(--gd-shirt-h), var(--gd-shirt-w)), 44px);
   }
   .gd-pl-mid {
     top: 50%;
@@ -1228,13 +1240,17 @@
     width: auto;
     height: 2px;
   }
+  .gd-pl-circle {
+    width: 92px;
+    height: 92px;
+  }
   .gd-pl-box {
     top: auto;
     transform: translateX(-50%);
     left: 50%;
     right: auto;
-    width: 58%;
-    height: 64px;
+    width: 52%;
+    height: 50px;
   }
   .gd-pl-box-l {
     top: -2px;
@@ -1249,14 +1265,15 @@
     border-radius: 5px 5px 0 0;
   }
   .gd-pitch-grid {
-    height: auto;
-    min-height: 600px;
+    height: 100%;
     flex-direction: column;
   }
-  /* size each half (and lane) to its content so wrapped bands grow downward instead of clipping */
+  /* each half takes an equal slice of the fixed height; its bands distribute evenly down it */
   .gd-phalf {
-    flex-shrink: 0;
-    flex-basis: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    justify-content: space-evenly;
+    padding: 4px 5px;
   }
   .gd-phalf.is-away {
     order: -1;
@@ -1265,10 +1282,13 @@
   .gd-phalf.is-home {
     flex-direction: column-reverse;
   }
-  /* lane axis is now vertical: sub-lines stack back→front, matching each half's direction */
+  /* a band: its convention sub-lines stay tight (read as one unit); the deeper line lands toward own goal */
   .gd-pcol {
-    flex-shrink: 0;
-    flex-basis: auto;
+    flex: 0 0 auto;
+    flex-grow: 0;
+    justify-content: center;
+    align-items: stretch;
+    gap: 3px;
   }
   .gd-phalf.is-away .gd-pcol {
     flex-direction: column;
@@ -1276,19 +1296,79 @@
   .gd-phalf.is-home .gd-pcol {
     flex-direction: column-reverse;
   }
-  /* show the narrow (2+2) back-4 variant here, hide the wide (single-line) one */
-  .gd-pcol.is-wide-only {
-    display: none;
-  }
-  .gd-pcol.is-narrow-only {
-    display: flex;
-  }
-  /* one formation line is now a horizontal row of tokens. The back-4's 2+2 is helper-driven (balanced);
-     flex-wrap stays only as a last-resort clamp so an unusually wide sub-line can't clip on a tiny phone. */
+  /* one formation line = a horizontal row spread ACROSS the full width; it NEVER wraps (a flat 4 shrinks) */
   .gd-pline {
     flex: 0 0 auto;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    justify-content: space-evenly;
+    align-items: flex-start;
+    width: 100%;
+    gap: 4px;
+  }
+
+  /* token: every part scales proportionally off --shirt so it reads as a jersey at any fit size */
+  .gd-tok {
+    max-width: calc((100vw - 2 * var(--sp-3)) / var(--pitch-cols));
+    gap: 2px;
+    padding: 0;
+  }
+  .gd-tok-shirt-wrap {
+    width: var(--shirt);
+    height: var(--shirt);
+  }
+  /* Rating hugs the LEFT shoulder, the sub-off/red badge the RIGHT — each sits AT the shoulder (no
+     vertical overhang, so neither reaches into the line above/below) and overhangs OUTWARD horizontally,
+     so on a small jersey the two still clear each other by a margin. */
+  .gd-tok-rate {
+    top: 0;
+    left: calc(var(--shirt) * -0.28);
+    min-width: calc(var(--shirt) * 0.56);
+    height: calc(var(--shirt) * 0.42);
+    font-size: calc(var(--shirt) * 0.24);
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px var(--surface-0);
+  }
+  .gd-tok-status {
+    top: 0;
+    right: calc(var(--shirt) * -0.28);
+    padding: 0 calc(var(--shirt) * 0.04);
+    gap: 0;
+  }
+  /* the minute uses a fixed 9px `font:` shorthand at full size — scale it down with the jersey */
+  .gd-tok-status .gd-rev.is-off {
+    font-size: calc(var(--shirt) * 0.24);
+  }
+  .gd-tok-status .gd-rev.is-red {
+    width: calc(var(--shirt) * 0.3);
+    height: calc(var(--shirt) * 0.42);
+  }
+  .gd-tok-own {
+    bottom: 0;
+    left: calc(var(--shirt) * -0.05);
+    min-width: calc(var(--shirt) * 0.44);
+    height: calc(var(--shirt) * 0.34);
+    padding: 0 calc(var(--shirt) * 0.07);
+    font-size: calc(var(--shirt) * 0.2);
+    border-radius: var(--r-pill);
+  }
+  .gd-tok-own.is-rival {
+    width: calc(var(--shirt) * 0.26);
+    height: calc(var(--shirt) * 0.26);
+    bottom: 0;
+    left: 0;
+  }
+  .gd-tok-name {
+    font-size: clamp(8px, calc(var(--shirt) * 0.3), 12px);
+    line-height: 1.04;
+    max-width: 100%;
+  }
+  .gd-tok-foot {
+    min-height: calc(var(--shirt) * 0.34);
+  }
+  .gd-tok-foot .gd-fpts {
+    font-size: clamp(8px, calc(var(--shirt) * 0.28), 11px);
+    padding: 0 calc(var(--shirt) * 0.13);
   }
 
   .gd-tl-grid {
