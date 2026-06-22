@@ -231,7 +231,12 @@ function KitToken({ line, live, onOpen }: { line: PlayerLine; live: boolean; onO
   return <div className={`gd-tok${me ? " is-me" : ""}`}>{inner}</div>;
 }
 
-/** One side's starters as position lanes (GK→FWD); CSS orients them per side + viewport. */
+/**
+ * One side's named starting XI as position lanes (GK→FWD); CSS orients them per side + viewport.
+ * Sources `side.pitch` (the official is_starter sheet) — NOT `side.starters`, which also carries
+ * inferred/come-on starters and would over-fill a side past 11 tokens. Subbed-off / sent-off
+ * starters keep their lane; a come-on substitute never gets a pitch token. Empty pitch = no sheet.
+ */
 function PitchHalf({
   side,
   which,
@@ -249,7 +254,7 @@ function PitchHalf({
     MID: [],
     FWD: [],
   };
-  for (const l of side.starters) byLane[l.position].push(l);
+  for (const l of side.pitch) byLane[l.position].push(l);
   return (
     <div className={`gd-phalf is-${which}`}>
       {LANES.map((lane) => (

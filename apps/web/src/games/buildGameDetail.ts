@@ -172,6 +172,12 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
   const scoreByPlayer = new Map(scores.map((s) => [s.playerId, s.points]));
   const ratingRowsByPlayer = groupRatingRows(ratings);
   const lineupByPlayer = new Map(lineupEntries.map((e) => [e.playerId, e.isStarter]));
+  // The official starting XI per the `match_lineup_entry` sheet (is_starter) — drives the formation
+  // PITCH selection. NEVER the inferred `role: "starter"`, which also catches off-sheet appearances
+  // (e.g. a come-on substitute whose substitution event lacked a playerIn id) and would over-fill it.
+  const officialStarterIds = new Set(
+    lineupEntries.filter((e) => e.isStarter).map((e) => e.playerId),
+  );
 
   const homeLines: PlayerLine[] = [];
   const awayLines: PlayerLine[] = [];
@@ -212,8 +218,8 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     (side === "home" ? homeLines : awayLines).push(line);
   }
 
-  const home = buildSide(match.homeTeamName, match.homeScore, homeLines);
-  const away = buildSide(match.awayTeamName, match.awayScore, awayLines);
+  const home = buildSide(match.homeTeamName, match.homeScore, homeLines, officialStarterIds);
+  const away = buildSide(match.awayTeamName, match.awayScore, awayLines, officialStarterIds);
 
   return {
     header: {
@@ -246,13 +252,22 @@ function sideOf(
   return null;
 }
 
-function buildSide(teamName: string | null, score: number | null, lines: PlayerLine[]): SquadSide {
+function buildSide(
+  teamName: string | null,
+  score: number | null,
+  lines: PlayerLine[],
+  officialStarterIds: ReadonlySet<string>,
+): SquadSide {
   return {
     // Never surface a raw team UUID: an unjoined/unnamed team falls back to the shared constant.
     teamName: teamName ?? UNNAMED_OPPONENT,
     teamCode: teamName ?? null,
     score,
     starters: lines.filter((l) => l.role === "starter").sort(byPositionThenName),
+    // PITCH: only the players the official sheet names in the starting XI (is_starter) — a strict
+    // subset of `starters` that excludes inferred/come-on starters, so a side never renders more
+    // than its ≤11 named starters. Empty when no sheet has been posted (pitch renders empty).
+    pitch: lines.filter((l) => officialStarterIds.has(l.playerId)).sort(byPositionThenName),
     subs: lines.filter((l) => l.role === "sub").sort(byEntryThenName),
     bench: lines.filter((l) => l.role === "bench").sort(byPositionThenName),
   };

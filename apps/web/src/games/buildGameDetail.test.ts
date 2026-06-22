@@ -272,6 +272,41 @@ describe("buildGameDetail — assembly", () => {
     expect(v.empty).toBe(false);
   });
 
+  // ── formation PITCH = the official starting XI only (never inferred/come-on starters) ──
+  it("pitch renders ONLY the official is_starter sheet — excludes an inferred/come-on starter", () => {
+    const v = buildGameDetail(fullInput());
+    // Sheet starters: p1, p2 (home), p5 (away). p6 appeared with NO sheet entry → inferred INTO
+    // `starters` (the list, pinned above) but kept OFF the pitch, so a side never shows >11 tokens.
+    expect(v.home.pitch.map((l) => l.playerId)).toEqual(["p1", "p2"]);
+    expect(v.away.pitch.map((l) => l.playerId)).toEqual(["p5"]);
+    expect(v.away.pitch.map((l) => l.playerId)).not.toContain("p6");
+    expect(v.away.starters.map((l) => l.playerId)).toContain("p6"); // still listed, just not on pitch
+    // Invariant: pitch ⊆ starters, ≤ 11 per side.
+    for (const side of [v.home, v.away]) {
+      const starterIds = new Set(side.starters.map((l) => l.playerId));
+      expect(side.pitch.every((l) => starterIds.has(l.playerId))).toBe(true);
+      expect(side.pitch.length).toBeLessThanOrEqual(11);
+    }
+  });
+
+  it("keeps a subbed-off / sent-off STARTER on the pitch (the formation is fixed at kickoff)", () => {
+    const v = buildGameDetail(fullInput());
+    // p5 is an official starter withdrawn at 75' — he keeps his lane on the pitch.
+    const p5 = v.away.pitch.find((l) => l.playerId === "p5");
+    expect(p5?.wentOffMinute).toBe(75);
+    // p2 is an official starter sent off (red, 80') — also keeps his lane.
+    const p2 = v.home.pitch.find((l) => l.playerId === "p2");
+    expect(p2?.redCard).toBe(true);
+  });
+
+  it("renders an empty pitch when no official lineup sheet has been posted (graceful placeholder)", () => {
+    const v = buildGameDetail({ ...fullInput(), lineupEntries: [] });
+    expect(v.home.pitch).toEqual([]);
+    expect(v.away.pitch).toEqual([]);
+    // The squad is still LISTED (roles inferred from appearances) — only the formation pitch waits.
+    expect(v.home.starters.length + v.home.subs.length + v.home.bench.length).toBeGreaterThan(0);
+  });
+
   it("folds fantasy points + stat chips per participant (not just rostered players)", () => {
     const v = buildGameDetail(fullInput());
     const p1 = v.home.starters.find((l) => l.playerId === "p1")!;

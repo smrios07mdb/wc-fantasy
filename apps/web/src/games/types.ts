@@ -76,6 +76,15 @@ export interface SquadSide {
   readonly teamCode: string | null;
   readonly score: number | null;
   readonly starters: readonly PlayerLine[];
+  /**
+   * The formation-PITCH subset: exactly the players the official `match_lineup_entry` sheet names in
+   * the starting XI (is_starter). A STRICT SUBSET of `starters` — it excludes inferred starters (a
+   * player who appeared with no sheet entry, e.g. a come-on substitute whose substitution event
+   * lacked a playerIn id), so a side never renders more than its ≤11 named starters on the pitch.
+   * Subbed-off / sent-off starters stay (the formation is fixed at kickoff). Empty when the official
+   * lineup hasn't been posted — the pitch renders empty while the squad still lists via `starters`.
+   */
+  readonly pitch: readonly PlayerLine[];
   /** Substitutes who came on. */
   readonly subs: readonly PlayerLine[];
   /** Named bench who did not feature. */
