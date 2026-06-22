@@ -17,7 +17,13 @@ export const metadata: Metadata = { title: "Match" };
 
 export default function GameDetailLayout({ children }: { children: ReactNode }) {
   return (
-    <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
+    // `gd-host` is the ONE structural hook for the mobile-lineups pitch height chain: it lets
+    // games.css re-establish a DEFINITE height from the viewport down (`:has(.gd-host)` → html/body/
+    // this wrapper get `height:100%`), so the shell's `.sh-app{height:100%}` resolves instead of
+    // collapsing to `auto`. Without it the pitch's `height:100cqh` (in `.gd-tabwrap{container-type:size}`)
+    // resolves against a zero-height container and the pitch renders empty on a real phone. Scoped to
+    // this route only — see games.css §"MOBILE PITCH = FORMATION GRID". No other route is affected.
+    <div className="gd-host" data-theme="dark" data-accent="cobalt" data-density="comfortable">
       <AppShell active="pool">{children}</AppShell>
     </div>
   );

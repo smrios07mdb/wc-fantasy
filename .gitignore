@@ -18,6 +18,9 @@ apps/worker/ranking-draft.csv
 dist/
 build/
 .next/
+
+# pitch layout guard scratch (apps/web/scripts/verify-pitch-layout.mjs — temp HTML + debug shots)
+apps/web/screenshots/
 out/
 *.tsbuildinfo
 next-env.d.ts

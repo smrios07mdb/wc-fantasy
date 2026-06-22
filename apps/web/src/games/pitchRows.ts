@@ -1,51 +1,56 @@
 /**
- * Pure pitch-layout helper: split a position band into balanced formation lines so a populous band
- * never overflows the fixed-height pitch (the clip the single-column lane produced for a 5-/6-deep band).
+ * Pure pitch-layout helper: split a position band into the formation lines a real lineup view draws,
+ * so a populous band reads as the formation AND never overflows the pitch. Presentation only — it groups
+ * players already built into `side.pitch`; it does NOT touch the view-model (`buildGameDetail`), the data
+ * contract, or scoring.
  *
- * Presentation only — it groups players already built into `side.pitch`; it does NOT touch the
- * view-model (`buildGameDetail`), the data contract, or scoring.
- */
-
-/**
- * Max players in one formation line before a band of 5+ wraps. 5+ wrap identically on both axes; the
- * only axis-dependent case is a flat back-4 (see `narrow` below).
- */
-const MAX_PER_LINE = 4;
-
-/**
- * Group a band of N players into balanced sub-lines, FULLER line biased toward the FRONT (toward
- * midfield) so the band reads like a formation:
+ * The split follows FOOTBALL CONVENTION, keyed on the BAND (not a viewport axis), with the DEEPER line —
+ * the one toward the team's own goal — listed FIRST so it renders nearest the back in every orientation:
  *
- *   wide (desktop):  ≤4 → one line                · 5 → [2,3] · 6 → [3,3] · 7 → [3,4] · 8 → [4,4]
- *   narrow (mobile): ≤3 → one line · 4 → [2,2]     · 5 → [2,3] · 6 → [3,3] · 7 → [3,4] · 8 → [4,4]
+ *   GK / any band ≤ 4 → one line               (a flat back-4 and a flat mid-4 are SINGLE lines that
+ *                                                shrink to fit, never a 2+2 — the locked real-app rule)
+ *   DEF 5            → [3, 2]                   (a back three + a wing-back pair)
+ *   MID 5            → [2, 3]                   (two holding deep + three ahead; the 4-2-3-1 / 4-5-1 case)
+ *   FWD 5            → [2, 3]                   (front-loaded; only reachable by an anomalous XI)
+ *   any band ≥ 6     → balanced lines of ≤ 4, fuller toward the FRONT (anomaly safety net; an 11-man XI
+ *                       can't field 6 in one band — this only fires when the kickoff-XI reconciliation
+ *                       could not resolve to 11, see {@link SquadSide.pitch})
  *
- * The only axis-dependent split is the flat back-4: on the WIDE (desktop) axis it stays a single
- * line, on the NARROW (mobile) axis it wraps to a balanced 2+2 (back 2 | front 2) so it never
- * overflows a phone's width. `narrow` is the same desktop/mobile signal the half uses to flip its
- * flex-direction — the caller derives it from that one breakpoint, not a new one.
- *
- * The returned order is BACK-line first → FRONT-line last. That order is rendered straight into the
- * GK→FWD flex direction each half already uses (home `row` / away `row-reverse` on desktop; away
- * `column` / home `column-reverse` on mobile), so the fuller line lands nearest the halfway line in
- * every orientation without the caller needing to know which side it is.
+ * Returned order is BACK-line first → FRONT-line last. The half renders that straight into the GK→FWD
+ * flex direction it already uses (desktop `row`/`row-reverse`; mobile `column`/`column-reverse`), so the
+ * deeper line always lands toward own goal without the caller knowing which side it is. There is no
+ * longer an axis-dependent split: the flat-4 reads identically on phone and desktop (it just shrinks on
+ * the phone), which is what removed the old wide/narrow dual-render.
  *
  * Generic over the element type so it can be unit-tested without the full `PlayerLine` shape.
  */
-export function pitchRows<T>(players: readonly T[], narrow = false): T[][] {
+
+/** The four pitch bands. Only DEF vs MID/FWD changes the n = 5 split; GK never reaches a multi-line n. */
+export type PitchBand = "GK" | "DEF" | "MID" | "FWD";
+
+/** Max players in one formation line before a band of 6+ (anomaly only) wraps into balanced lines. */
+const MAX_PER_LINE = 4;
+
+export function pitchRows<T>(players: readonly T[], band: PitchBand): T[][] {
   const n = players.length;
   if (n === 0) return [];
-  if (n <= 3) return [[...players]];
-  if (n === 4) {
-    // Flat back-4: one line on the wide axis, a balanced 2+2 (back 2 | front 2) on the narrow axis.
-    return narrow ? [players.slice(0, 2), players.slice(2)] : [[...players]];
+  // ≤ 4 is always a single line: GK, a back/mid three, a flat back-4 / mid-4 (shrinks to fit, no 2+2),
+  // a front 2/3, etc. This is the formation line you'd see on Sofascore / FotMob / the FIFA app.
+  if (n <= MAX_PER_LINE) return [[...players]];
+
+  // 5 is the only convention-split case. DEF reads as a back three behind a wing-back pair (deeper line
+  // = 3, listed first); MID/FWD read as a holding pair behind a forward trio (deeper line = 2, first).
+  if (n === 5) {
+    return band === "DEF"
+      ? [players.slice(0, 3), players.slice(3)]
+      : [players.slice(0, 2), players.slice(2)];
   }
 
+  // 6+ never happens for a legal XI; balance into ≤4 lines with the remainder biased toward the FRONT so
+  // the wider line sits nearest midfield (keeps a reconciliation-anomaly band from clipping the pitch).
   const lineCount = Math.ceil(n / MAX_PER_LINE);
   const base = Math.floor(n / lineCount);
   const extra = n % lineCount;
-
-  // Every line gets `base`; the remainder is handed to the lines nearest the FRONT (the last `extra`
-  // entries) so the fuller line sits toward midfield.
   const sizes = Array.from({ length: lineCount }, (_, i) =>
     i >= lineCount - extra ? base + 1 : base,
   );
