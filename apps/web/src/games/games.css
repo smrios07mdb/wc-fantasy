@@ -1274,15 +1274,25 @@
     height: 100cqh;
     min-height: 0;
     container-type: size;
-    /* token unit: budget the WHOLE token (jersey + name + pts strip) into ONE formation line so the fit
-       always wins. --gd-shirt-h is a fraction of the line height (the strip below scales proportionally
-       off --shirt, never with a fixed reserve), so even at the legibility floor a full 5-line side can't
-       be pushed past the half-pitch budget — the strip shrinks instead of clipping. Width budget caps
-       a dense line so it never clips sideways; the smaller of the two wins. */
-    --gd-line-h: calc(50cqh / var(--pitch-rows));
-    --gd-shirt-h: calc(var(--gd-line-h) * 0.42);
+    /* Budget the FULL token — jersey + name line + fpts pill (whose 13px number is UNPINNED below so it
+       scales with the jersey) — into ONE of the half's `--pitch-rows` lines. The half is 50cqh tall; we
+       subtract its vertical padding (--gd-half-pad ×2) and a small slack for the inter-band sub-line gaps,
+       then reserve the name + foot strip EXPLICITLY (--gd-name-h + --gd-foot-h, pinned to those exact
+       heights below). The jersey is the REMAINDER, so token height == line height by construction and a
+       dense 5-line side's content can never exceed its 50% slice and bleed across the halfway line. The
+       fit always wins — the jersey shrinks before anything clips. Width budget caps a dense line so it
+       never clips sideways; the smaller of height/width wins. (See ARCHITECTURE §25.) */
+    --gd-half-pad: 3px; /* .gd-phalf vertical padding, per edge — also applied to the half below */
+    --gd-grid-slack: 8px; /* inter-band sub-line gaps (.gd-pcol gap) + rounding headroom, per half */
+    --gd-line-h: calc(
+      (50cqh - 2 * var(--gd-half-pad) - var(--gd-grid-slack)) / var(--pitch-rows)
+    );
+    --gd-name-h: clamp(5px, calc(var(--gd-line-h) * 0.24), 13px);
+    --gd-foot-h: clamp(7px, calc(var(--gd-line-h) * 0.3), 16px);
+    /* jersey = line − strip − the two 1px token gaps; floored at 7px (legibility yields to the fit) */
+    --gd-shirt-h: calc(var(--gd-line-h) - var(--gd-name-h) - var(--gd-foot-h) - 2px);
     --gd-shirt-w: calc((100vw - 2 * var(--sp-3) - 14px) / var(--pitch-cols) - 12px);
-    --shirt: clamp(11px, min(var(--gd-shirt-h), var(--gd-shirt-w)), 42px);
+    --shirt: clamp(7px, min(var(--gd-shirt-h), var(--gd-shirt-w)), 42px);
   }
   .gd-pl-mid {
     top: 50%;
@@ -1324,8 +1334,13 @@
   .gd-phalf {
     flex: 1 1 0;
     min-height: 0;
+    /* HARD centerline barrier: a token can never spill out of its 50% slice into the other team's half.
+       The full-token budget above means it never actually clips here — the guard measures unclipped layout
+       boxes (getBoundingClientRect) and still demands a true fit — but this guarantees the halfway line is
+       never crossed even under an unforeseen density. */
+    overflow: hidden;
     justify-content: space-evenly;
-    padding: 4px 5px;
+    padding: var(--gd-half-pad) 5px;
   }
   .gd-phalf.is-away {
     order: -1;
@@ -1410,19 +1425,33 @@
     bottom: 0;
     left: 0;
   }
-  /* name + pts strip scales with --shirt down to a low floor — so on a tight screen the strip shrinks
-     with the jersey and the line budget is never exceeded (fit wins; never clip). */
+  /* name + foot strip are PINNED to the heights reserved out of the line budget (--gd-name-h / --gd-foot-h),
+     so the token's TOTAL height is exactly the line height and can't exceed its half. The fonts scale with
+     --shirt but are capped to the pinned box, so a tight screen shrinks them with the jersey (fit wins). */
   .gd-tok-name {
-    font-size: clamp(5px, calc(var(--shirt) * 0.32), 12px);
-    line-height: 1.02;
+    height: var(--gd-name-h);
+    line-height: var(--gd-name-h);
+    font-size: min(calc(var(--shirt) * 0.34), calc(var(--gd-name-h) * 0.96));
     max-width: 100%;
   }
   .gd-tok-foot {
-    min-height: calc(var(--shirt) * 0.3);
+    height: var(--gd-foot-h);
+    min-height: 0;
   }
   .gd-tok-foot .gd-fpts {
-    font-size: clamp(5px, calc(var(--shirt) * 0.3), 11px);
+    font-size: min(calc(var(--shirt) * 0.34), calc((var(--gd-foot-h) - 2px) * 0.9));
+    line-height: 1;
     padding: 0 calc(var(--shirt) * 0.12);
+  }
+  /* UNPIN the points number: `.gd-fpts-sm b` hard-codes 13px, which never shrank with the jersey and kept
+     the pill ~20px tall at ANY token size — the strip that overflowed the line budget and bled past the
+     halfway line on a dense XI. Scale the number (and the "fpts" suffix) with the chip so the WHOLE token
+     fits its budgeted line. THIS is the load-bearing fix; the budget above only works once it lands. */
+  .gd-tok-foot .gd-fpts b {
+    font-size: inherit;
+  }
+  .gd-tok-foot .gd-fpts small {
+    font-size: 0.7em;
   }
 
   .gd-tl-grid {

@@ -23,10 +23,13 @@
  * exit 0 (never red-flags a machine without browsers).
  *
  * For a battery of representative formations (4-3-3, 4-2-3-1 = mid 2+3, 3-5-2, 4-4-2 = flat back-4 + flat
- * mid-4, 4-5-1, 3-4-3 = flat mid-4 squeeze), rendered symmetric (same XI both halves, away on top / home
- * on bottom, one subbed-off + one red-carded + one owned starter to exercise every badge), it asserts at
- * 360 AND 390 across a ROOMY (844) and a TIGHT (667, iPhone-SE class) viewport height — so the flex-fill
- * is exercised in both regimes, not just the roomy one — and shows 1280 (desktop):
+ * mid-4, 4-5-1, 3-4-3 = flat mid-4 squeeze, 5-3-2 + 5-4-1 = the DEF-5 [3,2] splits), each seeded with a
+ * REAL WORST-CASE XI (see `squad()`: every
+ * player rated, ~half the outfielders subbed off, TWO-DIGIT fantasy-point pills on every token, real-length
+ * names — the NED–SWE / ARG–AUT density from the MD2 screenshots) and rendered symmetric (same XI both
+ * halves, away on top / home on bottom), it asserts at 360 AND 390 across a ROOMY (844) and a TIGHT (667,
+ * iPhone-SE class) viewport height — so the flex-fill is exercised in both regimes, not just the roomy one
+ * — and shows 1280 (desktop):
  *   (a0) the pitch does NOT collapse — on the phone viewports the tab body holds a real share of the
  *        screen (.gd-tabwrap ≥ 40% of clientH), the pitch fills it (≥ 90% of .gd-tabwrap), and clears an
  *        absolute floor ≈ 0.36·clientH (≈240px at 667). Every token has non-zero width AND height. An
@@ -38,6 +41,10 @@
  *   (c) ZERO horizontal clip — no token's box exceeds the pitch / viewport width.
  *   (d) the right LINE STRUCTURE — each band renders the convention split (4-2-3-1 → MID [2,3], 3-5-2 →
  *       DEF [3] · MID [2,3], 4-4-2 → flat [4]/[4], etc.), per half.
+ *   (e) NO CROSS-CENTERLINE — no away-half token's layout box reaches below the pitch vertical midpoint and
+ *       no home-half token's reaches above it (the two attacking bands never collide in the centre). This is
+ *       the MD2 bleed bug encoded directly; it uses getBoundingClientRect (NOT the visual clip), so it
+ *       demands the FIX make tokens that genuinely FIT their half — clipping them with overflow alone is RED.
  *
  * Rendered screenshots for the mockup review are saved to /tmp at 360 × {667, 844} for 4-2-3-1, 4-4-2, 3-4-3.
  */
@@ -130,9 +137,17 @@ function tok(p) {
         (p.off != null ? `<span class="gd-rev is-off">▾${p.off}&#39;</span>` : "") +
         `</span>`
       : "";
+  // FAITHFUL to <Fpts> (GameDetailClient.tsx): the chip is `gd-fpts gd-fpts-sm <tone>` (default size="sm").
+  // That `gd-fpts-sm` is load-bearing for GEOMETRY — `.gd-fpts-sm b { font-size: 13px }` pins the points
+  // NUMBER at a FIXED 13px on mobile, because the mobile `--shirt` rule resizes only the `.gd-fpts` SPAN,
+  // not its <b>. So the real chip never shrinks with the jersey: a ~20px pill (13px number + 1px border +
+  // padding) regardless of token size. An earlier replica rendered a bare `gd-fpts`, whose <b> inherited
+  // the shrunk span size, so the guard measured a fake ~8px foot and never saw the pill push the token past
+  // its half. Rendering the real classes is what lets this guard SEE the bleed it now asserts against.
+  const tone = p.fpts < 0 ? " is-neg" : p.own === "me" ? " is-pop" : " is-muted";
   const fpts =
     p.fpts != null
-      ? `<span class="gd-fpts"><b>${p.fpts >= 0 ? "+" : ""}${p.fpts}</b><small>fpt${Math.abs(p.fpts) === 1 ? "" : "s"}</small></span>`
+      ? `<span class="gd-fpts gd-fpts-sm${tone}"><b>${p.fpts >= 0 ? "+" : ""}${p.fpts}</b><small>fpt${Math.abs(p.fpts) === 1 ? "" : "s"}</small></span>`
       : "";
   return (
     `<button class="gd-tok${p.own === "me" ? " is-me" : ""}" type="button">` +
@@ -232,26 +247,80 @@ function P(pos, name, opts = {}) {
   };
 }
 
-/** Build an XI for a formation and seed it with every badge (subbed-off, red, owned, long name). */
+// Real surnames + real-length tokens, so the chip/name widths match a live XI, not "Defender 1".
+const SURNAMES = [
+  "van Dijk",
+  "Dumfries",
+  "Aké",
+  "Geertruida",
+  "Reijnders",
+  "Schouten",
+  "Koopmeiners",
+  "Simons",
+  "Gakpo",
+  "Frimpong",
+  "Gravenberch",
+  "Depay",
+  "Malen",
+  "Weghorst",
+  "Bergwijn",
+];
+// Always TWO-DIGIT fantasy points (mixed sign) — the wide `+18 fpts` / `-13 fpts` pills from the real
+// MD2 sheets. The 2-digit width never wraps (nowrap), but the 13px-pinned number is what made the pill
+// tall enough to bleed; the values here keep that pill present on every token.
+const TWO_DIGIT = [12, -10, 18, 14, -13, 21, 11, -16, 19, 13, 17, -11, 22];
+
+/**
+ * Build an XI for a formation as the REAL WORST CASE from the MD2 screenshots (NED–SWE, ARG–AUT): EVERY
+ * player carries a rating, ~HALF the outfielders are subbed off (▾min badge), fantasy points are TWO-DIGIT
+ * pills on every token, names are real-length, and two starters are owned (YOU + a rival). This is the
+ * density that pushed the full token — jersey + name + the 13px-pinned points pill — past its 50% half and
+ * bled across the halfway line. It replaces the old idealized fixture (light badges, single-digit points);
+ * the line STRUCTURE per band is unchanged, so the structure check (d) still pins the formation split.
+ */
 function squad(def, mid, fwd) {
-  const players = [P("GK", "Martínez", { rating: 6.8, fpts: 1 })];
-  for (let i = 0; i < def; i += 1) players.push(P("DEF", `Defender ${i + 1}`));
-  for (let i = 0; i < mid; i += 1) players.push(P("MID", `Midfielder ${i + 1}`));
-  for (let i = 0; i < fwd; i += 1) players.push(P("FWD", `Forward ${i + 1}`));
-  // exercise the badges, including a rated AND subbed-off player (the rating-vs-sub overlap case)
+  const players = [P("GK", "Verbruggen", { rating: 6.9, fpts: 10 })];
+  let k = 0;
+  const add = (pos, count) => {
+    for (let i = 0; i < count; i += 1) {
+      players.push(
+        P(pos, SURNAMES[k % SURNAMES.length], {
+          rating: Math.round(64 + ((k * 7) % 30)) / 10, // 6.4..9.3, EVERY player rated
+          fpts: TWO_DIGIT[k % TWO_DIGIT.length], // always two-digit, mixed sign
+        }),
+      );
+      k += 1;
+    }
+  };
+  add("DEF", def);
+  add("MID", mid);
+  add("FWD", fwd);
+  // ~HALF the outfielders subbed off — the heavy-subs case (every other outfielder gets a ▾min badge).
+  const outfield = players.filter((p) => p.pos !== "GK");
+  for (let i = 0; i < outfield.length; i += 2) outfield[i].off = 52 + ((i * 6) % 38);
+  // keep the rating-vs-sub overlap case explicit on a midfielder (rated AND subbed off — both shoulders).
   const midIdx = players.findIndex((p) => p.pos === "MID");
   if (midIdx >= 0) {
     players[midIdx].off = 63;
     players[midIdx].rating = 7.6;
   }
-  const defIdx = players.findIndex((p) => p.pos === "DEF");
-  if (defIdx >= 0) players[defIdx].red = true;
+  // one red card on a DIFFERENT player than any sub-off (a sent-off man is not also subbed) — otherwise the
+  // status pill would carry red + ▾min and (legitimately) collide with the rating square on the DESKTOP token,
+  // a separate axis from the mobile bleed under test. The last defender is rated + red, never subbed.
+  const redIdx = players
+    .map((p, i) => (p.pos === "DEF" ? i : -1))
+    .filter((i) => i >= 0)
+    .pop();
+  if (redIdx != null && redIdx >= 0) {
+    players[redIdx].red = true;
+    players[redIdx].off = null;
+  }
   const fwdIdx = players.findIndex((p) => p.pos === "FWD");
   if (fwdIdx >= 0) {
     players[fwdIdx].own = "me";
     players[fwdIdx].name = "Gravenberch";
     players[fwdIdx].rating = 8.4;
-    players[fwdIdx].fpts = 12;
+    players[fwdIdx].fpts = 24;
   }
   players[players.length - 1].own = "rival";
   return players;
@@ -264,6 +333,11 @@ const FORMATIONS = {
   "4-4-2": { def: 4, mid: 4, fwd: 2, lines: { DEF: [4], MID: [4], FWD: [2] } },
   "4-5-1": { def: 4, mid: 5, fwd: 1, lines: { DEF: [4], MID: [2, 3], FWD: [1] } },
   "3-4-3": { def: 3, mid: 4, fwd: 3, lines: { DEF: [3], MID: [4], FWD: [3] } },
+  // DEF-5 shapes (real GROUP_FORMATIONS, src/lineup/view.ts) — the back-5 splits [3,2] (deeper line first),
+  // so the wing-back pair [2] lands toward the centre. Same rows=5 max as the MID-5 forms, but the only
+  // shapes that render the DEF-5 split near the halfway line — so they exercise (e) on a band the others miss.
+  "5-3-2": { def: 5, mid: 3, fwd: 2, lines: { DEF: [3, 2], MID: [3], FWD: [2] } },
+  "5-4-1": { def: 5, mid: 4, fwd: 1, lines: { DEF: [3, 2], MID: [4], FWD: [1] } },
 };
 const SHOT_FORMATIONS = ["4-2-3-1", "4-4-2", "3-4-3"]; // saved to /tmp for the mockup review
 
@@ -288,13 +362,24 @@ const PROBE = () => {
     const rateEl = t.querySelector(".gd-tok-rate");
     const statusEl = t.querySelector(".gd-tok-status");
     const ownEl = t.querySelector(".gd-tok-own");
-    const badges = [rateEl, statusEl, ownEl].filter(Boolean).map(rectOf);
+    // The fpts PILL itself is in the bbox, not just the (height-pinned) .gd-tok-foot box around it. The pill
+    // is the element whose 13px-pinned points number historically overflowed the foot and bled past the
+    // halfway line. Because .gd-tok-foot has a fixed height and the token is a flex COLUMN sized to its
+    // items' main sizes, a re-pinned pill grows BELOW the foot without growing the .gd-tok rect — so unless
+    // its own rect is unioned in, the centerline / vertical-bounds / horizontal-clip checks would miss
+    // exactly the regression class this guard exists to catch (a future revert of the b{font-size:inherit}).
+    const fptsEl = t.querySelector(".gd-fpts");
+    const parts = [rateEl, statusEl, ownEl, fptsEl].filter(Boolean).map(rectOf);
+    const phalf = t.closest(".gd-phalf");
     return {
       name: (t.querySelector(".gd-tok-name").textContent || "").trim(),
+      // which half this token belongs to — the centerline assertion needs it (away renders on TOP of the
+      // vertical pitch, home on the BOTTOM; neither may cross the halfway line into the other's slice).
+      half: phalf && phalf.classList.contains("is-away") ? "away" : "home",
       tok: tokRect,
       rate: rateEl ? rectOf(rateEl) : null,
       status: statusEl ? rectOf(statusEl) : null,
-      bbox: union([tokRect, ...badges]),
+      bbox: union([tokRect, ...parts]),
     };
   });
   // line structure, in DOM order (GK, DEF, MID, FWD) per half
@@ -381,6 +466,34 @@ function check(label, narrow, formationName, data) {
         `token "${t.name}" outside pitch vertically (${t.bbox.t}..${t.bbox.b} vs ${pitch.t}..${pitch.b})`,
       );
       break;
+    }
+  }
+
+  // (e) NO CROSS-CENTERLINE — the MD2 bleed bug, encoded directly. On the vertical mobile pitch the away
+  // half renders on TOP (own goal at the screen top, attack toward the centre) and the home half on the
+  // BOTTOM; the halfway line is the pitch's vertical midpoint. A token whose LAYOUT box (getBoundingClientRect,
+  // which ignores any overflow:hidden clip) extends past that midline into the other team's slice is exactly
+  // the overlap Sergio saw — two attacking bands colliding in the centre. So: no away token's box may reach
+  // BELOW the midpoint, and no home token's may reach ABOVE it. Phone-only (desktop splits left/right, not
+  // top/bottom, and is fixed-height). This goes RED on the shipped CSS with the dense fixture and is the
+  // assertion the fix must turn green by SIZING (smaller tokens that fit), not by clipping.
+  if (narrow) {
+    const mid = (pitch.t + pitch.b) / 2;
+    for (const t of tokens) {
+      if (t.half === "away" && t.bbox.b > mid + 1) {
+        fails.push(
+          `away-half token "${t.name}" crosses the halfway line (box bottom ${t.bbox.b} > midpoint ${Math.round(mid)})`,
+        );
+        break;
+      }
+    }
+    for (const t of tokens) {
+      if (t.half === "home" && t.bbox.t < mid - 1) {
+        fails.push(
+          `home-half token "${t.name}" crosses the halfway line (box top ${t.bbox.t} < midpoint ${Math.round(mid)})`,
+        );
+        break;
+      }
     }
   }
 
@@ -487,7 +600,8 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    `✓ pitch layout guard: all ${passed} render checks passed (360 & 390 @ 667 + 844, 1280; 6 formations).`,
+    `✓ pitch layout guard: all ${passed} render checks passed (360 & 390 @ 667 + 844, 1280; 8 formations, ` +
+      `real worst-case dense XI; no token crosses the halfway line).`,
   );
   process.exit(0);
 }
