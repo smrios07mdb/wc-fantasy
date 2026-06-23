@@ -1855,9 +1855,16 @@ form-driven CRUD through `POST /api/pool/pick` then `router.refresh()`). The P40
   which has no clock). The UI renders exactly what that gated read returns and never bypasses it; the
   leaderboard's separate all-league read is safe because it aggregates only completed matches
   (completed ⊆ kicked-off ⊆ revealable — no individual unrevealed pick is exposed, only counts).
-- **Nav entry deferred (parallel staging).** `/pool` shipped reachable by direct URL only; "pool" is not
-  yet a `NavId` (adding it touches the shared `crossNav.ts` + `AppShell.tsx` glyph map). The layout
-  passes a non-member `active` so nothing falsely highlights — a one-line cleanup once the nav entry lands.
+- **Nav wired (`feat/pool-nav`, P17 cross-nav pattern).** "pool" is now a real `NavId` — added to the
+  shared `crossNav.ts` (union + `NAV_ITEMS`) + the `AppShell.tsx` glyph map, with the Pool entry **placed
+  after Waivers** (the gameplay cluster, ahead of the `/scoring` reference + `/settings` config). The
+  layout's deferral cast is dropped (`active="pool"`), so the tab highlights on `/pool`.
+- **The exhaustive `Record<NavId, ReactNode>` glyph map makes nav wiring tsc-atomic.** Because `AppShell`'s
+  `NavIcon` keys its glyph map by `NavId` exhaustively, adding a member to the `NavId` union **forces** a
+  matching glyph or `tsc --noEmit` fails — a missing glyph is a typecheck error, not a silent runtime gap.
+  So the union edit and the glyph edit can't drift apart; the type system enforces the wiring. (The
+  presentational tests are belt-and-suspenders: the suite has no JSX transform, so they assert the glyph
+  source contract; compile correctness is delegated to `tsc` + `next build`.)
 
 ### P43 — `/pool` live updates (clock-reveal + leaderboard poll; merged to main)
 
@@ -2940,3 +2947,18 @@ subagent for audit work. Auto-invocation never drives a side-effectful action.
 4. **No-cross-halfway-line assertion** — each `.gd-phalf` must clip (`overflow:hidden`) and the last band's bottom edge must sit above the halfway line at `≤390 px` viewport width.
 
 **iPhone on the densest match is the gate.** A pitch that passes on desktop but is not verified on an iPhone with a dense real fixture is NOT done. The two reverts (`ff8c3d2`, `246fc7c`) that preceded the final landing (`33e71e5`, `d7efad8`) exist because the earlier versions were merged before this gate was applied. See PROJECT.md (2026-06-22 entry).
+
+## Draft Realtime resilience (Prompts 31–32 + hotfix `55faff2`) — self-heal layer; native-API receiver rule
+
+### Decisions & learnings
+
+- **Injectable native browser APIs (timers, DOM event methods, fetch) must be invoked with their `window`/`document` receiver — pass `window.*`-bound lambda wrappers, never bare refs.** Storing `globalThis.setInterval` as a plain object property strips the receiver; browsers brand-check that the receiver is `Window` before executing native timer calls and throw `"TypeError: Illegal invocation"`. Node/jsdom skip the check, so unit tests pass (invisible gap). The invariant: any `timerFns`-style abstraction must use `(fn, ms) => window.setInterval(fn, ms)` (lambda captures `window` at call time, preserves the receiver) and never `setInterval: globalThis.setInterval` (bare ref loses receiver at first invocation as a method). Structural regression guards (source-text assertions that the lambda form is present) are added alongside tests that exercise this path, because the runtime proof is a browser load — not the test suite.
+
+- **Draft board self-heals via resume-refetch + 20s polling backstop; server stays authoritative; countdown source (`pick_deadline_at`) unchanged.** The three event listeners (`visibilitychange`, `online`, `pageshow`) all call the same `handleResume` — a single authoritative fetch of `GET /api/draft/state` followed by a conditional resubscribe if the channel dropped. The `startPolling` backstop ticks every 20s regardless of Realtime health, skips when `document.hidden`, and self-cancels when it sees `status === "complete"`. Both paths feed the same `applyDraftRowChange` patch so the board is a pure function of the authoritative row. **Known transient:** if `handleResume` fires before `TOKEN_REFRESHED`, the re-subscription momentarily uses a stale token; `TOKEN_REFRESHED` fires within seconds and corrects it; the 20s polling backstop covers the gap without user-visible staleness.
+
+- **Known minor gap (deferred, harmless): polling is not `active`-status-gated.** The §5 spec asked the backstop to run only during `active` status; the current `startPolling` ticks during `pending`/`paused` too. The tick is idempotent (refetch + patch is safe at any status; the self-cancel fires on `complete`) and the poll interval is 20s, so the extra ticks are negligible. Deferred — not blocking go-live.
+
+### Operator gate (required before the draft — cannot be proven in-session)
+Two live verifications are mandatory:
+1. **Phone background→foreground mid-draft:** put the phone to sleep or switch apps, wait >20s, return to `/draft` — the board should self-heal (current pick, deadline) within one polling interval without a manual reload.
+2. **>1h draft (token-expiry case):** after an hour of drafting, confirm in the Supabase Auth dashboard logs that `TOKEN_REFRESHED` fired and that the `setAuth` call re-authorized the Realtime socket — the board should keep streaming without a reload. The `onAuthStateChange` → `resubscribe` → `subscribeDraft` → `setAuth` chain is wired (H2 confirmed — no new code was needed), but live confirmation is the only proof.

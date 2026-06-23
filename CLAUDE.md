@@ -37,3 +37,20 @@ Determinism matched to stakes:
 - **auditor** (`.claude/agents/auditor.md`, read-only: Read/Grep/Glob) — scoped read-only audit lane; reports P0–P3 findings with `path:line`.
 - **guard-git** (`.claude/hooks/guard-git.sh`, `PreToolUse(Bash)`) — deterministically blocks force-pushes (`--force`, `--force-with-lease`, `-f`, `+refspec`). Defense-in-depth, not the only guard.
 - **Stop hook** (`.claude/settings.json`) — runs a background typecheck on stop; informational only (`|| true`), never blocking.
+
+## Teardown is part of merge
+
+After merging a feature branch, the handoff is not complete until the worktree and branch are cleaned up. Steps:
+
+1. `git worktree list` — read the path→branch mapping from the output (never infer from directory names; worktree dirs can be misnamed vs the branch they hold).
+2. `git worktree remove <real path from git worktree list>` for the merged branch's worktree.
+3. `git branch -d <branch>` — deletes the local branch (use `-D` only if the branch was intentionally abandoned, not merged forward).
+4. `git worktree prune` — cleans up stale metadata.
+
+A merged branch must never linger as a ghost. If a worktree removal fails because of uncommitted changes, investigate before discarding — it may be in-progress work.
+
+## Status is derived, not narrated
+
+At thread start, diff BACKLOG.md / PROJECT.md status claims against `git branch --merged origin/main` + `git log --oneline origin/main`. Flag any entry still marked "merge HELD" or "TODO" whose commits are already an ancestor of `origin/main`. Run `git merge-base --is-ancestor <sha> origin/main` to verify each SHA before updating the doc.
+
+If the `/braindocs` skill exists under `.claude/`, add this check as the first step there. Otherwise treat it as a mandatory manual start-of-thread check: read the MEMORY.md index, cross-reference against git, and surface stale HELD labels before doing any feature work.

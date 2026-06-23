@@ -57,9 +57,9 @@ set of types.** For a small team that is the single biggest reliability win avai
   same 2026-06-13 export's deletions were rejected as omissions (`--kit-outline`, the P46 PlayerAvatar/
   `.flag-emoji` block, the P40 overflow backstop — all live dependencies); `playerCardTokens.test.ts`
   guards both the `.pc-*` presence and those survivors. Dormant until a screen renders it.
-  The authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield` + `/waivers` + `/scoring` +
-  `/settings`) are wrapped by the **App Shell** (`app/shell/AppShell.tsx`, which absorbed the interim
-  CrossNav). The shell has a **responsive nav** (Prompt 40):
+  The authenticated screens (hub `/` + `/draft` + `/lineup` + `/vsfield` + `/waivers` + `/pool` +
+  `/scoring` + `/settings`) are wrapped by the **App Shell** (`app/shell/AppShell.tsx`, which absorbed the
+  interim CrossNav). The shell has a **responsive nav** (Prompt 40):
   - **≥ 640 px (tablet/desktop):** contained top strip. `.sh-topnav-scroll` (`overflow-x:auto;
     min-width:0; flex:1`) holds the 8 nav items so they scroll within their own box and never widen
     the document. `min-width:0` on `.sh-app` / `.sh-topbar` lets flex ancestors shrink below intrinsic
@@ -604,6 +604,7 @@ authoritative in Postgres and **broadcast on change**.
   controller exposes state + `submitPick` / `tickDraft` for them to call. **Auth + the identity gate
   landed in Prompt 06's hand-off prompt (07):** `POST /api/draft/pick` now resolves the session manager
   and rejects 401/403 BEFORE calling the unchanged `submitPick` (see §6).
+- **The `/draft` client carries a self-heal layer (Prompts 32 + hotfix):** `visibilitychange`/`online`/`pageshow` resume + a ~20s polling backstop, both feeding the SAME authoritative `GET /api/draft/state` read via `applyDraftRowChange`; render stays a pure fn of row state. `setAuth` re-authorizes the socket on every resubscribe (both the auth-state path and the resume path call the same `resubscribe(token)` → `subscribeDraft` → `client.realtime.setAuth(token)` before `.subscribe()`). See DECISIONS → "Draft Realtime resilience" for the operator gate.
 - **⚠️ AMENDMENT (Prompt 44 — positional caps lifted):** draft roster legality is now **total-based**,
   not per-position — `isPositionLegal` / `isSquadComplete` gate purely on a new **`squadTotal(counts)`**
   helper vs the 15-man `SQUAD_SIZE` (the `2/5/5/3` per-position ceilings above are retired). The draft is
@@ -680,9 +681,10 @@ Minimal, for a private league of friends.
     **form-driven CRUD**: every pick is a `POST /api/pool/pick` round-trip (the Prompt-40 gated route)
     followed by `router.refresh()` — **NO Realtime, NO polling** (the Realtime subscription is **P43**).
     A SELF-scoped surface (the viewer's own picks), so no 403-not-your-manager at the page; the per-pick
-    write gate lives in the route. **NAV ENTRY DEFERRED:** unlike the other AppShell screens, `/pool` is
-    **not** in the §1 nav list yet — it's reachable by direct URL only; "pool" isn't a `NavId`, so the
-    layout passes a non-member `active` (nothing falsely highlights) until the post-merge nav-wiring step.
+    write gate lives in the route. **NAV WIRED** (`feat/pool-nav`, P17 cross-nav pattern): "pool" is now a
+    real `NavId` in the shared `crossNav` strip (union + `NAV_ITEMS` + the `AppShell` glyph map), **placed
+    after `/waivers`** in the §1 nav list (gameplay cluster, ahead of `/scoring` + `/settings`); the
+    layout's deferral cast is dropped, so the Pool tab highlights when `/pool` is active.
 
 ---
 
