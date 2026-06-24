@@ -7,12 +7,12 @@
  * the client shell, the presentational components, AND the refetch client (`snapshotClient`) all depend on
  * this one module — nothing in @app/vsfield changes.
  *
- * Bench players never score in fantasy (only starters do), so — unlike `StarterView` — a bench entry carries
- * NO live state / points / lock-on-play: just identity (name + nation kit) + role, surfaced for scouting at
- * the bottom of the head-to-head.
+ * Bench points (T14): per-player `score_player_match.points` composed SERVER-SIDE from the SAME period-scoped
+ * read the starters use (path a — no new table/RLS/migration). State is derived from the player's match status
+ * via their `player.teamId` join. A bench player with no score row → "yet-to-play" / 0 pts.
  */
 import type { Position } from "@app/shared";
-import type { VsFieldView } from "@app/vsfield";
+import type { StarterState, VsFieldView } from "@app/vsfield";
 import type { SelectablePeriod } from "@/src/period/selectablePeriods";
 
 /** One bench player (a current-period `lineup_slot` with `is_starter = false`) — display-only. */
@@ -23,6 +23,13 @@ export interface BenchPlayerView {
   /** Nation from the `fifa_team.name` join (NEVER `player.country` — P34); null if no team link. */
   nation: string | null;
   role: Position;
+  /** Match state derived from the player's team match status (T14). */
+  state: StarterState;
+  /**
+   * Points from `score_player_match` for the displayed period (T14, path a — server-only). Defaults to 0
+   * when no row exists (yet-to-play or player genuinely scored 0).
+   */
+  points: number;
 }
 
 /** A single manager's bench (substitutes) for the current period. */

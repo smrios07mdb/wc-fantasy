@@ -658,6 +658,14 @@
   background: var(--surface-2);
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
+  color: var(--text-primary);
+  text-align: left;
+}
+button.vf-bench-tok {
+  cursor: pointer;
+}
+button.vf-bench-tok:hover {
+  background: var(--surface-3);
 }
 /* GOTCHA (handoff README): the kit is a MULTI-LAYER background — never set its background-size to
    "cover" (the layers collapse to a solid block). */
@@ -688,6 +696,72 @@
 }
 .vf-bench-empty {
   margin: 2px 0 0;
+}
+/* bench score chip (T14) — mirrors the starter .sl-jersey-score treatment but scoped outside .da-pitch */
+.vf-bench-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  flex: none;
+}
+.vf-bench-score b {
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+.vf-bench-score-pts {
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.62;
+}
+.vf-bench-score.s-live,
+.vf-bench-score.s-played {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(7, 11, 17, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+[data-theme="light"] .vf-bench-score.s-live,
+[data-theme="light"] .vf-bench-score.s-played {
+  color: rgba(14, 23, 38, 1);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+.vf-bench-score.is-zero {
+  opacity: 0.78;
+}
+.vf-bench-score.is-zero b {
+  opacity: 0.55;
+}
+.vf-bench-score.s-ytp {
+  color: var(--text-tertiary);
+  background: rgba(7, 11, 17, 0.42);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+}
+[data-theme="light"] .vf-bench-score.s-ytp {
+  color: rgba(107, 117, 136, 1);
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(0, 0, 0, 0.16);
+}
+.vf-bench-score-dash {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.7;
+}
+.vf-bench-score-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  align-self: center;
+  background: var(--live);
+  animation: livepulse 1.4s var(--ease-standard) infinite;
 }
 .ma-benchwrap {
   margin-top: 2px;

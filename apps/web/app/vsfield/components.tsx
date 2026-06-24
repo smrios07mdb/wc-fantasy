@@ -463,14 +463,62 @@ export function XIPanel({
 /* ─────────────────────────── bench (substitutes under the H2H XI) ─────────────────────────── */
 
 /**
- * One bench player as a compact off-pitch token: a small flag-kit jersey swatch (the SAME `kitOf` kit
- * vocabulary the XI tokens use) + name + a `Pos` position badge (both existing surface components). Bench
- * players don't score in fantasy, so this is INFO-ONLY — no points chip, no live state, not tappable
- * (vsfield is read-only). It sits on a plain surface (not the pitch turf) so it reads as "on the bench".
+ * Compact points chip for a bench player token (T14) — mirrors the starter `sl-jersey-score` chip
+ * treatment but scoped under `.vf-bench-score` (outside `.da-pitch`, so the pitch-scoped classes can't
+ * be reused directly). Three states match the starter pill exactly: playing = dark + live dot + N pts,
+ * played = dark + N pts (no dot), yet-to-play = dashed + "– to play".
  */
-function BenchToken({ player }: { player: BenchPlayerView }) {
+function BenchScoreChip({
+  state,
+  points,
+  dimLive,
+}: {
+  state: BenchPlayerView["state"];
+  points: number;
+  dimLive: boolean;
+}) {
+  if (state === "yet-to-play") {
+    return (
+      <span className="vf-bench-score s-ytp">
+        <span className="vf-bench-score-dash" aria-hidden="true">
+          –
+        </span>
+        <span className="vf-bench-score-pts">to play</span>
+      </span>
+    );
+  }
+  const chipCls =
+    "vf-bench-score " +
+    (state === "playing" ? "s-live" : "s-played") +
+    (points === 0 ? " is-zero" : "");
   return (
-    <div className="vf-bench-tok" title={player.name}>
+    <span className={chipCls}>
+      {state === "playing" && !dimLive && (
+        <span className="vf-bench-score-dot" aria-hidden="true" />
+      )}
+      <b>{points}</b>
+      <span className="vf-bench-score-pts">pts</span>
+    </span>
+  );
+}
+
+/**
+ * One bench player as a compact off-pitch token: jersey swatch + name + position badge + points chip
+ * (T14). Tappable when the player has score data (played or playing) — opens `PlayerScoreSheet` via
+ * `onOpenPlayer`. Yet-to-play players are inert (vsfield is read-only).
+ */
+function BenchToken({
+  player,
+  onOpenPlayer,
+  dimLive = false,
+}: {
+  player: BenchPlayerView;
+  onOpenPlayer?: (playerId: string) => void;
+  dimLive?: boolean;
+}) {
+  const tappable = player.state !== "yet-to-play" && onOpenPlayer != null;
+  const inner = (
+    <>
       <span
         className="vf-bench-jersey"
         style={{ background: kitOf(player.nation) }}
@@ -480,6 +528,24 @@ function BenchToken({ player }: { player: BenchPlayerView }) {
         <span className="vf-bench-name">{player.name}</span>
         <Pos p={player.role} />
       </span>
+      <BenchScoreChip state={player.state} points={player.points} dimLive={dimLive} />
+    </>
+  );
+  if (tappable) {
+    return (
+      <button
+        type="button"
+        className="vf-bench-tok"
+        onClick={() => onOpenPlayer(player.playerId)}
+        title={`${player.name} — tap for score breakdown`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div className="vf-bench-tok" title={player.name}>
+      {inner}
     </div>
   );
 }
@@ -492,10 +558,14 @@ export function BenchStrip({
   label,
   players,
   isMe,
+  onOpenPlayer,
+  dimLive = false,
 }: {
   label: string;
   players: BenchPlayerView[];
   isMe?: boolean;
+  onOpenPlayer?: (playerId: string) => void;
+  dimLive?: boolean;
 }) {
   return (
     <div className={"vf-bench" + (isMe ? " is-me" : "")}>
@@ -508,7 +578,7 @@ export function BenchStrip({
       ) : (
         <div className="vf-bench-list">
           {players.map((p) => (
-            <BenchToken key={p.playerId} player={p} />
+            <BenchToken key={p.playerId} player={p} onOpenPlayer={onOpenPlayer} dimLive={dimLive} />
           ))}
         </div>
       )}
@@ -1035,6 +1105,8 @@ export function MaH2H({
           label={side === "me" ? "You" : opp.displayName}
           isMe={side === "me"}
           players={benchFor(benches, shown.managerId)}
+          onOpenPlayer={onOpenPlayer}
+          dimLive={dimLive}
         />
       </div>
     </div>

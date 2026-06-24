@@ -254,10 +254,18 @@ export function VsFieldClient({
                     {/* Benches under the H2H — your subs (left) and the opponent's (right), mirroring
                         the You-left / Opp-right XI columns above. */}
                     <div className="da-benches">
-                      <BenchStrip label="You" isMe players={benchFor(view.benches, me.managerId)} />
+                      <BenchStrip
+                        label="You"
+                        isMe
+                        players={benchFor(view.benches, me.managerId)}
+                        onOpenPlayer={setBoxPlayer}
+                        dimLive={dimLive}
+                      />
                       <BenchStrip
                         label={opp.displayName}
                         players={benchFor(view.benches, opp.managerId)}
+                        onOpenPlayer={setBoxPlayer}
+                        dimLive={dimLive}
                       />
                     </div>
                   </>

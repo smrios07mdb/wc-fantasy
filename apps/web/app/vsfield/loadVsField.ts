@@ -18,6 +18,7 @@ import {
   type PeriodForSelect,
 } from "@/src/period/selectablePeriods";
 import type { BenchPlayerView, ManagerBench, VsFieldViewWithBenches } from "@/src/vsfield/benches";
+import type { StarterState } from "@app/vsfield";
 
 /** Max wall-clock window to consider a period still live after its last scheduled kickoff. */
 const MATCH_DURATION_MS = 120 * 60 * 1000; // covers regulation + extra time
@@ -57,7 +58,12 @@ export interface BenchSlotRow {
   isStarter: boolean;
   playerId: string;
   role: Position;
-  player: { displayName: string; team: { name: string } | null };
+  player: {
+    displayName: string;
+    /** `player.teamId` — used to look up the player's match status for T14 bench state derivation. */
+    teamId: string | null;
+    team: { name: string } | null;
+  };
 }
 
 /**
@@ -66,8 +72,17 @@ export interface BenchSlotRow {
  * partition/sort is unit-tested without a live DB. STARTER rows are skipped here: they flow into
  * `buildVsField` exactly as before, so benches never reach the @app/vsfield engine — they are a
  * display-only sibling of the snapshot.
+ *
+ * T14: `pointsForPlayer` and `matchStateByTeam` are threaded in from the loader (the SAME period-scoped
+ * `score_player_match` read the starters use — no new query). A bench player with no score row gets 0 pts
+ * + "yet-to-play". State derives from the player's team's match status: in_progress → "playing",
+ * completed → "played", anything else → "yet-to-play".
  */
-export function groupBenchesByManager(rows: BenchSlotRow[]): ManagerBench[] {
+export function groupBenchesByManager(
+  rows: BenchSlotRow[],
+  pointsForPlayer: (playerId: string) => number = () => 0,
+  matchStateByTeam: Map<string, StarterState> = new Map(),
+): ManagerBench[] {
   const byManager = new Map<string, BenchPlayerView[]>();
   for (const s of rows) {
     if (s.isStarter) continue;
@@ -76,11 +91,15 @@ export function groupBenchesByManager(rows: BenchSlotRow[]): ManagerBench[] {
       list = [];
       byManager.set(s.managerId, list);
     }
+    const state: StarterState =
+      (s.player.teamId ? matchStateByTeam.get(s.player.teamId) : undefined) ?? "yet-to-play";
     list.push({
       playerId: s.playerId,
       name: s.player.displayName,
       nation: s.player.team?.name ?? null,
       role: s.role,
+      state,
+      points: pointsForPlayer(s.playerId),
     });
   }
   return [...byManager.entries()].map(([managerId, players]) => ({
@@ -330,9 +349,23 @@ export async function loadVsField(
     now,
   };
 
+  // T14: bench state map — derived from the SAME matchRows already in scope (no new read). Both team sides
+  // of each match map to the same StarterState so a player's teamId resolves directly.
+  const matchStateByTeam = new Map<string, StarterState>();
+  for (const m of matchRows) {
+    const state: StarterState =
+      m.status === "in_progress" ? "playing" : m.status === "completed" ? "played" : "yet-to-play";
+    if (m.homeTeamId) matchStateByTeam.set(m.homeTeamId, state);
+    if (m.awayTeamId) matchStateByTeam.set(m.awayTeamId, state);
+  }
+
   // benches: the display-only sibling composed from the bench rows in the SAME lineup read. buildVsField
   // (the @app/vsfield engine) is untouched — its input/output never see the bench.
-  const benches: ManagerBench[] = groupBenchesByManager(lineupRows);
+  const benches: ManagerBench[] = groupBenchesByManager(
+    lineupRows,
+    pointsForPlayer,
+    matchStateByTeam,
+  );
 
   return { ...buildVsField(input), benches, selectablePeriods, isLivePeriod };
 }
