@@ -40,7 +40,12 @@ function HomeSvg({ name }: { name: string }) {
   );
 }
 
-function FlagBadge({ country }: { country: string | null | undefined }) {
+/**
+ * The country flag badge — emoji (or inline SVG for home nations), or null for unknown/missing country.
+ * Exported so the lineup screen can overlay the SAME badge on its flag-kit jersey chip (the disc and the
+ * jersey share one flag-resolution path); the disc (`PlayerAvatar`) is unchanged.
+ */
+export function FlagBadge({ country }: { country: string | null | undefined }) {
   if (!country) return null;
   if (isHomeNation(country)) {
     return (

@@ -33,7 +33,7 @@ import type {
   PeriodLineup,
   StarterStatus,
 } from "../../src/lineup/types";
-import { PlayerAvatar } from "../../components/PlayerAvatar";
+import { FlagBadge } from "../../components/PlayerAvatar";
 import { Flag } from "../draft/Flag";
 import { toIso2 } from "../../src/draft/flag";
 
@@ -242,18 +242,50 @@ export function ScorePill({
   );
 }
 
+/**
+ * The flag-kit jersey chip — replaces the position-color `PlayerAvatar` disc on BOTH the pitch tokens
+ * and the bench (T13). The clipped `.sl-kit` silhouette (geometry promoted from t13's `.sl-bench-kit`)
+ * sits on a `var(--surface-4)` base; the resolved per-nation kit gradient (`kitBg`) is applied inline,
+ * per the roster `.rt-kit` convention (NEVER `background-size: cover` — the multi-layer kits collapse).
+ * The flag badge is a SIBLING of the clipped silhouette (a child would be cut off by the clip-path),
+ * positioned by the relative `.sl-kit-wrap` anchor. Purely presentational: `kitBg` is resolved upstream
+ * in `SetLineupClient` via the shared `kitOf`, so this never imports the kit map.
+ */
+function PlayerKit({ player, kitBg }: { player: LineupPlayer; kitBg?: string }) {
+  return (
+    <span className="sl-kit-wrap" title={player.displayName} aria-label={player.displayName}>
+      <span
+        className="sl-kit"
+        aria-hidden="true"
+        style={kitBg ? { background: kitBg } : undefined}
+      />
+      <FlagBadge country={player.country} />
+    </span>
+  );
+}
+
 export interface TokenProps {
   slot: PitchSlot;
   selected: boolean;
   eligible: boolean;
   /** League IANA tz — formats the per-player kickoff/lock deadline. */
   timezone: string;
+  /** The resolved flag-kit gradient for this player's nation (from `SetLineupClient`'s `kitOf` map). */
+  kitBg?: string;
   onSelect: (playerId: string) => void;
   /** Open the score breakdown modal for this player. */
   onScore: (playerId: string) => void;
 }
 
-export function PitchToken({ slot, selected, eligible, timezone, onSelect, onScore }: TokenProps) {
+export function PitchToken({
+  slot,
+  selected,
+  eligible,
+  timezone,
+  kitBg,
+  onSelect,
+  onScore,
+}: TokenProps) {
   const { player, movable, slotKind, pointsAtStake } = slot;
   // Availability is meaningful ONLY while the player is still movable (pre-kickoff). Once he locks by
   // play, the lock state + score line take over and the badge is dropped (design visibility gate).
@@ -297,17 +329,10 @@ export function PitchToken({ slot, selected, eligible, timezone, onSelect, onSco
       title={title}
     >
       <span className="sl-tok-top">
-        {/* Anchor wraps the avatar so the availability medallion pins to ITS top-right + the state glow
-            follows the avatar silhouette (the design's kit glow, adapted to the circular avatar). */}
+        {/* Anchor wraps the jersey kit so the availability medallion pins to ITS top-right + the real-XI
+            state glow (`.sl-tok.sl-av-* .sl-av-anchor` drop-shadow) follows the kit silhouette. */}
         <span className="sl-av-anchor">
-          <PlayerAvatar
-            displayName={player.displayName}
-            firstName={player.firstName}
-            lastName={player.lastName}
-            country={player.country}
-            position={player.position}
-            size="sm"
-          />
+          <PlayerKit player={player} kitBg={kitBg} />
           {avail && <AvailabilityMedallion status={avail} />}
         </span>
         {/* T11 R2 (Fix A-2, corrected): a locked-on-play tile shows its clickable points pill — the
@@ -338,11 +363,21 @@ export interface PitchProps {
   selected: string | null;
   eligibleIds: ReadonlySet<string>;
   timezone: string;
+  /** playerId → resolved flag-kit gradient (resolved once in `SetLineupClient` via the shared `kitOf`). */
+  kitByPlayer: Record<string, string>;
   onSelect: (playerId: string) => void;
   onScore: (playerId: string) => void;
 }
 
-export function Pitch({ view, selected, eligibleIds, timezone, onSelect, onScore }: PitchProps) {
+export function Pitch({
+  view,
+  selected,
+  eligibleIds,
+  timezone,
+  kitByPlayer,
+  onSelect,
+  onScore,
+}: PitchProps) {
   return (
     <div className="sl-pitch">
       <div className="sl-pitch-lines" aria-hidden="true">
@@ -363,6 +398,7 @@ export function Pitch({ view, selected, eligibleIds, timezone, onSelect, onScore
                 selected={selected === slot.player.id}
                 eligible={eligibleIds.has(slot.player.id)}
                 timezone={timezone}
+                kitBg={kitByPlayer[slot.player.id]}
                 onSelect={onSelect}
                 onScore={onScore}
               />
@@ -374,7 +410,15 @@ export function Pitch({ view, selected, eligibleIds, timezone, onSelect, onScore
   );
 }
 
-export function BenchRow({ slot, selected, eligible, timezone, onSelect, onScore }: TokenProps) {
+export function BenchRow({
+  slot,
+  selected,
+  eligible,
+  timezone,
+  kitBg,
+  onSelect,
+  onScore,
+}: TokenProps) {
   const { player, movable, slotKind, pointsAtStake } = slot;
   const state = selected ? "selected" : eligible ? "eligible" : "idle";
   // Availability only while movable (pre-kickoff) — the row state class drives the left accent stripe.
@@ -388,14 +432,7 @@ export function BenchRow({ slot, selected, eligible, timezone, onSelect, onScore
       draggable={false}
       onClick={handleClick}
     >
-      <PlayerAvatar
-        displayName={player.displayName}
-        firstName={player.firstName}
-        lastName={player.lastName}
-        country={player.country}
-        position={player.position}
-        size="sm"
-      />
+      <PlayerKit player={player} kitBg={kitBg} />
       <span className="sl-bench-main">
         <span className="sl-bench-line1">
           <b className={`sl-bench-name${slotKind === "voided" ? " is-voided" : ""}`}>
@@ -428,11 +465,21 @@ export interface BenchProps {
   selected: string | null;
   eligibleIds: ReadonlySet<string>;
   timezone: string;
+  /** playerId → resolved flag-kit gradient (resolved once in `SetLineupClient` via the shared `kitOf`). */
+  kitByPlayer: Record<string, string>;
   onSelect: (playerId: string) => void;
   onScore: (playerId: string) => void;
 }
 
-export function Bench({ bench, selected, eligibleIds, timezone, onSelect, onScore }: BenchProps) {
+export function Bench({
+  bench,
+  selected,
+  eligibleIds,
+  timezone,
+  kitByPlayer,
+  onSelect,
+  onScore,
+}: BenchProps) {
   return (
     <div className="sl-bench card">
       <div className="sl-bench-head between">
@@ -447,6 +494,7 @@ export function Bench({ bench, selected, eligibleIds, timezone, onSelect, onScor
             selected={selected === slot.player.id}
             eligible={eligibleIds.has(slot.player.id)}
             timezone={timezone}
+            kitBg={kitByPlayer[slot.player.id]}
             onSelect={onSelect}
             onScore={onScore}
           />

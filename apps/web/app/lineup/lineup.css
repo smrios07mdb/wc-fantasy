@@ -510,6 +510,40 @@
   filter: drop-shadow(0 0 1px var(--sl-av))
     drop-shadow(0 0 5px color-mix(in srgb, var(--sl-av) 70%, transparent));
 }
+
+/* ── shared flag-kit jersey chip (T13) ─────────────────────────────────────
+   Used by BOTH starter tokens (inside .sl-av-anchor) and the bench, replacing the position-color
+   PlayerAvatar disc. Geometry promoted from t13's `.sl-bench-kit`: a jersey silhouette (clip-path)
+   outlined against the turf via the GLOBAL `--kit-outline` token, over a `var(--surface-4)` base. The
+   resolved per-nation kit gradient is applied INLINE (style.background) per the roster `.rt-kit`
+   convention — we never set the kit's background-size to cover (the multi-layer kit gradients collapse).
+   The flag badge is a SIBLING of the clipped silhouette (a child would be cut off by the clip-path),
+   positioned by the relative `.sl-kit-wrap`. `.sl-tok { overflow: visible }` lets the outline + flag
+   protrude (same fix the disc relied on). */
+.sl-kit-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.sl-kit {
+  flex: none;
+  width: 26px;
+  height: 30px;
+  background: var(--surface-4);
+  clip-path: polygon(27% 0, 73% 0, 100% 15%, 84% 33%, 84% 100%, 16% 100%, 16% 33%, 0 15%);
+  filter: drop-shadow(1.5px 0 0 var(--kit-outline)) drop-shadow(-1.5px 0 0 var(--kit-outline))
+    drop-shadow(0 1.5px 0 var(--kit-outline)) drop-shadow(0 -1.5px 0 var(--kit-outline))
+    drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+}
+/* The flag badge re-homed onto the kit (mirrors ds.css `.avatar-sm .pa-flag` sizing; position +
+   bottom/right come from the global `.pa-flag` rule). */
+.sl-kit-wrap .pa-flag {
+  font-size: 9px;
+}
+.sl-kit-wrap .pa-flag-svg {
+  width: 10px;
+  height: 6px;
+}
 /* Pitch: corner medallion pinned to the avatar's top-right (design: 19px circle, dark/white glyph). */
 .sl-av-medal {
   position: absolute;
@@ -893,5 +927,10 @@
   }
   .sl-tok-name {
     font-size: 11px;
+  }
+  /* Shrink the kit chip in step with the narrowest token so a 5-wide lane still fits one row. */
+  .sl-kit {
+    width: 22px;
+    height: 26px;
   }
 }

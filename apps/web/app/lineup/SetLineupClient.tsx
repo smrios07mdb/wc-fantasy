@@ -36,6 +36,9 @@ import {
   SaveBar,
 } from "./components";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
+// Flag-kit jersey resolver — imported from the NEUTRAL shared home (apps/web/src/kit/), NOT from
+// app/vsfield/. fifa_team.name (LineupPlayer.country) → CSS kit gradient; threaded to the tokens below.
+import { kitOf } from "@/src/kit/kitOf";
 
 /** Stable empty set for periods with no forfeit confirms — keeps memo deps referentially clean. */
 const EMPTY_FORFEITS: ReadonlySet<string> = new Set();
@@ -104,6 +107,15 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
     () => buildPitch(renderSquad, { ...period, starterIds }),
     [renderSquad, period, starterIds],
   );
+
+  // Jersey kit per rendered player — resolved once HERE (the single render path) via the shared `kitOf`
+  // (fifa_team.name → flag-kit CSS gradient), then threaded to the pitch + bench tokens. Presentation
+  // only; `PlayerKit` stays a dumb chip. Covers since-dropped fielded players too (in `renderSquad`).
+  const kitByPlayer = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const pl of renderSquad) map[pl.id] = kitOf(pl.country);
+    return map;
+  }, [renderSquad]);
 
   // Re-sample the clock on each edit / period switch so the window check stays fresh (presentation only;
   // the server clock is authoritative).
@@ -384,6 +396,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
             selected={selected}
             eligibleIds={eligibleIds}
             timezone={timezone}
+            kitByPlayer={kitByPlayer}
             onSelect={onSelect}
             onScore={onScore}
           />
@@ -412,6 +425,7 @@ export function SetLineupClient({ initialState }: { initialState: SetLineupState
             selected={selected}
             eligibleIds={eligibleIds}
             timezone={timezone}
+            kitByPlayer={kitByPlayer}
             onSelect={onSelect}
             onScore={onScore}
           />

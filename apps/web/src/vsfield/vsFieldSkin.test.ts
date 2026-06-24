@@ -24,7 +24,10 @@ const css = read("vsfield/vsfield.css");
 const layout = read("vsfield/layout.tsx");
 const page = read("vsfield/page.tsx");
 const loader = read("vsfield/loadVsField.ts");
-const kit = read("vsfield/kitOf.ts");
+// The kit primitive was neutralized out of app/vsfield/ into the shared apps/web/src/kit/ home (vsfield
+// rides a re-export shim). Read the NEUTRAL module so the source-contract assertions below check the real
+// definition, not the one-line shim. (`appDir` is apps/web/app, so `../src/...` reaches apps/web/src.)
+const kit = read("../src/kit/kitOf.ts");
 const ds = read("styles/ds.css");
 
 describe("vsfield re-skin — the body brand lockup stays de-duplicated (the shell owns the brand)", () => {

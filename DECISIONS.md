@@ -2368,7 +2368,33 @@ remains absent from vsfield components (test-enforced).
 (`rgba(20,28,42,.5)`), with ALL FIVE ds.css copies synced byte-identically** (the byte-identity
 invariant is now machine-enforced across all four per-route copies — see the appShell test). It is
 APPLIED only on vsfield in this build; lineup has no jerseys today (PlayerAvatar discs), so lineup kit
-adoption is a deferred feature, not a retrofit.
+adoption is a deferred feature, not a retrofit. **(T13, 2026-06-24 — now SHIPPED; see the kit
+neutralization decision directly below.)**
+
+**Decision (T13, 2026-06-24): lineup kit adoption SHIPPED, and the kit primitive is NEUTRALIZED into a
+shared home.** The set-lineup pitch + bench now render flag-kit jersey chips in place of the
+position-color `PlayerAvatar` disc, closing the deferred feature above. The chip is a shared `.sl-kit`
+silhouette (geometry promoted from the `feat/t13-bench-kit-chips` `.sl-bench-kit` reference: a clip-path
+jersey outlined against the turf with the GLOBAL `--kit-outline` token, over a `var(--surface-4)` base);
+the resolved per-nation kit gradient is applied INLINE per the roster `.rt-kit` convention — **never
+`background-size: cover`** (the multi-layer kit gradients collapse under it). The existing flag badge
+(`FlagBadge`, now EXPORTED additively from `components/PlayerAvatar.tsx`) is overlaid as a SIBLING of the
+clipped silhouette (a child would be cut by the clip-path); the real-XI availability medallion/glow and
+the lock-on-play dims (`is-locked` / `sl-tok-played`) + `ScorePill` are byte-unchanged (the chip swaps
+in inside the existing `.sl-av-anchor`). **Resolver neutralized:** `JERSEY_BG_V2` / `KIT_FALLBACK` /
+`kitOf` were MOVED to a surface-agnostic home `apps/web/src/kit/kitOf.ts`; `app/vsfield/kitOf.ts` is now
+a one-line re-export shim (`export *`), so vsfield + game-detail keep importing `vsfield/kitOf`
+byte-identically while lineup imports the neutral module directly — no screen "owns" the kit primitive,
+and lineup never reaches into the vsfield route. **There is NO name-keyed `JERSEY_BG` map in apps/web**
+(that was a design-prototype construct only; the app keys kits by ISO-2 through `kitOf()`, resolving
+`fifa_team.name` via the shared flag mapper) — do not re-introduce one. Presentation + module relocation
+only: NO loader (`country` = `team?.name`, already loaded — loadLineup.ts:96), engine/scoring,
+data-contract, RLS, Realtime, or migration change; the `--kit-outline` 5-copy byte-identity invariant is
+untouched (the chip reuses the existing global token). Tests: jsdom render proof in
+`ForfeitConfirm.test.tsx` (kit chip + flag badge + medallion + lock state + tap route) + pure-Node
+source contract in `lineupKit.test.ts` (no `background-size: cover`; neutral-module wiring). Merge HELD
+(review-class: module extraction + cross-surface test). The vsfield jersey-class collision guard above
+still holds — lineup's `.sl-kit` is unique and never collides with vsfield's `.sl-tok-jersey`/`.sl-jersey`.
 
 **Decision: the jersey token class is `.sl-tok-jersey` scoped under `.da-pitch` — NEVER bare
 `.sl-tok`.** The design reuses lineup's `.sl-tok`/`.sl-tok-name` names, but lineup.css already owns

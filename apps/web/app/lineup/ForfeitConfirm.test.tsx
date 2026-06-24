@@ -345,3 +345,91 @@ describe("forfeit-sub save — succeeds without surfacing a spurious error (T7)"
     expect(screen.queryByText(/confirm the forfeit to proceed/i)).toBeNull();
   });
 });
+
+// ── RTL: T13 flag-kit jerseys (starters + bench) ───────────────────────────
+// The pitch + bench now render the flag-kit chip (`.sl-kit`) in place of the position-color
+// PlayerAvatar disc. This proves the swap preserves the flag badge, the real-XI medallion + availClass,
+// and the lock-on-play state (played-starter dim + ScorePill) — and that the tap routing is unchanged.
+describe("PlayerKit jerseys — T13 (kit chip replaces the disc on starters + bench)", () => {
+  // A squad carrying real nations so kitOf resolves to an inline gradient (null country → surface fallback).
+  function pc(id: string, pos: Position, country: string | null): LineupPlayer {
+    return {
+      id,
+      displayName: id.toUpperCase(),
+      firstName: "X",
+      lastName: id,
+      position: pos,
+      country,
+    };
+  }
+  // Same 2GK/5DEF/5MID/3FWD shape + ids as SQUAD/STARTERS. fwd1 = Mexico (movable + officially STARTING
+  // → medallion). DEF1 = France (the played-starter lock target). mid5 = Belgium (a bench man). The kits
+  // are single-layer `linear-gradient`s on purpose: jsdom's CSS parser keeps those inline (it silently
+  // drops multi-layer gradients like Argentina/Brazil), so the inline-gradient assertions stay reliable.
+  const KIT_SQUAD: LineupPlayer[] = [
+    pc(GK1, "GK", "Germany"),
+    pc(GK2, "GK", null),
+    pc(DEF1, "DEF", "France"),
+    pc("def2", "DEF", null),
+    pc("def3", "DEF", null),
+    pc("def4", "DEF", null),
+    pc(DEF5, "DEF", null),
+    pc("mid1", "MID", null),
+    pc("mid2", "MID", null),
+    pc("mid3", "MID", null),
+    pc("mid4", "MID", null),
+    pc("mid5", "MID", "Belgium"),
+    pc("fwd1", "FWD", "Mexico"),
+    pc("fwd2", "FWD", null),
+    pc("fwd3", "FWD", null),
+  ];
+  // BASE_PERIOD + an announced "starting" availability for the movable fwd1 (drives medallion + glow).
+  const KIT_PERIOD: PeriodLineup = { ...BASE_PERIOD, starterStatusByPlayer: { fwd1: "starting" } };
+  const kitState = (): SetLineupState => ({ ...state(KIT_PERIOD), squad: KIT_SQUAD });
+
+  it("renders a .sl-kit chip for all 15 players and NO PlayerAvatar disc", () => {
+    const { container } = render(<SetLineupClient initialState={kitState()} />);
+    expect(container.querySelectorAll(".sl-kit").length).toBe(15); // 11 starters + 4 bench
+    expect(container.querySelector(".player-avatar")).toBeNull(); // the disc is gone
+  });
+
+  it("a starter chip carries an inline kit gradient + the flag badge", () => {
+    const { container } = render(<SetLineupClient initialState={kitState()} />);
+    const wrap = container.querySelector('[aria-label="FWD1"]'); // fwd1 = Mexico
+    expect(wrap).not.toBeNull();
+    const chip = wrap!.querySelector(".sl-kit") as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.getAttribute("style") ?? "").toMatch(/linear-gradient/); // MX kit = a real CSS gradient
+    expect(wrap!.querySelector(".pa-flag")).not.toBeNull(); // the flag badge rides the jersey
+  });
+
+  it("the bench renders the SAME shared .sl-kit chip (with its own kit gradient)", () => {
+    const { container } = render(<SetLineupClient initialState={kitState()} />);
+    const wrap = container.querySelector('[aria-label="MID5"]'); // mid5 = Belgium, a bench player
+    expect(wrap).not.toBeNull();
+    const chip = wrap!.querySelector(".sl-kit") as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.getAttribute("style") ?? "").toMatch(/linear-gradient/);
+  });
+
+  it("a movable + officially-starting token keeps its real-XI medallion + availClass", () => {
+    render(<SetLineupClient initialState={kitState()} />);
+    const fwd1 = screen.getByTitle(/FWD1 · FWD · movable/i);
+    expect(fwd1.className).toMatch(/sl-av-starting/); // availClass host class preserved
+    expect(fwd1.querySelector(".sl-av-medal")).not.toBeNull(); // corner medallion preserved
+  });
+
+  it("preserves lock-on-play visuals: a played-starter keeps sl-tok-played + ScorePill alongside the kit", () => {
+    render(<SetLineupClient initialState={kitState()} />);
+    const def1 = screen.getByTitle(DEF1_TITLE); // DEF1 played-starter
+    expect(def1.className).toMatch(/sl-tok-played/); // lock dim class intact
+    expect(def1.querySelector(".sl-scorepill")).not.toBeNull(); // ScorePill intact
+    expect(def1.querySelector(".sl-kit")).not.toBeNull(); // and it's a kit chip now
+  });
+
+  it("preserves the tap route: clicking a movable starter selects it (st-selected)", () => {
+    render(<SetLineupClient initialState={kitState()} />);
+    fireEvent.click(screen.getByTitle(/FWD1 · FWD · movable/i));
+    expect(screen.getByTitle(/FWD1 · FWD · movable/i).className).toMatch(/st-selected/);
+  });
+});

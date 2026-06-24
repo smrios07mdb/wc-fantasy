@@ -121,21 +121,25 @@ describe("draft/components.tsx — PlayerAvatar wired into pool rows, queue, and
   });
 });
 
-describe("lineup/components.tsx — PlayerAvatar wired into PitchToken and BenchRow", () => {
-  it("imports PlayerAvatar from the shared components directory", () => {
-    expect(lineupComps).toContain("import { PlayerAvatar }");
+// T13: the lineup pitch + bench swapped the PlayerAvatar disc for the flag-kit jersey chip (`PlayerKit`).
+// The disc is GONE from lineup; only the flag badge is reused (FlagBadge, exported from PlayerAvatar.tsx).
+// (The draft surface above still uses the disc — this only narrows where PlayerAvatar appears.)
+describe("lineup/components.tsx — flag-kit jersey (PlayerKit) replaces the PlayerAvatar disc (T13)", () => {
+  it("imports FlagBadge (not the disc) from the shared components directory", () => {
+    expect(lineupComps).toContain("import { FlagBadge }");
+    expect(lineupComps).not.toContain("import { PlayerAvatar }");
   });
-  it("PlayerAvatar appears in PitchToken (sl-tok-top context)", () => {
+  it("renders PlayerKit (not the disc) in the pitch token", () => {
     expect(lineupComps).toContain("sl-tok-top");
-    expect(lineupComps).toContain("<PlayerAvatar");
+    expect(lineupComps).toContain("<PlayerKit");
+    expect(lineupComps).not.toContain("<PlayerAvatar");
   });
-  it("PlayerAvatar appears in BenchRow (bench list context)", () => {
+  it("renders PlayerKit in the bench row", () => {
     expect(lineupComps).toContain("sl-bench-row");
-    // PlayerAvatar inside bench row — Pos no longer used in bench row
     const benchSection = lineupComps.slice(lineupComps.indexOf("export function BenchRow"));
-    expect(benchSection).toContain("<PlayerAvatar");
+    expect(benchSection).toContain("<PlayerKit");
   });
-  it("player country is passed through to the avatar", () => {
+  it("player country is still passed through (to the jersey's flag badge)", () => {
     expect(lineupComps).toMatch(/country=\{player\.country\}/);
   });
 });
