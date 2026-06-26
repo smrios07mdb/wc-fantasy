@@ -11,6 +11,7 @@ import {
   mapStatLine,
   mapRating,
   mapTeamStat,
+  mapGroupStanding,
   mapMatchRow,
   mapPosition,
   derivePeriodLabel,
@@ -275,4 +276,29 @@ export async function ingestTeamStats(
     upserted++;
   });
   return { upserted, foreignSkipped };
+}
+
+/**
+ * Group-standings backfill/refresh (T18). A SINGLE non-paginated `group_standings` feed call (all 12
+ * groups, ~48 rows for WC2026) → pure {@link mapGroupStanding} → idempotent `store.upsertGroupStanding`,
+ * with the SAME per-item isolation ({@link eachItem}) as the other ingests. Display-only / fantasy-safe:
+ * it writes ONLY `group_standing`, does NOT touch player stats/events/shots, marks NOTHING dirty, and
+ * triggers NO recompute. The store FOREIGN-GUARDS each row (a team not yet in `fifa_team` is skipped and
+ * counted in `foreignSkipped`). Idempotent via the `team_id` upsert — safe to re-run after each matchday.
+ * Returns counts for operator logging. Defaults to season 2026.
+ */
+export async function ingestGroupStandings(
+  feed: FeedClient,
+  store: IngestStore,
+  season = 2026,
+): Promise<{ fetched: number; upserted: number; foreignSkipped: number }> {
+  const standings = await feed.groupStandings({ seasons: [season] });
+  let upserted = 0;
+  let foreignSkipped = 0;
+  await eachItem(standings.data, async (f) => {
+    const wrote = await store.upsertGroupStanding(mapGroupStanding(f));
+    if (wrote) upserted++;
+    else foreignSkipped++;
+  });
+  return { fetched: standings.data.length, upserted, foreignSkipped };
 }

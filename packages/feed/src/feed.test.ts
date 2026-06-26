@@ -200,4 +200,58 @@ describe("createBalldontlieClient", () => {
     expect(res.data[0]).toMatchObject({ market_type: "tournament_winner", american_odds: 450 });
     expect(res.data).toHaveLength(1);
   });
+
+  it("group_standings: season-scoped, NON-paginated (single call), nested team/group/season", async () => {
+    const urls: string[] = [];
+    // A response with a next_cursor present — groupStandings must NOT follow it (the endpoint is
+    // documented non-paginated; a single getPage call returns one page).
+    const transport: FetchLike = (url) => {
+      urls.push(url);
+      return Promise.resolve(
+        json({
+          data: [
+            {
+              season: { id: 1, year: 2026 },
+              team: { id: 12, name: "Argentina", abbreviation: "ARG" },
+              group: { id: 1, name: "Group A" },
+              position: 1,
+              played: 3,
+              won: 2,
+              drawn: 1,
+              lost: 0,
+              goals_for: 6,
+              goals_against: 2,
+              goal_difference: 4,
+              points: 7,
+            },
+          ],
+          meta: { next_cursor: 99 }, // present, but must be ignored
+        }),
+      );
+    };
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    const res = await client.groupStandings();
+    expect(urls).toHaveLength(1); // NON-paginated: exactly one request, cursor NOT followed
+    expect(urls[0]).toContain("/fifa/worldcup/v1/group_standings");
+    expect(urls[0]).toContain("seasons%5B%5D=2026"); // defaults to 2026
+    expect(urls[0]).not.toContain("cursor="); // never followed the (spurious) next_cursor
+    expect(res.data).toHaveLength(1);
+    expect(res.data[0]).toMatchObject({
+      team: { id: 12 },
+      group: { id: 1, name: "Group A" },
+      position: 1,
+      points: 7,
+    });
+  });
+
+  it("group_standings: honours an explicit season", async () => {
+    let seenUrl = "";
+    const transport: FetchLike = (url) => {
+      seenUrl = url;
+      return Promise.resolve(json({ data: [], meta: {} }));
+    };
+    const client = createBalldontlieClient({ apiKey: "k", transport, requestsPerMinute: 600 });
+    await client.groupStandings({ seasons: [2022] });
+    expect(seenUrl).toContain("seasons%5B%5D=2022");
+  });
 });

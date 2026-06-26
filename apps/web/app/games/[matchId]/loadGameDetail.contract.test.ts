@@ -35,6 +35,18 @@ describe("loadGameDetail — assembly contract", () => {
     expect(codeOnly).toContain("prisma.statTeamMatch.findMany");
   });
 
+  it("reads the WC group table GROUP-SCOPED via the two in-match teams (T18, display-only)", () => {
+    // The match's group is DERIVED from its two teams' standing rows (NEVER fifa_match.group_id, which is
+    // unpopulated/NULL), then a superset of rows for those group(s) is fetched — both via groupStanding.
+    expect(codeOnly).toContain("prisma.groupStanding.findMany");
+    expect(codeOnly).toContain("teamId: { in: [match.homeTeamId, match.awayTeamId] }");
+    expect(codeOnly).toContain("bdlGroupId: { in: groupIds }");
+    // Threaded into the pure builder, which verifies same-group + decides tab visibility (A1).
+    expect(codeOnly).toContain("standings: standingRows.map");
+    // The group is NEVER derived from the match's own (unpopulated) group_id column.
+    expect(codeOnly).not.toContain("match.groupId");
+  });
+
   it("selects the columns the kickoff-XI reconciliation cascade needs (substitution player_in/out + minutes)", () => {
     // The cascade pairs substitutions (player_out ↔ player_in) and re-adds withdrawn off-sheet starters,
     // so BOTH sub ids must be read; the "no-minute phantom" drop needs minutes_played.

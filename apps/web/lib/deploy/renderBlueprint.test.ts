@@ -162,20 +162,27 @@ const SECRET_KEYS = [
 ];
 
 describe("render.yaml — Blueprint structure & topology", () => {
-  it("parses structurally (guards the parser): ≥1 env group + the 3 services", () => {
+  it("parses structurally (guards the parser): ≥1 env group + the 4 services", () => {
     // The daily `wc-fantasy-faab-batch` cron was RETIRED (Theme-D per-matchday amendment): FAAB now
     // runs as a per-period trigger inside the worker tick, not a separate cron. The isolated Sofascore
     // `wc-fantasy-scraper` worker was REMOVED (CODE_PROMPT_57 — ratings run on the BALLDONTLIE rating).
+    // `wc-fantasy-group-standings` (T18) is the daily group-table refresh cron.
     expect(bp.groups.length).toBeGreaterThanOrEqual(1);
     expect(bp.services.map((s) => s.name).sort()).toEqual(
-      ["wc-fantasy-period-close", "wc-fantasy-web", "wc-fantasy-worker"].sort(),
+      [
+        "wc-fantasy-group-standings",
+        "wc-fantasy-period-close",
+        "wc-fantasy-web",
+        "wc-fantasy-worker",
+      ].sort(),
     );
   });
 
-  it("defines the Theme E topology: web + resident worker + 1 cron", () => {
+  it("defines the Theme E topology: web + resident worker + 2 crons", () => {
     expect(svc("wc-fantasy-web").type).toBe("web");
     expect(svc("wc-fantasy-worker").type).toBe("worker");
     expect(svc("wc-fantasy-period-close").type).toBe("cron");
+    expect(svc("wc-fantasy-group-standings").type).toBe("cron"); // T18 daily group-table refresh
     // FAAB batch is no longer a cron — see the retired-cron note in render.yaml.
     expect(bp.services.find((s) => s.name === "wc-fantasy-faab-batch")).toBeUndefined();
     // The isolated Sofascore scraper worker was removed — see the retired-service note in render.yaml.

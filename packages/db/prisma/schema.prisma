@@ -286,11 +286,12 @@ model FifaTeam {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  group       FifaGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  players     Player[]
-  homeMatches FifaMatch[]     @relation("HomeTeam")
-  awayMatches FifaMatch[]     @relation("AwayTeam")
-  teamStats   StatTeamMatch[]
+  group         FifaGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  players       Player[]
+  homeMatches   FifaMatch[]     @relation("HomeTeam")
+  awayMatches   FifaMatch[]     @relation("AwayTeam")
+  teamStats     StatTeamMatch[]
+  groupStanding GroupStanding?
 
   @@map("fifa_team")
 }
@@ -751,6 +752,41 @@ model StatTeamMatch {
 
   @@id([matchId, teamId])
   @@map("stat_team_match")
+}
+
+/// Real-football WC GROUP-STAGE TABLE — one row per team (T18, game-detail Standings tab). DISPLAY-ONLY
+/// and FANTASY-SAFE: ingested from BALLDONTLIE `/group_standings`, never read by the scoring engine or
+/// `computeStandings` (which build the *fantasy* power-record from `score_manager_period`). Self-contained
+/// (D1): group identity is DENORMALIZED here (`bdl_group_id` + `group_name`) — there is NO FK to
+/// `fifa_group` and the (unpopulated) `fifa_team.group_id` / `fifa_match.group_id` columns stay untouched.
+/// A match's group is derived by looking up its two teams' rows here (never via `fifa_match.group_id`).
+/// WC2026-ONLY: PK is `team_id` (one row per team in the current edition); `season` defaults to 2026.
+/// `position` is the feed's authoritative rank (incl. FIFA tie-breaks). No `form`/`last` column (the feed
+/// has none). Written ONLY server-side by `@app/ingest` (owner role); RLS = authenticated SELECT
+/// (defense-in-depth), no anon, no Realtime — read on the server-rendered game-detail page load.
+model GroupStanding {
+  teamId         String   @id @map("team_id")
+  /// BALLDONTLIE group id (the feed's `group.id`) — denormalized; same value shared by a group's 4 teams.
+  bdlGroupId     Int      @map("bdl_group_id")
+  /// Feed `group.name`, stored verbatim (live data is the full string e.g. "Group A", not a bare letter).
+  groupName      String   @map("group_name")
+  /// WC2026-only table; the edition year from the feed `season.year`. Defaults to 2026.
+  season         Int      @default(2026)
+  position       Int
+  played         Int
+  won            Int
+  drawn          Int
+  lost           Int
+  goalsFor       Int      @map("goals_for")
+  goalsAgainst   Int      @map("goals_against")
+  goalDifference Int      @map("goal_difference")
+  points         Int
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  team FifaTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([bdlGroupId])
+  @@map("group_standing")
 }
 
 /// PK (match_id, player_id, source). The resolver reads this by source priority

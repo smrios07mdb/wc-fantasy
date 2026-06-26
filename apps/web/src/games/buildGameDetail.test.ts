@@ -13,6 +13,7 @@ import type {
   GdEventInput,
   GdLineupEntryInput,
   GdPlayerInput,
+  GdStandingInput,
   GdStatInput,
   OwnerTag,
 } from "./types";
@@ -1223,5 +1224,97 @@ describe("buildGameDetail — events timeline (T16b)", () => {
       finalAway: 1,
       unresolvedGoals: 0,
     });
+  });
+});
+
+// ─── group standings (T18) — buildGroupStandings via the view-model's `standings` field ──────────────
+describe("buildGameDetail — standings (T18)", () => {
+  // `fullInput().match` has homeTeamId "home" / awayTeamId "away".
+  const gs = (teamId: string, over: Partial<GdStandingInput> = {}): GdStandingInput => ({
+    teamId,
+    teamName: teamId.toUpperCase(),
+    bdlGroupId: 1,
+    groupName: "Group A",
+    position: 1,
+    played: 3,
+    won: 1,
+    drawn: 1,
+    lost: 1,
+    goalsFor: 3,
+    goalsAgainst: 3,
+    goalDifference: 0,
+    points: 4,
+    ...over,
+  });
+  const withStandings = (
+    standings: GdStandingInput[],
+    matchOver: Partial<BuildGameDetailInput["match"]> = {},
+  ) =>
+    buildGameDetail({
+      ...fullInput(),
+      match: { ...fullInput().match, ...matchOver },
+      standings,
+    }).standings;
+
+  it("hides the tab (null) when no standings were ingested for the group", () => {
+    expect(withStandings([])).toBeNull();
+  });
+
+  it("hides the tab when one in-match team has no standing row", () => {
+    // rows present for other teams, but neither "home" nor "away".
+    expect(withStandings([gs("x"), gs("y")])).toBeNull();
+  });
+
+  it("hides the tab when a side is TBD/null (A1)", () => {
+    expect(withStandings([gs("home"), gs("away")], { awayTeamId: null })).toBeNull();
+    expect(withStandings([gs("home"), gs("away")], { homeTeamId: null })).toBeNull();
+  });
+
+  it("hides the tab when the two teams are in DIFFERENT groups (e.g. a knockout fixture)", () => {
+    expect(
+      withStandings([
+        gs("home", { bdlGroupId: 1, groupName: "Group A" }),
+        gs("away", { bdlGroupId: 2, groupName: "Group B" }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("renders the group table sorted by position, flags in-match teams + the top-2 cutline, with notes", () => {
+    const standings: GdStandingInput[] = [
+      gs("away", { teamName: "AT", position: 3, points: 3 }),
+      gs("home", { teamName: "HT", position: 1, points: 9 }),
+      gs("x", { teamName: "X", position: 2, points: 4 }),
+      gs("y", { teamName: null, position: 4, points: 1 }), // unnamed → fallback
+    ];
+    const v = withStandings(standings);
+    expect(v).not.toBeNull();
+    expect(v?.groupName).toBe("Group A");
+    // sorted by the feed's authoritative `position` ascending
+    expect(v?.rows.map((r) => r.teamId)).toEqual(["home", "x", "away", "y"]);
+    // top-2 cutline
+    expect(v?.rows.map((r) => r.isQualifying)).toEqual([true, true, false, false]);
+    // the two in-match teams highlighted (and ONLY those)
+    expect(
+      v?.rows
+        .filter((r) => r.inMatch)
+        .map((r) => r.teamId)
+        .sort(),
+    ).toEqual(["away", "home"]);
+    expect(v?.rows.find((r) => r.teamId === "x")?.inMatch).toBe(false);
+    // unnamed team → UNNAMED fallback, never a raw UUID
+    expect(v?.rows.find((r) => r.teamId === "y")?.teamName).toBe(UNNAMED_OPPONENT);
+    // static notes present
+    expect(v?.advanceNote).toContain("Top 2 advance");
+    expect(v?.tiebreakNote).toContain("head-to-head");
+  });
+
+  it("only includes the in-match teams' own group, ignoring other groups' rows in the superset", () => {
+    const v = withStandings([
+      gs("home", { position: 1 }),
+      gs("away", { position: 2 }),
+      // a stray row from another group (the loader fetches a superset) — must be excluded
+      gs("z", { bdlGroupId: 9, groupName: "Group Z", position: 1 }),
+    ]);
+    expect(v?.rows.map((r) => r.teamId)).toEqual(["home", "away"]);
   });
 });

@@ -336,6 +336,33 @@ export interface FIFAFuturesOdd {
   [key: string]: unknown;
 }
 
+/**
+ * A `group_standings` row (GOAT `/fifa/worldcup/v1/group_standings`) — one team's standing within its
+ * World Cup group for the requested edition. The endpoint is SEASON-scoped + NON-paginated (a bare
+ * `data[]`, NO `meta.next_cursor`). The row keys to a team via NESTED `team.id` (NOT a flat `team_id`,
+ * unlike {@link FIFATeamMatchStats}) and to a group via NESTED `group.id` / `group.name` — and here
+ * `group.name` is the bare letter "A".."L" (unlike {@link FIFAMatch}.`group.name` = "Group A"). There is
+ * NO form / recent-results field on this object (recent form lives only on the separate
+ * `match_team_form` endpoint). Requires ALL-STAR tier or higher; the app's GOAT key covers it (same
+ * `Authorization` credential as `team_match_stats`).
+ */
+export interface FIFAStanding {
+  season: { id: number; year: number };
+  team: FIFATeamRef;
+  group: FIFAGroupRef;
+  /** Rank within the group (1 = top) — the feed's authoritative order, incl. the FIFA tie-breaks. */
+  position: number;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+  [key: string]: unknown;
+}
+
 // ── Request params ────────────────────────────────────────────────────────────
 
 export interface ListParams {
@@ -357,6 +384,14 @@ export interface RostersParams extends ListParams {
   playerIds?: number[];
 }
 export interface FuturesParams extends ListParams {
+  /** World Cup edition years; defaults to [2026] in the client when omitted. */
+  seasons?: number[];
+}
+/**
+ * `group_standings` request params. SEASON-scoped only — there is no `match_id`, no group filter, and no
+ * cursor/perPage (the endpoint is non-paginated), so this deliberately does NOT extend {@link ListParams}.
+ */
+export interface StandingsParams {
   /** World Cup edition years; defaults to [2026] in the client when omitted. */
   seasons?: number[];
 }

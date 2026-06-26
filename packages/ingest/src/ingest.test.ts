@@ -7,6 +7,7 @@ import {
   ingestSchedule,
   ingestRosters,
   ingestTeamStats,
+  ingestGroupStandings,
 } from "./ingest";
 import type { FeedClient } from "@app/feed";
 
@@ -453,5 +454,108 @@ describe("ingestTeamStats (team-stats backfill, T17)", () => {
     await ingestTeamStats(feed, store, 50);
 
     expect(dirtySpy).not.toHaveBeenCalled(); // display-only path: zero fantasy-state mutation
+  });
+});
+
+describe("ingestGroupStandings (T18 group table)", () => {
+  const row = (over: Record<string, unknown>) => ({
+    season: { id: 1, year: 2026 },
+    team: { id: 0, name: "T", abbreviation: "T" },
+    group: { id: 1, name: "Group A" },
+    position: 1,
+    played: 3,
+    won: 0,
+    drawn: 0,
+    lost: 0,
+    goals_for: 0,
+    goals_against: 0,
+    goal_difference: 0,
+    points: 0,
+    ...over,
+  });
+
+  it("upserts known teams, FOREIGN-GUARD skips teams not in fifa_team, and counts precisely", async () => {
+    const store = new MemoryIngestStore();
+    await store.upsertTeamByBdlId(12, "Argentina"); // registered
+    await store.upsertTeamByBdlId(10, "Mexico"); // registered
+    // team 7 deliberately NOT registered → must be foreign-skipped
+    const feed = fakeFeed({
+      groupStandings: () =>
+        Promise.resolve({
+          data: [
+            row({ team: { id: 12, name: "Argentina" }, position: 1, points: 7 }),
+            row({ team: { id: 10, name: "Mexico" }, position: 2, points: 4 }),
+            row({ team: { id: 7, name: "Ghost" }, position: 3, points: 1 }),
+          ],
+          meta: {},
+        }),
+    });
+
+    const result = await ingestGroupStandings(feed, store, 2026);
+
+    expect(result).toEqual({ fetched: 3, upserted: 2, foreignSkipped: 1 });
+    const stored = store.allGroupStandings();
+    expect(stored.map((s) => s.teamBdlId).sort((a, b) => a - b)).toEqual([10, 12]);
+    expect(stored.find((s) => s.teamBdlId === 7)).toBeUndefined(); // ghost team skipped
+    expect(stored.find((s) => s.teamBdlId === 12)).toMatchObject({
+      bdlGroupId: 1,
+      groupName: "Group A",
+      season: 2026,
+      points: 7,
+    });
+  });
+
+  it("is idempotent: a re-run overwrites in place (one row per team) with fresh values", async () => {
+    const store = new MemoryIngestStore();
+    await store.upsertTeamByBdlId(12, "Argentina");
+    const feed = (points: number) =>
+      fakeFeed({
+        groupStandings: () =>
+          Promise.resolve({ data: [row({ team: { id: 12 }, points })], meta: {} }),
+      });
+
+    await ingestGroupStandings(feed(7), store, 2026);
+    await ingestGroupStandings(feed(9), store, 2026); // re-run with updated points
+
+    const stored = store.allGroupStandings();
+    expect(stored).toHaveLength(1); // overwritten, not duplicated
+    expect(stored[0]?.points).toBe(9); // refreshed in place
+  });
+
+  it("makes NO dirty-mark and writes NO player stats (display-only / fantasy-safe)", async () => {
+    const store = new MemoryIngestStore();
+    await store.upsertTeamByBdlId(12, "Argentina");
+    const dirtySpy = vi.spyOn(store, "markPlayersDirty");
+    const statSpy = vi.spyOn(store, "upsertStatLine");
+    const feed = fakeFeed({
+      groupStandings: () =>
+        Promise.resolve({ data: [row({ team: { id: 12 }, points: 7 })], meta: {} }),
+    });
+
+    await ingestGroupStandings(feed, store, 2026);
+
+    expect(dirtySpy).not.toHaveBeenCalled(); // never re-dirties the recompute sweep
+    expect(statSpy).not.toHaveBeenCalled(); // never touches player stats
+  });
+
+  it("skips a malformed row (eachItem isolation) without aborting the batch", async () => {
+    const store = new MemoryIngestStore();
+    await store.upsertTeamByBdlId(12, "Argentina");
+    await store.upsertTeamByBdlId(10, "Mexico");
+    const feed = fakeFeed({
+      groupStandings: () =>
+        Promise.resolve({
+          data: [
+            row({ team: { id: 12 }, points: 7 }),
+            { team: { id: 10 }, group: { id: 1, name: "Group A" } } as never, // missing position/points → throws, skipped
+          ],
+          meta: {},
+        }),
+    });
+
+    const result = await ingestGroupStandings(feed, store, 2026);
+    // The malformed row is skipped by eachItem; the good row still lands.
+    expect(result.upserted).toBe(1);
+    expect(store.allGroupStandings().map((s) => s.teamBdlId)).toEqual([12]);
   });
 });

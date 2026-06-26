@@ -1192,8 +1192,123 @@
   background: var(--gd-st-a);
 }
 
+/* ════════════════ STANDINGS (T18) — the match's WC group table; ported from handoff .md-gr-* ════════════════ */
+.gd-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gd-gr-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.gd-gr-trophy {
+  font-size: 15px;
+  line-height: 1;
+}
+.gd-gr-head b {
+  font-family: var(--font-display);
+  font-weight: var(--fw-black);
+  font-size: 17px;
+  color: var(--text-primary);
+}
+.gd-gr-note {
+  margin-left: auto;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.gd-gr-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.gd-gr-table th {
+  font: var(--fw-bold) 10px / 1 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+.gd-gr-table th.gd-gr-team {
+  text-align: left;
+  padding-left: 14px;
+}
+.gd-gr-table td {
+  text-align: center;
+  padding: 11px 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--hairline);
+  font-variant-numeric: tabular-nums;
+}
+.gd-gr-table tr:last-child td {
+  border-bottom: none;
+}
+.gd-gr-table td b {
+  color: var(--text-primary);
+}
+.gd-gr-table td.gd-gr-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  padding-left: 14px;
+  color: var(--text-primary);
+  font-weight: var(--fw-semibold);
+}
+.gd-gr-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gd-gr-pos {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font: var(--fw-black) 11px / 1 var(--font-display);
+}
+/* Top-2 cutline only — position 3 has NO distinct style (the note + footnote convey "3rd may advance"). */
+.gd-gr-pos.is-qual {
+  background: var(--win);
+  color: #fff;
+}
+.gd-gr-table tr.is-inmatch {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.gd-gr-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: 2px;
+}
+.gd-gr-tiebreak {
+  margin: 0;
+  padding: 2px 4px;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
 /* ════════════════ RESPONSIVE (mobile: vertical pitch + single-column lists) ════════════════ */
 @media (max-width: 720px) {
+  /* Standings table: tighten cell padding on narrow screens (handoff .mmd override). */
+  .gd-gr-table th,
+  .gd-gr-table td {
+    padding: 8px 3px;
+    font-size: 11px;
+  }
   /* ── DEFINITE-HEIGHT ANCHOR (the chain the flex-fill below depends on) ──
      The flex-fill model below needs a DEFINITE height to flow from the viewport down into
      `.gd-tabwrap` so `100cqh` resolves. The App Shell's `.sh-app{height:100%}` is the design's
@@ -1284,9 +1399,7 @@
        never clips sideways; the smaller of height/width wins. (See ARCHITECTURE §25.) */
     --gd-half-pad: 3px; /* .gd-phalf vertical padding, per edge — also applied to the half below */
     --gd-grid-slack: 8px; /* inter-band sub-line gaps (.gd-pcol gap) + rounding headroom, per half */
-    --gd-line-h: calc(
-      (50cqh - 2 * var(--gd-half-pad) - var(--gd-grid-slack)) / var(--pitch-rows)
-    );
+    --gd-line-h: calc((50cqh - 2 * var(--gd-half-pad) - var(--gd-grid-slack)) / var(--pitch-rows));
     --gd-name-h: clamp(5px, calc(var(--gd-line-h) * 0.24), 13px);
     --gd-foot-h: clamp(7px, calc(var(--gd-line-h) * 0.3), 16px);
     /* jersey = line − strip − the two 1px token gaps; floored at 7px (legibility yields to the fit) */

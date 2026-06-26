@@ -16,6 +16,7 @@
     "job:recompute": "tsx src/jobs/recompute.ts",
     "job:rosters": "tsx src/jobs/syncRosters.ts",
     "job:ingest-team-stats": "tsx src/jobs/ingestTeamStats.ts",
+    "job:ingest-group-standings": "tsx src/jobs/ingestGroupStandings.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

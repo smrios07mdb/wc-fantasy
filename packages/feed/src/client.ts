@@ -17,10 +17,12 @@ import type {
   FIFARoster,
   FIFAPlayerProp,
   FIFAFuturesOdd,
+  FIFAStanding,
   MatchListParams,
   MatchScopedParams,
   RostersParams,
   FuturesParams,
+  StandingsParams,
   ListParams,
 } from "./types";
 import type { FeedClient, FeedClientConfig } from "./index";
@@ -166,5 +168,11 @@ export function buildClient(config: FeedClientConfig): FeedClient {
         per_page: p?.perPage,
         seasons: p?.seasons ?? [2026],
       }),
+    // WC group-stage standings. SEASON-scoped + NON-paginated (a bare `data[]`, no `meta.next_cursor`),
+    // so it makes exactly ONE `getPage` request — never the cursor-following `getAll` and never the
+    // match-scoped `matchScoped` (this endpoint honours neither `match_id` nor a cursor). Defaults to
+    // season 2026; returns all 12 groups' rows in one page. The new ingest job's only feed call.
+    groupStandings: (p?: StandingsParams) =>
+      getPage<FIFAStanding>(b, "group_standings", { seasons: p?.seasons ?? [2026] }),
   };
 }

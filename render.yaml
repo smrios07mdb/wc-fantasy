@@ -155,3 +155,31 @@ services:
       - fromGroup: wc-fantasy-shared
       - key: DATABASE_URL # pooled (:6543) — runtime
         sync: false
+
+  # ── Cron: group-standings refresh (T18 — game-detail Standings tab) ──────────────────────────────
+  # Daily re-pull of the WC `group_standings` table so the Standings tab reflects the latest positions /
+  # points. DISPLAY-ONLY / fantasy-safe: writes `group_standing` ONLY — no player dirty-mark, no
+  # recompute (the scoring engine never reads this table). Idempotent (`team_id` upsert) — safe to re-run.
+  # PRIMARILY needed during the group stage; ⚠️ OPERATOR (Sergio, owns Render): may suspend this cron once
+  # the group stage is complete (knockouts have no group table). Mirrors the period-close cron, plus the
+  # BALLDONTLIE feed key (per-service, sync:false) since this job hits the feed like the worker.
+  - type: cron
+    name: wc-fantasy-group-standings
+    runtime: node
+    plan: starter
+    region: virginia
+    branch: main
+    # 07:20 UTC daily — after the prior day's group fixtures have settled. Off the exact hour on purpose.
+    schedule: "20 7 * * *"
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @app/worker job:ingest-group-standings
+    envVars:
+      - fromGroup: wc-fantasy-shared
+      - key: DATABASE_URL # pooled (:6543) — runtime
+        sync: false
+      - key: BALLDONTLIE_API_KEY
+        sync: false
+      - key: BALLDONTLIE_BASE_URL
+        value: https://api.balldontlie.io
+      - key: BALLDONTLIE_RPM
+        value: "600"

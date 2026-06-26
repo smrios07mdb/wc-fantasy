@@ -8,7 +8,7 @@
 import type { PrismaClient, MatchStatus, PeriodKind, Position } from "@app/db";
 import { markStatPlayerDirty, Prisma } from "@app/db";
 import type { IngestStore, SchedulableMatch, LineupEntryIn } from "./store";
-import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
+import type { StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn, GroupStandingRowIn } from "./map";
 import { isLockWriteAuthorized } from "./lock";
 
 type Db = PrismaClient;
@@ -220,6 +220,34 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
         create: { matchId, teamId, ...data },
         update: data,
       });
+    },
+
+    async upsertGroupStanding(row: GroupStandingRowIn): Promise<boolean> {
+      // FOREIGN-GUARD: a standings row for a team not yet imported into `fifa_team` is skipped (rosters
+      // populate `fifa_team`). Mirrors `upsertTeamStat`'s `if (!teamId) return`. No dirty-mark, no
+      // recompute — `group_standing` is display-only. Idempotent: keyed by `team_id` (one row per team).
+      const teamId = await teamIdFor(row.teamBdlId);
+      if (!teamId) return false;
+      const data = {
+        bdlGroupId: row.bdlGroupId,
+        groupName: row.groupName,
+        season: row.season,
+        position: row.position,
+        played: row.played,
+        won: row.won,
+        drawn: row.drawn,
+        lost: row.lost,
+        goalsFor: row.goalsFor,
+        goalsAgainst: row.goalsAgainst,
+        goalDifference: row.goalDifference,
+        points: row.points,
+      };
+      await prisma.groupStanding.upsert({
+        where: { teamId },
+        create: { teamId, ...data },
+        update: data,
+      });
+      return true;
     },
 
     async markPlayersDirty(matchBdlId, playerBdlIds): Promise<void> {

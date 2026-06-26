@@ -41,8 +41,11 @@ import type {
   GdEventInput,
   GdPlayerInput,
   GdRatingInput,
+  GdStandingInput,
   GdStatInput,
   GdTeamStatInput,
+  GameStandingRow,
+  GameStandings,
   LineupAnomaly,
   PlayerLine,
   PlayerRole,
@@ -502,6 +505,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     scores,
     ratings,
     teamStats,
+    standings = [],
     lineupEntries,
     events,
     ownerByPlayer,
@@ -637,6 +641,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     home,
     away,
     statistics: buildTeamStatistics(teamStats, match.homeTeamId, match.awayTeamId),
+    standings: buildGroupStandings(standings, match.homeTeamId, match.awayTeamId),
     events: timeline,
     eventScoreAnomaly,
     empty: homeLines.length === 0 && awayLines.length === 0,
@@ -903,4 +908,62 @@ function buildTeamStatistics(
     }),
   }));
   return anyValue ? { groups } : null;
+}
+
+/** Static footnotes for the Standings tab (T18). The tie-break list is FIFA's published group order. */
+const STANDINGS_ADVANCE_NOTE = "Top 2 advance · 3rd may advance (best 8)";
+const STANDINGS_TIEBREAK_NOTE =
+  "Tie-breakers — head-to-head points · goal difference · goals scored · disciplinary · FIFA ranking.";
+
+/**
+ * Build the Standings tab view-model — the match's WC group table (T18). PURE.
+ *
+ * Returns null (tab HIDDEN, A1) when:
+ *   - either side is null/TBD; OR
+ *   - either in-match team has no `group_standing` row in `standings` (standings not ingested yet, or a
+ *     knockout-stage team with no group); OR
+ *   - the two in-match teams are NOT in the same group (`bdlGroupId` differs — e.g. a knockout fixture).
+ *
+ * Otherwise: keep only that single group's rows, sort by the feed's authoritative `position` ascending,
+ * and flag each row `isQualifying` (top-2 cutline) + `inMatch` (one of the two teams in this match).
+ */
+function buildGroupStandings(
+  standings: readonly GdStandingInput[],
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+): GameStandings | null {
+  if (homeTeamId === null || awayTeamId === null) return null;
+  const homeRow = standings.find((s) => s.teamId === homeTeamId);
+  const awayRow = standings.find((s) => s.teamId === awayTeamId);
+  if (homeRow === undefined || awayRow === undefined) return null;
+  if (homeRow.bdlGroupId !== awayRow.bdlGroupId) return null;
+
+  const groupId = homeRow.bdlGroupId;
+  const inMatch = new Set([homeTeamId, awayTeamId]);
+  const rows: GameStandingRow[] = standings
+    .filter((s) => s.bdlGroupId === groupId)
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((s) => ({
+      teamId: s.teamId,
+      teamName: s.teamName ?? UNNAMED_OPPONENT,
+      position: s.position,
+      played: s.played,
+      won: s.won,
+      drawn: s.drawn,
+      lost: s.lost,
+      goalsFor: s.goalsFor,
+      goalsAgainst: s.goalsAgainst,
+      goalDifference: s.goalDifference,
+      points: s.points,
+      isQualifying: s.position <= 2, // top-2 cutline
+      inMatch: inMatch.has(s.teamId),
+    }));
+
+  return {
+    groupName: homeRow.groupName,
+    rows,
+    advanceNote: STANDINGS_ADVANCE_NOTE,
+    tiebreakNote: STANDINGS_TIEBREAK_NOTE,
+  };
 }

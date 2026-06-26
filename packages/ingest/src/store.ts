@@ -5,7 +5,14 @@
  * orchestration ({@link ./ingest}) is a pure function of this interface, unit-testable against
  * {@link ./memoryStore} with NO database.
  */
-import type { MatchRowIn, StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
+import type {
+  MatchRowIn,
+  StatLineRow,
+  EventRowIn,
+  ShotRowIn,
+  TeamStatRowIn,
+  GroupStandingRowIn,
+} from "./map";
 
 /** Which derivation produced a lock-write attempt — carried through `lockSlot` into the structured log
  *  so the next incident's path is greppable in Render in minutes. */
@@ -58,6 +65,13 @@ export interface IngestStore {
   upsertEvent(row: EventRowIn): Promise<void>;
   upsertShot(row: ShotRowIn): Promise<void>;
   upsertTeamStat(row: TeamStatRowIn): Promise<void>;
+  /**
+   * Upsert one WC group-stage standing row (T18 `group_standing`), keyed by `team_id`. FOREIGN-GUARDED:
+   * a team not yet in `fifa_team` (resolved by balldontlie id) is SKIPPED. Returns `true` when a row was
+   * written, `false` when foreign-skipped — so the orchestrator counts precisely. DISPLAY-ONLY: marks
+   * NOTHING dirty and triggers NO recompute (the engine never reads `group_standing`).
+   */
+  upsertGroupStanding(row: GroupStandingRowIn): Promise<boolean>;
   /** Re-dirty each affected player for a match-level write (events/shots/team have no dirty col) by
    *  flipping `stat_player_match.dirty` — the channel `sweep`'s `claimDirtyPlayerMatches` actually reads. */
   markPlayersDirty(matchBdlId: number, playerBdlIds: readonly number[]): Promise<void>;

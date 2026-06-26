@@ -14,10 +14,12 @@ import type {
   FIFARoster,
   FIFAPlayerProp,
   FIFAFuturesOdd,
+  FIFAStanding,
   MatchListParams,
   MatchScopedParams,
   RostersParams,
   FuturesParams,
+  StandingsParams,
 } from "./types";
 import type { FetchLike } from "./http";
 import { buildClient } from "./client";
@@ -40,6 +42,11 @@ export interface FeedClient {
   playerProps(params: MatchScopedParams): Promise<Paginated<FIFAPlayerProp>>;
   /** Futures odds (tournament winner + others). Defaults to season 2026. */
   futures(params?: FuturesParams): Promise<Paginated<FIFAFuturesOdd>>;
+  /**
+   * WC group-stage standings, one row per team (the new game-detail Standings tab's only feed source).
+   * Season-scoped + NON-paginated — a single request returns all groups. Defaults to season 2026.
+   */
+  groupStandings(params?: StandingsParams): Promise<Paginated<FIFAStanding>>;
 }
 
 export interface FeedClientConfig {

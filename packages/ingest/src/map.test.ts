@@ -5,6 +5,7 @@ import {
   mapShot,
   mapRating,
   mapTeamStat,
+  mapGroupStanding,
   mapMatchRow,
   derivePeriodLabel,
   normalizeStatus,
@@ -379,6 +380,57 @@ describe("mapTeamStat", () => {
 
   it("throws FeedShapeMismatchError when team_id is missing", () => {
     expect(() => mapTeamStat({ match_id: 1 } as never)).toThrow(/team_id/);
+  });
+});
+
+describe("mapGroupStanding", () => {
+  const live = {
+    season: { id: 1, year: 2026 },
+    team: { id: 12, name: "Argentina", abbreviation: "ARG" },
+    group: { id: 3, name: "Group A" },
+    position: 1,
+    played: 3,
+    won: 2,
+    drawn: 1,
+    lost: 0,
+    goals_for: 6,
+    goals_against: 2,
+    goal_difference: 4,
+    points: 7,
+  };
+
+  it("maps the NESTED team.id / group.id|name, season.year, and all stat columns", () => {
+    expect(mapGroupStanding(live)).toEqual({
+      teamBdlId: 12, // from nested team.id (NOT a flat team_id)
+      bdlGroupId: 3, // from nested group.id
+      groupName: "Group A", // verbatim (live is the full string, not a bare letter)
+      season: 2026, // from season.year
+      position: 1,
+      played: 3,
+      won: 2,
+      drawn: 1,
+      lost: 0,
+      goalsFor: 6,
+      goalsAgainst: 2,
+      goalDifference: 4,
+      points: 7,
+    });
+  });
+
+  it("soft-defaults a missing season to 2026 (WC2026-only table) rather than dropping the row", () => {
+    const { season: _drop, ...noSeason } = live;
+    expect(mapGroupStanding(noSeason as never).season).toBe(2026);
+  });
+
+  it("throws FeedShapeMismatchError when the nested team.id is missing", () => {
+    const { team: _drop, ...noTeam } = live;
+    expect(() => mapGroupStanding(noTeam as never)).toThrow(FeedShapeMismatchError);
+    expect(() => mapGroupStanding(noTeam as never)).toThrow(/team\.id/);
+  });
+
+  it("throws FeedShapeMismatchError when a stat column (points) is missing", () => {
+    const { points: _drop, ...noPoints } = live;
+    expect(() => mapGroupStanding(noPoints as never)).toThrow(/points/);
   });
 });
 

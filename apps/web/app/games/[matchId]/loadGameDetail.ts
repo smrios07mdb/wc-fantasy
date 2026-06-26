@@ -186,6 +186,54 @@ export async function loadGameDetail(
     }
   }
 
+  // T18: the match's WC group table. Resolve the two in-match teams' group(s) from group_standing, then
+  // fetch a superset of standing rows for those group(s) — the pure builder verifies the two teams share
+  // ONE group, filters/sorts/flags, and decides tab visibility (A1). Read-only + Prisma owner-bypass like
+  // the rest — group_standing is DISPLAY-ONLY (never read by scoring), so NO migration/RLS concern here.
+  // Self-contained group identity: derived from group_standing.team_id, NEVER fifa_match.group_id (NULL).
+  let standingRows: Array<{
+    teamId: string;
+    bdlGroupId: number;
+    groupName: string;
+    position: number;
+    played: number;
+    won: number;
+    drawn: number;
+    lost: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    goalDifference: number;
+    points: number;
+    team: { name: string | null } | null;
+  }> = [];
+  if (match.homeTeamId && match.awayTeamId) {
+    const pairGroups = await prisma.groupStanding.findMany({
+      where: { teamId: { in: [match.homeTeamId, match.awayTeamId] } },
+      select: { bdlGroupId: true },
+    });
+    const groupIds = [...new Set(pairGroups.map((r) => r.bdlGroupId))];
+    if (groupIds.length > 0) {
+      standingRows = await prisma.groupStanding.findMany({
+        where: { bdlGroupId: { in: groupIds } },
+        select: {
+          teamId: true,
+          bdlGroupId: true,
+          groupName: true,
+          position: true,
+          played: true,
+          won: true,
+          drawn: true,
+          lost: true,
+          goalsFor: true,
+          goalsAgainst: true,
+          goalDifference: true,
+          points: true,
+          team: { select: { name: true } },
+        },
+      });
+    }
+  }
+
   const view = buildGameDetail({
     match: {
       matchId: match.id,
@@ -231,6 +279,21 @@ export async function loadGameDetail(
       shotsBlocked: t.shotsBlocked,
       // `extra` is the retained un-promoted feed jsonb; the builder reads keys defensively.
       extra: t.extra as unknown as Readonly<Record<string, unknown>> | null,
+    })),
+    standings: standingRows.map((s) => ({
+      teamId: s.teamId,
+      teamName: s.team?.name ?? null, // resolved name (P34); builder falls back to UNNAMED
+      bdlGroupId: s.bdlGroupId,
+      groupName: s.groupName,
+      position: s.position,
+      played: s.played,
+      won: s.won,
+      drawn: s.drawn,
+      lost: s.lost,
+      goalsFor: s.goalsFor,
+      goalsAgainst: s.goalsAgainst,
+      goalDifference: s.goalDifference,
+      points: s.points,
     })),
     lineupEntries: lineupEntries.map((e) => ({ playerId: e.playerId, isStarter: e.isStarter })),
     events: eventRows.map((e) => ({

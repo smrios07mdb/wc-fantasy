@@ -5,7 +5,14 @@
  * event/shot/team writes do NOT (markPlayersDirty does, as in the Prisma store).
  */
 import type { IngestStore, SchedulableMatch, LineupEntryIn } from "./store";
-import type { MatchRowIn, StatLineRow, EventRowIn, ShotRowIn, TeamStatRowIn } from "./map";
+import type {
+  MatchRowIn,
+  StatLineRow,
+  EventRowIn,
+  ShotRowIn,
+  TeamStatRowIn,
+  GroupStandingRowIn,
+} from "./map";
 import { isLockWriteAuthorized } from "./lock";
 
 const pk = (a: number, b: number): string => `${a}:${b}`;
@@ -16,6 +23,7 @@ export class MemoryIngestStore implements IngestStore {
   private events = new Map<number, EventRowIn>();
   private shots = new Map<number, ShotRowIn>();
   private teamStats = new Map<string, TeamStatRowIn>();
+  private groupStandings = new Map<number, GroupStandingRowIn>(); // teamBdlId → row (T18)
   private dirty = new Set<string>();
   private locks = new Map<string, Date>();
   private appeared = new Map<number, Set<number>>(); // matchBdlId → appeared player BDL-ids (score rows)
@@ -111,6 +119,10 @@ export class MemoryIngestStore implements IngestStore {
   allTeamStats(): TeamStatRowIn[] {
     return [...this.teamStats.values()];
   }
+  /** Test accessor: the stored group-standing rows (T18). */
+  allGroupStandings(): GroupStandingRowIn[] {
+    return [...this.groupStandings.values()];
+  }
   isDirty(m: number, p: number): boolean {
     return this.dirty.has(pk(m, p));
   }
@@ -196,6 +208,13 @@ export class MemoryIngestStore implements IngestStore {
   upsertTeamStat(row: TeamStatRowIn): Promise<void> {
     this.teamStats.set(pk(row.matchBdlId, row.teamBdlId), row);
     return Promise.resolve();
+  }
+  upsertGroupStanding(row: GroupStandingRowIn): Promise<boolean> {
+    // FOREIGN-GUARD mirror: skip a row whose team was never registered via `upsertTeamByBdlId`
+    // (models "team not in fifa_team"). Idempotent: keyed by teamBdlId. No dirty-mark, no recompute.
+    if (!this.upsertedTeams.has(row.teamBdlId)) return Promise.resolve(false);
+    this.groupStandings.set(row.teamBdlId, row);
+    return Promise.resolve(true);
   }
   markPlayersDirty(m: number, ps: readonly number[]): Promise<void> {
     for (const p of ps) this.dirty.add(pk(m, p));

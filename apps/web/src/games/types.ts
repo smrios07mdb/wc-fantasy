@@ -148,6 +148,50 @@ export interface GameStatistics {
   readonly groups: readonly GameStatGroup[];
 }
 
+// ─── group standings (T18) ──────────────────────────────────────────────────────────
+
+/**
+ * One row of the real-football WC group table (the match's group), from `group_standing`. Display-only;
+ * derived purely from the ingested standing rows (NEVER the fantasy power-record). `position` is the
+ * feed's authoritative rank. The two booleans drive the design highlights.
+ */
+export interface GameStandingRow {
+  readonly teamId: string;
+  /**
+   * Resolved team name, or the shared UNNAMED_OPPONENT fallback — NEVER a raw team UUID. Doubles as the
+   * flag key (the P34 nation pattern: the team name IS the nation), like the rest of game-detail.
+   */
+  readonly teamName: string;
+  readonly position: number;
+  readonly played: number;
+  readonly won: number;
+  readonly drawn: number;
+  readonly lost: number;
+  readonly goalsFor: number;
+  readonly goalsAgainst: number;
+  readonly goalDifference: number;
+  readonly points: number;
+  /** Top-2 cutline — gets the green qualification position badge. */
+  readonly isQualifying: boolean;
+  /** One of the two teams in THIS match — gets the accent row tint + dot. */
+  readonly inMatch: boolean;
+}
+
+/**
+ * The Standings tab view-model — the match's group table. Present ONLY for a group-stage match whose two
+ * teams share one group AND whose standings have been ingested; otherwise the builder returns null and the
+ * tab is hidden (A1). Rows are sorted by the feed's `position` ascending.
+ */
+export interface GameStandings {
+  /** Group display name, verbatim from the feed (e.g. "Group A"). */
+  readonly groupName: string;
+  readonly rows: readonly GameStandingRow[];
+  /** Static advancement note (e.g. "Top 2 advance · 3rd may advance (best 8)"). */
+  readonly advanceNote: string;
+  /** Static FIFA tie-break footnote. */
+  readonly tiebreakNote: string;
+}
+
 // ─── kickoff-XI reconciliation anomaly ─────────────────────────────────────────────
 
 /**
@@ -233,6 +277,12 @@ export interface GameDetailView {
    * present, individual rows may still be null (a metric the feed omits) and render "–".
    */
   readonly statistics: GameStatistics | null;
+  /**
+   * The match's WC group table (T18), or null when the tab is hidden — i.e. a non-group-stage match, a
+   * match whose two teams are NOT in the same group (e.g. a knockout fixture), a TBD/unknown side, or a
+   * group whose standings haven't been ingested yet. When present, `rows` is sorted by `position`.
+   */
+  readonly standings: GameStandings | null;
   /**
    * Ordered match-events timeline (T16b) — goals (scorer + assist + running score), substitutions, cards, and
    * the synthetic KO/HT/FT markers, in chronological order. Empty until the feed posts events. Display-only;
@@ -326,6 +376,27 @@ export interface GdTeamStatInput {
   readonly extra: Readonly<Record<string, unknown>> | null;
 }
 
+/**
+ * One `group_standing` row as the loader hands it to `buildGroupStandings` (T18). Carries the denormalized
+ * `bdlGroupId` so the pure builder can verify the two in-match teams share ONE group. `teamName` is the
+ * resolved `fifa_team.name` (or null → UNNAMED fallback in the builder).
+ */
+export interface GdStandingInput {
+  readonly teamId: string;
+  readonly teamName: string | null;
+  readonly bdlGroupId: number;
+  readonly groupName: string;
+  readonly position: number;
+  readonly played: number;
+  readonly won: number;
+  readonly drawn: number;
+  readonly lost: number;
+  readonly goalsFor: number;
+  readonly goalsAgainst: number;
+  readonly goalDifference: number;
+  readonly points: number;
+}
+
 export interface GdLineupEntryInput {
   readonly playerId: string;
   readonly isStarter: boolean;
@@ -363,6 +434,13 @@ export interface BuildGameDetailInput {
   readonly ratings: readonly GdRatingInput[];
   /** stat_team_match rows (one per team) for this match; the builder maps each to home/away. */
   readonly teamStats: readonly GdTeamStatInput[];
+  /**
+   * group_standing rows (T18) for the GROUP(S) of the two in-match teams — the loader fetches a superset
+   * (both teams' groups) so the pure builder can verify they share one group; empty for a match with no
+   * ingested standings. The builder filters, sorts, flags, and decides tab visibility (A1). OPTIONAL +
+   * defaults to `[]` (→ tab hidden) so it's additive: the loader always supplies it.
+   */
+  readonly standings?: readonly GdStandingInput[];
   readonly lineupEntries: readonly GdLineupEntryInput[];
   readonly events: readonly GdEventInput[];
   /** playerId → owner tag (already name-resolved by the loader; empty when no period link). */

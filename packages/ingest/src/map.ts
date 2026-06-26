@@ -10,6 +10,7 @@ import type {
   FIFAPlayerMatchStats,
   FIFAPlayerRef,
   FIFAShot,
+  FIFAStanding,
   FIFATeamMatchStats,
 } from "@app/feed";
 import { FeedShapeMismatchError } from "./errors";
@@ -326,6 +327,51 @@ export function mapTeamStat(f: FIFATeamMatchStats): TeamStatRowIn {
     shotsBlocked: n(f.shots_blocked),
     possession: n(f.possession_pct), // documented field is `possession_pct`, NOT `possession`
     extra: buildTeamStatExtra(f),
+  };
+}
+
+/**
+ * One mapped `group_standings` row → `group_standing` (T18). BDL-keyed like every feed row; group identity
+ * is DENORMALIZED (`bdlGroupId` + `groupName`) so the table is self-contained (no `fifa_group` FK). The
+ * team + group ids are NESTED (`team.id` / `group.id`, NOT flat) — extracted defensively and validated by
+ * {@link requireNumber}, so a malformed row throws {@link FeedShapeMismatchError} and `eachItem` skips it.
+ * Live `group.name` is the full string ("Group A"), stored verbatim. `season.year` is soft-defaulted to
+ * 2026 (the table is WC2026-only). DISPLAY-ONLY — never read by scoring.
+ */
+export interface GroupStandingRowIn {
+  teamBdlId: number;
+  bdlGroupId: number;
+  groupName: string;
+  season: number;
+  position: number;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export function mapGroupStanding(f: FIFAStanding): GroupStandingRowIn {
+  const ctx: Ctx = { team_id: f.team?.id, group_id: f.group?.id };
+  const year = f.season?.year;
+  return {
+    teamBdlId: requireNumber("group_standings", "team.id", f.team?.id, ctx),
+    bdlGroupId: requireNumber("group_standings", "group.id", f.group?.id, ctx),
+    groupName: requireString("group_standings", "group.name", f.group?.name, ctx),
+    // WC2026-only table: soft-default a missing/malformed season to 2026 rather than drop the whole row.
+    season: typeof year === "number" && Number.isFinite(year) ? year : 2026,
+    position: requireNumber("group_standings", "position", f.position, ctx),
+    played: requireNumber("group_standings", "played", f.played, ctx),
+    won: requireNumber("group_standings", "won", f.won, ctx),
+    drawn: requireNumber("group_standings", "drawn", f.drawn, ctx),
+    lost: requireNumber("group_standings", "lost", f.lost, ctx),
+    goalsFor: requireNumber("group_standings", "goals_for", f.goals_for, ctx),
+    goalsAgainst: requireNumber("group_standings", "goals_against", f.goals_against, ctx),
+    goalDifference: requireNumber("group_standings", "goal_difference", f.goal_difference, ctx),
+    points: requireNumber("group_standings", "points", f.points, ctx),
   };
 }
 

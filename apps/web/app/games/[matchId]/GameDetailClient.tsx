@@ -28,6 +28,7 @@ import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import type {
   GameDetailView,
   GameEvent,
+  GameStandings,
   GameStatistics,
   GameStatRow,
   OwnerTag,
@@ -38,7 +39,7 @@ import type {
 import { pitchRows } from "@/src/games/pitchRows";
 import "@/src/games/games.css";
 
-type Tab = "lineups" | "statistics" | "events" | "ratings";
+type Tab = "lineups" | "statistics" | "events" | "ratings" | "standings";
 type OpenFn = ((playerId: string) => void) | null;
 
 // ─── name + rating helpers (pure, presentational) ──────────────────────────────────
@@ -924,6 +925,69 @@ function EventsTab({ view }: { view: GameDetailView }) {
   );
 }
 
+/**
+ * Standings tab (T18) — the match's WC group table. Columns `# · Team · P · W · D · L · GD · GF · Pts`
+ * per the match-detail handoff (the `Last`/form column is intentionally omitted: the `group_standings`
+ * feed carries no form). Top-2 get the green qualification position badge (`is-qual`); the two in-match
+ * teams get the accent row tint + dot (`is-inmatch`). Position-3 has no distinct style — the advancement
+ * note + footnote convey "3rd may advance" (faithful to the handoff).
+ */
+function StandingsTab({ standings }: { standings: GameStandings }) {
+  const fmtGd = (gd: number): string => (gd > 0 ? `+${gd}` : `${gd}`);
+  return (
+    <div className="gd-standings">
+      <div className="gd-gr-head">
+        <span className="gd-gr-trophy" aria-hidden="true">
+          🏆
+        </span>
+        <b>{standings.groupName}</b>
+        <span className="gd-gr-note">{standings.advanceNote}</span>
+      </div>
+      <table className="gd-gr-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th className="gd-gr-team">Team</th>
+            <th>P</th>
+            <th>W</th>
+            <th>D</th>
+            <th>L</th>
+            <th>GD</th>
+            <th>GF</th>
+            <th>Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {standings.rows.map((r) => (
+            <tr key={r.teamId} className={r.inMatch ? "is-inmatch" : undefined}>
+              <td>
+                <span className={`gd-gr-pos${r.isQualifying ? " is-qual" : ""}`}>{r.position}</span>
+              </td>
+              <td className="gd-gr-team">
+                {r.teamName && <Flag code={toIso2(r.teamName)} label={r.teamName} />}
+                <span className="gd-gr-name">{r.teamName}</span>
+                {r.inMatch && <span className="gd-gr-dot" aria-hidden="true" />}
+              </td>
+              <td>{r.played}</td>
+              <td>{r.won}</td>
+              <td>{r.drawn}</td>
+              <td>{r.lost}</td>
+              <td>{fmtGd(r.goalDifference)}</td>
+              <td>
+                {r.goalsFor}:{r.goalsAgainst}
+              </td>
+              <td>
+                <b>{r.points}</b>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="gd-gr-tiebreak">{standings.tiebreakNote}</p>
+    </div>
+  );
+}
+
 /** A stable, content-derived React key (no event id in the feed; markers repeat labels). */
 function timelineKey(e: GameEvent): string {
   return [
@@ -1163,17 +1227,32 @@ export function GameDetailClient({ view }: { view: GameDetailView }) {
             >
               Ratings
             </button>
+            {/* Standings tab — LAST per the match-detail handoff strip; appears only for a group-stage
+                match whose group table has been ingested (the builder returns null otherwise). */}
+            {view.standings && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "standings"}
+                className={`gd-tabbtn${tab === "standings" ? " is-active" : ""}`}
+                onClick={() => setTab("standings")}
+              >
+                Standings
+              </button>
+            )}
           </div>
 
           <div className="gd-tabwrap">
-            {/* LineupsTab is the default fall-through, so a stale "statistics" tab (after the block
-                disappears on refresh) degrades cleanly rather than rendering blank. */}
+            {/* LineupsTab is the default fall-through, so a stale "statistics"/"standings" tab (after the
+                block disappears on refresh) degrades cleanly rather than rendering blank. */}
             {tab === "ratings" ? (
               <RatingsTab view={view} live={live} onOpen={onOpen} />
             ) : tab === "events" ? (
               <EventsTab view={view} />
             ) : tab === "statistics" && view.statistics ? (
               <StatisticsTab view={view} statistics={view.statistics} live={live} />
+            ) : tab === "standings" && view.standings ? (
+              <StandingsTab standings={view.standings} />
             ) : (
               <LineupsTab view={view} live={live} onOpen={onOpen} />
             )}
