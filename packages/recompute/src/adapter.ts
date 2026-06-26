@@ -158,12 +158,17 @@ export function classifyCard(e: CardEvent): CardKind | null {
  * deliberately does NOT key on the label substring "goal": that wrongly swept in `varDecision` rows
  * whose class merely CONTAINS "goal" (goalAwarded, goalNotAwarded, vip_for_goal), inflating conceded
  * (the VAR-substring bug — DECISIONS.md). VAR outcomes are read separately by {@link overturnedGoals}.
+ *
+ * Exported (export keyword only — scoring byte-identical) so the read-only Game-Detail events timeline
+ * (T16b) keys goals on the SAME predicate scoring uses, the single-source pattern already established for
+ * {@link classifyCard} (T-CARD1). The web `GdEventInput` is structurally assignable to {@link EventRow}.
  */
-function isGoalEvent(e: EventRow): boolean {
+export function isGoalEvent(e: EventRow): boolean {
   return norm(e.incidentType) === "goal";
 }
 
-function isOwnGoalEvent(e: EventRow): boolean {
+/** Own-goal sub-type of a goal incident (label carries "own") — shared with the T16b timeline. */
+export function isOwnGoalEvent(e: EventRow): boolean {
   return isGoalEvent(e) && label(e).includes("own");
 }
 
@@ -179,8 +184,11 @@ function isGoalNotAwarded(e: EventRow): boolean {
  * not-yet-voided same-player goal within ≤3 effective minutes — one void cancels exactly one goal.
  * Every other varDecision class (goalAwarded, vip_for_goal, …) is ignored: under {@link isGoalEvent}
  * those are no longer goals at all. Pure — derived solely from the event list; identity by reference.
+ *
+ * Exported (export keyword only — scoring byte-identical) so the T16b Game-Detail timeline excludes the
+ * SAME VAR-disallowed goals scoring excludes (a disallowed `goal/*` row is not rescinded — see above).
  */
-function overturnedGoals(events: readonly EventRow[]): ReadonlySet<EventRow> {
+export function overturnedGoals(events: readonly EventRow[]): ReadonlySet<EventRow> {
   const goals = events.filter((e) => !e.rescinded && isGoalEvent(e) && e.playerId != null);
   const overturned = new Set<EventRow>();
   for (const v of events) {

@@ -166,6 +166,63 @@ export interface LineupAnomaly {
   readonly removedPlayerIds: readonly string[];
 }
 
+// ─── events timeline (T16b) ─────────────────────────────────────────────────────────
+
+export type GameEventKind = "goal" | "sub" | "card" | "marker";
+
+/**
+ * One ordered entry in the match-events timeline — a goal, substitution, card, or a synthetic KO/HT/FT
+ * marker — sharing a flat shape. The builder emits them CHRONOLOGICALLY (KO first … FT last) and accumulates
+ * a running score by replaying goals in order: an own goal credits the OPPOSING side and a VAR-overturned
+ * goal is excluded, both keyed on the shared engine predicates (`isOwnGoalEvent` / `overturnedGoals`) so the
+ * timeline can never silently disagree with scoring. The UI reverses for latest-first display.
+ */
+export interface GameEvent {
+  readonly kind: GameEventKind;
+  /**
+   * Beneficiary side of a goal (an own goal flips to the opponent); the acting side of a sub/card; null for
+   * the KO/HT/FT markers AND for a goal whose scorer can't be resolved to a side (counted, never silently
+   * credited — see {@link EventScoreAnomaly}).
+   */
+  readonly side: "home" | "away" | null;
+  /** Effective minute (time_minute + added_time) for ordering; null for the synthetic markers. */
+  readonly minute: number | null;
+  /** Pre-formatted clock label ("73'" / "45+2'"); null on markers. Built server-side (no client re-format). */
+  readonly minuteLabel: string | null;
+  /** `1H` / `2H` / `ET` / `PEN`, for the ordering rank; null on synthetic markers. */
+  readonly period: string | null;
+  /** Marker name ("Kick-off" / "Half-time" / "Full-time") or a card reason; null otherwise. */
+  readonly label: string | null;
+  /** Running home/away score AFTER this event (a marker carries the score at that point). */
+  readonly homeScore: number;
+  readonly awayScore: number;
+  /** Scorer / carded / subbed-ON player id — lets the UI cross-reference the per-player owner tag. */
+  readonly playerId: string | null;
+  readonly playerName: string | null;
+  /** Goal assist scorer name; null otherwise. */
+  readonly assistName: string | null;
+  /** Subbed-OFF player name (sub events); null otherwise. */
+  readonly secondaryName: string | null;
+  readonly cardKind: "yellow" | "red" | null;
+  readonly isPenalty: boolean;
+  readonly isOwnGoal: boolean;
+}
+
+/**
+ * Terminal-match reconciliation flag: the score accumulated from the timeline's goal events did NOT equal
+ * the stored authoritative (VAR-correct) final score, OR a goal's scorer could not be resolved to a side.
+ * Mirrors the {@link LineupAnomaly} safety net (T-RECON) — the loader logs it; the timeline still renders
+ * the accumulated score (an observable divergence, never a silent desync). Null in the normal (agreeing) case.
+ */
+export interface EventScoreAnomaly {
+  readonly computedHome: number;
+  readonly computedAway: number;
+  readonly finalHome: number | null;
+  readonly finalAway: number | null;
+  /** Goals dropped from the running score because their scorer didn't resolve to a side. */
+  readonly unresolvedGoals: number;
+}
+
 export interface GameDetailView {
   readonly header: GameDetailHeader;
   readonly home: SquadSide;
@@ -176,6 +233,15 @@ export interface GameDetailView {
    * present, individual rows may still be null (a metric the feed omits) and render "–".
    */
   readonly statistics: GameStatistics | null;
+  /**
+   * Ordered match-events timeline (T16b) — goals (scorer + assist + running score), substitutions, cards, and
+   * the synthetic KO/HT/FT markers, in chronological order. Empty until the feed posts events. Display-only;
+   * the running score replays the shared engine goal/own-goal/VAR predicates. Feeds the Events tab AND the
+   * scoreboard scorers row.
+   */
+  readonly events: readonly GameEvent[];
+  /** Terminal-match running-score reconciliation flag (T16b); null in the normal (agreeing) case. */
+  readonly eventScoreAnomaly: EventScoreAnomaly | null;
   /** True when neither side has a single player line (no lineup announced + nobody scored yet). */
   readonly empty: boolean;
   /** periodId for the PlayerScoreSheet modal; null = no tap-to-breakdown (and no owner overlay). */
@@ -265,15 +331,27 @@ export interface GdLineupEntryInput {
   readonly isStarter: boolean;
 }
 
+/**
+ * One `event_match` row. Structurally a SUPERSET of `@app/recompute`'s `EventRow` (it only adds `period`),
+ * so it is directly assignable to the shared engine predicates `isGoalEvent` / `isOwnGoalEvent` /
+ * `overturnedGoals` / `classifyCard` — the events timeline keys goals/cards on the SAME classification
+ * scoring uses (the T16b / T-CARD1 single-source pattern). `timeMinute` + `addedTime` are carried RAW (not
+ * pre-collapsed to one minute) so the timeline can render the "45+2'" added-time form and reuse the
+ * engine's effective-minute math; the per-player `cameOnMinute`/`wentOffMinute` collapse them locally.
+ */
 export interface GdEventInput {
-  readonly playerId: string | null;
-  readonly playerInId: string | null;
-  readonly playerOutId: string | null;
   readonly incidentType: string;
   readonly incidentClass: string | null;
-  /** Effective minute (time_minute + added_time); null when the feed omits it. */
-  readonly minute: number | null;
+  readonly timeMinute: number | null;
+  readonly addedTime: number | null;
+  readonly playerId: string | null;
+  /** Assist scorer id (`event_match.assist_player_id`) — added to the loader's id union (T16b). */
+  readonly assistPlayerId: string | null;
+  readonly playerInId: string | null;
+  readonly playerOutId: string | null;
   readonly rescinded: boolean;
+  /** `1H` / `2H` / `ET` / `PEN` — synthesizes the HT/FT markers + the period sort rank (T16b). */
+  readonly period: string | null;
 }
 
 export interface BuildGameDetailInput {

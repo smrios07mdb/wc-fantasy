@@ -27,6 +27,7 @@ import { kitOf } from "@/app/vsfield/kitOf";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import type {
   GameDetailView,
+  GameEvent,
   GameStatistics,
   GameStatRow,
   OwnerTag,
@@ -37,7 +38,7 @@ import type {
 import { pitchRows } from "@/src/games/pitchRows";
 import "@/src/games/games.css";
 
-type Tab = "lineups" | "statistics" | "ratings";
+type Tab = "lineups" | "statistics" | "events" | "ratings";
 type OpenFn = ((playerId: string) => void) | null;
 
 // ─── name + rating helpers (pure, presentational) ──────────────────────────────────
@@ -734,6 +735,207 @@ function StatisticsTab({
   );
 }
 
+// ─── events timeline + scorers (T16b) ───────────────────────────────────────────────
+
+/** Goal events for one side, in chronological order (own goals already attributed to the beneficiary). */
+function sideGoals(events: readonly GameEvent[], side: "home" | "away"): GameEvent[] {
+  return events.filter((e) => e.kind === "goal" && e.side === side);
+}
+
+/** One side's scoreboard scorers line: "⚽ Surname 11', 45+2'", grouped by scorer; own goals tagged (OG). */
+function ScorersSide({
+  goals,
+  side,
+  lineById,
+}: {
+  goals: readonly GameEvent[];
+  side: "home" | "away";
+  lineById: Map<string, PlayerLine>;
+}) {
+  const groups: { key: string; name: string; og: boolean; mins: string[] }[] = [];
+  const byKey = new Map<string, (typeof groups)[number]>();
+  for (const g of goals) {
+    const line = g.playerId ? lineById.get(g.playerId) : undefined;
+    const name = line?.lastName ?? g.playerName ?? "Goal"; // compact surname on the scoreboard line
+    const key = `${g.playerId ?? name}|${g.isOwnGoal ? "og" : ""}`;
+    let grp = byKey.get(key);
+    if (!grp) {
+      grp = { key, name, og: g.isOwnGoal, mins: [] };
+      byKey.set(key, grp);
+      groups.push(grp);
+    }
+    if (g.minuteLabel) grp.mins.push(g.minuteLabel);
+  }
+  return (
+    <div className={`gd-scorers is-${side}`}>
+      {groups.map((g) => (
+        <div className="gd-scorer" key={g.key}>
+          <span className="gd-ball" aria-hidden="true">
+            ⚽
+          </span>
+          <span className="gd-scorer-nm">
+            {g.name}
+            {g.og && <em className="gd-og"> (OG)</em>}
+          </span>
+          {g.mins.length > 0 && <span className="gd-scorer-mins mono">{g.mins.join(", ")}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The body of a non-marker timeline row — a goal, substitution, or card. `line` resolves the owner tag. */
+function EventBody({ e, line }: { e: GameEvent; line: PlayerLine | undefined }) {
+  if (e.kind === "goal") {
+    return (
+      <div className="gd-tev-body">
+        <div className="gd-tev-line">
+          <span className="gd-ball" aria-hidden="true">
+            ⚽
+          </span>
+          <b>{e.playerName ?? "Goal"}</b>
+          {e.isPenalty && <span className="gd-ev-tag">PEN</span>}
+          {e.isOwnGoal && <span className="gd-ev-tag is-og">OG</span>}
+        </div>
+        {e.assistName && <div className="gd-tev-sub">assist · {e.assistName}</div>}
+        {line?.owner && (
+          <div className="gd-tev-fan">
+            <OwnerChip owner={line.owner} tiny />
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (e.kind === "sub") {
+    return (
+      <div className="gd-tev-body">
+        <div className="gd-tev-line gd-sub-on">
+          <span className="gd-sub-ar is-on" aria-hidden="true">
+            ▲
+          </span>
+          <b>{e.playerName ?? "—"}</b>
+        </div>
+        {e.secondaryName && (
+          <div className="gd-tev-sub gd-sub-off">
+            <span className="gd-sub-ar is-off" aria-hidden="true">
+              ▼
+            </span>
+            {e.secondaryName}
+          </div>
+        )}
+      </div>
+    );
+  }
+  // card
+  return (
+    <div className="gd-tev-body">
+      <div className="gd-tev-line">
+        <span
+          className={`gd-ev-ic is-${e.cardKind === "red" ? "red" : "yel"}`}
+          aria-hidden="true"
+          title={e.cardKind === "red" ? "Red card" : "Yellow card"}
+        />
+        <b>{e.playerName ?? "—"}</b>
+      </div>
+    </div>
+  );
+}
+
+/** One timeline entry: a full-width KO/HT/FT marker, or a side-anchored goal/sub/card on the spine. */
+function TimelineRow({ e, lineById }: { e: GameEvent; lineById: Map<string, PlayerLine> }) {
+  if (e.kind === "marker") {
+    const major = e.label === "Half-time" || e.label === "Full-time";
+    return (
+      <div className={`gd-tl-marker${major ? " is-major" : ""}`}>
+        <span className="gd-tlm-line" aria-hidden="true" />
+        <span className={`gd-tlm-pill${major ? " is-major" : ""}`}>
+          {e.label}
+          {major ? ` · ${e.homeScore}–${e.awayScore}` : ""}
+        </span>
+        <span className="gd-tlm-line" aria-hidden="true" />
+      </div>
+    );
+  }
+  const line = e.playerId ? lineById.get(e.playerId) : undefined;
+  const body = <EventBody e={e} line={line} />;
+  // A goal whose scorer can't be placed on a side (the desync-guarded case) renders centred, never dropped.
+  if (e.side === null) {
+    return (
+      <div className="gd-tev gd-tev-none">
+        <span className="gd-tev-min mono">{e.minuteLabel}</span>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <div className={`gd-tev gd-tev-${e.side}${e.kind === "goal" ? " is-goal" : ""}`}>
+      <div className="gd-tev-half gd-tev-l">{e.side === "home" && body}</div>
+      <div className="gd-tev-spine">
+        <span className="gd-tev-min mono">{e.minuteLabel}</span>
+      </div>
+      <div className="gd-tev-half gd-tev-r">{e.side === "away" && body}</div>
+    </div>
+  );
+}
+
+/** The Events tab — a chronological match timeline (reversed to latest-first), home left / away right. */
+function EventsTab({ view }: { view: GameDetailView }) {
+  const lineById = new Map(allLines(view).map((l) => [l.playerId, l]));
+  const rows = view.events.slice().reverse();
+  // Empty only when there's nothing but the synthetic Kick-off marker (mirrors the design's `evs.length<=1`);
+  // a finished event-free match shows its KO/FT markers instead of a future-tense "as the match unfolds" note.
+  const onlyKickoff = view.events.length <= 1;
+  const anomaly = view.eventScoreAnomaly;
+  return (
+    <div className="gd-events">
+      <div className="gd-ev-head">
+        <span className="gd-eh-team">
+          {view.home.teamCode && (
+            <Flag code={toIso2(view.home.teamCode)} label={view.home.teamName} />
+          )}
+          {view.home.teamName}
+        </span>
+        <span className="gd-eh-mid">Match events</span>
+        <span className="gd-eh-team is-away">
+          {view.away.teamName}
+          {view.away.teamCode && (
+            <Flag code={toIso2(view.away.teamCode)} label={view.away.teamName} />
+          )}
+        </span>
+      </div>
+      {anomaly && (
+        // The timeline's replayed score diverged from the official (stored) score — surface it honestly
+        // rather than leaving the user to puzzle over a scoreboard that disagrees with the FT marker.
+        <p className="gd-note t-sm text-tertiary">
+          Timeline reconstructed from feed events; it may differ from the official score.
+        </p>
+      )}
+      <div className="gd-timeline">
+        {onlyKickoff && (
+          <div className="gd-ev-empty">
+            No events yet — goals, cards and substitutions appear as the match unfolds.
+          </div>
+        )}
+        {rows.map((e) => (
+          <TimelineRow key={timelineKey(e)} e={e} lineById={lineById} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A stable, content-derived React key (no event id in the feed; markers repeat labels). */
+function timelineKey(e: GameEvent): string {
+  return [
+    e.kind,
+    e.period ?? "",
+    e.minute ?? "",
+    e.playerId ?? e.label ?? "",
+    e.homeScore,
+    e.awayScore,
+  ].join("|");
+}
+
 // ─── scoreboard + stake ───────────────────────────────────────────────────────────
 
 function ClockPill({ status }: { status: MatchStatus }) {
@@ -755,6 +957,10 @@ function Scoreboard({ view }: { view: GameDetailView }) {
   const live = header.status === "in_progress";
   const hasScore = home.score !== null && away.score !== null;
   const exposure = exposureOf(view);
+  // Scoreboard scorers row (T16b): goals grouped by side, from the same ordered events[] the tab consumes.
+  const homeGoals = sideGoals(view.events, "home");
+  const awayGoals = sideGoals(view.events, "away");
+  const lineById = new Map(allLines(view).map((l) => [l.playerId, l])); // surname resolution for scorers
   return (
     <div className="gd-board">
       <div className="gd-board-main">
@@ -789,6 +995,13 @@ function Scoreboard({ view }: { view: GameDetailView }) {
           <span className="gd-team-nm">{away.teamName}</span>
         </div>
       </div>
+
+      {homeGoals.length + awayGoals.length > 0 && (
+        <div className="gd-board-scorers">
+          <ScorersSide goals={homeGoals} side="home" lineById={lineById} />
+          <ScorersSide goals={awayGoals} side="away" lineById={lineById} />
+        </div>
+      )}
 
       <div className="gd-board-meta">
         <span>{header.kickoffLabel}</span>
@@ -931,6 +1144,16 @@ export function GameDetailClient({ view }: { view: GameDetailView }) {
                 Statistics
               </button>
             )}
+            {/* Events tab — between Statistics and Ratings per the match-detail handoff tab strip. */}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "events"}
+              className={`gd-tabbtn${tab === "events" ? " is-active" : ""}`}
+              onClick={() => setTab("events")}
+            >
+              Events
+            </button>
             <button
               type="button"
               role="tab"
@@ -947,6 +1170,8 @@ export function GameDetailClient({ view }: { view: GameDetailView }) {
                 disappears on refresh) degrades cleanly rather than rendering blank. */}
             {tab === "ratings" ? (
               <RatingsTab view={view} live={live} onOpen={onOpen} />
+            ) : tab === "events" ? (
+              <EventsTab view={view} />
             ) : tab === "statistics" && view.statistics ? (
               <StatisticsTab view={view} statistics={view.statistics} live={live} />
             ) : (

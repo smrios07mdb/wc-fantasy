@@ -193,69 +193,90 @@ function fullInput(): BuildGameDetailInput {
     ],
     events: [
       {
+        incidentType: "substitution",
+        incidentClass: null,
+        timeMinute: 60,
+        addedTime: null,
         playerId: null,
+        assistPlayerId: null,
         playerInId: "p3",
         playerOutId: null, // p3 came on; who he replaced isn't modelled here (p4 stays unused bench)
+        rescinded: false,
+        period: "2H",
+      },
+      {
+        incidentType: "card",
+        incidentClass: "yellow",
+        timeMinute: 30,
+        addedTime: null,
+        playerId: "p5",
+        assistPlayerId: null,
+        playerInId: null,
+        playerOutId: null,
+        rescinded: false,
+        period: "1H",
+      },
+      {
+        incidentType: "card",
+        incidentClass: "yellow",
+        timeMinute: 70,
+        addedTime: null,
+        playerId: "p5",
+        assistPlayerId: null,
+        playerInId: null,
+        playerOutId: null,
+        rescinded: false,
+        period: "2H",
+      },
+      {
         incidentType: "substitution",
         incidentClass: null,
-        minute: 60,
-        rescinded: false,
-      },
-      {
-        playerId: "p5",
-        playerInId: null,
-        playerOutId: null,
-        incidentType: "card",
-        incidentClass: "yellow",
-        minute: 30,
-        rescinded: false,
-      },
-      {
-        playerId: "p5",
-        playerInId: null,
-        playerOutId: null,
-        incidentType: "card",
-        incidentClass: "yellow",
-        minute: 70,
-        rescinded: false,
-      },
-      {
+        timeMinute: 75,
+        addedTime: null,
         playerId: null,
+        assistPlayerId: null,
         playerInId: null, // p6's come-on lacks an id; he's OFF the sheet but the side HAS one → Sub, not XI
         playerOutId: "p5", // p5 (sheet starter) is withdrawn at 75'
-        incidentType: "substitution",
-        incidentClass: null,
-        minute: 75,
         rescinded: false,
+        period: "2H",
       },
       {
-        playerId: "p2",
-        playerInId: null,
-        playerOutId: null,
         incidentType: "card",
         incidentClass: "red",
-        minute: 80,
+        timeMinute: 80,
+        addedTime: null,
+        playerId: "p2",
+        assistPlayerId: null,
+        playerInId: null,
+        playerOutId: null,
         rescinded: false,
+        period: "2H",
       },
       // rescinded card for p1 — must NOT count.
       {
-        playerId: "p1",
-        playerInId: null,
-        playerOutId: null,
         incidentType: "card",
         incidentClass: "yellow",
-        minute: 50,
+        timeMinute: 50,
+        addedTime: null,
+        playerId: "p1",
+        assistPlayerId: null,
+        playerInId: null,
+        playerOutId: null,
         rescinded: true,
+        period: "1H",
       },
       // a non-card VAR-ish row — must NOT be classified as a card.
       {
-        playerId: "p6",
-        playerInId: null,
-        playerOutId: null,
         incidentType: "varDecision",
         incidentClass: "goalAwarded",
-        minute: 41,
+        timeMinute: 41,
+        addedTime: null,
+        playerId: "p6",
+        assistPlayerId: null,
+        playerInId: null,
+        playerOutId: null,
         rescinded: false,
+        period: "1H",
       },
     ],
     ownerByPlayer: {
@@ -567,22 +588,28 @@ const SUB = (
   playerInId: string | null,
   minute: number,
 ): GdEventInput => ({
-  playerId: null,
-  playerInId,
-  playerOutId,
   incidentType: "substitution",
   incidentClass: null,
-  minute,
+  timeMinute: minute,
+  addedTime: null,
+  playerId: null,
+  assistPlayerId: null,
+  playerInId,
+  playerOutId,
   rescinded: false,
+  period: minute <= 45 ? "1H" : "2H",
 });
 const CARD = (playerId: string, incidentClass: "yellow" | "red", minute: number): GdEventInput => ({
-  playerId,
-  playerInId: null,
-  playerOutId: null,
   incidentType: "card",
   incidentClass,
-  minute,
+  timeMinute: minute,
+  addedTime: null,
+  playerId,
+  assistPlayerId: null,
+  playerInId: null,
+  playerOutId: null,
   rescinded: false,
+  period: minute <= 45 ? "1H" : "2H",
 });
 
 /** id, position, minutes-played (null ⇒ no stat row). Every row is flagged `is_starter`. */
@@ -888,5 +915,313 @@ describe("buildGameDetail — kickoff XI reconciliation (cascade)", () => {
     expect(a.removedPlayerIds).toEqual(["Jurasek"]);
     expect(a.keptPlayerIds).not.toContain("Jurasek");
     expect(v.home.bench.map((l) => l.playerId)).toContain("Jurasek"); // not silently vanished
+  });
+});
+
+// ─── events timeline (T16b) ──────────────────────────────────────────────────────────
+
+const EV_PLAYERS: GdPlayerInput[] = [
+  { id: "scorer", displayName: "H. Kane", firstName: "Harry", lastName: "Kane", position: "FWD", teamId: "home", nation: "HT" }, // prettier-ignore
+  { id: "assister", displayName: "P. Foden", firstName: "Phil", lastName: "Foden", position: "MID", teamId: "home", nation: "HT" }, // prettier-ignore
+  { id: "owngoaler", displayName: "O. Goaler", firstName: "Own", lastName: "Goaler", position: "DEF", teamId: "home", nation: "HT" }, // prettier-ignore
+  { id: "ascorer", displayName: "K. Mbappe", firstName: "Kylian", lastName: "Mbappe", position: "FWD", teamId: "away", nation: "AT" }, // prettier-ignore
+  { id: "varscorer", displayName: "V. Ruled", firstName: "Var", lastName: "Ruled", position: "FWD", teamId: "away", nation: "AT" }, // prettier-ignore
+  { id: "subon", displayName: "S. On", firstName: "Sub", lastName: "On", position: "MID", teamId: "away", nation: "AT" }, // prettier-ignore
+  { id: "suboff", displayName: "S. Off", firstName: "Sub", lastName: "Off", position: "MID", teamId: "away", nation: "AT" }, // prettier-ignore
+];
+
+/** Minimal event factory — defaults to an unkeyed goal row; pass the discriminators you care about. */
+const ev = (over: Partial<GdEventInput>): GdEventInput => ({
+  incidentType: "goal",
+  incidentClass: null,
+  timeMinute: null,
+  addedTime: null,
+  playerId: null,
+  assistPlayerId: null,
+  playerInId: null,
+  playerOutId: null,
+  rescinded: false,
+  period: null,
+  ...over,
+});
+
+function eventsInput(over: Partial<BuildGameDetailInput> = {}): BuildGameDetailInput {
+  return {
+    match: baseMatch({ homeScore: 2, awayScore: 1 }),
+    players: EV_PLAYERS,
+    stats: [],
+    scores: [],
+    ratings: [],
+    teamStats: [],
+    lineupEntries: [],
+    events: [],
+    ownerByPlayer: {},
+    unresolvedFromPool: 0,
+    ...over,
+  };
+}
+
+/** A full match's worth of events, deliberately NOT pre-sorted, to prove the builder's own ordering. */
+const STD_EVENTS: GdEventInput[] = [
+  ev({ incidentType: "goal", incidentClass: "regular", playerId: "scorer", assistPlayerId: "assister", timeMinute: 10, period: "1H" }), // prettier-ignore
+  ev({ incidentType: "goal", incidentClass: "ownGoal", playerId: "owngoaler", timeMinute: 25, period: "1H" }), // prettier-ignore
+  ev({ incidentType: "goal", incidentClass: "penalty", playerId: "scorer", timeMinute: 50, period: "2H" }), // prettier-ignore
+  ev({
+    incidentType: "goal",
+    incidentClass: "regular",
+    playerId: "varscorer",
+    timeMinute: 60,
+    period: "2H",
+  }), // disallowed (overturned below)  // prettier-ignore
+  ev({ incidentType: "varDecision", incidentClass: "goalNotAwarded", playerId: "varscorer", timeMinute: 61, period: "2H" }), // prettier-ignore
+  ev({
+    incidentType: "varDecision",
+    incidentClass: "goalAwarded",
+    playerId: "ascorer",
+    timeMinute: 41,
+    period: "1H",
+  }), // plain VAR → dropped  // prettier-ignore
+  ev({ incidentType: "substitution", playerInId: "subon", playerOutId: "suboff", timeMinute: 70, period: "2H" }), // prettier-ignore
+  ev({ incidentType: "card", incidentClass: "yellow", playerId: "ascorer", timeMinute: 80, period: "2H" }), // prettier-ignore
+];
+
+describe("buildGameDetail — events timeline (T16b)", () => {
+  it("emits an ordered KO→FT timeline with a replayed running score (own goal credits the opposing side, penalty + regular counted, VAR-disallowed + every varDecision excluded)", () => {
+    const v = buildGameDetail(eventsInput({ events: STD_EVENTS }));
+    const shape = v.events.map(
+      (e) =>
+        `${e.kind}:${e.label ?? e.playerName ?? ""}@${e.minuteLabel ?? ""}=${e.homeScore}-${e.awayScore}`,
+    );
+    expect(shape).toEqual([
+      "marker:Kick-off@=0-0",
+      "goal:Harry Kane@10'=1-0",
+      "goal:Own Goaler@25'=1-1", // own goal by a HOME player → AWAY's score
+      "marker:Half-time@=1-1",
+      "goal:Harry Kane@50'=2-1",
+      "sub:Sub On@70'=2-1",
+      "card:Kylian Mbappe@80'=2-1",
+      "marker:Full-time@=2-1",
+    ]);
+    // computed (2–1) == stored (2–1), nothing unresolved → no anomaly.
+    expect(v.eventScoreAnomaly).toBeNull();
+    // a VAR-disallowed goal's scorer never appears on the timeline.
+    expect(v.events.some((e) => e.playerName === "Var Ruled")).toBe(false);
+  });
+
+  it("resolves the assist name and flags own-goal / penalty / side", () => {
+    const v = buildGameDetail(eventsInput({ events: STD_EVENTS }));
+    const goals = v.events.filter((e) => e.kind === "goal");
+    expect(goals.map((g) => g.playerName)).toEqual(["Harry Kane", "Own Goaler", "Harry Kane"]);
+    expect(goals[0]!.assistName).toBe("Phil Foden");
+    expect(goals[1]!).toMatchObject({ isOwnGoal: true, side: "away" });
+    expect(goals[2]!).toMatchObject({ isPenalty: true, isOwnGoal: false, side: "home" });
+  });
+
+  it("orders same-minute events deterministically (goal before card) regardless of input order", () => {
+    const same: GdEventInput[] = [
+      ev({
+        incidentType: "card",
+        incidentClass: "yellow",
+        playerId: "ascorer",
+        timeMinute: 30,
+        period: "1H",
+      }),
+      ev({
+        incidentType: "goal",
+        incidentClass: "regular",
+        playerId: "scorer",
+        timeMinute: 30,
+        period: "1H",
+      }),
+    ];
+    const m = baseMatch({ homeScore: 1, awayScore: 0 });
+    const forward = buildGameDetail(eventsInput({ events: same, match: m }));
+    const reversed = buildGameDetail(eventsInput({ events: [...same].reverse(), match: m }));
+    expect(forward.events.filter((e) => e.kind !== "marker").map((e) => e.kind)).toEqual([
+      "goal",
+      "card",
+    ]);
+    expect(reversed.events.map((e) => e.kind)).toEqual(forward.events.map((e) => e.kind));
+  });
+
+  it("never silently credits a goal whose scorer can't be placed on a side; counts it in the anomaly", () => {
+    const v = buildGameDetail(
+      eventsInput({
+        events: [
+          ev({
+            incidentType: "goal",
+            incidentClass: "regular",
+            playerId: "ghost",
+            timeMinute: 12,
+            period: "1H",
+          }),
+        ],
+        match: baseMatch({ homeScore: 0, awayScore: 0 }),
+      }),
+    );
+    expect(v.events.find((e) => e.kind === "goal")?.side).toBeNull();
+    expect(v.events.at(-1)).toMatchObject({ label: "Full-time", homeScore: 0, awayScore: 0 });
+    expect(v.eventScoreAnomaly).toMatchObject({ unresolvedGoals: 1 });
+  });
+
+  it("flags a terminal computed-vs-stored mismatch but still renders the accumulated timeline score", () => {
+    const v = buildGameDetail(
+      eventsInput({
+        events: [
+          ev({
+            incidentType: "goal",
+            incidentClass: "regular",
+            playerId: "scorer",
+            timeMinute: 10,
+            period: "1H",
+          }),
+        ],
+        match: baseMatch({ status: "completed", homeScore: 3, awayScore: 0 }),
+      }),
+    );
+    expect(v.eventScoreAnomaly).toMatchObject({
+      computedHome: 1,
+      computedAway: 0,
+      finalHome: 3,
+      finalAway: 0,
+    });
+    expect(v.events.at(-1)).toMatchObject({ label: "Full-time", homeScore: 1, awayScore: 0 });
+  });
+
+  it("is live-safe: no Full-time mid-match, and Half-time only once the second half is reached", () => {
+    const firstHalf = buildGameDetail(
+      eventsInput({
+        events: [
+          ev({
+            incidentType: "goal",
+            incidentClass: "regular",
+            playerId: "scorer",
+            timeMinute: 10,
+            period: "1H",
+          }),
+        ],
+        match: baseMatch({ status: "in_progress", homeScore: 1, awayScore: 0 }),
+      }),
+    );
+    expect(firstHalf.events.some((e) => e.label === "Full-time")).toBe(false);
+    expect(firstHalf.events.some((e) => e.label === "Half-time")).toBe(false);
+    const secondHalf = buildGameDetail(
+      eventsInput({
+        events: [
+          ev({
+            incidentType: "card",
+            incidentClass: "yellow",
+            playerId: "scorer",
+            timeMinute: 47,
+            period: "2H",
+          }),
+        ],
+        match: baseMatch({ status: "in_progress", homeScore: 0, awayScore: 0 }),
+      }),
+    );
+    expect(secondHalf.events.some((e) => e.label === "Half-time")).toBe(true);
+    expect(secondHalf.events.some((e) => e.label === "Full-time")).toBe(false);
+  });
+
+  it("renders the added-time minute form (45+2')", () => {
+    const v = buildGameDetail(
+      eventsInput({
+        events: [
+          ev({
+            incidentType: "goal",
+            incidentClass: "regular",
+            playerId: "scorer",
+            timeMinute: 45,
+            addedTime: 2,
+            period: "1H",
+          }),
+        ],
+        match: baseMatch({ homeScore: 1, awayScore: 0 }),
+      }),
+    );
+    const goal = v.events.find((e) => e.kind === "goal");
+    expect(goal?.minuteLabel).toBe("45+2'");
+    expect(goal?.minute).toBe(47);
+  });
+
+  it("orders a knockout's regulation → extra-time → penalty goals by period rank, replaying the score across them", () => {
+    // Deliberately unsorted input mixing 2H / ET / PEN (the World Cup knockout case).
+    const knockout: GdEventInput[] = [
+      ev({
+        incidentType: "goal",
+        incidentClass: "regular",
+        playerId: "ascorer",
+        timeMinute: 105,
+        period: "ET",
+      }), // away ET goal
+      ev({
+        incidentType: "goal",
+        incidentClass: "penalty",
+        playerId: "scorer",
+        timeMinute: 120,
+        period: "PEN",
+      }), // home shoot-out
+      ev({
+        incidentType: "goal",
+        incidentClass: "regular",
+        playerId: "scorer",
+        timeMinute: 70,
+        period: "2H",
+      }), // home 2H goal
+    ];
+    const v = buildGameDetail(
+      eventsInput({ events: knockout, match: baseMatch({ homeScore: 2, awayScore: 1 }) }),
+    );
+    const goals = v.events.filter((e) => e.kind === "goal");
+    expect(goals.map((g) => `${g.period}@${g.minute}=${g.homeScore}-${g.awayScore}`)).toEqual([
+      "2H@70=1-0",
+      "ET@105=1-1",
+      "PEN@120=2-1",
+    ]);
+    // Half-time rides the 1H→2H boundary (the first ≥2 event), not ET/PEN.
+    const htIdx = v.events.findIndex((e) => e.label === "Half-time");
+    const firstGoalIdx = v.events.findIndex((e) => e.kind === "goal");
+    expect(htIdx).toBeGreaterThan(0);
+    expect(htIdx).toBeLessThan(firstGoalIdx); // HT before the 2H goal
+    expect(v.eventScoreAnomaly).toBeNull();
+  });
+
+  it("does NOT flag an open-play goal as a penalty (the 'pen' substring trap)", () => {
+    const v = buildGameDetail(
+      eventsInput({
+        events: [
+          ev({
+            incidentType: "goal",
+            incidentClass: "openPlay",
+            playerId: "scorer",
+            timeMinute: 20,
+            period: "1H",
+          }),
+          ev({
+            incidentType: "goal",
+            incidentClass: "penalty",
+            playerId: "scorer",
+            timeMinute: 60,
+            period: "2H",
+          }),
+        ],
+        match: baseMatch({ homeScore: 2, awayScore: 0 }),
+      }),
+    );
+    const goals = v.events.filter((e) => e.kind === "goal");
+    expect(goals.map((g) => g.isPenalty)).toEqual([false, true]); // "openPlay" → false, "penalty" → true
+  });
+
+  it("surfaces the goal-less completed fixture's reconciliation anomaly (a 2–1 final with no goal events)", () => {
+    // The canonical assembly fixture is a completed 2–1 with subs/cards only (no goal rows) — documenting that
+    // buildEvents flags the divergence rather than masking it (computed 0–0 vs stored 2–1).
+    const v = buildGameDetail(fullInput());
+    expect(v.eventScoreAnomaly).toMatchObject({
+      computedHome: 0,
+      computedAway: 0,
+      finalHome: 2,
+      finalAway: 1,
+      unresolvedGoals: 0,
+    });
   });
 });

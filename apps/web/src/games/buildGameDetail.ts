@@ -21,11 +21,20 @@
  * renders the kept set as-is (never padded/trimmed) and surfaces a {@link LineupAnomaly}.
  */
 import { UNNAMED_OPPONENT } from "@/src/lineup/view";
-import { classifyCard, resolveRating, type RatingRow } from "@app/recompute";
+import {
+  classifyCard,
+  isGoalEvent,
+  isOwnGoalEvent,
+  overturnedGoals,
+  resolveRating,
+  type RatingRow,
+} from "@app/recompute";
 import type { Position } from "@app/shared";
 import type {
   BuildGameDetailInput,
+  EventScoreAnomaly,
   GameDetailView,
+  GameEvent,
   GameStatGroup,
   GameStatistics,
   GameStatRow,
@@ -57,6 +66,14 @@ function byEntryThenName(a: PlayerLine, b: PlayerLine): number {
   const am = a.cameOnMinute ?? Number.POSITIVE_INFINITY;
   const bm = b.cameOnMinute ?? Number.POSITIVE_INFINITY;
   return am !== bm ? am - bm : a.displayName.localeCompare(b.displayName);
+}
+
+/**
+ * Effective match minute = `time_minute` + `added_time` (e.g. 45+2 → 47); null when the feed omits the
+ * base minute. Mirrors the engine's `effMinute`, applied to the raw columns now carried on `GdEventInput`.
+ */
+function effMin(e: GdEventInput): number | null {
+  return e.timeMinute === null ? null : e.timeMinute + (e.addedTime ?? 0);
 }
 
 // ─── per-player derivation ──────────────────────────────────────────────────────
@@ -95,14 +112,14 @@ function eventFactsFor(playerId: string, events: readonly GdEventInput[]): Event
     if (e.playerInId === playerId) {
       named = true;
       cameOn = true; // came on; the minute may be unknown but the boolean still flags the role
-      if (e.minute !== null)
-        cameOnMinute = cameOnMinute === null ? e.minute : Math.min(cameOnMinute, e.minute);
+      const m = effMin(e);
+      if (m !== null) cameOnMinute = cameOnMinute === null ? m : Math.min(cameOnMinute, m);
     }
     if (e.playerOutId === playerId) {
       named = true;
       wentOff = true;
-      if (e.minute !== null)
-        wentOffMinute = wentOffMinute === null ? e.minute : Math.min(wentOffMinute, e.minute);
+      const m = effMin(e);
+      if (m !== null) wentOffMinute = wentOffMinute === null ? m : Math.min(wentOffMinute, m);
     }
     if (e.playerId === playerId) {
       named = true;
@@ -242,6 +259,239 @@ function kickoffLabelUtc(iso: string): string {
   return `${wd} ${day} ${mon} · ${hh}:${mm}`;
 }
 
+// ─── events timeline (T16b) ──────────────────────────────────────────────────────────
+
+/** Lowercase + strip non-alphanumerics (mirrors the engine's `norm`) — for period / incident matching. */
+const norm = (s: string | null | undefined): string =>
+  (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/** Combined incident label (mirrors the engine's private `label`) — used only to flag penalties here. */
+const eventLabel = (e: GdEventInput): string => `${norm(e.incidentType)} ${norm(e.incidentClass)}`;
+
+function otherSide(s: "home" | "away" | null): "home" | "away" | null {
+  return s === "home" ? "away" : s === "away" ? "home" : null;
+}
+
+/** Resolve an event participant id to its match side (null when absent/unplaceable). */
+function sideOfId(
+  id: string | null,
+  sideById: ReadonlyMap<string, "home" | "away" | null>,
+): "home" | "away" | null {
+  return id === null ? null : (sideById.get(id) ?? null);
+}
+
+/**
+ * Coarse chronological rank from `event_match.period` (1H/2H/ET/PEN → 1/2/3/4); the HT marker rides the
+ * 1→2 boundary. Falls back to the effective minute when the feed omits `period` (defensive — the feed
+ * normally sets it). Drives the PRIMARY sort key so extra-time / penalties never sort before regulation.
+ */
+function periodRank(e: GdEventInput): number {
+  const p = norm(e.period);
+  if (p === "1h" || p === "firsthalf") return 1;
+  if (p === "2h" || p === "secondhalf") return 2;
+  if (p.startsWith("et") || p === "extratime" || p === "aet") return 3;
+  if (p.startsWith("pen") || p === "p") return 4;
+  const m = effMin(e);
+  if (m === null || m <= 45) return 1;
+  if (m <= 90) return 2;
+  if (m <= 120) return 3;
+  return 4;
+}
+
+/**
+ * A substitution row — matched leniently (`includes("substitut")`) to mirror ingestion's `isSubstitution`
+ * (`packages/ingest/src/ingest.ts`, the de-facto feed contract), so a wording drift like "substitute" can't
+ * silently drop a sub from the timeline while ingestion still pairs/locks it.
+ */
+function isSubEvent(e: GdEventInput): boolean {
+  return norm(e.incidentType).includes("substitut");
+}
+
+/** Same-minute ordering: goal → card → sub, then anything else (a fixed, deterministic kind order). */
+function kindRank(e: GdEventInput): number {
+  if (isGoalEvent(e)) return 0;
+  if (classifyCard(e) !== null) return 1;
+  if (isSubEvent(e)) return 2;
+  return 3;
+}
+
+/**
+ * Final deterministic tiebreak from row CONTENT (not input order) so two same-(period, effMinute, kind) rows
+ * order stably. Includes the raw `time_minute`/`added_time` split so a "45+2'" and a "47'" row (same effMinute)
+ * never tie — making the sort strictly total regardless of input order, even on that (real-feed-impossible) edge.
+ */
+function tieKey(e: GdEventInput): string {
+  return [
+    e.playerId ?? "",
+    e.playerInId ?? "",
+    e.playerOutId ?? "",
+    e.assistPlayerId ?? "",
+    norm(e.incidentClass),
+    String(e.timeMinute ?? ""),
+    String(e.addedTime ?? ""),
+  ].join("|");
+}
+
+/** "45+2'" when there is added time, else "73'"; null when the feed omits the base minute. */
+function minuteLabelOf(e: GdEventInput): string | null {
+  if (e.timeMinute === null) return null;
+  const added = e.addedTime ?? 0;
+  return added > 0 ? `${e.timeMinute}+${added}'` : `${e.timeMinute}'`;
+}
+
+function marker(label: string, homeScore: number, awayScore: number): GameEvent {
+  return {
+    kind: "marker",
+    side: null,
+    minute: null,
+    minuteLabel: null,
+    period: null,
+    label,
+    homeScore,
+    awayScore,
+    playerId: null,
+    playerName: null,
+    assistName: null,
+    secondaryName: null,
+    cardKind: null,
+    isPenalty: false,
+    isOwnGoal: false,
+  };
+}
+
+/**
+ * Pure ordered events timeline + the terminal score-reconciliation flag (T16b). Goals, subs, and cards are
+ * classified on the SHARED engine predicates (`isGoalEvent` / `isOwnGoalEvent` / `overturnedGoals` /
+ * `classifyCard`) so the timeline keys EXACTLY as scoring does: an own goal credits the OPPOSING side, a
+ * VAR-overturned goal (its `goal/*` row is not rescinded — paired void only) is excluded, and every
+ * `varDecision` row is dropped (the VAR theme is closed — no VAR display). The running score is replayed by
+ * accumulating goals in chronological order. A goal whose scorer can't be placed on a side is counted but
+ * NEVER silently credited; a terminal computed-vs-stored mismatch is surfaced (mirrors {@link LineupAnomaly}).
+ */
+function buildEvents(
+  events: readonly GdEventInput[],
+  sideById: ReadonlyMap<string, "home" | "away" | null>,
+  fullNameById: ReadonlyMap<string, string>,
+  isTerminal: boolean,
+  finalHome: number | null,
+  finalAway: number | null,
+): { events: GameEvent[]; anomaly: EventScoreAnomaly | null } {
+  const overturned = overturnedGoals(events);
+  const timeline = events.filter(
+    (e) =>
+      !e.rescinded &&
+      norm(e.incidentType) !== "vardecision" && // VAR rows DROPPED (closed theme — no VAR display)
+      !(isGoalEvent(e) && overturned.has(e)), // VAR-disallowed goal excluded (mirrors scoring exactly)
+  );
+
+  const ranked = timeline.slice().sort((a, b) => {
+    const pr = periodRank(a) - periodRank(b);
+    if (pr !== 0) return pr;
+    const ma = effMin(a) ?? 0;
+    const mb = effMin(b) ?? 0;
+    if (ma !== mb) return ma - mb;
+    const kr = kindRank(a) - kindRank(b);
+    if (kr !== 0) return kr;
+    return tieKey(a).localeCompare(tieKey(b));
+  });
+
+  const nameOf = (id: string | null): string | null =>
+    id === null ? null : (fullNameById.get(id) ?? null);
+
+  const out: GameEvent[] = [];
+  let hs = 0;
+  let as = 0;
+  let unresolvedGoals = 0;
+  let htInserted = false;
+
+  out.push(marker("Kick-off", hs, as)); // synthetic KO — always first, 0–0
+
+  for (const e of ranked) {
+    // Half-time = the 1H → (2H/ET/PEN) boundary, inserted once, carrying the 1H running score.
+    if (!htInserted && periodRank(e) >= 2) {
+      out.push(marker("Half-time", hs, as));
+      htInserted = true;
+    }
+    if (isGoalEvent(e)) {
+      const scorerSide = sideOfId(e.playerId, sideById);
+      const benefit = isOwnGoalEvent(e) ? otherSide(scorerSide) : scorerSide;
+      if (benefit === "home") hs += 1;
+      else if (benefit === "away") as += 1;
+      else unresolvedGoals += 1; // scorer not placeable → count, never silently credit a side
+      out.push({
+        kind: "goal",
+        side: benefit,
+        minute: effMin(e),
+        minuteLabel: minuteLabelOf(e),
+        period: e.period,
+        label: null,
+        homeScore: hs,
+        awayScore: as,
+        playerId: e.playerId,
+        playerName: nameOf(e.playerId),
+        assistName: nameOf(e.assistPlayerId),
+        secondaryName: null,
+        cardKind: null,
+        // Full word "penalty" (the feed's goal class), NOT the substring "pen" — "openPlay" → "openplay"
+        // contains "pen" and would false-flag an open-play goal.
+        isPenalty: eventLabel(e).includes("penalty"),
+        isOwnGoal: isOwnGoalEvent(e),
+      });
+    } else if (isSubEvent(e)) {
+      out.push({
+        kind: "sub",
+        side: sideOfId(e.playerInId, sideById) ?? sideOfId(e.playerOutId, sideById),
+        minute: effMin(e),
+        minuteLabel: minuteLabelOf(e),
+        period: e.period,
+        label: null,
+        homeScore: hs,
+        awayScore: as,
+        playerId: e.playerInId, // the player coming ON is the headline
+        playerName: nameOf(e.playerInId),
+        assistName: null,
+        secondaryName: nameOf(e.playerOutId), // the player going OFF
+        cardKind: null,
+        isPenalty: false,
+        isOwnGoal: false,
+      });
+    } else {
+      const card = classifyCard(e);
+      if (card === null) continue; // unknown incident type → not on the timeline
+      out.push({
+        kind: "card",
+        side: sideOfId(e.playerId, sideById),
+        minute: effMin(e),
+        minuteLabel: minuteLabelOf(e),
+        period: e.period,
+        label: null,
+        homeScore: hs,
+        awayScore: as,
+        playerId: e.playerId,
+        playerName: nameOf(e.playerId),
+        assistName: null,
+        secondaryName: null,
+        // A 2nd-yellow dismissal renders as a red (addition #2); the feed also posts a real `card/red` row
+        // for it, which classifyCard maps to "red" directly (no `second_yellow` token on live data today).
+        cardKind: card === "second_yellow" ? "red" : card,
+        isPenalty: false,
+        isOwnGoal: false,
+      });
+    }
+  }
+
+  if (isTerminal) out.push(marker("Full-time", hs, as)); // live-safe: no FT mid-match
+
+  const finalKnown = finalHome !== null && finalAway !== null;
+  const scoreMismatch = isTerminal && finalKnown && (hs !== finalHome || as !== finalAway);
+  const anomaly: EventScoreAnomaly | null =
+    scoreMismatch || unresolvedGoals > 0
+      ? { computedHome: hs, computedAway: as, finalHome, finalAway, unresolvedGoals }
+      : null;
+
+  return { events: out, anomaly };
+}
+
 // ─── main export ─────────────────────────────────────────────────────────────────
 
 export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
@@ -353,6 +603,27 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     anomalyFor("away", match.awayTeamId, awayHasSheet, awayCandidates, away.pitch),
   ].filter((a): a is LineupAnomaly => a !== null);
 
+  // Events timeline (T16b): side + full names resolve off the SAME player union; the running score is
+  // replayed via the shared engine goal/own-goal/VAR predicates (see buildEvents). Terminal score
+  // reconciliation rides the SAME `matchIsTerminal` gate as the kickoff-XI phantom drop above.
+  const sideById = new Map(
+    players.map((p) => [p.id, sideOf(p, match.homeTeamId, match.awayTeamId)]),
+  );
+  const fullNameById = new Map(
+    players.map((p) => [
+      p.id,
+      p.firstName && p.lastName ? `${p.firstName} ${p.lastName}` : p.displayName,
+    ]),
+  );
+  const { events: timeline, anomaly: eventScoreAnomaly } = buildEvents(
+    events,
+    sideById,
+    fullNameById,
+    matchIsTerminal,
+    match.homeScore,
+    match.awayScore,
+  );
+
   return {
     header: {
       matchId: match.matchId,
@@ -366,6 +637,8 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
     home,
     away,
     statistics: buildTeamStatistics(teamStats, match.homeTeamId, match.awayTeamId),
+    events: timeline,
+    eventScoreAnomaly,
     empty: homeLines.length === 0 && awayLines.length === 0,
     periodId: match.periodId,
     unresolvedParticipants: unresolvedFromPool + unplaced,

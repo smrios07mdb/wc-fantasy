@@ -43,6 +43,15 @@ describe("loadGameDetail — assembly contract", () => {
     expect(codeOnly).toContain("minutesPlayed: true");
   });
 
+  it("selects the T16b additive event columns (assist scorer + period) and joins assists to the id union", () => {
+    // assist_player_id + period are pure additive SELECTS on the existing event read (both columns pre-exist
+    // → NO migration); the period drives the pure builder's HT/FT markers + sort rank, and the assist id is
+    // added to the player union so assist scorers' names resolve via the same player.findMany.
+    expect(codeOnly).toContain("assistPlayerId: true");
+    expect(codeOnly).toContain("period: true");
+    expect(codeOnly).toContain("if (e.assistPlayerId) idSet.add(e.assistPlayerId)");
+  });
+
   it("surfaces the kickoff-XI reconciliation safety net (logs ≠11 anomalies, never swallowed)", () => {
     // The builder returns lineupAnomalies; the loader logs each one (observable) and still renders the view.
     expect(codeOnly).toContain("view.lineupAnomalies");

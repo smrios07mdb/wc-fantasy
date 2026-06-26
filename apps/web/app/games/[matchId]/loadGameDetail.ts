@@ -76,12 +76,17 @@ export async function loadGameDetail(
         where: { matchId },
         select: {
           playerId: true,
+          // T16b additive selects (display-only): the assist scorer (added to the id union below) and the
+          // period (1H/2H/ET/PEN) the pure builder uses to synthesize the HT/FT markers + the sort rank.
+          // Both columns pre-exist — NO migration. event_match is otherwise read independently by the engine.
+          assistPlayerId: true,
           playerInId: true,
           playerOutId: true,
           incidentType: true,
           incidentClass: true,
           timeMinute: true,
           addedTime: true,
+          period: true,
           rescinded: true,
         },
       }),
@@ -105,6 +110,7 @@ export async function loadGameDetail(
   for (const r of ratingRows) idSet.add(r.playerId);
   for (const e of eventRows) {
     if (e.playerId) idSet.add(e.playerId);
+    if (e.assistPlayerId) idSet.add(e.assistPlayerId); // T16b: resolve assist scorers' names too
     if (e.playerInId) idSet.add(e.playerInId);
     if (e.playerOutId) idSet.add(e.playerOutId);
   }
@@ -228,13 +234,16 @@ export async function loadGameDetail(
     })),
     lineupEntries: lineupEntries.map((e) => ({ playerId: e.playerId, isStarter: e.isStarter })),
     events: eventRows.map((e) => ({
-      playerId: e.playerId,
-      playerInId: e.playerInId,
-      playerOutId: e.playerOutId,
       incidentType: e.incidentType,
       incidentClass: e.incidentClass,
-      minute: e.timeMinute !== null ? e.timeMinute + (e.addedTime ?? 0) : null,
+      timeMinute: e.timeMinute,
+      addedTime: e.addedTime,
+      playerId: e.playerId,
+      assistPlayerId: e.assistPlayerId,
+      playerInId: e.playerInId,
+      playerOutId: e.playerOutId,
       rescinded: e.rescinded,
+      period: e.period,
     })),
     ownerByPlayer,
     unresolvedFromPool,
@@ -251,6 +260,16 @@ export async function loadGameDetail(
       count: anomaly.count,
       kept: anomaly.keptPlayerIds,
       removed: anomaly.removedPlayerIds,
+    });
+  }
+
+  // Safety net (read-only, T16b): the events-timeline running score (replayed via the shared engine goal /
+  // own-goal / VAR predicates) did not equal the stored authoritative final score on a terminal match, OR a
+  // goal's scorer could not be placed on a side. Surface it — observable, never a silent timeline desync.
+  if (view.eventScoreAnomaly) {
+    console.warn("[game-detail] events running-score reconciliation anomaly", {
+      matchId: view.header.matchId,
+      ...view.eventScoreAnomaly,
     });
   }
 
