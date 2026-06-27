@@ -74,6 +74,19 @@ export function rosterCapForLeagueStatus(status: LeagueStatus): number {
 }
 
 /**
+ * The SQUAD roster cap keyed on the data-existence PLAYOFF PHASE (does any `playoff_entry` row exist) rather
+ * than the `league.status` field — the form the FAAB/waiver READ path uses to honor the phase contract
+ * (DECISIONS → "FAAB/waiver phase derives from playoff_entry existence"). `true` → the reduced guillotine cap
+ * ({@link PLAYOFF_ROSTER}.cap = 9); `false` → the full group squad ({@link SQUAD_SIZE} = 15). Equivalent to
+ * {@link rosterCapForLeagueStatus} in every reachable phase (the group→playoff transition writes
+ * `status='playoff'` and the `alive` playoff_entry rows in one $transaction, so they are twins), but read off
+ * the DATA. The bid/grant/batch ENFORCEMENT sites still use the status-keyed form pending the P3 migration.
+ */
+export function rosterCapForPlayoffPhase(playoffPhaseActive: boolean): number {
+  return playoffPhaseActive ? PLAYOFF_ROSTER.cap : SQUAD_SIZE;
+}
+
+/**
  * Per-league config SEED DEFAULTS — used ONLY when creating a league row. These mirror the
  * `@default(...)` on the league/manager columns (faab_budget, result_freeze_hours,
  * faab_batch_local_time, season_year; draft_pick_seconds defaults in the DB only).

@@ -16,14 +16,23 @@ describe("loadWaivers — trim-down contract", () => {
   const loader = read("./loadWaivers.ts");
 
   it("returns the three new view fields", () => {
-    expect(loader).toContain("rosterCap: rosterCapForLeagueStatus(leagueStatus)");
+    expect(loader).toContain("rosterCap: rosterCapForPlayoffPhase(playoffPhaseActive)");
     expect(loader).toContain("isParticipant,");
     expect(loader).toContain("playoffForfeitDeadlineIso,");
   });
 
   it("sources participation + cap from the single-source helpers (not re-derived)", () => {
     expect(loader).toContain("loadIsPlayoffParticipant");
-    expect(loader).toContain("rosterCapForLeagueStatus");
+    expect(loader).toContain("rosterCapForPlayoffPhase");
+  });
+
+  it("derives the playoff phase from playoff_entry existence, NOT league.status (P2 contract)", () => {
+    // The data-existence phase signal — the atomic twin of league.status='playoff', NOT selectTournamentPhase.
+    expect(loader).toContain("loadPlayoffPhaseActive");
+    // No phase/cap/participation gate may key on the league.status field or its cap helper.
+    expect(loader).not.toContain('=== "playoff"');
+    expect(loader).not.toContain("rosterCapForLeagueStatus");
+    expect(loader).not.toContain("league?.status");
   });
 
   it("uses the current-period R32 first kickoff as the conservative forfeit bound", () => {

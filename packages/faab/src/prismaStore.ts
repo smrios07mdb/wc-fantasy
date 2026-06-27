@@ -19,7 +19,7 @@
  */
 import type { PrismaClient } from "@app/db";
 import { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "@app/lineup/prisma";
-import { rosterCapForLeagueStatus, type LeagueStatus, type Position } from "@app/shared";
+import { rosterCapForLeagueStatus, rosterCapForPlayoffPhase, type Position } from "@app/shared";
 import { liveOwnedWhere } from "./faEligibility";
 import type { BidInput, ManagerState } from "./resolve";
 import type {
@@ -306,7 +306,9 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
         ownedByManager.add(r.playerId);
       }
       const isPlayoffParticipant = await loadIsPlayoffParticipant(prisma, {
-        leagueStatus: manager.league.status,
+        // P3 follow-up: this submission store still keys phase + cap on league.status (cap stays on
+        // rosterCapForLeagueStatus below); the status-derived boolean keeps behavior byte-identical.
+        playoffPhaseActive: manager.league.status === "playoff",
         leagueId: manager.leagueId,
         managerId,
       });
@@ -517,7 +519,9 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
         ownedByManager.add(r.playerId);
       }
       const isPlayoffParticipant = await loadIsPlayoffParticipant(prisma, {
-        leagueStatus: manager.league.status,
+        // P3 follow-up: this FA-grant store still keys phase + cap on league.status (cap stays on
+        // rosterCapForLeagueStatus below); the status-derived boolean keeps behavior byte-identical.
+        playoffPhaseActive: manager.league.status === "playoff",
         leagueId: manager.leagueId,
         managerId,
       });
@@ -631,19 +635,37 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
 // ── the playoff trim-down release adapter (DECISIONS §D trim-down) ──────────────────
 
 /**
+ * Data-existence PHASE predicate for the FAAB/waiver READ path: the league is in the playoff phase iff ANY
+ * `playoff_entry` row exists for it. This is the atomic twin of `league.status === 'playoff'` — the
+ * group→playoff transition writes the status flip and the `alive` playoff_entry rows in ONE
+ * `applyTransition` $transaction (apps/worker/src/commish/transitionStore.ts), so they never diverge in a
+ * reachable phase — but keying on the DATA, not the status field, is the contract the dashboard/playoffs
+ * loaders honor (DECISIONS → "FAAB/waiver phase derives from playoff_entry existence"). Deliberately NOT
+ * `selectTournamentPhase` (kickoff-based): that returns `group` during the R32 pre-kickoff trim window and
+ * `complete` after the Final, either of which would wrongly re-open the squad cap.
+ */
+export async function loadPlayoffPhaseActive(
+  db: Pick<Db, "playoffEntry">,
+  leagueId: string,
+): Promise<boolean> {
+  return (await db.playoffEntry.count({ where: { leagueId } })) > 0;
+}
+
+/**
  * D4 participant gate, single-sourced: outside the playoff phase EVERYONE participates (so group flows are
  * byte-identical); in the playoff phase a participant is a manager with an `alive` playoff_entry. Keyed on
  * `status === 'alive'` (NOT row-exists) so a later per-round `eliminated` flip removes them — Phase-2 ready.
+ * `playoffPhaseActive` is the data-existence phase signal ({@link loadPlayoffPhaseActive}), NOT league.status.
  */
 export async function loadIsPlayoffParticipant(
   db: Pick<Db, "playoffEntry">,
   {
-    leagueStatus,
+    playoffPhaseActive,
     leagueId,
     managerId,
-  }: { leagueStatus: LeagueStatus; leagueId: string; managerId: string },
+  }: { playoffPhaseActive: boolean; leagueId: string; managerId: string },
 ): Promise<boolean> {
-  if (leagueStatus !== "playoff") return true;
+  if (!playoffPhaseActive) return true;
   const entry = await db.playoffEntry.findUnique({
     where: { leagueId_managerId: { leagueId, managerId } },
     select: { status: true },
@@ -671,12 +693,14 @@ export function createPrismaFaabReleaseStore(prisma: Db): FaabReleaseStore {
     async loadReleaseContext(managerId): Promise<ReleaseContext | null> {
       const manager = await prisma.manager.findUnique({
         where: { id: managerId },
-        select: { leagueId: true, league: { select: { status: true } } },
+        select: { leagueId: true },
       });
       if (!manager) return null;
       const { leagueId } = manager;
-      const status = manager.league.status;
-      const isPlayoffPhase = status === "playoff";
+      // Phase from playoff_entry EXISTENCE (the data-existence contract), never league.status. Computed once
+      // and fed to the cap, the trim-window period hint, and the participant gate. (Atomic twin of
+      // status='playoff'; NOT selectTournamentPhase, which mis-reads the R32 pre-kickoff trim window.)
+      const isPlayoffPhase = await loadPlayoffPhaseActive(prisma, leagueId);
 
       const rosterRows = await prisma.rosterPlayer.findMany({
         where: { managerId, droppedAt: null },
@@ -702,7 +726,7 @@ export function createPrismaFaabReleaseStore(prisma: Db): FaabReleaseStore {
         : null;
 
       const isPlayoffParticipant = await loadIsPlayoffParticipant(prisma, {
-        leagueStatus: status,
+        playoffPhaseActive: isPlayoffPhase,
         leagueId,
         managerId,
       });
@@ -710,7 +734,7 @@ export function createPrismaFaabReleaseStore(prisma: Db): FaabReleaseStore {
       return {
         leagueId,
         roster,
-        rosterCap: rosterCapForLeagueStatus(status),
+        rosterCap: rosterCapForPlayoffPhase(isPlayoffPhase),
         lockedPlayerIds,
         isPlayoffPhase,
         isPlayoffParticipant,

@@ -1706,6 +1706,49 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   `loadPlayoffs` stays byte-untouched (it spreads `...core`); the theater consumes the additive field
   unchanged. No new write, no scoring-rule change (aggregations of existing scores), no migration.
 
+## FAAB/waiver phase derives from `playoff_entry` existence, never `league.status` (P2 — `fix/league-status-phase-contract`)
+
+- **The FAAB/waiver READ path keys its phase (roster cap 15→9, D4 participation, the R32 forfeit/trim
+  hint) on `playoff_entry` row EXISTENCE — a data-existence signal — NOT the `league.status` field.** Two
+  read sites violated the contract the dashboard/playoffs loaders honor: `loadWaivers.ts`
+  (`const leagueStatus = league?.status; isPlayoffPhase = leagueStatus === "playoff"`) and the
+  `@app/faab/prisma` `loadReleaseContext` (`status = manager.league.status; isPlayoffPhase = status === "playoff"`).
+  Both now read `loadPlayoffPhaseActive(db, leagueId)` = `playoffEntry.count({ where: { leagueId } }) > 0`.
+  This is the **atomic twin** of `league.status === "playoff"`: the group→playoff transition writes the
+  status flip **and** the `alive` playoff_entry rows in ONE `applyTransition` `$transaction`
+  (`apps/worker/src/commish/transitionStore.ts`), so the two signals never diverge in any reachable phase
+  — the fix is behavior-identical on the live path, it just reads past a field that can lag the data.
+
+- **`selectTournamentPhase` is DELIBERATELY NOT the signal here.** The dashboard's data-existence phase
+  helper (above) is *kickoff-based*: it returns `group` until a knockout match kicks off and `complete`
+  once the Final is FT'd. Substituting it on the FAAB path would REGRESS twice: (a) in the **R32
+  pre-kickoff trim window** (post-transition, before any knockout kicks off) it returns `group`, which
+  would re-open the cap to 15 and re-admit eliminated managers during the exact window the trim must hold
+  9; (b) after the Final it returns `complete`, which (since `league.status` stays `playoff` — there is no
+  `playoff→complete` writer, see Theme C) would likewise re-open the cap. `playoff_entry` existence is the
+  only equivalence-preserving signal. (Gated PG test pins this: alive entries + `league.status='group'` ⇒
+  cap 9 — `release.integration.test.ts` / `loadWaivers.integration.test.ts`.)
+
+- **Two data-existence phase signals now legitimately coexist** — they answer different questions:
+  the dashboard **display phase** (`selectTournamentPhase`, kickoff-based: what screen to render) and the
+  FAAB **roster-cap phase** (`loadPlayoffPhaseActive`, entry-existence: is the guillotine regime in force).
+  They agree in every phase except the R32 trim window and post-Final, where the FAAB regime must lead the
+  display — hence two helpers, not one.
+
+- **The migration is PARTIAL by design — a P3 follow-up remains.** Only the two scoped READ sites moved.
+  The bid/grant/batch ENFORCEMENT path still keys its cap on `league.status` via `rosterCapForLeagueStatus`
+  (`prismaStore.ts` `loadBidContext`/`loadGrantContext`/`loadBatchContext`); those are left byte-identical
+  (the shared `loadIsPlayoffParticipant`, now taking a `playoffPhaseActive` boolean, is fed a status-derived
+  boolean at those two call sites so their behavior is unchanged). Equivalence-safe because status⟺entry-
+  existence. Migrating the enforcement callers off status + adding a `switch`/`never` exhaustiveness guard
+  over `LeagueStatus` (the `complete` arm is a dead status branch — never written) is the **P3 follow-up**.
+  NB: `"group"` and `"complete"` are not written by any code path, but `"group"` IS load-bearing — the
+  transition's entry gate is `updateMany WHERE status="group"` (set out-of-band), so it is not dead.
+
+- **Source-only: no schema, migration, RLS, or DB write.** The only new read is `playoffEntry.count` on
+  the existing table/column. `packages/scoring` + `packages/recompute` are untouched and unread by this
+  path (FAAB/waiver loaders carry no scoring-engine dependency); no scoring or standings behavior change.
+
 ## Profile rename / Settings route (Prompt 39)
 
 - **`display_name` is the single user-editable manager identity.** There is no `team_name` or

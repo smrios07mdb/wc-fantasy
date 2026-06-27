@@ -10,9 +10,13 @@
  */
 import { prisma } from "@app/db";
 import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
-import { listFaIneligiblePlayerIds, loadIsPlayoffParticipant } from "@app/faab/prisma";
+import {
+  listFaIneligiblePlayerIds,
+  loadIsPlayoffParticipant,
+  loadPlayoffPhaseActive,
+} from "@app/faab/prisma";
 import { findLockedSlotPlayerIds } from "@app/lineup/prisma";
-import { rosterCapForLeagueStatus, selectCurrentPeriod, type Position } from "@app/shared";
+import { rosterCapForPlayoffPhase, selectCurrentPeriod, type Position } from "@app/shared";
 // Read-only reuse of the set-lineup opponent resolver (exported Prompt 53) so the FA picker's
 // "next opponent" tag is field-for-field the SAME derivation as lineup's OpponentTag — never re-derived.
 import { resolveOpponentByPlayer } from "../../src/lineup/view";
@@ -73,7 +77,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     await Promise.all([
       prisma.league.findUnique({
         where: { id: leagueId },
-        select: { timezone: true, status: true },
+        select: { timezone: true },
       }),
       // Rolling waiver order + names (public). Seeded managers sort by position; unseeded (null) last.
       prisma.manager.findMany({
@@ -292,18 +296,21 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     }));
 
   // The phase squad cap (15 group / 9 playoff) is VIEW-DRIVEN (no hardcoded 15 in the client). D4
-  // participation gates the affordances; outside the playoff phase everyone participates.
-  const leagueStatus = league?.status ?? "draft";
-  const isPlayoffPhase = leagueStatus === "playoff";
+  // participation gates the affordances; outside the playoff phase everyone participates. The phase is
+  // derived from playoff_entry EXISTENCE (the data-existence contract the dashboard/playoffs loaders honor),
+  // NEVER league.status — see DECISIONS → "FAAB/waiver phase derives from playoff_entry existence".
+  // selectTournamentPhase is deliberately NOT the signal here (it would regress the R32 pre-kickoff trim
+  // window and the post-tournament state).
+  const playoffPhaseActive = await loadPlayoffPhaseActive(prisma, leagueId);
   const isParticipant = await loadIsPlayoffParticipant(prisma, {
-    leagueStatus,
+    playoffPhaseActive,
     leagueId,
     managerId: viewerManagerId,
   });
   // The forfeit bound = the current (R32) period's first kickoff, league-wide — the CONSERVATIVE earliest
   // possible per-player lock. A survivor's own earliest kickoff may be later, but this is the safe display.
   const playoffForfeitDeadlineIso =
-    isPlayoffPhase && currentPeriodRow?.matches[0]?.kickoffAt
+    playoffPhaseActive && currentPeriodRow?.matches[0]?.kickoffAt
       ? currentPeriodRow.matches[0].kickoffAt.toISOString()
       : null;
 
@@ -318,8 +325,8 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     waiverOrder,
     batchWindow,
     timezone: league?.timezone ?? "UTC",
-    isPlayoffPhase,
-    rosterCap: rosterCapForLeagueStatus(leagueStatus),
+    isPlayoffPhase: playoffPhaseActive,
+    rosterCap: rosterCapForPlayoffPhase(playoffPhaseActive),
     isParticipant,
     playoffForfeitDeadlineIso,
     nowIso: now.toISOString(),

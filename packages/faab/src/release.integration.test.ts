@@ -177,4 +177,27 @@ describe.skipIf(!TEST_URL)("FAAB release adapter — real Postgres", () => {
     const ctx = await store.loadReleaseContext(MGR);
     expect(ctx!.isPlayoffParticipant).toBe(false);
   });
+
+  it("keys the playoff phase on playoff_entry EXISTENCE, not league.status (R32 trim-window correctness)", async () => {
+    // DISAGREEMENT fixture — the R32 pre-kickoff trim window: ALIVE playoff_entry rows exist, but the
+    // league.status field reads 'group' (the field lags the data / mid-diagnosis). This is exactly the
+    // window selectTournamentPhase would have broken: with no knockout match kicked off it returns 'group'
+    // and would re-open the cap to 15 + re-admit eliminated managers. Keying on entry existence keeps the
+    // trim regime (cap 9, alive-gated participation). In prod the applyTransition $transaction writes
+    // status='playoff' and the alive entries together, so status and entry-existence are twins — this state
+    // only diverges under the lagging field, which is precisely what the contract must read past.
+    await db.league.update({ where: { id: LEAGUE }, data: { status: "group" } });
+    await seedRosterPlayer("t-gk", "GK", 8301);
+    await db.playoffEntry.create({
+      data: { leagueId: LEAGUE, managerId: MGR, seed: 1, status: "alive" },
+    });
+    const store = createPrismaFaabReleaseStore(db);
+
+    const ctx = await store.loadReleaseContext(MGR);
+    expect(ctx).not.toBeNull();
+    expect(ctx!.isPlayoffPhase).toBe(true); // entry exists ⇒ playoff phase, despite status='group'
+    expect(ctx!.rosterCap).toBe(9); // RED on the old status read (it would be 15)
+    expect(ctx!.isPlayoffParticipant).toBe(true); // the alive entry
+    expect(ctx!.currentPeriodId).toBe(PERIOD); // the open R32 period — null under the old status gate
+  });
 });
