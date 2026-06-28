@@ -64,9 +64,14 @@ export function sortByPeriodOrder<T>(items: readonly T[], labelOf: (item: T) => 
  *    live. Using `batchClearedAt` for vsfield would drop the live wave ~6h before first kickoff
  *    (the batch timestamp), showing an empty next period while MD1 matches are being played.
  *
- * `status === "open"` is retained as a fast-path for when status transitions are wired (currently
- * `period.status` stays `"pending"` from provision to freeze — the open branch is dead but
- * future-safe).
+ * `status === "open"` is the fast-path for the wave the hourly `wc-fantasy-period-close` cron has
+ * promoted live. That cron (`apps/worker/src/jobs/periodClose.ts`, via
+ * `selectPeriodStatusTransitions`) is the SOLE writer of `status === "open"`: it opens each wave —
+ * every group matchday AND each knockout round (R16→QF→SF→Final) — once the prior wave's fixtures
+ * all reach `completed`, ~1 day before that wave's first kickoff. So this arm is LIVE, not dead.
+ * (An earlier version of this comment said `period.status` "stays pending from provision to freeze —
+ * the open branch is dead"; that predated the 2026-06-17 `feat/period-status-lifecycle` merge and was
+ * wrong. Do not re-derive that premise.)
  */
 export function selectCurrentPeriod<
   T extends {

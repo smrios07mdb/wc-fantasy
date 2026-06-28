@@ -2332,10 +2332,16 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   rather than relying on the DB sort order. The `status === "open"` fast-path is retained for
   future-safety. The `isCurrent` predicate is injected because the correct latch differs by screen.
 
-- **`period.status` never transitions.** No code writes `"open"` or `"closed"` to `period.status` —
-  the column defaults `"pending"` at provision and stays there. `periodClose.ts` stamps only
-  `frozenAt`; the FAAB cadence stamps only `batchClearedAt`. The open/closed arms of
-  `selectCurrentPeriod` are therefore dead paths today but retained as future-safe hooks.
+- **`period.status` DOES transition — the `open`/`closed` arms are LIVE (corrected 2026-06-28).** An
+  earlier version of this bullet said "`period.status` never transitions … dead paths" — that was
+  STALE; it predated the 2026-06-17 `feat/period-status-lifecycle` merge (see the AMENDMENT above +
+  ARCHITECTURE §22). The hourly `wc-fantasy-period-close` cron (`apps/worker/src/jobs/periodClose.ts`,
+  via the pure `selectPeriodStatusTransitions`) is the **SOLE** writer of `status='open'`/`'closed'`:
+  it closes a wave once its fixtures all reach `completed`, and opens the next wave — group matchdays
+  AND each knockout round (R16→QF→SF→Final) — ~1 day before that wave's first kickoff. So the `open`
+  arm of `selectCurrentPeriod` is selected in prod, not a dead path. (Freeze still stamps `frozenAt`;
+  the FAAB cadence still stamps `batchClearedAt` — separate clocks.) **Do not re-derive the "status
+  never transitions" premise** — it produced the false FAAB-FA-P2 report (closed not-a-bug 2026-06-28).
 
 - **Waivers latch: `p => p.batchClearedAt === null`.** The batch has not yet run for this period —
   it is still the active waiver window. This matches the worker's `selectPeriodsToClear` gate (fires

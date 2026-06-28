@@ -1312,9 +1312,13 @@ resolved to the Final period on WC opening day.
 **Shared selector: `selectCurrentPeriod<T>(periods, isCurrent)`.** Lives in
 `packages/shared/src/periodOrder.ts` (same module as P51's `sortByPeriodOrder`). Re-sorts the input
 array in JS by `matches[0].kickoffAt` (populated by schedule sync, not by provisioning), then applies
-a per-screen `isCurrent` predicate. `status === "open"` is a fast-path retained for future-safety;
-the pending arm uses the injected `isCurrent`. `period.status` never actually transitions — it stays
-`"pending"` from provision to freeze (no code writes `"open"`) — so the open arm is currently dead.
+a per-screen `isCurrent` predicate. `status === "open"` is the fast-path for the wave the period-close
+cron has promoted live; the pending arm uses the injected `isCurrent`. **Correction (2026-06-28):** an
+earlier version of this paragraph said `period.status` "never actually transitions … the open arm is
+currently dead." That was STALE (it predated `feat/period-status-lifecycle`, 2026-06-17). The hourly
+`wc-fantasy-period-close` cron is the SOLE writer of `status='open'`/`'closed'` and opens each wave —
+group matchdays AND each knockout round (R16→QF→SF→Final) — when the prior wave's fixtures all reach
+`completed` (see §22). The `open` arm is LIVE, not dead; do not re-derive the "never transitions" premise.
 
 **Per-screen predicates (the split is required).**
 

@@ -235,6 +235,72 @@ Realtime, and worker autopick** — on the deployed stack. **Put the Realtime-AU
 
 ---
 
+## Knockout transitions — pre-flight (recurring: R16 / QF / SF / Final)
+
+> **Recurring operational check — NOT a one-time go-live step.** Run it as each knockout round nears.
+
+**Why.** The hourly **`wc-fantasy-period-close`** cron (`render.yaml` → `job:period-close`, schedule
+`"0 * * * *"`) is the SOLE writer of `period.status='open'`. It closes a round once its fixtures all
+reach `completed` and opens the next round (R32→R16→QF→SF→Final) ~1 day before that round's first
+kickoff. The `/waivers` **$0 free-agency panel mounts only when that round is `status='open'`** (the
+`open` fast-path in `selectCurrentPeriod`; a still-`pending` round whose batch has cleared is NOT
+selected). The same cron also stamps `frozen_at`, so **a cron stall misses freezes too** — it is a
+single point of failure.
+
+**Pass condition (no action needed).** Once the prior round's last match is `completed`, the next
+round should show **`status='open'` while its `batch_cleared_at` is still NULL** → the FA panel will
+mount once the batch clears. Confirm either way:
+
+- **Cron log** — Render dashboard → **`wc-fantasy-period-close`** → Logs. After the prior round
+  completes, expect:
+  - `job.periodClose.statusAdvanced { periodId: <prior round>, to: "closed" }`
+  - `job.periodClose.statusAdvanced { periodId: <next round>, to: "open" }`
+- **Read-only SQL** — Supabase **SQL editor** (or `psql` on `DIRECT_URL`):
+
+  ```sql
+  select label, status, batch_cleared_at,
+         count(m.id) filter (where m.status = 'completed')                as completed,
+         count(m.id)                                                      as fixtures,
+         count(m.id) filter (where m.status in ('postponed','abandoned')) as anomalies,
+         min(m.kickoff_at)                                                as first_kickoff
+  from period p
+  left join fifa_match m on m.period_id = p.id
+  group by p.id, label, status, batch_cleared_at
+  order by min(m.kickoff_at) nulls last;
+  ```
+
+  Pass = the next round is `open` (or already `closed` once its matches end), `anomalies = 0` on the
+  prior round, and the next round's `batch_cleared_at` is still NULL when you check pre-window.
+
+**Fallback ladder — only if the next round is still `pending` as it nears (FA window ≈ 6h pre-kickoff).**
+
+1. **Anomaly (the one real latent gap).** Check the cron log for `job.periodClose.anomaly` — a
+   `postponed`/`abandoned` fixture in the **prior** round blocks its close, so the next round never
+   opens. Resolve that fixture's status, then let the cron fire on the hour or trigger it once:
+   - `pnpm --filter @app/worker job:period-close` — **WHERE:** Render **Shell on `wc-fantasy-worker`**
+     (preferred — inherits the env group; see Appendix), or local Mac `apps/worker` against the prod
+     `DATABASE_URL`. Idempotent (guarded `updateMany`s) — safe to re-run.
+2. **Cron not firing, no anomaly.** Run the same job once manually (same command / same WHERE as
+   above). It reproduces the cron's exact guarded close + open.
+3. **Last resort — the job itself cannot run.** Raw SQL, **WHERE:** Supabase **SQL editor**. Close the
+   prior round and open the next as **ONE transaction** — never open the next round alone: with two
+   `open` rows, `selectCurrentPeriod` returns the **earliest-kickoff** open (the stuck prior round), so
+   the FA panel still won't advance (the one-open invariant matters).
+
+   ```sql
+   begin;
+     update period set status = 'closed' where id = '<PRIOR_ROUND_ID>' and status <> 'closed';
+     update period set status = 'open'   where id = '<NEXT_ROUND_ID>'  and status =  'pending';
+   commit;
+   ```
+
+> **The one real latent gap** is the anomaly path (step 1): a postponed/abandoned prior-round fixture
+> stalls the close, so the next round never opens and its FA window passes with no panel. The steady
+> state (cron healthy, no anomaly) needs **no action** — the round opens automatically. See BACKLOG →
+> FAAB-FA-P2 (resolved not-a-bug) and DECISIONS → "`period.status` DOES transition".
+
+---
+
 ## Appendix
 
 ### Service topology (`render.yaml`)
