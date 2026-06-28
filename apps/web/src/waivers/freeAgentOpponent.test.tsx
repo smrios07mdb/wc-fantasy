@@ -40,6 +40,7 @@ function mount(freeAgents: WvPlayer[]) {
   render(
     <FreeAgentPanel
       enabled
+      rosterCap={15}
       freeAgents={freeAgents}
       claims={[]}
       roster={[]}

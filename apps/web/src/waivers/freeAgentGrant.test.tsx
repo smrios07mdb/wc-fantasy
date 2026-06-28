@@ -160,3 +160,84 @@ describe("Waivers FA tab — instant $0 free-agency grant (the wiring P48 was mi
     expect(screen.getAllByRole("button", { name: /new claim/i }).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * PLAYOFF cap-parity (the 2026-06-28 R32 incident). The group→playoff transition trims the roster cap
+ * to 9 (`rosterCapForPlayoffPhase`, keyed on `playoff_entry`) and the grant path enforces it — but the
+ * FA panel's squad-full gate was hardcoded `SQUAD_SIZE = 15`. A 9-man squad read `9 >= 15 = false`, so
+ * the drop selector never rendered, the grant POSTed with `playerDropId: null`, and the engine correctly
+ * returned `drop-required` (409): every playoff manager was blocked. This MOUNTS the real WaiversClient
+ * with the threaded `rosterCap: 9` and proves the drop selector now renders and a 1-for-1 succeeds —
+ * the P48/P54 "a route test is not a working user path" lesson, now extended to the playoff cap.
+ */
+function playoffRoster(): WvPlayer[] {
+  // A trimmed 9-man guillotine squad (1 GK + 8 outfield); the last man is the named drop target.
+  const counts: Record<Position, number> = { GK: 1, DEF: 3, MID: 3, FWD: 2 };
+  const out: WvPlayer[] = [];
+  for (const pos of ["GK", "DEF", "MID", "FWD"] as Position[]) {
+    for (let i = 0; i < counts[pos]; i++) {
+      out.push(player(`${pos}${i}`, { position: pos, shortName: `${pos} ${i}`, nation: "Spain" }));
+    }
+  }
+  out[out.length - 1] = player("dropme", {
+    position: "FWD",
+    shortName: "DropTarget",
+    nation: "Spain",
+  });
+  return out;
+}
+
+/** A playoff free-agency view at the trimmed cap, the participant in the field, squad AT the cap. */
+function playoffView(over: Partial<WaiversView> = {}): WaiversView {
+  return view({
+    roster: playoffRoster(),
+    isPlayoffPhase: true,
+    isParticipant: true,
+    rosterCap: 9,
+    playoffForfeitDeadlineIso: "2099-01-01T00:00:00.000Z",
+    ...over,
+  });
+}
+
+describe("Waivers FA tab — playoff cap parity (the 2026-06-28 R32 409 incident)", () => {
+  it("playoff free-agency: an AT-CAP 9-man squad renders the drop selector and the 1-for-1 grant SUCCEEDS", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init: { method: string; body: string }) =>
+        new Response(JSON.stringify({ ok: true, playerAddId: "mbappe" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<WaiversClient view={playoffView()} />);
+
+    // select the free agent — at cap 9 the squad is FULL, so the drop selector MUST render (the bug:
+    // hardcoded SQUAD_SIZE=15 read 9>=15=false, hid the drop, and posted dropId:null → 409).
+    fireEvent.click(fa().getByRole("button", { name: /Mbappé/ }));
+    const drop = fa().getByRole("button", { name: /DropTarget/ });
+    expect(drop).toBeTruthy();
+
+    // drive the 1-for-1 swap → the grant POSTs a NON-NULL drop and applies (no 409).
+    fireEvent.click(drop);
+    fireEvent.click(fa().getByRole("button", { name: /^Add free agent$/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/faab/free-agent");
+    expect(init.method).toBe("POST");
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({ managerId: "m1", playerAddId: "mbappe", playerDropId: "dropme" });
+    expect(body.playerDropId).not.toBeNull(); // the regression guard: never a no-drop grant at cap
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("playoff free-agency: Add is DISABLED until a drop is chosen (a no-drop grant can't be sent at cap)", () => {
+    render(<WaiversClient view={playoffView()} />);
+    fireEvent.click(fa().getByRole("button", { name: /Mbappé/ }));
+    const add = fa().getByRole("button", { name: /^Add free agent$/i }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true); // full squad ⇒ a drop is required before Add enables
+    fireEvent.click(fa().getByRole("button", { name: /DropTarget/ }));
+    expect(add.disabled).toBe(false);
+  });
+});

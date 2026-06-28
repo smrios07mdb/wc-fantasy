@@ -291,6 +291,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
             {canAct && faMode && (
               <FreeAgentPanel
                 enabled={phase === "free-agency"}
+                rosterCap={view.rosterCap}
                 freeAgents={view.freeAgents}
                 claims={view.claims}
                 roster={view.roster}
@@ -405,6 +406,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
         <BidComposer
           key={composer.editClaim?.bidId ?? "new"}
           editClaim={composer.editClaim}
+          rosterCap={view.rosterCap}
           now={now}
           freeAgents={view.freeAgents}
           claims={view.claims}

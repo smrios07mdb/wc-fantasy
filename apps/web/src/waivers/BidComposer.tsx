@@ -24,12 +24,14 @@ const POS_FILTERS: ReadonlyArray<"ALL" | Position> = ["ALL", "GK", "DEF", "MID",
 
 export interface BidPayload {
   addId: string;
-  dropId: string;
+  /** null only when the squad has an open slot below the phase cap (no drop required). */
+  dropId: string | null;
   amount: number;
 }
 
 export function BidComposer({
   editClaim,
+  rosterCap,
   now,
   freeAgents,
   claims,
@@ -43,6 +45,11 @@ export function BidComposer({
   onOpen,
 }: {
   editClaim: WvClaim | null;
+  /** The league's CURRENT-PHASE squad cap (15 group / 9 playoff), threaded from the server loader — the
+   *  drop-required gate keys on it, parity with {@link FreeAgentPanel}. The composer previously ALWAYS
+   *  required a drop (a hidden "full 15" assumption); a below-cap playoff squad must NOT be forced into
+   *  an unnecessary 1-for-1. Group squads are always exactly full, so group behaviour is unchanged. */
+  rosterCap: number;
   now: Date;
   freeAgents: readonly WvPlayer[];
   claims: readonly WvClaim[];
@@ -70,7 +77,10 @@ export function BidComposer({
     : claimableFreeAgents(freeAgents, claims, now, { query, position, nation, editingBidId });
   const drops = droppableRoster(roster, lockedPlayerIds);
   const maxBid = composerMaxBid(faabBudget, claims, editingBidId);
-  const valid = !!selected && !!dropId && amount >= 0 && amount <= maxBid;
+  // A drop is required only once the squad is at the PHASE cap (15 group / 9 playoff) — parity with the
+  // engine's `drop-required` rule + FreeAgentPanel. Below cap, a bid may reinforce an open slot.
+  const squadFull = roster.length >= rosterCap;
+  const valid = !!selected && (!squadFull || !!dropId) && amount >= 0 && amount <= maxBid;
 
   const clamp = (n: number) => Math.max(0, Math.min(maxBid, n));
 
@@ -191,33 +201,38 @@ export function BidComposer({
                   </div>
                 </label>
 
-                <div className="wv-comp-field">
-                  <span className="t-label">
-                    Drop to make room <span className="text-tertiary">· squad full 15/15</span>
-                  </span>
-                  <div className="wv-drop-pick">
-                    {drops.length === 0 && (
-                      <span className="t-sm text-tertiary">
-                        No droppable players — every squad player is locked by play.
+                {squadFull && (
+                  <div className="wv-comp-field">
+                    <span className="t-label">
+                      Drop to make room{" "}
+                      <span className="text-tertiary">
+                        · squad full {roster.length}/{rosterCap}
                       </span>
-                    )}
-                    {drops.map((p) => (
-                      <button
-                        key={p.id}
-                        className={"wv-drop-opt" + (dropId === p.id ? " is-sel" : "")}
-                        onClick={() => setDropId(p.id)}
-                      >
-                        <KitChip player={p} sm />
-                        <NationFlag nation={p.nation} />
-                        <Pos p={p.position} />
-                        <span className="wv-drop-optname">{p.shortName}</span>
-                        <span className="t-micro text-tertiary">
-                          {p.seasonPoints === null ? "—" : `${p.seasonPoints} pts`}
+                    </span>
+                    <div className="wv-drop-pick">
+                      {drops.length === 0 && (
+                        <span className="t-sm text-tertiary">
+                          No droppable players — every squad player is locked by play.
                         </span>
-                      </button>
-                    ))}
+                      )}
+                      {drops.map((p) => (
+                        <button
+                          key={p.id}
+                          className={"wv-drop-opt" + (dropId === p.id ? " is-sel" : "")}
+                          onClick={() => setDropId(p.id)}
+                        >
+                          <KitChip player={p} sm />
+                          <NationFlag nation={p.nation} />
+                          <Pos p={p.position} />
+                          <span className="wv-drop-optname">{p.shortName}</span>
+                          <span className="t-micro text-tertiary">
+                            {p.seasonPoints === null ? "—" : `${p.seasonPoints} pts`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="wv-comp-rules">
                   <div className="wv-comp-rule">
@@ -240,7 +255,7 @@ export function BidComposer({
                     className="btn btn-primary"
                     disabled={!valid || submitting}
                     onClick={() =>
-                      onSubmit({ addId: selected.id, dropId: dropId as string, amount })
+                      onSubmit({ addId: selected.id, dropId: squadFull ? dropId : null, amount })
                     }
                   >
                     {submitting ? "Saving…" : editClaim ? "Save claim" : "Queue sealed bid"}

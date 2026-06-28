@@ -1914,6 +1914,45 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   pickability gate) → **merge HELD** for Chat clearance; live-deploy `/pool` screenshot owed.
   See PROJECT.md (2026-06-28 Quiniela knockout layout entry) + ARCHITECTURE.md → §3 pool Picks-tab layout.
 
+## UI roster-cap gates must read the ENGINE cap, never a hardcoded squad-size constant (2026-06-28 — `feat/faab-fa-cap-parity`, merge HELD — the live R32 FA 409 incident)
+
+- **The bug.** In live WC2026 R32, every playoff manager got **409 on `POST /api/faab/free-agent`**. The
+  group→playoff transition trims the ownership cap to **9** (`rosterCapForPlayoffPhase`, keyed on
+  `playoff_entry` existence — see the CONTRACT-P2/P3 entries) and the grant ENGINE enforces it, but the
+  `/waivers` `FreeAgentPanel` computed `squadFull = roster.length >= SQUAD_SIZE` with the **hardcoded
+  group constant `SQUAD_SIZE = 15`**. A 9-man playoff squad read `9 >= 15 = false` ⇒ not full ⇒ the drop
+  selector never rendered ⇒ the grant POSTed `dropId: null` ⇒ the engine correctly returned
+  `drop-required`. The engine was right; the **UI lied about "full"** against the wrong cap.
+
+- **The decision/rule.** A UI roster-legality gate (squad-full, drop-required, add-enable) MUST key on the
+  **same phase cap the engine enforces**, threaded from the server loader — never a re-derived or hardcoded
+  squad-size. The loader already resolves the truth (`WaiversView.rosterCap` via
+  `rosterCapForPlayoffPhase`/`loadPlayoffPhaseActive`, the SINGLE cap source per CONTRACT-P3); the fix
+  threads that one value into **both** `FreeAgentPanel` and `BidComposer` and keys `squadFull` on it. No new
+  `9`/`15` literal is introduced anywhere. `BidComposer`'s drop field also became conditional on the
+  threaded cap — it previously ALWAYS demanded a drop (the mirror over-constraint: a below-cap playoff squad
+  was needlessly forced into a 1-for-1), and `BidPayload.dropId` widened to `string | null` (the bid route
+  already accepts a null `playerDropId`; the engine already requires a drop only at `squadSize >= rosterCap`
+  — `checkDropAndRoster`). Group squads are always exactly full ⇒ **group behaviour byte-identical**.
+
+- **Scope discipline.** TOTAL-cap gate ONLY. Position-minimum (DEF/MID/FWD) roster-legality is a SEPARATE,
+  still-open playoff-composition decision and was left untouched. The FAAB engine is **byte-unchanged**
+  (verified `git diff --stat`: `resolve.ts`, `validate.ts`, `faEligibility.ts`,
+  `packages/shared/src/constants.ts` all absent) — this is a UI/loader-parity fix, not an engine change.
+
+- **The lesson (extends the P48/P54 rule).** "A route test ≠ a working user path" — the bug existed because
+  the UI acquisition path was **never tested against the playoff cap** (the engine + route had unit coverage;
+  the screen's full-squad gate did not). The fix is anchored by a playoff-phase RTL test that mounts the real
+  `WaiversClient` at cap 9 and proves the drop selector renders + a 1-for-1 grant SUCCEEDS, plus
+  component-level cap-9-vs-15 gating unit tests. **When an engine value is phase-dependent, every UI gate
+  that mirrors it must be tested in EACH phase, not just the default (group) one.**
+
+- **Recommended commissioner unblock (while held).** A single manager's add+drop can be applied directly via
+  `commish:roster --apply` (dry-run by default) from local `apps/worker` — the operator fallback recorded in
+  the thread. **Merge HELD** for Chat clearance (the diff + the playoff-phase RTL test). See PROJECT.md
+  (2026-06-28 FA cap-parity entry), BACKLOG → FAAB-FA-P2 (the orthogonal FA-panel-won't-surface-for-later-KO-
+  rounds loader finding), and the CONTRACT-P2/P3 cap-source decisions.
+
 ## Profile rename / Settings route (Prompt 39)
 
 - **`display_name` is the single user-editable manager identity.** There is no `team_name` or

@@ -152,7 +152,11 @@ describe("instant $0 free-agency — Waivers-tab surface (Prompt 48 route, final
   it("the FA panel REUSES the sealed composer's drop/roster + pool logic (no duplicated rules)", () => {
     expect(faPanel).toContain("droppableRoster");
     expect(faPanel).toContain("claimableFreeAgents");
-    expect(faPanel).toContain("SQUAD_SIZE"); // drop required only once the squad is full
+    // squad-FULL keys on the THREADED phase cap (15 group / 9 playoff), NOT a hardcoded SQUAD_SIZE — the
+    // 2026-06-28 R32 cap-parity fix (a 9-man playoff squad was wrongly read non-full against 15 → 409).
+    expect(faPanel).toContain("roster.length >= rosterCap");
+    expect(faPanel).not.toMatch(/>=\s*SQUAD_SIZE/); // the hardcoded gate is gone (the bug)
+    expect(faPanel).not.toMatch(/import\s*\{[^}]*\bSQUAD_SIZE\b/); // no longer imported
     expect(faPanel).toContain("Add free agent");
   });
 });

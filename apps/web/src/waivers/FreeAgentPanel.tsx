@@ -17,7 +17,7 @@
  * server's `fa-conflict` (409), which the parent surfaces.
  */
 import { useState } from "react";
-import { SQUAD_SIZE, type Position } from "@app/shared";
+import { type Position } from "@app/shared";
 import type { WvClaim, WvPlayer } from "./types";
 import { claimableFreeAgents, droppableRoster, freeAgentNations } from "./waiversLogic";
 import { CutoffTag, FaPickRow, KitChip, NationFlag, Pos } from "./components";
@@ -33,6 +33,7 @@ export interface FaGrantPayload {
 
 export function FreeAgentPanel({
   enabled,
+  rosterCap,
   freeAgents,
   claims,
   roster,
@@ -45,6 +46,10 @@ export function FreeAgentPanel({
 }: {
   /** false in the locked phase → browse only, "Add" disabled. */
   enabled: boolean;
+  /** The league's CURRENT-PHASE squad cap (15 group / 9 playoff), threaded from the server loader via
+   *  `rosterCapForPlayoffPhase` so the "squad full" gate matches the cap the engine enforces. A 9-man
+   *  playoff squad must read FULL here (it was hardcoded `SQUAD_SIZE = 15`, the 2026-06-28 R32 409 bug). */
+  rosterCap: number;
   freeAgents: readonly WvPlayer[];
   claims: readonly WvClaim[];
   roster: readonly WvPlayer[];
@@ -66,7 +71,9 @@ export function FreeAgentPanel({
   const fas = claimableFreeAgents(freeAgents, claims, now, { query, position, nation });
   const drops = droppableRoster(roster, lockedPlayerIds);
   // A full squad must drop a player to add one (the engine's `drop-required` rule); an open slot may not.
-  const squadFull = roster.length >= SQUAD_SIZE;
+  // FULL is keyed on the threaded PHASE cap (15 group / 9 playoff), NOT a hardcoded SQUAD_SIZE — the
+  // playoff cap-parity fix (a 9-man playoff squad is full at 9, was wrongly read non-full against 15).
+  const squadFull = roster.length >= rosterCap;
   const valid = enabled && !!selected && (!squadFull || !!dropId);
 
   return (
@@ -145,7 +152,10 @@ export function FreeAgentPanel({
               {squadFull && (
                 <div className="wv-comp-field">
                   <span className="t-label">
-                    Drop to make room <span className="text-tertiary">· squad full 15/15</span>
+                    Drop to make room{" "}
+                    <span className="text-tertiary">
+                      · squad full {roster.length}/{rosterCap}
+                    </span>
                   </span>
                   <div className="wv-drop-pick">
                     {drops.length === 0 && (
