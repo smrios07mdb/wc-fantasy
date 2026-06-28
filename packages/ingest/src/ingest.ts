@@ -61,7 +61,10 @@ export async function ingestSchedule(feed: FeedClient, store: IngestStore): Prom
   const res = await feed.matches();
   for (const f of res.data) {
     const row = mapMatchRow(f);
-    const periodId = await store.resolvePeriodId(derivePeriodLabel(f));
+    // 3rd-place play-off NEVER gets a period (belt-and-suspenders with derivePeriodLabel's own guard):
+    // keep it period-less so it stays invisible to lineups/scoring/guillotine/playoffs (T-3RD). The /pool
+    // loader synthesizes a knockout period from `row.isThirdPlace` for the pick'em engine instead.
+    const periodId = row.isThirdPlace ? null : await store.resolvePeriodId(derivePeriodLabel(f));
     await store.upsertMatch(row, periodId, {});
   }
 }

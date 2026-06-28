@@ -512,6 +512,35 @@ describe("mapMatchRow", () => {
       awayTeamBdlId: null,
     });
   });
+
+  it("flags the 3rd-place play-off from the round text, leaving other matches unflagged", () => {
+    const third = mapMatchRow({
+      id: 104,
+      status: "scheduled",
+      datetime: "2026-07-18T18:00:00Z",
+      stage: { id: 8, name: "Knockout Stage" },
+      round_name: "Match for 3rd place",
+    });
+    expect(third.isThirdPlace).toBe(true);
+    // The real Final is NOT a 3rd-place match.
+    const real = mapMatchRow({
+      id: 105,
+      status: "scheduled",
+      datetime: "2026-07-19T18:00:00Z",
+      stage: { id: 7, name: "Final" },
+      round_name: "Final",
+    });
+    expect(real.isThirdPlace).toBe(false);
+    // A group fixture is never a 3rd-place match.
+    const group = mapMatchRow({
+      id: 106,
+      status: "scheduled",
+      datetime: "x",
+      stage: { id: 1, name: "Group Stage" },
+      round_number: 2,
+    });
+    expect(group.isThirdPlace).toBe(false);
+  });
 });
 
 describe("derivePeriodLabel", () => {
@@ -568,5 +597,41 @@ describe("derivePeriodLabel", () => {
         round_name: "Round of 16",
       }),
     ).toEqual({ kind: "knockout_round", label: "R16" });
+  });
+
+  it("returns null for the 3rd-place play-off so it never receives a period — even when the stage text would otherwise match a knockout regex", () => {
+    // Known live value: round_name "Match for 3rd place" (no "final" substring) already falls through.
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 8, name: "Knockout Stage" },
+        round_name: "Match for 3rd place",
+      }),
+    ).toBeNull();
+    // DEFENSIVE: even a hostile feed whose STAGE says "Final" must not mis-map the 3rd-place match to the
+    // real Final — the 3rd-place guard fires BEFORE the /final/ branch.
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 7, name: "Final" },
+        round_name: "Match for 3rd place",
+      }),
+    ).toBeNull();
+  });
+
+  it("still maps the real Final (no 3rd-place text) to its canonical label", () => {
+    expect(
+      derivePeriodLabel({
+        id: 1,
+        status: "scheduled",
+        datetime: "x",
+        stage: { id: 7, name: "Final" },
+        round_name: "Final",
+      }),
+    ).toEqual({ kind: "knockout_round", label: "Final" });
   });
 });

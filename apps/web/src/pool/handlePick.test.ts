@@ -102,6 +102,20 @@ describe("handleSubmitPick", () => {
     expect(res.body).toMatchObject({ error: "draw-not-allowed-knockout" });
   });
 
+  it("409 DRAW on the 3rd-place play-off — getMatchFacts resolves is_third_place → knockout_round (T-3RD)", async () => {
+    // The production getMatchFacts (prismaStore) resolves the period-less 3rd-place match to knockout_round
+    // via resolvePoolPeriod, so the handler rejects a DRAW on it exactly like any other knockout 2-way.
+    const store = new MemoryPoolPickStore()
+      .setManagerLeague("m1", "lg1")
+      .setMatch("tp", { status: "scheduled", periodKind: "knockout_round", kickoffAt: future });
+    const res = await handleSubmitPick(
+      deps(ok("m1"), store),
+      submit({ matchId: "tp", prediction: "DRAW" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: "draw-not-allowed-knockout" });
+  });
+
   it("200 creates then UPSERTS the same (manager, match) pick", async () => {
     const store = submitStore();
     const first = await handleSubmitPick(deps(ok("m1"), store), submit({ prediction: "HOME" }));

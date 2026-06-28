@@ -62,6 +62,9 @@ const ROUND_TITLES: Record<string, string> = {
   QF: "Quarter-finals",
   SF: "Semi-finals",
   Final: "Final",
+  // T-3RD: the 3rd-place play-off (resolvePoolPeriod's THIRD_PLACE_POOL_LABEL = "3P"); renders as its own
+  // bracket round after the Final via poolView's non-canonical-label branch.
+  "3P": "3rd Place",
 };
 const roundTitle = (label: string): string => ROUND_TITLES[label] ?? label;
 

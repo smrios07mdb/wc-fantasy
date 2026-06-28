@@ -83,6 +83,7 @@ export function createPrismaIngestStore(prisma: Db): IngestStore {
         referee: row.referee,
         periodId,
         kickoffLockFallback: opts.kickoffLockFallback ?? false,
+        isThirdPlace: row.isThirdPlace,
       };
       const m = await prisma.fifaMatch.upsert({
         where: { balldontlieId: row.bdlId },

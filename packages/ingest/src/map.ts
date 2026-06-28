@@ -404,6 +404,8 @@ export interface MatchRowIn {
   homeFormation: string | null;
   awayFormation: string | null;
   referee: string | null;
+  /** The 3rd-place play-off marker ({@link isThirdPlaceMatch}) — a POOL-ONLY flag, never a period (T-3RD). */
+  isThirdPlace: boolean;
 }
 
 export function mapMatchRow(f: FIFAMatch): MatchRowIn {
@@ -426,6 +428,7 @@ export function mapMatchRow(f: FIFAMatch): MatchRowIn {
     homeFormation: s(f.home_formation),
     awayFormation: s(f.away_formation),
     referee: s(f.referee?.name), // documented as a nested object { id, name, ... }, not a bare string
+    isThirdPlace: isThirdPlaceMatch(f),
   };
 }
 
@@ -438,11 +441,27 @@ const KNOCKOUT: Array<[RegExp, string]> = [
 ];
 
 /**
+ * The 3rd-place play-off ("Match for 3rd place") — a POOL-ONLY consolation fixture. It is detected by the
+ * round/stage text and is NEVER given a fantasy period (see {@link derivePeriodLabel}); the /pool IO loader
+ * synthesizes a knockout period for the pick'em engine instead (T-3RD, DECISIONS → 3rd-place). Matching on
+ * BOTH fields is deliberate so a feed that carries the marker in either round_name or stage.name is caught.
+ */
+const THIRD_PLACE_RE = /3rd place|third place/i;
+export function isThirdPlaceMatch(f: FIFAMatch): boolean {
+  return THIRD_PLACE_RE.test(f.round_name ?? "") || THIRD_PLACE_RE.test(f.stage?.name ?? "");
+}
+
+/**
  * Structural period label for a fixture — from round/matchday, NEVER kickoff time (a postponement
  * would corrupt a time-derived matchday). Knockout: round → canonical label. Group: a usable matchday
  * integer → MD{n}; otherwise null (the caller leaves period_id null + TODO(confirm)).
  */
 export function derivePeriodLabel(f: FIFAMatch): { kind: PeriodKind; label: string } | null {
+  // 3rd-place play-off guard FIRST: it must never receive a period (period_id stays NULL keeps it invisible
+  // to lineups/scoring/guillotine/playoffs). Ordered BEFORE the /final/ branch so a stage/round string that
+  // happens to contain "final" can't mis-map the consolation match to the real Final (T-3RD).
+  if (isThirdPlaceMatch(f)) return null;
+
   const stageNorm = (f.stage?.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
   // Knockout: match the stage name (e.g. "Round of 32", "Quarter-finals", "Final").

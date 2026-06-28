@@ -337,6 +337,33 @@ describe("ingestSchedule (schedule-sync)", () => {
     expect(store.upsertedMatch(50)?.periodId).toBe("period-r16"); // structural stage → R16 period
     expect(store.upsertedMatch(51)?.periodId).toBeNull(); // group game, no round_number → left null
   });
+
+  it("keeps the 3rd-place play-off period-less (period_id NULL + is_third_place) even if a matching period is seeded", async () => {
+    const feed = fakeFeed({
+      matches: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 60,
+              status: "scheduled",
+              datetime: "2026-07-18T18:00:00Z",
+              // Hostile: stage says "Final" — the defensive guard must STILL keep this period-less so it
+              // can never be mis-bound to the real Final period (T-3RD).
+              stage: { id: 7, name: "Final" },
+              round_name: "Match for 3rd place",
+            },
+          ],
+          meta: {},
+        }),
+    });
+    const store = new MemoryIngestStore();
+    store.seedPeriod("knockout_round", "Final", "period-final"); // the real Final period exists
+
+    await ingestSchedule(feed, store);
+
+    expect(store.upsertedMatch(60)?.periodId).toBeNull(); // NEVER a period — stays invisible to playoffs/lineups
+    expect(store.upsertedMatch(60)?.isThirdPlace).toBe(true); // but flagged for the /pool loader to synthesize
+  });
 });
 
 describe("ingestSettle", () => {

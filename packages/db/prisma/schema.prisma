@@ -383,6 +383,14 @@ model FifaMatch {
   /// Per-match lock-on-play fallback (Theme B / §3). false = lock-on-play (default); true = revert to
   /// kickoff-locking when live appearance data is missing. The operator UI that flips it is a later prompt.
   kickoffLockFallback Boolean     @default(false) @map("kickoff_lock_fallback")
+  /// POOL-ONLY marker for the 3rd-place play-off ("Match for 3rd place"). Set by @app/ingest `mapMatchRow`
+  /// when the feed round/stage text matches /3rd place|third place/i. It deliberately stays a SEPARATE axis
+  /// from `period_id`: a 3rd-place match MUST keep `period_id = NULL` so it remains invisible to lineups,
+  /// player scoring, the guillotine cut ladder, and /playoffs (loadPlayoffs keys on `period.kind`, so a real
+  /// period would peg `liveIdx` forever and the tournament would never complete — DECISIONS → 3rd-place).
+  /// The /pool IO loader (`resolvePoolPeriod`) reads this flag to SYNTHESIZE a `knockout_round`/"3P" period
+  /// for the pure pick'em engine, scoring it as a 2-way knockout pick — without any real period row.
+  isThirdPlace        Boolean     @default(false) @map("is_third_place")
   homeTeamId          String?     @map("home_team_id")
   awayTeamId          String?     @map("away_team_id")
   homeScore           Int?        @map("home_score")

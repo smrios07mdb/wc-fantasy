@@ -44,10 +44,10 @@ export class MemoryIngestStore implements IngestStore {
   private lockPlayerTeam = new Map<number, number>(); // playerBdlId → teamBdlId (team-membership gate)
   private periods = new Map<string, string>(); // `${kind}:${label}` → periodId
   private matches: SchedulableMatch[] = [];
-  /** bdlId → what upsertMatch was called with (records the resolved period_id + fallback flag). */
+  /** bdlId → what upsertMatch was called with (records the resolved period_id, fallback flag, 3rd-place). */
   private upsertedMatches = new Map<
     number,
-    { periodId: string | null; kickoffLockFallback: boolean }
+    { periodId: string | null; kickoffLockFallback: boolean; isThirdPlace: boolean }
   >();
   /** bdlId → fields upsertPlayerByBdlId was called with (rosters-sync assertions). */
   private upsertedPlayers = new Map<
@@ -171,13 +171,14 @@ export class MemoryIngestStore implements IngestStore {
     this.upsertedMatches.set(row.bdlId, {
       periodId,
       kickoffLockFallback: opts.kickoffLockFallback ?? false,
+      isThirdPlace: row.isThirdPlace,
     });
     return Promise.resolve({ matchId: `match-${row.bdlId}` });
   }
-  /** Assertion: what period_id the schedule-sync resolved for a fixture. */
+  /** Assertion: what period_id the schedule-sync resolved for a fixture (+ the 3rd-place marker). */
   upsertedMatch(
     bdlId: number,
-  ): { periodId: string | null; kickoffLockFallback: boolean } | undefined {
+  ): { periodId: string | null; kickoffLockFallback: boolean; isThirdPlace: boolean } | undefined {
     return this.upsertedMatches.get(bdlId);
   }
   resolvePeriodId(label: { kind: string; label: string } | null): Promise<string | null> {

@@ -18,6 +18,7 @@ import type {
   ReadPicksInput,
   UpsertPickInput,
 } from "./store";
+import { resolvePoolPeriod } from "./resolvePoolPeriod";
 
 type Db = PrismaClient;
 
@@ -34,11 +35,19 @@ export function createPrismaPoolPickStore(prisma: Db): PoolPickStore {
     async getMatchFacts(matchId): Promise<PoolMatchFacts | null> {
       const m = await prisma.fifaMatch.findUnique({
         where: { id: matchId },
-        select: { status: true, kickoffAt: true, period: { select: { kind: true } } },
+        select: {
+          status: true,
+          kickoffAt: true,
+          period: { select: { kind: true, label: true } },
+          isThirdPlace: true,
+        },
       });
       if (!m) return null;
-      // The corrected discriminator: phase comes from the linked period.kind, NOT fifa_match.round.
-      return { status: m.status, periodKind: m.period?.kind ?? null, kickoffAt: m.kickoffAt };
+      // The corrected discriminator: phase comes from the linked period.kind, NOT fifa_match.round. T-3RD:
+      // route through resolvePoolPeriod so the 3rd-place play-off resolves to knockout_round — making
+      // validatePickSubmission REJECT a DRAW on it (a 2-way fixture), exactly like every other knockout pick.
+      const { periodKind } = resolvePoolPeriod(m);
+      return { status: m.status, periodKind, kickoffAt: m.kickoffAt };
     },
 
     async upsertPick(input: UpsertPickInput): Promise<PersistedPoolPick> {

@@ -24,6 +24,7 @@ import { derivePoolResult, type LeaderboardMatch, type PoolPick } from "@app/poo
 import { loadPlayoffPhaseActive } from "@app/faab/prisma";
 import { selectTournamentPhase } from "@/src/dashboard/selectTournamentPhase";
 import { createPrismaPoolPickStore } from "./prismaStore";
+import { resolvePoolPeriod } from "./resolvePoolPeriod";
 import { selectPoolPicksView, buildPoolLeaderboardView } from "./poolView";
 import type { PoolFixture, PoolOtherPick, PoolTeam, PoolView } from "./types";
 
@@ -39,6 +40,9 @@ const MATCH_SELECT = {
   homeScorePens: true,
   awayScorePens: true,
   period: { select: { kind: true, label: true } },
+  // T-3RD: the 3rd-place play-off marker. period_id stays NULL (invisible to lineups/playoffs/guillotine);
+  // `resolvePoolPeriod` reads this flag to synthesize a knockout_round/"3P" period for the pool engine.
+  isThirdPlace: true,
   homeTeam: { select: { name: true, country: true } },
   awayTeam: { select: { name: true, country: true } },
 } as const;
@@ -99,7 +103,9 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
   }
 
   const fixtures: PoolFixture[] = matchRows.map((m) => {
-    const periodKind = m.period?.kind ?? null;
+    // T-3RD: synthesize the 3rd-place play-off's knockout_round/"3P" period at the loader boundary so the
+    // pure engine sees it as a 2-way knockout (period_id is NULL in the DB); every other fixture passes through.
+    const { periodKind, periodLabel } = resolvePoolPeriod(m);
     const result = derivePoolResult({
       status: m.status,
       kickoffAt: m.kickoffAt,
@@ -118,7 +124,7 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
       kickoffAt: m.kickoffAt.toISOString(),
       status: m.status,
       periodKind,
-      periodLabel: m.period?.label ?? null,
+      periodLabel,
       result,
       homeScore: m.homeScore,
       awayScore: m.awayScore,
@@ -129,6 +135,10 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
     };
   });
 
+  // Tournament phase is left on the RAW period.kind deliberately: the 3rd-place play-off must NOT influence
+  // phase detection (it is a pool-only consolation fixture). Harmless either way — the bracket's real gate is
+  // `playoffActive` (playoff_entry existence), and phase only contributes via `phase === "complete"`, which
+  // keys on the "Final" label, not on "3P".
   const phase = selectTournamentPhase(
     matchRows.map((m) => ({
       status: m.status,
@@ -137,20 +147,25 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
     })),
   );
 
-  // The leaderboard projection: a LeaderboardMatch per fixture (result derivation + canonical label).
-  const leaderboardMatches: LeaderboardMatch[] = matchRows.map((m) => ({
-    matchId: m.id,
-    status: m.status,
-    kickoffAt: m.kickoffAt,
-    periodKind: m.period?.kind ?? null,
-    periodLabel: m.period?.label ?? null,
-    homeScore: m.homeScore,
-    awayScore: m.awayScore,
-    homeScoreEt: m.homeScoreEt,
-    awayScoreEt: m.awayScoreEt,
-    homeScorePens: m.homeScorePens,
-    awayScorePens: m.awayScorePens,
-  }));
+  // The leaderboard projection: a LeaderboardMatch per fixture (result derivation + canonical label). T-3RD:
+  // route through resolvePoolPeriod too — this is a SEPARATE read of period.kind from the fixtures projection,
+  // so without it the 3rd-place pick would derive a null result and the +1 would never count.
+  const leaderboardMatches: LeaderboardMatch[] = matchRows.map((m) => {
+    const { periodKind, periodLabel } = resolvePoolPeriod(m);
+    return {
+      matchId: m.id,
+      status: m.status,
+      kickoffAt: m.kickoffAt,
+      periodKind,
+      periodLabel,
+      homeScore: m.homeScore,
+      awayScore: m.awayScore,
+      homeScoreEt: m.homeScoreEt,
+      awayScoreEt: m.awayScoreEt,
+      homeScorePens: m.homeScorePens,
+      awayScorePens: m.awayScorePens,
+    };
+  });
   const allPicks: PoolPick[] = allPickRows.map((p) => ({
     managerId: p.managerId,
     matchId: p.matchId,

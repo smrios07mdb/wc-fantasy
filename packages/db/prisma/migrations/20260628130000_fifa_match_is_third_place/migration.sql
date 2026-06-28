@@ -1,0 +1,12 @@
+-- T-3RD: surface the 3rd-place play-off ("Match for 3rd place") in the Quiniela /pool as a pickable
+-- 2-way knockout fixture, scored +1 cumulative — WITHOUT giving it a period_id.
+--
+-- This POOL-ONLY marker is a SEPARATE axis from period_id. A 3rd-place match MUST keep period_id = NULL so
+-- it stays invisible to lineups, player scoring, the guillotine cut ladder, and /playoffs: loadPlayoffs
+-- keys playoff rounds on period.kind = 'knockout_round', so a real 6th knockout period would peg the live
+-- round index on it permanently and the tournament would never report `complete` (DECISIONS → 3rd-place).
+-- Instead the /pool IO loader synthesizes a 'knockout_round'/'3P' period for the pure pick'em engine.
+--
+-- The flag is sourced by @app/ingest `mapMatchRow` (round/stage text /3rd place|third place/i). Additive +
+-- NOT NULL DEFAULT false → existing rows back-fill to false automatically; no data migration, no RLS change.
+ALTER TABLE "fifa_match" ADD COLUMN "is_third_place" BOOLEAN NOT NULL DEFAULT false;

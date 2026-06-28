@@ -17,6 +17,7 @@ import {
   isTeamResolved,
   isKnockoutFixturePickable,
 } from "./poolView";
+import { resolvePoolPeriod, THIRD_PLACE_POOL_LABEL } from "./resolvePoolPeriod";
 import type { PoolFixture } from "./types";
 
 // ─── factories ───────────────────────────────────────────────────────────────────────────
@@ -236,7 +237,8 @@ describe("selectPoolPicksView — preserves full history regardless of phase (sc
           status: "completed",
           kickoffAt: old,
         }),
-        // an unlinked fixture (periodKind null) — e.g. the 3rd-place match — kept in `unscheduled`
+        // an as-yet-unseeded fixture (periodKind null) — kept in `unscheduled` (NB: the 3rd-place match is
+        // NOT this case — the loader synthesizes a knockout_round/"3P" period for it; see the T-3RD block below)
         fx({ matchId: "u", periodKind: null }),
         // a real knockout fixture — in its bracket round
         fx({
@@ -272,6 +274,48 @@ describe("selectPoolPicksView — preserves full history regardless of phase (sc
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD3"]);
     expect(view.unscheduled.map((f) => f.matchId)).toEqual(["u"]);
     expect(view.bracket).toEqual([]);
+  });
+});
+
+// ─── selectPoolPicksView — 3rd-place play-off (T-3RD) ─────────────────────────────────────────
+// The 3rd-place match arrives from the loader ALREADY synthesized to a knockout_round/"3P" period
+// (resolvePoolPeriod), so the pure selector treats it as an ordinary knockout fixture: it joins the bracket
+// via poolView's defensive non-canonical-label branch, NOT the `unscheduled` bucket — with NO change to poolView.
+describe("selectPoolPicksView — 3rd-place play-off (T-3RD)", () => {
+  const tp = fx({
+    matchId: "tp",
+    periodKind: "knockout_round",
+    periodLabel: THIRD_PLACE_POOL_LABEL,
+    home: { name: "Brazil", code: "BR" },
+    away: { name: "Croatia", code: "HR" },
+  });
+
+  it("renders the 3rd-place fixture as its own bracket round after the 5 canonical rounds", () => {
+    const view = selectPoolPicksView([tp], "playoff", NOW, true);
+    expect(view.bracket.map((r) => r.label)).toEqual([
+      ...KNOCKOUT_ROUND_ORDER,
+      THIRD_PLACE_POOL_LABEL,
+    ]);
+    expect(
+      view.bracket.find((r) => r.label === THIRD_PLACE_POOL_LABEL)?.fixtures.map((f) => f.matchId),
+    ).toEqual(["tp"]);
+  });
+
+  it("does NOT leave the 3rd-place fixture in the unscheduled or matchday buckets", () => {
+    const view = selectPoolPicksView([tp], "playoff", NOW, true);
+    expect(view.unscheduled).toEqual([]);
+    expect(view.matchdays).toEqual([]);
+  });
+
+  it("is pickable only once both teams are resolved (TBD until the semifinals decide them)", () => {
+    expect(isKnockoutFixturePickable({ home: tp.home, away: tp.away })).toBe(true);
+    // Before the semifinals the feed carries placeholder names ("Team <id>") → not yet pickable.
+    expect(
+      isKnockoutFixturePickable({
+        home: { name: "Team 273", code: "273" },
+        away: { name: "Team 274", code: "274" },
+      }),
+    ).toBe(false);
   });
 });
 
@@ -571,6 +615,28 @@ describe("buildPoolLeaderboardView", () => {
     const rows = buildPoolLeaderboardView(picks, matches, managers, "m1");
     expect(rows.find((r) => r.managerId === "m1")).toMatchObject({
       played: 0,
+      correct: 0,
+      points: 0,
+    });
+  });
+
+  it("T-3RD: a correct 3rd-place winner pick contributes +1 to the cumulative total (loader-synthesized period)", () => {
+    // Mirror loadPool's leaderboard projection EXACTLY: the period-less 3rd-place match is resolved at the
+    // loader via resolvePoolPeriod, NOT left as periodKind null (which — per the test above — never scores).
+    const { periodKind, periodLabel } = resolvePoolPeriod({ isThirdPlace: true, period: null });
+    expect(periodKind).toBe("knockout_round");
+    const matches = [
+      lm("tp", "completed", periodKind, { homeScore: 2, awayScore: 1, periodLabel }), // home wins → advancer HOME
+    ];
+    const picks = [pk("m1", "tp", "HOME"), pk("m2", "tp", "AWAY")];
+    const rows = buildPoolLeaderboardView(picks, matches, managers, "m1");
+    expect(rows.find((r) => r.managerId === "m1")).toMatchObject({
+      played: 1,
+      correct: 1,
+      points: 1,
+    });
+    expect(rows.find((r) => r.managerId === "m2")).toMatchObject({
+      played: 1,
       correct: 0,
       points: 0,
     });
