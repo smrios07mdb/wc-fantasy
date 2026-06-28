@@ -390,8 +390,11 @@ doesn't fit a private H2H league).
 
 - **Hard roster cap ≈ 9 = 7 starters + 2 bench.** Cuts flow into the FAAB pool (fuels the
   reinforcement churn). Bench is positional-flexible.
-- **Starting shape 1 GK + 6 outfield, small variations allowed:** min 2 DEF / min 2 MID /
-  min 1 FWD → **2-2-2** (base), **3-2-1**, **2-3-1**.
+- **Starting shape 1 GK + 6 outfield, any complete split with ≥1 per line:** min 1 DEF / 1 MID /
+  1 FWD → the **10 shapes** 1-1-4 / 1-2-3 / 1-3-2 / 1-4-1 / 2-1-3 / 2-2-2 / 2-3-1 / 3-1-2 / 3-2-1 /
+  4-1-1. **(Loosened on `feat/playoff-formation-loosen`; was min 2 DEF / 2 MID / 1 FWD = {2-2-2,
+  3-2-1, 2-3-1}. The old 3-shape set is a strict subset of the new 10, so no saved playoff lineup is
+  invalidated and no migration is needed.)**
 - **Bench GK optional** — not required, but a manager may spend a bench slot on a backup keeper
   for insurance.
 - Exact cap / bench numbers stay provisional pending guillotine cadence (Theme C) and
@@ -2724,13 +2727,15 @@ Group cap byte-unchanged.
 
 ### Playoff lineup mode
 
-`validateLineup` branches on `period.kind === "knockout_round"` → enforces `PLAYOFF_ROSTER` (cap ≤9, 7 starters = 1 GK + 6 outfield). Position bounds are derived from `PLAYOFF_ROSTER` mins (each pos max = 6 − the other two mins), so the only complete 6-outfield shapes are exactly `FORMATIONS_PO` (2-2-2 / 2-3-1 / 3-2-1) — `FORMATIONS_PO` is not a stored constant; it *emerges* from the derived `playoffBounds()` calculation. A drift-guard test pins "complete shapes satisfying the derived bounds == FORMATIONS_PO." Group mode byte-unchanged; forfeit / lock-on-play reused, not forked.
+`validateLineup` branches on `period.kind === "knockout_round"` → enforces `PLAYOFF_ROSTER` (cap ≤9, 7 starters = 1 GK + 6 outfield). Position bounds are derived from `PLAYOFF_ROSTER` mins (each pos max = 6 − the other two mins). **Loosened to min 1 DEF / 1 MID / 1 FWD (`feat/playoff-formation-loosen`; was 2/2/1):** the complete 6-outfield shapes are now every split with ≥1 per line — the **10 shapes** 1-1-4 … 4-1-1 (the old {2-2-2, 2-3-1, 3-2-1} is a strict subset, so no saved lineup is invalidated; no migration). GK stays exactly 1; the maxes keep deriving (now 4). **There is no `FORMATIONS_PO` constant** — the set is computed at module load by the now-**exported** `playoffXIShapes()` (`packages/lineup/src/validate.ts`), the SINGLE source consumed by BOTH the validator (`canFieldPlayoffXI` / the bound check) AND the UI offer-set. **Drift-guard reality (corrected):** a true set-equality test did NOT previously exist — the set was pinned only by hardcoded `it.each` acceptance literals over a *private* enumerator. It is now REAL: `packages/lineup/src/playoffShapes.test.ts` asserts `Set(playoffXIShapes keys) == the 10` (normalized, order-independent), and the web layer (`formation.test.ts`) asserts `PLAYOFF_FORMATIONS keys == the derived set`. Group mode byte-unchanged; forfeit / lock-on-play reused, not forked.
 
-**UI:** period-driven switch (`loadLineup` reads `period.kind` → seeds via `formationSetForKind`; `SetLineupClient` derives the offer-set; `LockHero` shows "Playoff XI · 7 starters" vs "Starting XI · 11"). `kind` is required on `PeriodLineup` (`apps/web/src/lineup/types.ts`); the package validator's `PeriodWindow.kind` stays optional (back-compat).
+**UI:** period-driven switch (`loadLineup` reads `period.kind` → seeds via `formationSetForKind`; `SetLineupClient` derives the offer-set; `LockHero` shows "Playoff XI · 7 starters" vs "Starting XI · 11"). `PLAYOFF_FORMATIONS` (`apps/web/src/lineup/view.ts`) is now **DERIVED from `playoffXIShapes()`** (was a hardcoded 3-shape literal, correct only at the old 2/2/1 bounds) — so picker and validator can never drift; the picker offers the fillable subset of the 10, default still `2-3-1`. `kind` is required on `PeriodLineup` (`apps/web/src/lineup/types.ts`); the package validator's `PeriodWindow.kind` stays optional (back-compat).
 
 ### ⚠️ CUT-TIMING INVARIANT (D5)
 
 The 9-cap is a **GATE, not a DRIVER.** It blocks operating over 9; it does not pull a 15-man advancer down to 9, and the derived trim "deadline" (= the first R32 FAAB batch; no schema column) ≠ the R32 lineup lock. A survivor who never voluntarily trims is **blocked from setting an R32 lineup → forfeits** (by design — trimming is the roster decision). Safe with: (a) a clear at-lineup-attempt signal (Phase 3's `playoff-roster-cap` error), (b) runway before R32, (c) the **manager release-to-9 flow + commish force-trim backstop** shipped in the trim-down phase (below).
+
+**Side-effect of the formation loosening (`feat/playoff-formation-loosen`) — D5 unchanged:** widening the legal shape set to 1/1/1 can only **REDUCE** release-/trim-unfillability (more squads can field a legal XI), never increase it — the old legal set ⊂ the new, so every previously-fillable squad stays fillable. The `release-unfillable` confirm gate still fires, only for an emptier end-state (an empty lane, or <6 outfield bodies — the lane max of 4 never binds because the other two lanes always supply ≥2). The cut-timing invariant itself is untouched: the 9-cap is still a gate, and a survivor who never trims still forfeits.
 
 ### ✅ Trim-down phase (BUILT) — the release-to-9 net-shed
 
