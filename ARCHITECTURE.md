@@ -1145,6 +1145,24 @@ Regression coverage: `poolPickRls.integration.test.ts` (DB-gated, role-switched)
 `fifa_match.round` (raw feed text — non-null for group games; see the schema comment + DECISIONS). The
 IO loader performs this join and hands the pure engine a resolved `periodKind`.
 
+**3rd-place play-off = IO-loader period synthesis, `period_id` stays NULL (T-3RD, 2026-06-28).** The "Match
+for 3rd place" is the lone `period_id IS NULL` fixture and **must stay period-less** to remain invisible to
+lineups, player scoring, the guillotine ladder, and `/playoffs` (`loadPlayoffs` keys rounds on `period.kind`,
+so a real 6th `knockout_round` period would peg `playoffsView`'s `liveIdx` forever — the tournament would
+never report `complete`; see DECISIONS → 2026-06-28 T-3RD). To still surface it as a scored 2-way pick, the
+loader special-cases it at one seam: a pure `resolvePoolPeriod(match)` (`apps/web/src/pool/`) maps the
+additive `fifa_match.is_third_place` flag → a synthetic `{ "knockout_round", "3P" }`, and every other fixture
+passes through with its real period. `loadPool` routes BOTH the fixtures projection AND the separate
+`leaderboardMatches` projection through it (distinct raw reads — the leaderboard would otherwise derive a null
+result and never score the +1); the `selectTournamentPhase` input is left raw on purpose. The write path
+(`prismaStore.getMatchFacts`) routes through the same helper so `validatePickSubmission` rejects a DRAW on the
+2-way. The pure `@app/pool` engine and `poolView.ts` are byte-untouched — `derivePoolResult` scores "3P" as a
+knockout advancer and `selectPoolPicksView`'s defensive non-canonical-label branch renders it as its own
+bracket round after the Final (non-pickable until both teams resolve). The flag is set by `@app/ingest
+mapMatchRow` (`/3rd place|third place/i`), with `derivePeriodLabel` guarded to return null for it before the
+`/final/` branch and `ingestSchedule` defensively forcing `period_id = null`. `"3P"` is pool-local — NOT in
+`@app/shared KNOCKOUT_ROUNDS` (the guillotine ladder stays the five rounds).
+
 **Bracket-VISIBILITY gate = `playoff_entry` existence (distinct from the per-fixture `period.kind`
 discriminator above; 2026-06-28).** _When_ the whole R32→Final bracket skeleton appears on the Picks tab
 is a separate question from _which_ bucket each fixture lands in. The bracket renders once `playoffActive`
