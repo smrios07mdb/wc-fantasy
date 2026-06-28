@@ -1849,6 +1849,71 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   skipped/web build). **Review-class** (phase gate on a live surface) → **merge HELD** for Chat clearance.
   See PROJECT.md (2026-06-28 Quiniela bracket entry) + ARCHITECTURE.md → §3 pool bracket-visibility gate.
 
+## Quiniela (`/pool`) knockout Picks — vertical round layout + TBD/non-pickable undecided matches + group phase hidden in playoff (2026-06-28 — `worktree-feat+pool-knockout-vertical-tbd`, merge HELD)
+
+- **Vertical, round-sequential layout replaces the horizontal bracket grid.** The Picks-tab knockout
+  bracket was a horizontal `.pl-bracket` flex-row of fixed-width `.pl-bcol` columns (overflow-x scroll) —
+  unusable on a phone. It is now a stack of labeled `.pl-round` sections top-to-bottom (R32 → R16 → QF →
+  SF → Final), each reusing the matchday section styling (`.pl-md-head` + the responsive `.pl-md-list`
+  grid) so it reads like the group lists and collapses to one column at 320–414px. Headers render friendly
+  titles (`R32`→"Round of 32", `QF`→"Quarter-finals", …; `roundTitle` map in `PoolClient`, falls back to
+  the raw label). The engine's per-round fixture set/order (`KNOCKOUT_ROUND_ORDER`, kickoff-sorted within a
+  round) is byte-unchanged — this is layout only.
+
+- **A knockout match is pickable ONLY when BOTH sides are resolved real teams; otherwise it is TBD with NO
+  pick buttons.** The live feed seeds undecided bracket slots as placeholder teams named
+  `Team {balldontlie_team_id}` (e.g. "Team 273"…"Team 304") with REAL `fifa_match` rows and pick buttons —
+  so a manager could "pick" a match between two unknown teams. **Detection is by team NAME, anchored
+  `/^Team \d+$/` (trimmed), NOT country/flag.** Confirmed against the live DB: `fifa_team.country` AND
+  `fifa_team.abbreviation` are NULL for ALL 112 teams (64 placeholder-named, 48 real), so neither can
+  discriminate. The pure predicates live in `poolView.ts` — `isPlaceholderTeamName(name)`,
+  `isTeamResolved(team): team is PoolTeam` (type guard), `isKnockoutFixturePickable({home, away})` — keyed
+  on the team name already carried on each fixture and unit-tested directly. `TeamLabel` renders "TBD" for a
+  null OR placeholder side (the raw `Team {id}` name never reaches the DOM); `FixtureCard` renders the pick
+  control only when `pickable` (a "Teams to be decided" note + dashed `.is-undecided` frame otherwise). The
+  predicate is correct whether the feed later re-points the fixture to a real team UUID or renames the row
+  in place. Live state at write time: R32 = 16 resolved/pickable matches (first kickoff 2026-06-28);
+  R16/QF/SF/Final = all placeholders → TBD.
+
+- **The Picks tab hides the group phase once `playoffActive` — at the RENDER layer, NOT by stripping the
+  pure view.** `PoolView` gained `playoffActive: boolean` (set by `loadPool` from `playoff_entry`
+  existence); `PoolClient` computes `showGroup = !view.playoffActive` and renders the group matchday lists,
+  the Completed archive, and the `unscheduled` section only when `showGroup` (so the playoff Picks tab shows
+  ONLY the bracket — incl. dropping the unlinked 3rd-place match without sourcing/linking it). `hasAnyFixture`
+  was widened to `bracket.length > 0 || (showGroup && (matchdays || unscheduled))` so the always-present
+  5-round bracket skeleton counts as content (no empty banner beside an all-TBD bracket). The
+  `playoffActive=false` path is byte-for-byte unchanged (regression-pin).
+  **WHY render-layer, not a selector strip (the landmine the adversarial review caught):** an earlier draft
+  had `selectPoolPicksView` return `{ matchdays: [], bracket, unscheduled: [], completed: [] }` when
+  `playoffActive`. But `view.picks` is ALSO the sole input to the leaderboard drill-in modal
+  (`selectManagerPicks → allFixtures(view.picks)`, which deliberately includes `completed` so a manager's
+  settled group picks stay reachable). Stripping the buckets in the selector silently emptied that modal for
+  the whole knockout phase — clicking a manager showed only their knockout picks while the leaderboard row
+  still totaled their full group history. Fix = keep the pure selector phase-agnostic (full buckets always),
+  hide at the render layer. Pinned by a `managerPicks.test.ts` seam test that feeds real
+  `selectPoolPicksView(playoffActive=true)` output into `selectManagerPicks` (RED on the old selector strip).
+
+- **OUT OF SCOPE (recorded, not built):** the 3rd-place match ("Match for 3rd place", `period_id` null) is
+  a separate follow-up — not sourced, linked, or rendered here. A **server-side guard rejecting a pick on
+  an undecided match is a RECOMMENDED FOLLOW-UP** (fairness: a crafted `POST /api/pool/pick` can still
+  store a pick before teams are known) — this thread is view-selection + layout only. `@app/pool` engine /
+  `derivePoolResult` / `readVisiblePicks` reveal gate / `selectTournamentPhase` / per-fixture `period.kind`
+  result derivation are byte-untouched; no schema / migration / RLS / Realtime change; `packages/scoring` +
+  `packages/recompute` unread.
+
+- **TDD red→green:** `poolView.test.ts` adds scope-2 predicate cases (placeholder/real names; both-resolved
+  pickable; either-placeholder/null → not pickable) + scope-3 cases pinning that the pure selector PRESERVES
+  all buckets in playoff (data integrity for the modal) + the `playoffActive=false` regression-pin.
+  `managerPicks.test.ts` adds the loader→selector→modal SEAM test (full group/Completed history reachable in
+  playoff — RED against the rejected selector-strip). New `PoolBracket.test.tsx` (jsdom RTL, mounts the real
+  `PoolClient`) pins the stacked vertical sections in order, a resolved R32 match's HOME/AWAY buttons, a
+  placeholder R16 match rendering TBD with NO buttons, and NO group sections rendering in playoff even though
+  the group data is present in `view.picks`. `poolContracts.test.ts` stays green. Adversarial multi-agent
+  review caught the selector-strip P1 (above); fix + seam test landed before hold. Full DoD gate green
+  (typecheck/lint/format/test = **2670 passed** | 48 skipped / web build). **Review-class** (live competitive
+  pickability gate) → **merge HELD** for Chat clearance; live-deploy `/pool` screenshot owed.
+  See PROJECT.md (2026-06-28 Quiniela knockout layout entry) + ARCHITECTURE.md → §3 pool Picks-tab layout.
+
 ## Profile rename / Settings route (Prompt 39)
 
 - **`display_name` is the single user-editable manager identity.** There is no `team_name` or

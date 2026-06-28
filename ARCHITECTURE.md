@@ -711,8 +711,20 @@ Minimal, for a private league of friends.
     route `/pool` (`app/pool/`), server-rendered, **dynamic (`ƒ`)**, AppShell-mounted, auth-gated via
     `getSessionManager()` (no-session → `/sign-in`; not-allowlisted / no-manager → `/auth/denied`). Two
     tabs — **Picks** (per-match Home/Draw/Away picks; the playoff phase — gated on `playoff_entry`
-    EXISTENCE, NOT `selectTournamentPhase`; see §3 bracket-visibility gate — adds the fixed R32→Final
-    bracket skeleton with honest TBD slots) and **Leaderboard** (all league members, ranked by pool
+    EXISTENCE, NOT `selectTournamentPhase`; see §3 bracket-visibility gate — renders the knockout bracket
+    as a **vertical, round-sequential stack** of `.pl-round` sections R32 → R16 → QF → SF → Final
+    (mobile-first; reuses the matchday section styling; replaced the old horizontal `.pl-bcol` scroller —
+    2026-06-28). When `playoffActive` (now on `PoolView`) the Picks tab **hides the group phase** at the
+    RENDER layer — PoolClient gates the group matchday lists / Completed archive / unscheduled on
+    `view.playoffActive`, while the pure `selectPoolPicksView` keeps the FULL buckets so the leaderboard
+    drill-in modal (`selectManagerPicks`) retains every manager's settled history (a selector-side strip
+    would silently empty that modal — caught in adversarial review). A knockout match is
+    **pickable only when BOTH sides are resolved real teams**; undecided slots — feed placeholders named
+    `Team {balldontlie_team_id}`, detected by `/^Team \d+$/` since `fifa_team.country`/`.abbreviation` are
+    NULL for ALL teams — render as **TBD with NO pick buttons** (pure predicates in `poolView.ts`:
+    `isPlaceholderTeamName` / `isTeamResolved` / `isKnockoutFixturePickable`). A server-side guard rejecting
+    a pick on an undecided match is a recommended follow-up (view-only here); the unlinked 3rd-place match is
+    a separate thread, not rendered) and **Leaderboard** (all league members, ranked by pool
     points). It is
     **form-driven CRUD**: every pick is a `POST /api/pool/pick` round-trip (the Prompt-40 gated route)
     followed by `router.refresh()` — **NO Realtime, NO polling** (the Realtime subscription is **P43**).
