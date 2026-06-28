@@ -425,9 +425,7 @@ function reportTransition(
     for (const c of p.cutSchedule) console.log(`     ${c.round.padEnd(5)} ${c.cutCount}`);
     console.log(`  released to FAAB pool (${p.released.length}):`);
     for (const r of p.released) console.log(`     ${r.displayName}  (${r.releasedCount} players)`);
-    console.log(
-      `  budget reset: ${p.budgetResetManagerIds.length} advancer(s) → $${p.budgetResetTo}`,
-    );
+    console.log("  budget:       carried forward (one-time tournament allowance — not reset)");
     console.log("  waiver order (carried forward, eliminated removed, no re-seed):");
     for (const w of p.waiverOrder) {
       console.log(`     ${String(w.position).padStart(2)}  ${name(w.managerId)}`);

@@ -89,8 +89,8 @@ class MemoryTransitionStore implements PlayoffTransitionStore {
     for (const c of plan.cutSchedule) this.cutCounts.set(c.round, c.cutCount);
     for (const f of plan.field) this.entries.set(f.managerId, { seed: f.seed, status: "alive" });
     for (const r of plan.released) this.managers.get(r.managerId)!.rosterSize = 0;
-    for (const id of plan.budgetResetManagerIds)
-      this.managers.get(id)!.faabBudget = plan.budgetResetTo;
+    // Budgets are intentionally NOT reset — the production store carries them forward through the
+    // transition (one-time tournament allowance). Re-adding a reset here would be the regression.
     for (const m of this.managers.values()) m.waiverOrderPosition = null;
     for (const slot of plan.waiverOrder)
       this.managers.get(slot.managerId)!.waiverOrderPosition = slot.position;
@@ -100,7 +100,7 @@ class MemoryTransitionStore implements PlayoffTransitionStore {
 }
 
 /** 12 managers, seed = i, waiver position = reverse of seed (so carry-forward ≠ seed order), full 15-man
- *  rosters, a deliberately-spent $30 budget (to prove the reset writes 100, not @default). */
+ *  rosters, a deliberately-spent $30 budget (to prove the transition CARRIES it forward — never reset). */
 function twelveManagers(): SeedManager[] {
   return Array.from({ length: 12 }, (_, i) => {
     const seed = i + 1;
@@ -178,8 +178,6 @@ describe("buildTransitionPlan", () => {
       ["Final", 1],
     ]);
     expect(plan.released.map((r) => r.managerId)).toEqual(["m9", "m10", "m11", "m12"]);
-    expect(plan.budgetResetManagerIds).toHaveLength(8);
-    expect(plan.budgetResetTo).toBe(100);
     expect(plan.trimCap).toBe(9);
   });
 
@@ -251,13 +249,39 @@ describe("runPlayoffTransition", () => {
     // non-advancers released into the pool, advancers untouched
     expect(s.managers.get("m9")!.rosterSize).toBe(0);
     expect(s.managers.get("m1")!.rosterSize).toBe(15);
-    // every advancer reset to a fresh $100
-    expect(s.managers.get("m1")!.faabBudget).toBe(100);
-    expect(s.managers.get("m8")!.faabBudget).toBe(100);
+    // every advancer KEEPS their existing budget — the one-time allowance carries forward, never reset
+    expect(s.managers.get("m1")!.faabBudget).toBe(30);
+    expect(s.managers.get("m8")!.faabBudget).toBe(30);
     // waiver order carried forward (survivors 1..8), non-advancers cleared to NULL
     expect(s.managers.get("m8")!.waiverOrderPosition).toBe(1);
     expect(s.managers.get("m1")!.waiverOrderPosition).toBe(8);
     expect(s.managers.get("m9")!.waiverOrderPosition).toBeNull();
+  });
+
+  it("REGRESSION — advancers KEEP their existing FAAB budget (one-time allowance, NEVER reset)", async () => {
+    // The $100 FAAB is a ONE-TIME tournament allowance (group + playoffs): group-stage spend carries
+    // into the playoffs and is NEVER reset/replenished at the group→playoff transition. This guards
+    // against re-introducing the old "reset every advancer to a fresh $100" step (2026-06-28 correction).
+    // It goes RED if the reset write is added back (every advancer would become 100).
+    const distinct: Record<string, number> = { m1: 73, m2: 99, m3: 45, m4: 0 };
+    const managers = twelveManagers().map((m) => ({
+      ...m,
+      faabBudget: distinct[m.managerId] ?? m.faabBudget, // m5..m8 stay at the seeded 30 (also ≠ 100)
+    }));
+    const s = store({ managers });
+
+    const res = await runPlayoffTransition(deps(s), input({ apply: true }));
+    expect(res.status).toBe("applied");
+    if (res.status !== "applied") return;
+    expect(s.leagueStatus).toBe("playoff"); // the transition really ran
+
+    // each advancer's budget is byte-for-byte what it was pre-transition — NOT reset to 100
+    expect(s.managers.get("m1")!.faabBudget).toBe(73);
+    expect(s.managers.get("m2")!.faabBudget).toBe(99);
+    expect(s.managers.get("m3")!.faabBudget).toBe(45);
+    expect(s.managers.get("m4")!.faabBudget).toBe(0); // fully spent — a reset would wrongly grant $100
+    // and NO advancer in the seeded field was bumped to the $100 default
+    for (const f of res.plan.field) expect(s.managers.get(f.managerId)!.faabBudget).not.toBe(100);
   });
 
   it("is idempotent — a second --apply is a no-op skip (the league has left the group phase)", async () => {

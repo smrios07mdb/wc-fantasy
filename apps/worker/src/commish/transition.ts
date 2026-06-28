@@ -2,9 +2,9 @@
  * Group→playoff TRANSITION (`commish:transition`) — Theme C/D, the one-time collapse of the all-play-all
  * group league into the guillotine SURVIVAL LADDER over the WC's 5 knockout rounds. At the end of the
  * group stage the commissioner runs this; it locks the final standings, seeds the top-N field, writes the
- * derived per-round cut schedule, releases the non-advancers' rosters into the FAAB pool, resets every
- * advancer to a fresh $100, carries the rolling waiver order forward (eliminated removed, no re-seed), and
- * flips `league.status` group→playoff.
+ * derived per-round cut schedule, releases the non-advancers' rosters into the FAAB pool, carries the
+ * rolling waiver order forward (eliminated removed, no re-seed), and flips `league.status` group→playoff.
+ * The one-time $100 FAAB allowance is NOT reset here — group-stage spend carries into the playoffs.
  *
  * IO at the edges: the pure derivation ({@link buildTransitionPlan}) composes the @app/recompute pure
  * functions (`selectPlayoffField` / `cutScheduleFor` / `carryForwardWaiverOrder`); the {@link
@@ -27,7 +27,7 @@ import {
   type CarriedWaiverSlot,
 } from "@app/recompute";
 import { effectiveBatchAt, type PeriodCadenceView } from "@app/faab";
-import { LEAGUE_SEED_DEFAULTS, PLAYOFF_ROSTER, type LeagueStatus } from "@app/shared";
+import { PLAYOFF_ROSTER, type LeagueStatus } from "@app/shared";
 import { isCommissionerActor } from "./core";
 
 // ── the snapshot the store loads (the inputs the pure plan needs) ─────────────────────
@@ -72,9 +72,6 @@ export interface TransitionPlan {
   cutSchedule: CutScheduleEntry[];
   /** The non-advancers whose rosters are released into the FAAB pool. */
   released: ReleasedManager[];
-  /** The advancers whose FAAB budget resets to a fresh `budgetResetTo`. */
-  budgetResetManagerIds: string[];
-  budgetResetTo: number;
   /** The survivors' carried-forward CONTIGUOUS waiver order (1..K), relative order preserved, no re-seed.
    *  Non-advancers are cleared to NULL by the store. */
   waiverOrder: CarriedWaiverSlot[];
@@ -137,8 +134,6 @@ export function buildTransitionPlan(
     field,
     cutSchedule,
     released,
-    budgetResetManagerIds: field.map((f) => f.managerId),
-    budgetResetTo: LEAGUE_SEED_DEFAULTS.faabBudget,
     waiverOrder,
     trimCap: PLAYOFF_ROSTER.cap,
     trimDeadlineAt: ctx.r32Cadence ? effectiveBatchAt(ctx.r32Cadence, leadMs) : null,
@@ -242,8 +237,8 @@ export async function runPlayoffTransition(
 
   deps.log(
     `✓ group→playoff transition APPLIED — league ${plan.leagueId}: field ${plan.fieldSize}, ` +
-      `released ${plan.released.length} manager(s), reset ${plan.budgetResetManagerIds.length} budgets to ` +
-      `$${plan.budgetResetTo}; by ${input.actor.email ?? "(is_commissioner flag)"} — reason: ${input.reason}`,
+      `released ${plan.released.length} manager(s) (FAAB budgets carry forward — not reset); ` +
+      `by ${input.actor.email ?? "(is_commissioner flag)"} — reason: ${input.reason}`,
   );
   return { status: "applied", plan };
 }

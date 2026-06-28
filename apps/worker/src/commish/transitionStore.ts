@@ -6,7 +6,7 @@
  * Idempotency / atomicity: the transaction's FIRST statement is the conditional `league.status='group'`
  * → `'playoff'` claim (the entry gate — `updateMany` returning 0 rows means a concurrent run already
  * transitioned, so this one aborts with NOTHING applied). The rest are upserts (cut_counts, playoff_entry)
- * + idempotent updates (roster release, budget reset, the two-phase waiver renumber), so a hand re-run of
+ * + idempotent updates (roster release, the two-phase waiver renumber), so a hand re-run of
  * a partially-applied transition converges. Server-side as the table owner — RLS does not bite.
  */
 import type { PrismaClient, LeagueStatus } from "@app/db";
@@ -133,15 +133,7 @@ export function createPrismaPlayoffTransitionStore(prisma: Db): PlayoffTransitio
           });
         }
 
-        // (4) Reset every advancer's FAAB to a fresh budget (write explicitly — they have spent budget).
-        if (plan.budgetResetManagerIds.length > 0) {
-          await tx.manager.updateMany({
-            where: { leagueId: plan.leagueId, id: { in: plan.budgetResetManagerIds } },
-            data: { faabBudget: plan.budgetResetTo },
-          });
-        }
-
-        // (5) Carry the rolling waiver order forward. TWO-PHASE against the non-deferrable
+        // (4) Carry the rolling waiver order forward. TWO-PHASE against the non-deferrable
         //     unique([league, waiver_order_position]): NULL every manager (the disjoint temp range — and
         //     the END state for non-advancers, who are not re-seeded), then write the survivors' final
         //     contiguous 1..K. Multiple NULLs are allowed by the index.
