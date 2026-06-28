@@ -710,8 +710,10 @@ Minimal, for a private league of friends.
   - **Prompt 42 — `/pool` pick'em UI (built; the P40 engine's user-facing surface):** a new authenticated
     route `/pool` (`app/pool/`), server-rendered, **dynamic (`ƒ`)**, AppShell-mounted, auth-gated via
     `getSessionManager()` (no-session → `/sign-in`; not-allowlisted / no-manager → `/auth/denied`). Two
-    tabs — **Picks** (per-match Home/Draw/Away picks; knockout phase adds the fixed R32→Final bracket
-    skeleton with honest TBD slots) and **Leaderboard** (all league members, ranked by pool points). It is
+    tabs — **Picks** (per-match Home/Draw/Away picks; the playoff phase — gated on `playoff_entry`
+    EXISTENCE, NOT `selectTournamentPhase`; see §3 bracket-visibility gate — adds the fixed R32→Final
+    bracket skeleton with honest TBD slots) and **Leaderboard** (all league members, ranked by pool
+    points). It is
     **form-driven CRUD**: every pick is a `POST /api/pool/pick` round-trip (the Prompt-40 gated route)
     followed by `router.refresh()` — **NO Realtime, NO polling** (the Realtime subscription is **P43**).
     A SELF-scoped surface (the viewer's own picks), so no 403-not-your-manager at the page; the per-pick
@@ -1130,6 +1132,20 @@ Regression coverage: `poolPickRls.integration.test.ts` (DB-gated, role-switched)
 `fifa_match.periodId → period.kind` (the same signal §3 locking + recompute use), **never** from
 `fifa_match.round` (raw feed text — non-null for group games; see the schema comment + DECISIONS). The
 IO loader performs this join and hands the pure engine a resolved `periodKind`.
+
+**Bracket-VISIBILITY gate = `playoff_entry` existence (distinct from the per-fixture `period.kind`
+discriminator above; 2026-06-28).** _When_ the whole R32→Final bracket skeleton appears on the Picks tab
+is a separate question from _which_ bucket each fixture lands in. The bracket renders once `playoffActive`
+— `loadPlayoffPhaseActive(prisma, leagueId)` = `playoffEntry.count > 0`, reused from `@app/faab/prisma` —
+is true, **NOT** when `selectTournamentPhase` flips to `playoff`. The kickoff-based phase returns `group`
+through the entire **R32 pre-kickoff window** (every knockout match still `scheduled`), so a phase-gated
+bracket stayed hidden exactly when managers needed to pick the first knockout games (the live 2026-06-28
+bug). `loadPool` threads `playoffActive` as the 4th arg of `selectPoolPicksView`; the gate is
+`playoffActive || phase === "complete"` (the `complete` arm a defensive carry-over — entries persist, so
+`playoffActive` already covers a finished tournament). This is the SAME data-existence-phase signal the
+FAAB/waiver read + enforcement paths use (CONTRACT-P2/P3); `selectTournamentPhase` still frames the page
+but no longer gates the bracket. See DECISIONS → "Quiniela knockout bracket gates on `playoff_entry`
+existence" (2026-06-28).
 
 **Write/read path** (`apps/web/src/pool/` + `app/api/pool/pick/route.ts`, the `/api/faab/bid`
 template): a store port (Memory + Prisma doubles) + framework-agnostic `handleSubmitPick` /

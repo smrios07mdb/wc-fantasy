@@ -1801,6 +1801,54 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   the existing table/column. `packages/scoring` + `packages/recompute` are untouched and unread by this
   path (FAAB/waiver loaders carry no scoring-engine dependency); no scoring or standings behavior change.
 
+## Quiniela (`/pool`) knockout bracket gates on `playoff_entry` existence, not `selectTournamentPhase` — the same R32 pre-kickoff blind spot as CONTRACT-P2/P3 (2026-06-28 — `worktree-pool-playoff-bracket-gate`, merge HELD)
+
+- **The /pool (Quiniela) Picks tab now renders the knockout bracket gated on `playoffActive` —
+  `playoff_entry` row EXISTENCE — NOT the kickoff-derived `selectTournamentPhase`.** This was a LIVE bug,
+  mid-tournament: `league.status='playoff'`, 10 `playoff_entry` rows, all five knockout periods seeded with
+  `cut_count`, every R32–Final `fifa_match` linked to its `knockout_round` period — yet the Picks tab still
+  showed group matchday lists, so managers could not pick the R32 games. **Root cause:**
+  `selectPoolPicksView`'s bracket-vs-lists branch keyed on the phase from `selectTournamentPhase`, which by
+  design returns `group` (NOT `playoff`) while every knockout match is still `scheduled` — it flips to
+  `playoff` only once a knockout match is `in_progress`/`completed`. With the first KO that night, all R32
+  were `scheduled`, so the bracket never rendered. This is the **identical blind spot** the FAAB read path
+  (P2) and enforcement path (P3) dodge by keying on `playoff_entry` existence (the P2/P3 block immediately
+  above).
+
+- **Shape: thread an explicit `playoffActive: boolean` into the pure `selectPoolPicksView`; derive it in
+  `loadPool`.** `loadPool` adds ONE league-scoped read — `loadPlayoffPhaseActive(prisma, leagueId)` =
+  `playoffEntry.count({ where: { leagueId } }) > 0`, reused VERBATIM from `@app/faab/prisma` (the SAME
+  helper the waivers loader already imports into apps/web — no new dependency, no `@app/faab` internals
+  dragged in) — into its existing `Promise.all`, and passes the boolean as the new 4th arg of
+  `selectPoolPicksView(fixtures, phase, now, playoffActive)`. The web layer does NOT read `league.status`
+  (a worker concern). `selectTournamentPhase` STAYS in the loader (it still frames the page / sets
+  `PoolView.phase`), so the existing source-contract that pins it is unchanged — it just no longer gates
+  the bracket.
+
+- **The new gate is a strict SUPERSET of the old one — no prior render regresses.** Old:
+  `phase === "playoff" || phase === "complete"`. New: `playoffActive || phase === "complete"`. In every
+  reachable state a knockout match `in_progress`/`completed` (⇒ `phase === "playoff"`) implies
+  `playoff_entry` rows exist (the transition seeds the status flip + the `alive` rows in ONE `$transaction`)
+  ⇒ `playoffActive`, so the new gate fires everywhere the old one did, PLUS the R32 pre-kickoff window — the
+  fix. `phase === "complete"` is a **defensive carry-over**: `playoffActive` persists through completion
+  (entries are never deleted) so it already covers a finished tournament, but the explicit OR keeps the
+  settled bracket airtight on pathological data — the same robustness posture P3 took toward the unreachable
+  `complete` arm.
+
+- **View-SELECTION only — nothing else moves.** Per-fixture result/scoring derivation stays keyed on
+  `period.kind` (group 1X2 vs knockout 2-way advancer); the `readVisiblePicks` reveal gate, the `group_md`
+  Completed archive, the leaderboard, the `@app/pool` engine, and `selectTournamentPhase`'s own dashboard
+  "what screen to render" semantics are all byte-untouched. The two phase signals legitimately coexist for a
+  THIRD surface now — the display phase (`selectTournamentPhase`, kickoff-based) and the data-existence phase
+  (`loadPlayoffPhaseActive`, entry-existence) — exactly as the P2/P3 block frames it. No schema / migration /
+  RLS / Realtime / scoring change (`packages/scoring` + `packages/recompute` unread by this path). **TDD
+  red→green:** `poolView.test.ts` gains the gate case (`playoffActive` + `scheduled` knockout fixtures ⇒
+  populated R32→Final frame; `playoffActive=false` ⇒ matchday lists, regression-pinned) and
+  `poolContracts.test.ts` pins the loader's new read + the 4th-arg thread + a comment-stripped
+  `league.status` negative guard. Full DoD gate green (typecheck/lint/format/test = 2657 passed | 48
+  skipped/web build). **Review-class** (phase gate on a live surface) → **merge HELD** for Chat clearance.
+  See PROJECT.md (2026-06-28 Quiniela bracket entry) + ARCHITECTURE.md → §3 pool bracket-visibility gate.
+
 ## Profile rename / Settings route (Prompt 39)
 
 - **`display_name` is the single user-editable manager identity.** There is no `team_name` or
