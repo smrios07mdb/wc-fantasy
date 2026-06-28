@@ -57,15 +57,23 @@ describe("canFieldPlayoffXI", () => {
   });
 
   it.each([
-    ["too few DEF", { GK: 1, DEF: 1, MID: 3, FWD: 3 }],
-    ["too few MID", { GK: 1, DEF: 3, MID: 1, FWD: 3 }],
+    ["DEF at the loosened min of 1", { GK: 1, DEF: 1, MID: 3, FWD: 3 }], // fields 1-3-2
+    ["MID at the loosened min of 1", { GK: 1, DEF: 3, MID: 1, FWD: 3 }], // fields 3-1-2
+  ])("accepts a lane at the loosened minimum of 1 (%s)", (_label, c) => {
+    expect(canFieldPlayoffXI(counts(c))).toBe(true);
+  });
+
+  it.each([
+    ["no DEF", { GK: 1, DEF: 0, MID: 3, FWD: 3 }],
+    ["no MID", { GK: 1, DEF: 3, MID: 0, FWD: 3 }],
     ["no FWD", { GK: 1, DEF: 3, MID: 3, FWD: 0 }],
-  ])("rejects when a lane is below the playoff minimum (%s)", (_label, c) => {
+  ])("rejects when a lane is EMPTY — every shape needs ≥1 per line (%s)", (_label, c) => {
     expect(canFieldPlayoffXI(counts(c))).toBe(false);
   });
 
-  it("rejects a 6-outfield-short squad whose lanes meet the mins but cannot reach 6 starters", () => {
-    // 1 GK + 2 DEF + 2 MID + 1 FWD = 6 players: mins met, but only 5 outfield — no shape reaches 6.
+  it("rejects a 6-outfield-short squad whose lanes are non-empty but cannot reach 6 starters", () => {
+    // 1 GK + 2 DEF + 2 MID + 1 FWD = 6 players: only 5 outfield — no shape reaches 6 (a body-count gap,
+    // not a minimum gap, so it stays unfillable even under the loosened 1/1/1 mins).
     expect(canFieldPlayoffXI(counts({ GK: 1, DEF: 2, MID: 2, FWD: 1 }))).toBe(false);
   });
 

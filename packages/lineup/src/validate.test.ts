@@ -253,8 +253,9 @@ describe("validateLineup — precedence", () => {
 
 // ── Playoff mode (knockout_round) ──────────────────────────────────────────────
 // The reduced guillotine roster (DECISIONS.md Theme B → PLAYOFF_ROSTER): cap 9 = 7 starters + 2 bench,
-// 1 GK + 6 outfield, min 2 DEF / 2 MID / 1 FWD. With exactly 6 outfield + those mins, the ONLY legal
-// shapes are FORMATIONS_PO: 2-2-2 / 2-3-1 / 3-2-1. Mode derives from `period.kind === "knockout_round"`.
+// 1 GK + 6 outfield, min 1 DEF / 1 MID / 1 FWD. With exactly 6 outfield + those mins, the legal shapes
+// are every split with ≥1 per line — the 10 shapes 1-1-4 … 4-1-1 (the old 2/2/1 set {2-2-2, 2-3-1,
+// 3-2-1} is a strict subset). Mode derives from `period.kind === "knockout_round"`.
 const PO_SQUAD: SquadPlayer[] = [
   { playerId: "gk1", position: "GK" },
   { playerId: "d1", position: "DEF" },
@@ -281,10 +282,71 @@ const XI_PO_321 = ["gk1", "d1", "d2", "d3", "m1", "m2", "f1"]; // 3-2-1
 const XI_PO_222 = ["gk1", "d1", "d2", "m1", "m2", "f1", "f2"]; // 2-2-2
 
 describe("validateLineup — playoff mode (knockout_round)", () => {
-  it("accepts the three FORMATIONS_PO shapes (2-3-1 / 3-2-1 / 2-2-2)", () => {
+  it("accepts the three classic shapes (2-3-1 / 3-2-1 / 2-2-2) — still legal, now 3 of the 10", () => {
     ok(validateLineup(PO_SQUAD, XI_PO_231, NO_SLOTS, KO, NOW));
     ok(validateLineup(PO_SQUAD, XI_PO_321, NO_SLOTS, KO, NOW));
     ok(validateLineup(PO_SQUAD, XI_PO_222, NO_SLOTS, KO, NOW));
+  });
+
+  it("accepts the loosened lane-4 shapes 1-1-4 / 4-1-1 / 1-4-1 (each via a dedicated 7-man squad)", () => {
+    // Each needs 4 in one lane; a single ≤9 squad can't supply all three (1+4+4+4 = 13 > cap 9), so use
+    // one exactly-7 squad per shape (XI = the whole squad, 0 bench). RED under the old 2/2/1 bounds.
+    const sq114: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "m1", position: "MID" },
+      { playerId: "f1", position: "FWD" },
+      { playerId: "f2", position: "FWD" },
+      { playerId: "f3", position: "FWD" },
+      { playerId: "f4", position: "FWD" },
+    ];
+    ok(
+      validateLineup(
+        sq114,
+        sq114.map((p) => p.playerId),
+        NO_SLOTS,
+        KO,
+        NOW,
+      ),
+    ); // 1-1-4
+
+    const sq411: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "d2", position: "DEF" },
+      { playerId: "d3", position: "DEF" },
+      { playerId: "d4", position: "DEF" },
+      { playerId: "m1", position: "MID" },
+      { playerId: "f1", position: "FWD" },
+    ];
+    ok(
+      validateLineup(
+        sq411,
+        sq411.map((p) => p.playerId),
+        NO_SLOTS,
+        KO,
+        NOW,
+      ),
+    ); // 4-1-1
+
+    const sq141: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "m1", position: "MID" },
+      { playerId: "m2", position: "MID" },
+      { playerId: "m3", position: "MID" },
+      { playerId: "m4", position: "MID" },
+      { playerId: "f1", position: "FWD" },
+    ];
+    ok(
+      validateLineup(
+        sq141,
+        sq141.map((p) => p.playerId),
+        NO_SLOTS,
+        KO,
+        NOW,
+      ),
+    ); // 1-4-1
   });
 
   it("accepts a squad exactly at the cap (9 men) — the at-cap boundary passes (cap is `>`, not `>=`)", () => {
@@ -318,25 +380,84 @@ describe("validateLineup — playoff mode (knockout_round)", () => {
     if (!r.ok) expect(r.error).toMatchObject({ have: 6, need: 7 });
   });
 
-  it("rejects < 2 DEF", () => {
-    const xi = ["gk1", "d1", "m1", "m2", "m3", "f1", "f2"]; // 1-3-2: DEF 1 < 2
+  it("ACCEPTS 1-3-2 (DEF at the loosened minimum of 1 — was rejected under the old min 2)", () => {
+    const xi = ["gk1", "d1", "m1", "m2", "m3", "f1", "f2"]; // 1-3-2: DEF 1 (legal now)
+    ok(validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW));
+  });
+
+  it("ACCEPTS 3-1-2 (MID at the loosened minimum of 1 — was rejected under the old min 2)", () => {
+    const xi = ["gk1", "d1", "d2", "d3", "m1", "f1", "f2"]; // 3-1-2: MID 1 (legal now)
+    ok(validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW));
+  });
+
+  it("rejects 0 FWD — an empty lane stays illegal (the new floor is 1, not 0)", () => {
+    const xi = ["gk1", "d1", "d2", "d3", "m1", "m2", "m3"]; // 3-3-0: FWD 0 < min 1
     const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+    expect(code(r)).toBe("illegal-formation");
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "FWD" });
+  });
+
+  it("rejects 0 DEF — an empty lane stays illegal", () => {
+    const sq042: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "m1", position: "MID" },
+      { playerId: "m2", position: "MID" },
+      { playerId: "m3", position: "MID" },
+      { playerId: "m4", position: "MID" },
+      { playerId: "f1", position: "FWD" },
+      { playerId: "f2", position: "FWD" },
+    ];
+    const r = validateLineup(
+      sq042,
+      sq042.map((p) => p.playerId),
+      NO_SLOTS,
+      KO,
+      NOW,
+    ); // 0-4-2
     expect(code(r)).toBe("illegal-formation");
     if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "DEF" });
   });
 
-  it("rejects < 2 MID", () => {
-    const xi = ["gk1", "d1", "d2", "d3", "m1", "f1", "f2"]; // 3-1-2: MID 1 < 2
-    const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+  it("rejects 0 MID — an empty lane stays illegal", () => {
+    const sq402: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "d2", position: "DEF" },
+      { playerId: "d3", position: "DEF" },
+      { playerId: "d4", position: "DEF" },
+      { playerId: "f1", position: "FWD" },
+      { playerId: "f2", position: "FWD" },
+    ];
+    const r = validateLineup(
+      sq402,
+      sq402.map((p) => p.playerId),
+      NO_SLOTS,
+      KO,
+      NOW,
+    ); // 4-0-2
     expect(code(r)).toBe("illegal-formation");
     if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "MID" });
   });
 
-  it("rejects < 1 FWD", () => {
-    const xi = ["gk1", "d1", "d2", "d3", "m1", "m2", "m3"]; // 3-3-0: FWD 0 < 1
-    const r = validateLineup(PO_SQUAD, xi, NO_SLOTS, KO, NOW);
+  it("rejects 6-0-0 — a lane over the derived max of 4 (with two empty lanes) stays illegal", () => {
+    const sq600: SquadPlayer[] = [
+      { playerId: "gk1", position: "GK" },
+      { playerId: "d1", position: "DEF" },
+      { playerId: "d2", position: "DEF" },
+      { playerId: "d3", position: "DEF" },
+      { playerId: "d4", position: "DEF" },
+      { playerId: "d5", position: "DEF" },
+      { playerId: "d6", position: "DEF" },
+    ];
+    const r = validateLineup(
+      sq600,
+      sq600.map((p) => p.playerId),
+      NO_SLOTS,
+      KO,
+      NOW,
+    ); // 6-0-0
     expect(code(r)).toBe("illegal-formation");
-    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "FWD" });
+    if (!r.ok) expect(r.error).toMatchObject({ code: "illegal-formation", position: "DEF" });
   });
 
   it("rejects 0 GK (< exactly 1)", () => {
@@ -387,7 +508,7 @@ describe("validateLineup — playoff mode (knockout_round)", () => {
       closesAt: null,
       kind: "knockout_round",
     };
-    const illegal = ["gk1", "d1", "m1", "m2", "m3", "f1", "f2"]; // 1 DEF
+    const illegal = ["gk1", "d1", "d2", "d3", "m1", "m2", "m3"]; // 3-3-0: 0 FWD (a real formation error)
     expect(code(validateLineup(PO_SQUAD, illegal, NO_SLOTS, closed, NOW))).toBe("wrong-period");
   });
 });

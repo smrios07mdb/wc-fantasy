@@ -95,10 +95,10 @@ interface ModeRules {
 
 /**
  * The playoff per-position bounds, DERIVED from PLAYOFF_ROSTER (not a second source of truth). The
- * shared constant pins the mins (GK 1, DEF 2, MID 2, FWD 1) + exactly 6 outfield; the implied max for
- * an outfield lane is `6 − (the other two mins)`. With those bounds the only complete shapes are
- * exactly FORMATIONS_PO — 2-2-2 / 2-3-1 / 3-2-1 — so "formation ∈ FORMATIONS_PO" emerges, no extra
- * constant needed.
+ * shared constant pins the mins (GK 1, DEF 1, MID 1, FWD 1) + exactly 6 outfield; the implied max for
+ * an outfield lane is `6 − (the other two mins)` = 4. With those bounds the complete shapes are every
+ * 1-GK + 6-outfield split with ≥1 per line — the 10 shapes 1-1-4 … 4-1-1, enumerated by
+ * {@link playoffXIShapes}. There is no separate formation constant; the legal set emerges from the bound.
  */
 export function playoffBounds(): Record<Position, { min: number; max: number }> {
   const b = PLAYOFF_ROSTER.bounds;
@@ -126,11 +126,14 @@ export function squadCoversFormation(
 }
 
 /**
- * The complete playoff XI shapes (1 GK + 6 outfield) DERIVED from {@link playoffBounds} — not a second
- * source of truth. Enumerating the lane bounds that sum to `PLAYOFF_ROSTER.startingOutfield` yields exactly
- * 2-3-1 / 3-2-1 / 2-2-2 (the design's FORMATIONS_PO), so the offer-set emerges from the constant.
+ * The complete playoff XI shapes (1 GK + 6 outfield) DERIVED from {@link playoffBounds} — the SINGLE
+ * source of the playoff formation universe, consumed by BOTH the validator (legality, via
+ * {@link canFieldPlayoffXI}) AND the Set-Lineup UI offer-set (apps/web's `PLAYOFF_FORMATIONS` is built
+ * from this export, so the picker and the validator can never drift). Enumerating the lane bounds that
+ * sum to `PLAYOFF_ROSTER.startingOutfield` (6) yields, under the loosened 1/1/1 mins, the 10 shapes with
+ * ≥1 per line: 1-1-4 / 1-2-3 / 1-3-2 / 1-4-1 / 2-1-3 / 2-2-2 / 2-3-1 / 3-1-2 / 3-2-1 / 4-1-1.
  */
-function playoffXIShapes(): Record<Position, number>[] {
+export function playoffXIShapes(): Record<Position, number>[] {
   const bounds = playoffBounds();
   const outfield = PLAYOFF_ROSTER.startingOutfield; // 6
   const shapes: Record<Position, number>[] = [];

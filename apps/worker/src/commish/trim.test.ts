@@ -134,16 +134,16 @@ describe("runTrimOverride — fillability + locks", () => {
 
   it("flags an unfillable end state in the plan but still applies on --apply", async () => {
     const s = store({ roster: roster({ GK: 1, DEF: 1, MID: 5, FWD: 3 }) }); // 10
-    const plan = await runTrimOverride(
-      deps(s),
-      baseInput({ selection: { kind: "drop", ids: ["FWD3"] } }),
-    );
+    // Drop the only DEF → {GK1, DEF0, MID5, FWD3} = 9: an EMPTY DEF lane is unfillable under the loosened
+    // 1/1/1 bounds (a merely-thin lane now fills). The plan flags it; --apply still trims past the warning.
+    const drop = {
+      selection: { kind: "drop" as const, ids: ["DEF1"] },
+      nameOf: { DEF1: "Defender One" },
+    };
+    const plan = await runTrimOverride(deps(s), baseInput(drop));
     expect(plan.status === "planned" && plan.plan.unfillable).toBe(true);
 
-    const applied = await runTrimOverride(
-      deps(s),
-      baseInput({ apply: true, selection: { kind: "drop", ids: ["FWD3"] } }),
-    );
+    const applied = await runTrimOverride(deps(s), baseInput({ ...drop, apply: true }));
     expect(applied.status).toBe("applied");
     expect(s.rosterOf("M")).toHaveLength(9);
   });

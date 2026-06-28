@@ -124,11 +124,12 @@ describe("handleRelease", () => {
   });
 
   it("unfillable 7–9: 409 release-unfillable + needsConfirm, then 200 once confirmed", async () => {
-    // {GK1, DEF1, MID1-5, FWD1-3} = 10; drop a FWD → {GK1, DEF1, MID5, FWD2} = 9, DEF too thin.
+    // {GK1, DEF1, MID1-5, FWD1-3} = 10; drop the only DEF → {GK1, DEF0, MID5, FWD3} = 9, an EMPTY DEF lane
+    // → unfillable (under the loosened 1/1/1 bounds a merely-thin lane fills; an empty one does not).
     const s = store({ roster: roster({ GK: 1, DEF: 1, MID: 5, FWD: 3 }) });
     const first = await handleRelease(deps(s), {
       managerId: "A",
-      dropIds: ["FWD3"],
+      dropIds: ["DEF1"],
       confirmedUnfillable: false,
     });
     expect(first.status).toBe(409);
@@ -137,7 +138,7 @@ describe("handleRelease", () => {
 
     const second = await handleRelease(deps(s), {
       managerId: "A",
-      dropIds: ["FWD3"],
+      dropIds: ["DEF1"],
       confirmedUnfillable: true,
     });
     expect(second.status).toBe(200);

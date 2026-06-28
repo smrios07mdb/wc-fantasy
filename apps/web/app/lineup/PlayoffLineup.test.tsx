@@ -8,9 +8,9 @@
  * here, never defined), not a manual toggle.
  *
  * Proven here:
- *   • a knockout period offers EXACTLY FORMATIONS_PO (2-3-1 / 3-2-1 / 2-2-2) and NONE of the group shapes,
- *     opens on the reduced 2-3-1 (7 starters + 2 reserves), labels the hero "Playoff XI", and a reshape
- *     within the set stays legal (Save enabled);
+ *   • a knockout period offers the loosened playoff shapes the squad can fill (the fillable subset of the
+ *     10 shapes legal under the 1/1/1 bounds) and NONE of the group shapes, opens on the reduced 2-3-1
+ *     (7 starters + 2 reserves), labels the hero "Playoff XI", and a reshape within the set stays legal;
  *   • a group period rendered by the SAME component stays the full 11-man XI + the group shapes — the
  *     regression that proves the switch is period-driven, not global.
  *
@@ -79,12 +79,14 @@ const picker = () => within(screen.getByRole("tablist", { name: /formation optio
 const ftab = (name: string) => picker().queryByRole("tab", { name });
 
 describe("Set Lineup — period-driven playoff reduced roster (knockout_round)", () => {
-  it("offers EXACTLY FORMATIONS_PO in a knockout period, and none of the group shapes", () => {
+  it("offers the loosened playoff shapes this squad can fill, and none of the group shapes", () => {
     render(<SetLineupClient initialState={stateFor(PO_SQUAD, "knockout_round")} />);
     const shapes = picker()
       .getAllByRole("tab")
       .map((t) => t.textContent);
-    expect(shapes).toEqual(["2-3-1", "3-2-1", "2-2-2"]); // PLAYOFF_FORMATIONS, canonical order
+    // PO_SQUAD = 1 GK / 3 DEF / 3 MID / 2 FWD → the fillable subset of the 10 derived shapes, in canonical
+    // (DEF-MID-FWD) order. Lane-4 shapes (1-1-4 / 1-4-1 / 4-1-1 / …) need bodies this squad lacks.
+    expect(shapes).toEqual(["1-3-2", "2-2-2", "2-3-1", "3-1-2", "3-2-1"]);
     // group shapes never appear in the reduced mode
     expect(ftab("4-3-3")).toBeNull();
     expect(ftab("3-4-3")).toBeNull();

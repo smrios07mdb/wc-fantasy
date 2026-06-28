@@ -89,13 +89,13 @@ describe("ReleasePanel (mounted)", () => {
   it("an unfillable 7–9 selection requires the confirm checkbox", () => {
     const onRelease = vi.fn();
     panel({ roster: roster({ GK: 1, DEF: 1, MID: 5, FWD: 3 }), onRelease }); // 10
-    clickRow("FWD3"); // → {GK1, DEF1, MID5, FWD2} = 9, DEF too thin → unfillable
+    clickRow("DEF1"); // → {GK1, DEF0, MID5, FWD3} = 9, an EMPTY DEF lane → unfillable
     expect(releaseBtn().disabled).toBe(true);
     const box = screen.getByRole("checkbox");
     fireEvent.click(box);
     expect(releaseBtn().disabled).toBe(false);
     fireEvent.click(releaseBtn());
-    expect(onRelease).toHaveBeenCalledWith(["FWD3"], true);
+    expect(onRelease).toHaveBeenCalledWith(["DEF1"], true);
   });
 });
 

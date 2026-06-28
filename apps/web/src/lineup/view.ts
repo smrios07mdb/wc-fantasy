@@ -9,6 +9,7 @@
 import {
   validateLineup,
   squadCoversFormation,
+  playoffXIShapes,
   type SquadPlayer,
   type SlotState,
   type LineupValidation,
@@ -391,19 +392,18 @@ export type FormationKey = keyof typeof GROUP_FORMATIONS;
 export const DEFAULT_FORMATION_KEY: FormationKey = "4-3-3";
 
 /**
- * The PLAYOFF (knockout) formation vocabulary (the design's `FORMATIONS_PO`; DECISIONS.md → Theme B).
- * GK is always 1; the key is the outfield "DEF-MID-FWD" shape (each totals 6 outfield = 7 starters).
- * These three are exactly the shapes legal under `PLAYOFF_ROSTER`'s bounds (min 2 DEF / 2 MID / 1 FWD),
- * so the validator and this offer-set agree by construction — this is the discrete set the picker
- * OFFERS in a knockout window, not a second source of the bound.
+ * The PLAYOFF (knockout) formation vocabulary. DERIVED from @app/lineup's `playoffXIShapes()` — the SAME
+ * enumerator the validator uses for legality — so this offer-set and the validator's legal universe can
+ * NEVER drift. (The old hardcoded {2-3-1, 3-2-1, 2-2-2} literal was correct only while the bounds were
+ * 2/2/1; under the loosened 1/1/1 bounds the legal set is the 10 shapes with ≥1 per line, and this now
+ * tracks it automatically.) GK is always 1; the key is the outfield "DEF-MID-FWD" shape (6 outfield = 7
+ * starters). This is the discrete set the picker OFFERS in a knockout window, not a source of the bound.
  */
-export const PLAYOFF_FORMATIONS = {
-  "2-3-1": { GK: 1, DEF: 2, MID: 3, FWD: 1 },
-  "3-2-1": { GK: 1, DEF: 3, MID: 2, FWD: 1 },
-  "2-2-2": { GK: 1, DEF: 2, MID: 2, FWD: 2 },
-} as const satisfies Record<string, FormationCounts>;
+export const PLAYOFF_FORMATIONS: Record<string, FormationCounts> = Object.fromEntries(
+  playoffXIShapes().map((s): [string, FormationCounts] => [`${s.DEF}-${s.MID}-${s.FWD}`, s]),
+);
 
-/** The canonical playoff default (the design's playoff `modeConf().def`). */
+/** The canonical playoff default (the design's playoff `modeConf().def`) — still one of the offered shapes. */
 export const PLAYOFF_DEFAULT_FORMATION_KEY = "2-3-1";
 
 /** A mode's discrete formation offer-set + its canonical default — selected by the period kind. */

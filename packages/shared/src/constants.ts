@@ -43,8 +43,11 @@ export const FORMATION_BOUNDS = {
 
 /**
  * Playoff reduced roster (guillotine): hard cap ≈ 9 = 7 starters + 2 bench; starting shape
- * 1 GK + 6 outfield, min 2 DEF / 2 MID / 1 FWD (2-2-2 base, 3-2-1, 2-3-1). Bench GK optional.
- * Provisional pending the Theme C guillotine cadence (DECISIONS.md Theme B).
+ * 1 GK + 6 outfield, min 1 DEF / 1 MID / 1 FWD — any complete 6-outfield split with ≥1 per line
+ * (the 10 shapes 1-1-4 … 4-1-1; the old 2/2/1 set {2-2-2, 3-2-1, 2-3-1} is a strict subset, so no
+ * already-saved playoff lineup is invalidated). The per-lane MAX is not stored — `playoffBounds()`
+ * (@app/lineup) derives it as `6 − (the other two mins)` = 4. Bench GK optional. Provisional pending
+ * the Theme C guillotine cadence (DECISIONS.md Theme B).
  */
 export const PLAYOFF_ROSTER = {
   cap: 9,
@@ -53,8 +56,8 @@ export const PLAYOFF_ROSTER = {
   startingOutfield: 6,
   bounds: {
     GK: { min: 1, max: 1 },
-    DEF: { min: 2 },
-    MID: { min: 2 },
+    DEF: { min: 1 },
+    MID: { min: 1 },
     FWD: { min: 1 },
   },
 } as const;

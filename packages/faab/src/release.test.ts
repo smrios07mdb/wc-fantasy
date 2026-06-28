@@ -84,8 +84,10 @@ describe("validateRelease — the 7-starter floor", () => {
 });
 
 describe("validateRelease — the unfillable 7–9 confirm gate", () => {
-  // drop to leave GK1 / DEF1 / MID1-5 / FWD1-2 = 1/1/5/2 = 9: a thin DEF lane cannot field any shape.
-  const dropIds = ["GK2", "DEF2", "DEF3", "DEF4", "DEF5", "FWD3"];
+  // Drop ALL 5 DEF + a FWD → leaves GK1-2 / DEF0 / MID1-5 / FWD1-2 = 2/0/5/2 = 9: an EMPTY DEF lane can
+  // field no shape (every playoff shape needs ≥1 per line). Under the loosened 1/1/1 bounds an empty lane
+  // (or <6 outfield bodies) is the ONLY way to be unfillable — a merely-thin lane (≥1) now fills.
+  const dropIds = ["DEF1", "DEF2", "DEF3", "DEF4", "DEF5", "FWD3"];
 
   it("soft-warns (needs confirm) when the 7–9 end state cannot field a playoff XI", () => {
     const v = validateRelease({ ...base, dropIds });

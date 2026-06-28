@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Position } from "@app/shared";
 import {
   GROUP_FORMATIONS,
+  PLAYOFF_FORMATIONS,
   rosterCounts,
   formationFillable,
   formationLockLegal,
@@ -12,6 +13,7 @@ import {
   defaultStarterIds,
   evaluateProposal,
 } from "./view";
+import { playoffXIShapes } from "@app/lineup";
 import type { LineupPlayer, PeriodLineup, PeriodLock } from "./types";
 
 const NOW = new Date("2026-06-12T10:00:00.000Z");
@@ -197,3 +199,29 @@ describe("reshapeToFormation — keeps locks, fills shortages, stays immediately
 // The FormationPicker's RENDERING + interaction is proven by a real RTL mount in
 // app/lineup/FormationPicker.test.tsx (a source-contract smoke can't prove a control actually renders —
 // the P54 lesson). The lineup.css no-hex / no-gold body invariant stays covered by setLineup.test.ts.
+
+describe("PLAYOFF_FORMATIONS — knockout offer-set is DERIVED from the validator, never hardcoded", () => {
+  // The 10 complete 6-outfield shapes with >=1 per line, under the loosened 1/1/1 playoff bounds. Stated
+  // independently here so a bounds change must update BOTH this web guard and the @app/lineup drift guard.
+  const EXPECTED = [
+    "1-1-4",
+    "1-2-3",
+    "1-3-2",
+    "1-4-1",
+    "2-1-3",
+    "2-2-2",
+    "2-3-1",
+    "3-1-2",
+    "3-2-1",
+    "4-1-1",
+  ];
+
+  it("offers exactly the 10 derived playoff shapes (compared as a set)", () => {
+    expect(new Set(Object.keys(PLAYOFF_FORMATIONS))).toEqual(new Set(EXPECTED));
+  });
+
+  it("mirrors @app/lineup's playoffXIShapes() key-for-key (picker and validator can't drift)", () => {
+    const fromValidator = new Set(playoffXIShapes().map((s) => `${s.DEF}-${s.MID}-${s.FWD}`));
+    expect(new Set(Object.keys(PLAYOFF_FORMATIONS))).toEqual(fromValidator);
+  });
+});
