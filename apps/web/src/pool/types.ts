@@ -97,6 +97,13 @@ export interface PoolView {
    * playoff_entry existence (`playoffActive`) instead — see `selectPoolPicksView` / `loadPool`.
    */
   readonly phase: TournamentPhase;
+  /**
+   * playoff_entry EXISTENCE (the atomic twin of `league.status='playoff'`) — true from the group→playoff
+   * transition onward. Gates the knockout bracket AND drives the Picks-tab render-layer hide of the group
+   * phase (group matchday lists / Completed archive / unscheduled). The pure `picks` buckets stay FULL so
+   * the leaderboard drill-in keeps every manager's settled history; only the Picks tab hides them.
+   */
+  readonly playoffActive: boolean;
   readonly picks: PoolPicksView;
   readonly leaderboard: readonly PoolLeaderRow[];
   /** Server render time (ISO) — seeds the client's live clock so SSR + hydration agree (no mismatch). */

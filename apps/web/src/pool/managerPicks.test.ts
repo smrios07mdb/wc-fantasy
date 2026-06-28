@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import type { MatchStatus, PoolPrediction } from "@app/shared";
 import type { TournamentPhase } from "@/src/dashboard/selectTournamentPhase";
 import { selectManagerPicks } from "./managerPicks";
+import { selectPoolPicksView } from "./poolView";
 import type { PoolFixture, PoolLeaderRow, PoolOtherPick, PoolView } from "./types";
 
 const ISO = "2026-06-20T18:00:00.000Z";
@@ -63,6 +64,7 @@ function view(over: {
   return {
     managerId: over.managerId,
     phase: over.phase ?? "group",
+    playoffActive: false,
     picks: {
       matchdays: over.matchdays ? [{ label: "MD1", fixtures: over.matchdays }] : [],
       bracket: over.bracket ? [{ label: "R32", fixtures: over.bracket }] : [],
@@ -242,5 +244,55 @@ describe("selectManagerPicks — grading, ordering, coverage", () => {
       leaderboard: [leader({ managerId: "rival" })],
     });
     expect(selectManagerPicks(v, "rival").rows).toEqual([]);
+  });
+});
+
+// ─── loadPool → selectPoolPicksView → selectManagerPicks seam (P1 regression-pin) ──────────────
+// The drill-in modal reads `view.picks` — the SAME buckets the loader fills via selectPoolPicksView. The
+// group-phase hide is a render-layer concern (PoolClient), NOT a data strip in the selector; if it were a
+// strip, a manager's settled group picks would vanish from the modal once the tournament reaches playoff.
+// This pins the real seam (the hand-built `view()` factory above can't catch a selector-side regression).
+describe("selectManagerPicks — keeps full history through the live playoff selector (P1 seam)", () => {
+  it("a settled GROUP pick is still reachable from the drill-in during the playoff phase", () => {
+    const now = new Date("2026-07-05T18:00:00.000Z");
+    const old = new Date("2026-06-20T18:00:00.000Z").toISOString(); // ≥24h before now → Completed bucket
+    // Build the picks-view exactly as loadPool does in playoff (playoffActive = true).
+    const picks = selectPoolPicksView(
+      [
+        fx({
+          matchId: "grp",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: old,
+          myPick: "HOME",
+          result: "HOME",
+        }),
+        fx({
+          matchId: "ko",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          home: { name: "Brazil", code: "BR" },
+          away: { name: "Japan", code: "JP" },
+          myPick: "AWAY",
+        }),
+      ],
+      "playoff",
+      now,
+      true,
+    );
+    const v: PoolView = {
+      managerId: "me",
+      phase: "playoff",
+      playoffActive: true,
+      picks,
+      leaderboard: [leader({ managerId: "me", managerName: "Me", isMe: true })],
+      nowIso: now.toISOString(),
+    };
+    const rows = selectManagerPicks(v, "me")
+      .rows.map((r) => r.matchId)
+      .sort();
+    // BOTH the settled group pick (now in `completed`) AND the knockout pick remain reachable.
+    expect(rows).toEqual(["grp", "ko"]);
   });
 });

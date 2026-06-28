@@ -55,6 +55,16 @@ function friendly(data: { error?: string; message?: string } | null): string {
   return mapped ?? data.message ?? "Your pick was rejected — please review and try again.";
 }
 
+/** Friendly knockout round headers for the canonical labels (falls back to the raw label). */
+const ROUND_TITLES: Record<string, string> = {
+  R32: "Round of 32",
+  R16: "Round of 16",
+  QF: "Quarter-finals",
+  SF: "Semi-finals",
+  Final: "Final",
+};
+const roundTitle = (label: string): string => ROUND_TITLES[label] ?? label;
+
 export function PoolClient({ view }: { view: PoolView }) {
   const router = useRouter();
   const [tab, setTab] = useState<"picks" | "leaderboard">("picks");
@@ -169,8 +179,14 @@ export function PoolClient({ view }: { view: PoolView }) {
   );
 
   const { matchdays, bracket, unscheduled, completed } = view.picks;
+  // Scope 3: once playoff_entry exists the Picks tab shows ONLY the knockout rounds — the group matchday
+  // lists, the Completed archive, and the unscheduled bucket are hidden HERE (render layer), while the pure
+  // `view.picks` keeps the full history for the leaderboard drill-in (selectManagerPicks). The bracket
+  // skeleton always counts as content (every round present, even all-TBD), so the empty-state never
+  // co-renders with it.
+  const showGroup = !view.playoffActive;
   const hasAnyFixture =
-    matchdays.length > 0 || bracket.some((r) => r.fixtures.length > 0) || unscheduled.length > 0;
+    bracket.length > 0 || (showGroup && (matchdays.length > 0 || unscheduled.length > 0));
 
   return (
     <div className="pl-app">
@@ -209,45 +225,60 @@ export function PoolClient({ view }: { view: PoolView }) {
             </div>
           )}
 
-          {matchdays.map((section) => (
-            <section key={section.label} className="pl-md">
-              <header className="pl-md-head">
-                <span className="t-label">{section.label}</span>
-                <span className="t-micro text-tertiary">{section.fixtures.length} matches</span>
-              </header>
-              <div className="pl-md-list">
-                {section.fixtures.map((f) => renderFixture(f, false))}
-              </div>
-            </section>
-          ))}
+          {showGroup &&
+            matchdays.map((section) => (
+              <section key={section.label} className="pl-md">
+                <header className="pl-md-head">
+                  <span className="t-label">{section.label}</span>
+                  <span className="t-micro text-tertiary">{section.fixtures.length} matches</span>
+                </header>
+                <div className="pl-md-list">
+                  {section.fixtures.map((f) => renderFixture(f, false))}
+                </div>
+              </section>
+            ))}
 
           {bracket.length > 0 && (
-            <section className="pl-bracket-wrap">
-              <header className="pl-md-head">
+            <section className="pl-rounds">
+              <header className="pl-md-head pl-rounds-head">
                 <span className="t-label">Knockout bracket</span>
                 <span className="t-micro text-tertiary">
-                  Pick the team that advances · undecided rounds are TBD
+                  Pick the team that advances · matches with undecided teams are TBD
                 </span>
               </header>
-              <div className="pl-bracket">
-                {bracket.map((round) => (
-                  <div key={round.label} className="pl-bcol">
-                    <div className="pl-bcol-head">{round.label}</div>
-                    {round.fixtures.length === 0 ? (
-                      <div className="pl-tbd-card">
-                        <span className="pl-tbd-dot" aria-hidden="true" />
-                        <span className="t-sm text-tertiary">To be decided</span>
-                      </div>
-                    ) : (
-                      round.fixtures.map((f) => renderFixture(f, true))
-                    )}
-                  </div>
-                ))}
-              </div>
+              {/* Vertical, round-sequential (R32 → Final): each round is a stacked section listing its
+                  matches, reusing the matchday section styling so it reads cleanly on phones. */}
+              {bracket.map((round) => {
+                const empty = round.fixtures.length === 0;
+                return (
+                  <section key={round.label} className="pl-round">
+                    <header className="pl-md-head">
+                      <span className="t-label">{roundTitle(round.label)}</span>
+                      {!empty && (
+                        <span className="t-micro text-tertiary">
+                          {`${round.fixtures.length} ${
+                            round.fixtures.length === 1 ? "match" : "matches"
+                          }`}
+                        </span>
+                      )}
+                    </header>
+                    <div className="pl-md-list">
+                      {empty ? (
+                        <div className="pl-tbd-card">
+                          <span className="pl-tbd-dot" aria-hidden="true" />
+                          <span className="t-sm text-tertiary">To be decided</span>
+                        </div>
+                      ) : (
+                        round.fixtures.map((f) => renderFixture(f, true))
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
             </section>
           )}
 
-          {unscheduled.length > 0 && (
+          {showGroup && unscheduled.length > 0 && (
             <section className="pl-md">
               <header className="pl-md-head">
                 <span className="t-label">Not yet scheduled</span>
@@ -257,7 +288,7 @@ export function PoolClient({ view }: { view: PoolView }) {
             </section>
           )}
 
-          {completed.length > 0 && (
+          {showGroup && completed.length > 0 && (
             <details className="pl-md pl-completed">
               <summary className="pl-md-head">
                 <span className="t-label">Completed</span>

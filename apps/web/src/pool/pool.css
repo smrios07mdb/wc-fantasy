@@ -88,6 +88,13 @@
   background: var(--surface-1);
   border-color: var(--hairline);
 }
+/* a knockout match whose teams aren't decided yet — dashed frame, no pick controls, an honest note */
+.pl-fx.is-undecided {
+  border-style: dashed;
+}
+.pl-fx-tbd {
+  flex: 1 1 auto;
+}
 .pl-fx-top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -282,27 +289,17 @@
   color: var(--text-tertiary);
 }
 
-/* knockout bracket — horizontal scroll of round columns (the "March Madness feel") */
-.pl-bracket {
-  display: flex;
-  gap: var(--sp-3);
-  overflow-x: auto;
-  padding-bottom: var(--sp-2);
-}
-.pl-bcol {
-  flex: 0 0 300px;
+/* knockout bracket — vertical, round-sequential (R32 → Final), mobile-first. Replaces the old horizontal
+   column scroller: each round is a stacked section reusing the matchday section styling (.pl-md-head +
+   .pl-md-list), so it reads like the group lists and collapses to a single column on phones. */
+.pl-rounds {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-6);
 }
-.pl-bcol-head {
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-bold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  padding-bottom: var(--sp-1);
-  border-bottom: 1px solid var(--hairline);
+/* the bracket's intro line sits flush above the first round (the flex gap handles the spacing) */
+.pl-rounds-head {
+  margin-bottom: 0;
 }
 .pl-tbd-card {
   display: flex;
@@ -472,9 +469,6 @@
 @media (max-width: 560px) {
   .pl-md-list {
     grid-template-columns: 1fr;
-  }
-  .pl-bcol {
-    flex-basis: 260px;
   }
 }
 

@@ -9,6 +9,7 @@ import type { PoolPrediction } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
 import { toIso2 } from "@/src/draft/flag";
 import type { ManagerPickRow, ManagerPicksView } from "./managerPicks";
+import { isKnockoutFixturePickable, isTeamResolved } from "./poolView";
 import type { PoolFixture, PoolLeaderRow, PoolTeam } from "./types";
 
 // ── icons ─────────────────────────────────────────────────────────────────────
@@ -48,7 +49,10 @@ function IcoCheck() {
 
 /** A nation badge — the shared emoji/SVG `<Flag>` + the side's name (or a TBD slot when undecided). */
 function TeamLabel({ team, align }: { team: PoolTeam | null; align: "l" | "r" }) {
-  if (!team) {
+  // An unresolved knockout slot renders as TBD whether the side is null OR a `Team {id}` placeholder
+  // (the feed seeds placeholder rows for not-yet-decided bracket matches; see isTeamResolved). The raw
+  // placeholder name is never shown — a manager only ever sees a real nation or "TBD".
+  if (!isTeamResolved(team)) {
     return (
       <span className={"pl-team is-tbd pl-team-" + align}>
         <span className="pl-tbd-dot" aria-hidden="true" />
@@ -146,14 +150,20 @@ export function PickControl({
 
 // ── others' revealed picks (post-kickoff only — server enforced) ──────────────────
 
+/**
+ * The display name for a revealed pick's side — the nation name, or "TBD" for a null/placeholder side.
+ * Defense-in-depth so a raw `Team {id}` placeholder can never reach the DOM through the reveal/modal labels
+ * (mirrors TeamLabel). Reached only via the out-of-scope crafted-POST path today (a revealable pick implies
+ * a kicked-off match implies resolved teams), but keeps the "names never leak" guarantee universal.
+ */
+function sideName(team: PoolTeam | null): string {
+  return isTeamResolved(team) ? team.name : "TBD";
+}
+
 export function OthersReveal({ fixture }: { fixture: PoolFixture }) {
   if (fixture.others.length === 0) return null;
   const text = (p: PoolPrediction) =>
-    p === "HOME"
-      ? (fixture.home?.name ?? "Home")
-      : p === "AWAY"
-        ? (fixture.away?.name ?? "Away")
-        : "Draw";
+    p === "HOME" ? sideName(fixture.home) : p === "AWAY" ? sideName(fixture.away) : "Draw";
   return (
     <div className="pl-others">
       <span className="t-micro text-tertiary">League picks</span>
@@ -193,8 +203,12 @@ export function FixtureCard({
   onPick: (prediction: PoolPrediction) => void;
 }) {
   const hasScore = fixture.homeScore !== null && fixture.awayScore !== null;
+  // A knockout match with an unresolved (placeholder) side is NOT pickable — render TBD with NO pick
+  // buttons (scope 2). Group matches are always fully resolved at schedule time, so the `!knockout`
+  // short-circuit keeps the group 3-way control byte-identical.
+  const pickable = !knockout || isKnockoutFixturePickable(fixture);
   return (
-    <div className={"pl-fx" + (locked ? " is-locked" : "")}>
+    <div className={"pl-fx" + (locked ? " is-locked" : "") + (pickable ? "" : " is-undecided")}>
       <div className="pl-fx-top">
         <TeamLabel team={fixture.home} align="l" />
         {/* The teams-score area is a SEPARATE tap target → the real-match detail (T6). It is NOT a
@@ -222,14 +236,20 @@ export function FixtureCard({
       </div>
 
       <div className="pl-fx-act">
-        <PickControl
-          fixture={fixture}
-          knockout={knockout}
-          locked={locked}
-          busy={busy}
-          onPick={onPick}
-        />
-        {locked && <LockPill />}
+        {pickable ? (
+          <>
+            <PickControl
+              fixture={fixture}
+              knockout={knockout}
+              locked={locked}
+              busy={busy}
+              onPick={onPick}
+            />
+            {locked && <LockPill />}
+          </>
+        ) : (
+          <span className="pl-fx-tbd t-micro text-tertiary">Teams to be decided</span>
+        )}
       </div>
 
       {error && <div className="pl-fx-error">{error}</div>}
@@ -298,10 +318,10 @@ export function LeaderboardTable({
 // `selectManagerPicks`). It renders only what the server revealed — for another manager that excludes
 // every not-yet-kicked-off pick — so the panel cannot expose a pre-kickoff prediction. No data fetching.
 
-/** Render a manager's prediction as the predicted side's name (Home/Away) or "Draw". */
+/** Render a manager's prediction as the predicted side's name (or "TBD") or "Draw". */
 function predictionText(row: ManagerPickRow): string {
-  if (row.prediction === "HOME") return row.home?.name ?? "Home";
-  if (row.prediction === "AWAY") return row.away?.name ?? "Away";
+  if (row.prediction === "HOME") return sideName(row.home);
+  if (row.prediction === "AWAY") return sideName(row.away);
   return "Draw";
 }
 

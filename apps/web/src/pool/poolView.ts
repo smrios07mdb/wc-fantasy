@@ -28,6 +28,7 @@ import type {
   PoolLeaderRow,
   PoolMatchdaySection,
   PoolPicksView,
+  PoolTeam,
 } from "./types";
 
 /** The fixed knockout bracket frame, left→right. The skeleton is always rendered in knockout phase. */
@@ -57,6 +58,33 @@ function isArchived(f: PoolFixture, now: Date): boolean {
 /** A pick is locked once kickoff arrives or the match leaves `scheduled` (server time authoritative). */
 export function isFixtureLocked(fixture: PoolFixture, now: Date): boolean {
   return isPickLocked({ status: fixture.status, kickoffAt: new Date(fixture.kickoffAt) }, now);
+}
+
+/**
+ * A knockout slot is an UNRESOLVED placeholder when the feed has not yet filled in the real advancer. The
+ * feed names placeholders `Team {balldontlie_team_id}` (e.g. "Team 273"); resolved sides carry a real
+ * nation name ("Brazil"). Detection is by NAME — `fifa_team.country` AND `.abbreviation` are NULL for
+ * EVERY team (real and placeholder) in the live DB, so neither flag/code field can be used (DECISIONS →
+ * Pool). Anchored `^Team \d+$` (trimmed): correct whether the feed later re-points the fixture to a real
+ * team UUID or renames the row in place.
+ */
+export function isPlaceholderTeamName(name: string): boolean {
+  return /^Team \d+$/.test(name.trim());
+}
+
+/** A side is RESOLVED when it is present and not a `Team {id}` placeholder (type-guards to PoolTeam). */
+export function isTeamResolved(team: PoolTeam | null): team is PoolTeam {
+  return team !== null && !isPlaceholderTeamName(team.name);
+}
+
+/**
+ * A knockout match is PICKABLE only when BOTH sides are resolved real teams. If either side is still an
+ * unresolved placeholder the match must render as TBD with NO pick controls — a manager must not pick a
+ * match between unknown teams. View-only: a crafted POST is still accepted by the route, so a server-side
+ * guard rejecting a pick on an undecided match is a recommended FOLLOW-UP (fairness), out of scope here.
+ */
+export function isKnockoutFixturePickable(fixture: Pick<PoolFixture, "home" | "away">): boolean {
+  return isTeamResolved(fixture.home) && isTeamResolved(fixture.away);
 }
 
 /**
@@ -134,6 +162,12 @@ export function selectPoolPicksView(
     }
   }
 
+  // The pure selector returns the FULL bucketed history — group matchday lists, the Completed archive, the
+  // unscheduled bucket, and the knockout bracket — REGARDLESS of phase. Hiding the group phase on the Picks
+  // tab in playoff (scope 3) is a RENDER-LAYER concern: PoolClient gates the group sections on
+  // `playoffActive`. `view.picks` is ALSO the sole source of the leaderboard drill-in modal
+  // (selectManagerPicks → allFixtures), which must keep every manager's full settled history reachable —
+  // stripping buckets here would silently empty that modal mid-tournament.
   return { matchdays, bracket, unscheduled, completed };
 }
 

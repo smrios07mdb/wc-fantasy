@@ -65,6 +65,7 @@ function poolView(): PoolView {
   return {
     managerId: "me",
     phase: "group",
+    playoffActive: false,
     picks: {
       matchdays: [
         {

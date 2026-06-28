@@ -160,8 +160,10 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
   return {
     managerId: viewerManagerId,
     phase,
-    // `now` (the same instant used for the reveal read above) drives the ≥24h Completed-archive cutoff;
-    // `playoffActive` (playoff_entry existence) gates the knockout bracket — see the import note.
+    // `playoffActive` (playoff_entry existence) gates the knockout bracket AND drives the Picks-tab
+    // render-layer hide of the group phase (PoolClient); the pure `picks` buckets stay full for the
+    // leaderboard drill-in. `now` (same instant as the reveal read) drives the ≥24h Completed cutoff.
+    playoffActive,
     picks: selectPoolPicksView(fixtures, phase, now, playoffActive),
     leaderboard: buildPoolLeaderboardView(
       allPicks,

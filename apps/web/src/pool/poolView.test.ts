@@ -13,6 +13,9 @@ import {
   selectPoolPicksView,
   buildPoolLeaderboardView,
   isFixtureLocked,
+  isPlaceholderTeamName,
+  isTeamResolved,
+  isKnockoutFixturePickable,
 } from "./poolView";
 import type { PoolFixture } from "./types";
 
@@ -139,7 +142,7 @@ describe("selectPoolPicksView — knockout phase", () => {
     expect(view.bracket.every((r) => r.fixtures.length === 0)).toBe(true);
   });
 
-  it("still lists group fixtures as matchdays alongside the bracket in knockout phase", () => {
+  it("PRESERVES group fixtures as matchdays alongside the bracket in knockout phase (render layer hides them)", () => {
     const view = selectPoolPicksView(
       [
         fx({ matchId: "g", periodKind: "group_md", periodLabel: "MD3" }),
@@ -149,6 +152,8 @@ describe("selectPoolPicksView — knockout phase", () => {
       NOW,
       true,
     );
+    // The pure selector keeps the matchday lists even in knockout phase — the Picks tab hides them at the
+    // render layer (PoolClient), but the leaderboard drill-in (selectManagerPicks) needs the full history.
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD3"]);
     expect(view.bracket.find((r) => r.label === "R16")?.fixtures.map((f) => f.matchId)).toEqual([
       "k",
@@ -207,6 +212,129 @@ describe("selectPoolPicksView — unscheduled (period not yet linked)", () => {
     const view = selectPoolPicksView([fx({ matchId: "u", periodKind: null })], "group", NOW, false);
     expect(view.unscheduled.map((f) => f.matchId)).toEqual(["u"]);
     expect(view.matchdays).toEqual([]);
+  });
+});
+
+// ─── selectPoolPicksView — preserves the FULL history regardless of phase (scope 3) ──────────
+// Hiding the group phase on the Picks tab in playoff is a RENDER-LAYER concern (PoolClient gates the group
+// sections on `playoffActive`). The pure selector must NOT strip the group / Completed / unscheduled
+// buckets, because `view.picks` is ALSO the sole source of the leaderboard drill-in modal
+// (selectManagerPicks → allFixtures) — stripping them would silently empty that modal mid-tournament.
+// (PoolBracket.test.tsx asserts the render-layer hide; managerPicks.test.ts pins the loader→modal seam.)
+describe("selectPoolPicksView — preserves full history regardless of phase (scope 3)", () => {
+  const old = new Date("2026-06-01T00:00:00.000Z").toISOString(); // ≥24h before NOW → archived
+
+  it("KEEPS matchdays, Completed, and unscheduled even when playoffActive (hiding is render-layer only)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({ matchId: "g", periodKind: "group_md", periodLabel: "MD3" }),
+        // a long-finished group match → lands in `completed`, still kept
+        fx({
+          matchId: "c",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: old,
+        }),
+        // an unlinked fixture (periodKind null) — e.g. the 3rd-place match — kept in `unscheduled`
+        fx({ matchId: "u", periodKind: null }),
+        // a real knockout fixture — in its bracket round
+        fx({
+          matchId: "k",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          home: { name: "Brazil", code: "BR" },
+          away: { name: "Japan", code: "JP" },
+        }),
+      ],
+      "playoff",
+      NOW,
+      true,
+    );
+    expect(view.matchdays.map((s) => s.label)).toEqual(["MD3"]);
+    expect(view.completed.map((f) => f.matchId)).toEqual(["c"]);
+    expect(view.unscheduled.map((f) => f.matchId)).toEqual(["u"]);
+    expect(view.bracket.find((r) => r.label === "R32")?.fixtures.map((f) => f.matchId)).toEqual([
+      "k",
+    ]);
+  });
+
+  it("regression-pin: playoffActive=false → group matchdays / unscheduled UNCHANGED (no bracket)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({ matchId: "g", periodKind: "group_md", periodLabel: "MD3" }),
+        fx({ matchId: "u", periodKind: null }),
+      ],
+      "group",
+      NOW,
+      false,
+    );
+    expect(view.matchdays.map((s) => s.label)).toEqual(["MD3"]);
+    expect(view.unscheduled.map((f) => f.matchId)).toEqual(["u"]);
+    expect(view.bracket).toEqual([]);
+  });
+});
+
+// ─── isPlaceholderTeamName / isTeamResolved / isKnockoutFixturePickable (scope 2) ─────────────
+// A knockout match is pickable ONLY when BOTH sides are resolved real teams. The feed seeds undecided
+// bracket slots as `Team {balldontlie_team_id}` (e.g. "Team 273"); resolved sides carry a nation name.
+// Detection is by NAME — fifa_team.country AND .abbreviation are NULL for EVERY team (real + placeholder)
+// in the live DB, so neither can be used (DECISIONS → Pool).
+describe("isPlaceholderTeamName (scope 2 — undecided detection by name)", () => {
+  it("flags the feed's `Team {id}` placeholder names, never real nation names", () => {
+    expect(isPlaceholderTeamName("Team 273")).toBe(true);
+    expect(isPlaceholderTeamName("Team 304")).toBe(true);
+    expect(isPlaceholderTeamName("  Team 42  ")).toBe(true); // trimmed before matching
+    expect(isPlaceholderTeamName("Brazil")).toBe(false);
+    expect(isPlaceholderTeamName("Bosnia & Herzegovina")).toBe(false);
+    expect(isPlaceholderTeamName("Team USA")).toBe(false); // id must be numeric
+    expect(isPlaceholderTeamName("Team")).toBe(false);
+    expect(isPlaceholderTeamName("Team 12 FC")).toBe(false); // anchored ^…$ — no trailing text
+  });
+});
+
+describe("isTeamResolved / isKnockoutFixturePickable (scope 2)", () => {
+  it("a side is resolved when present and not a placeholder; null/placeholder → unresolved", () => {
+    expect(isTeamResolved({ name: "Brazil", code: "BR" })).toBe(true);
+    expect(isTeamResolved({ name: "Team 273", code: null })).toBe(false);
+    expect(isTeamResolved(null)).toBe(false);
+  });
+
+  it("a knockout match with BOTH teams resolved is pickable", () => {
+    expect(
+      isKnockoutFixturePickable(
+        fx({
+          matchId: "k",
+          home: { name: "Brazil", code: "BR" },
+          away: { name: "Japan", code: "JP" },
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("a knockout match with EITHER side a placeholder (or null) is NOT pickable (TBD)", () => {
+    expect(
+      isKnockoutFixturePickable(
+        fx({
+          matchId: "k",
+          home: { name: "Team 273", code: null },
+          away: { name: "Team 274", code: null },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isKnockoutFixturePickable(
+        fx({
+          matchId: "k",
+          home: { name: "Brazil", code: "BR" },
+          away: { name: "Team 274", code: null },
+        }),
+      ),
+    ).toBe(false);
+    // null side passed directly — the `fx` factory's `?? default` would coalesce a null home away.
+    expect(isKnockoutFixturePickable({ home: null, away: { name: "Brazil", code: "BR" } })).toBe(
+      false,
+    );
   });
 });
 
