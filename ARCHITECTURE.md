@@ -438,7 +438,8 @@ not by hopeful application code:
   see §9), **draft_pick_seconds** (commissioner-set per-pick timer), status
   (`draft`/`group`/`playoff`/`complete`).
 - `manager` — id, league_id, user_id (-> Supabase auth), display_name, is_commissioner,
-  draft_slot, **faab_budget** (reset to 100 at playoff transition), **waiver_order_position**
+  draft_slot, **faab_budget** (one-time $100 tournament allowance — NOT reset at the playoff transition;
+  group-stage spend carries into the playoffs), **waiver_order_position**
   (rolling; seeded once by reverse draft order, mutated by move-to-bottom, carried into playoffs).
   - **`display_name` is now user-editable (Prompt 39):** a manager may rename themselves via
     `POST /api/manager/display-name`. Names are **case-insensitively unique within a league**
@@ -924,8 +925,8 @@ infrastructure to enforce them already lives in this doc:
   still works; it's just gated). Before the freeze, recompute runs normally.
 - **Trades** -> none (out of brief; possible later theme).
 - **Group→playoff transition is now BUILT** (`feat/playoff-transition`, 87a7e1a→b7dc9d3): `commish:transition`
-  CLI + the 6-step `$transaction` (status claim → `cut_count` writes → `playoff_entry` rows → roster
-  release → FAAB reset → waiver carry-forward); pure `cutScheduleFor` + `selectPlayoffField` +
+  CLI + the 5-step `$transaction` (status claim → `cut_count` writes → `playoff_entry` rows → roster
+  release → waiver carry-forward; FAAB budgets carry forward — not reset); pure `cutScheduleFor` + `selectPlayoffField` +
   `carryForwardWaiverOrder` in `packages/recompute/src/transition.ts`. See **§20** for the full wiring.
 
 ---
@@ -1057,8 +1058,8 @@ and invent nothing:
 
 **Modules** (`Dashboard.tsx`, masonry `db-grid`; the group `db-spotlight` stays group-only):
 - Playoff arm = **`SurvivalModule`** (the guillotine bracket — survival + current-round summary
-  combined, as the design's `BracketModule`; CTA → `/playoffs`) + **`ReinforceModule`** (FAAB-reset
-  reminder from `playoffs.reinforcement`; CTA → `/waivers`). The design's `lock`/`fixtures`/`activity`
+  combined, as the design's `BracketModule`; CTA → `/playoffs`) + **`ReinforceModule`** (FAAB
+  reinforcement reminder from `playoffs.reinforcement`; CTA → `/waivers`). The design's `lock`/`fixtures`/`activity`
   are **dropped** — not PlayoffsView-derivable (same subset discipline P38 applied to the group arm).
 - Complete arm = **`ChampionModule`** (podium) + **`MyFinishModule`** (the viewer's run). The design's
   `standings`/`activity` are dropped.
@@ -1657,14 +1658,15 @@ waivers card's Points tab is a real-`WvPlayer`-data overview instead. `FaPickRow
 
 ### Transactional transition + idempotency
 
-`commish:transition --apply` runs ONE `$transaction` (six steps, in order):
+`commish:transition --apply` runs ONE `$transaction` (five steps, in order):
 
 0. Conditional `league.status` `group→playoff` claim — 0 rows aborts idempotently (belt-and-suspenders with the orchestrator skip).
 1. Write `cut_count` onto the 5 knockout periods (upsert by `(league_id, label)` — they pre-exist from provisioning; `KNOCKOUT_ROUNDS` is the label contract, validated by `validateConfig` at provision time so a drift fails loud, not silently at the irreversible step).
 2. Write one `alive` `playoff_entry` per top-N seeded manager.
 3. Release non-advancers' active roster players to the FAAB pool (`droppedAt = now`).
-4. Reset every advancer's FAAB budget to a fresh $100.
-5. Two-phase waiver carry-forward: NULL all `waiver_order_position` values first, then write survivors `1..K` preserving their live relative order (the non-deferrable `@@unique([league_id, waiver_order_position])` is satisfied at every checkpoint via the temp-range disjoint write; eliminated managers end NULL).
+4. Two-phase waiver carry-forward: NULL all `waiver_order_position` values first, then write survivors `1..K` preserving their live relative order (the non-deferrable `@@unique([league_id, waiver_order_position])` is satisfied at every checkpoint via the temp-range disjoint write; eliminated managers end NULL).
+
+**FAAB budgets are NOT touched by the transition** — the $100 is a one-time tournament allowance and group-stage spend carries into the playoffs (the prior "reset to a fresh $100" step was removed on 2026-06-28; see DECISIONS.md → FAAB Budget + PROJECT.md → 2026-06-28 session log).
 
 **D6 pre-condition guard:** `--apply` refuses while any `group_md` period has `frozen_at IS NULL` (results not final). Override: `--allow-incomplete-standings` (irreversible-op escape hatch, not a default). Dry-run (default) prints field + seeds, cut schedule, release/trim plan, and the `standings: FINAL ✓ / ⚠ NOT FINAL` line without touching state.
 
@@ -1733,7 +1735,7 @@ PlayoffsView {
   survivesNow: number                 // survivors after the current round's cut
   me: { managerId, rank, points, safe|zone } | null   // the viewer's standing in the live round
   reducedLineup: <viewer's 7-man playoff XI reference, from @app/lineup>
-  reinforcement: <FAAB reset-$100 + carried-waiver state, from @app/faab>
+  reinforcement: <FAAB budget (carried forward, not reset) + carried-waiver state, from @app/faab>
 }
 
 PlayoffRoundView {

@@ -628,18 +628,26 @@ Guiding constraint honored: **boring and reliable** (this is the standard "blind
 agency" pattern, compressed to a daily tournament cadence; no clever machinery).
 
 #### Budget
-- **$100 starting FAAB per manager** for the group stage. Clean and legible (bids read as a %),
-  ample resolution against a huge undrafted pool (≈1,000+ unowned players), enough for the handful
-  of in-tournament churn moves a group stage produces.
-- **Full reset to a fresh $100 at the group→playoff transition**, for every advancing manager.
-  **No carryover.** Equalizes the six qualifiers so nobody enters the guillotine with a FAAB edge
-  earned (or squandered) in groups — which is what makes reinforcement actually function.
-- **One $100 budget for the ENTIRE playoff run — NOT per round.** Rationing it across up to five
-  knockout rounds is a deliberate guillotine pressure. Self-balancing: each round frees a cut
-  manager's ~9 players while the field shrinks each round (e.g. 6→5→4→3→2, or 10→8→6→4→2 with
-  2-cuts — the illustrative sequence scales with the field size and cut schedule chosen in Theme C),
-  so late reinforcement is
-  cheap and a single $100 lasts; budget bites hardest early (R32→R16).
+- **$100 one-time FAAB allowance per manager for the ENTIRE tournament (group + playoffs).** Clean and
+  legible (bids read as a %), ample resolution against a huge undrafted pool (≈1,000+ unowned players),
+  enough for the handful of in-tournament churn moves the WC produces.
+- **The budget is NEVER reset or replenished — group-stage spend carries straight into the playoffs.**
+  Whatever a manager has left after the group stage is exactly what they take into the guillotine. The
+  one-time allowance IS the strategic constraint: spending hard in groups means entering the playoffs
+  short, and that trade-off is the point.
+  **(CORRECTION — 2026-06-28; supersedes the prior design.)** The original spec reset every advancer to a
+  fresh $100 at the group→playoff transition ("equalize the qualifiers / no carryover / a fresh $100 for
+  the playoff run"), and the shipped transition implemented that reset — **both were WRONG.** On 2026-06-28
+  the transition ran live and reset all 10 advancers to $100; the real budgets were hand-reverted via SQL
+  (`faab_budget = 100 − Σ each manager's won-bid amounts`, scoped to alive `playoff_entry`). The reset step
+  was then removed from the transition (`fix/faab-budget-no-reset`); a regression test guards against its
+  re-introduction. See PROJECT.md → 2026-06-28 session log + ARCHITECTURE.md §20.
+- **One $100 across the whole tournament — NOT per round, NOT a fresh playoff pot.** Rationing the same
+  budget across the group stage AND up to five knockout rounds is a deliberate guillotine pressure.
+  Self-balancing: each round frees a cut manager's ~9 players while the field shrinks each round (e.g.
+  6→5→4→3→2, or 10→8→6→4→2 with 2-cuts — the illustrative sequence scales with the field size and cut
+  schedule chosen in Theme C), so late reinforcement is cheap and a single $100 lasts; budget bites
+  hardest early (R32→R16).
 
 #### Processing — two-tier daily cycle (identical in group stage and playoffs)
 The staggered WC calendar has **no weekly "no-games" night**, so waivers run on a **daily** cycle
@@ -671,8 +679,9 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   kickoffs); keep it as a defensive guard, don't rely on it.
 - **Retired: the 1-cycle waiver hold / "drops route to waivers first"** — there is no mid-period
   churn left for it to guard. New releases simply enter the next period's batch pool.
-- **Unchanged:** $100 group budget spent across the 3 batches; $100 reset for the entire playoff
-  run; rolling waiver-order tiebreak + playoff carry-forward (no re-seed).
+- **Unchanged:** the $100 one-time tournament budget is spent across the 3 group batches AND the
+  knockout-round batches (carried forward, never reset); rolling waiver-order tiebreak + playoff
+  carry-forward (no re-seed).
 - **Knock-on (flag for the Theme-D implementation thread):** the worker scheduler (Prompt 05a)
   changes from daily FAAB cron → per-period batch trigger; FA-eligibility ("cleared ≥1 batch
   unclaimed") collapses to "unclaimed after the period's single batch."
@@ -781,8 +790,8 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   conditional logic, boring/reliable. *(Conditional / grouped bids = possible later enhancement,
   not part of the locked rule set.)*
 - **Playoffs — carry the SAME rolling order forward (NO re-seed):** take the live order over the
-  twelve, **remove the eliminated managers, preserve the surviving qualifiers' relative order.** Budget
-  resets to $100; the waiver order does **not** reset. Simpler — and it **keeps FAAB fully
+  twelve, **remove the eliminated managers, preserve the surviving qualifiers' relative order.** The
+  budget carries forward (never reset); the waiver order does **not** reset either. Simpler — and it **keeps FAAB fully
   decoupled from Theme C seeding**: the order is draft-seeded and self-maintaining, so it never
   needs standings, at MD1 or at the playoff transition.
 
@@ -791,13 +800,13 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
 > ✅ IMPLEMENTED — see the **Group→playoff transition + playoff lineup mode** block below.
 
 No bespoke machine: **reinforcement is the same daily FAAB cycle, run on the playoff field** with
-the reset $100 + the carried-forward rolling waiver order (eliminated managers removed). Two attrition streams feed it — (a) each guillotined
+the carried-forward budget (the one-time allowance, never reset) + the carried-forward rolling waiver order (eliminated managers removed). Two attrition streams feed it — (a) each guillotined
 manager's freed ~9-player roster, and (b) every survivor's own roster decaying as WC teams are
 knocked out — which is exactly what *forces* reinforcement each round.
 - **At the group→playoff transition:** lock final standings → the **top N advance** (N = the
   Theme C playoff field, likely 8 or 10) →
   release all non-advancers' rosters → advancers **trim 15 → ≈9 (7+2)** by the **trim deadline =
-  first playoff pre-dawn batch** → reset budgets ($100); the rolling waiver order carries forward
+  first playoff pre-dawn batch** → budgets carry forward (never reset); the rolling waiver order carries forward
   (eliminated managers removed). All released players hit
   **waivers** for that first batch. (~~Players from WC teams already eliminated in the group stage
   are in the pool but worthless — natural filtering; managers trim them first.~~ **REVERSED Jun 28 2026
@@ -1598,8 +1607,8 @@ is Prompt 26). Merged to `main` @ `2145700`. The decisions of record:
   resolves purely by amount and the route does **not** expose reorder. Honoring priority needs a migration
   (Prompt 26). The submission/cancel/edit-amount paths are wired now.
 - **Out of scope (flagged, not built):** the free-agency **FA `Acquire` route does not exist** (sibling
-  concern); the **playoff FAAB reset + waiver carry-forward** belong to the group→playoff transition prompt
-  (this engine only READS current budget/order). `faab_bid` **RLS is already present** (Theme F invariants
+  concern); the **playoff waiver carry-forward** belongs to the group→playoff transition prompt
+  (budgets carry forward — never reset; this engine only READS current budget/order). `faab_bid` **RLS is already present** (Theme F invariants
   migration — own-pending read/write + public settled read), so no policy was added.
 
 ## DRAFT Nation Binding (Prompt 33) — the locked §D algorithm in code; `@app/faab` pure resolver + bid route + cron
@@ -1711,7 +1720,7 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
 
 - **Module subset discipline (consume `PlayoffsView`, invent nothing).** Playoff arm = `SurvivalModule`
   (guillotine bracket = survival + current-round summary combined, as the design's `BracketModule`) +
-  `ReinforceModule` (FAAB-reset reminder → `/waivers`). Complete arm = `ChampionModule` (champion +
+  `ReinforceModule` (FAAB reinforcement reminder → `/waivers`). Complete arm = `ChampionModule` (champion +
   runner-up podium) + `MyFinishModule` (the viewer's knockout finish). The design's
   `lock`/`fixtures`/`activity` (playoff) and `standings`/`activity` (complete) are **dropped** — not
   PlayoffsView-derivable, the same subset call P38 made for the group arm. CSS reuses the pre-stubbed
@@ -2711,9 +2720,8 @@ Distribute `field − 1` eliminations across the 5 WC knockout rounds (R32→R16
 0. Conditional `league.status` `group→playoff` claim; 0 rows ⇒ abort (idempotent, belt-and-suspenders with the orchestrator skip).
 1. Write `cut_count` onto the 5 knockout periods (upsert by `(league, label)` — they pre-exist from provisioning).
 2. One `alive` `playoff_entry` per top-N seeded manager.
-3. Release non-advancers' active rosters → FAAB pool (`droppedAt = now`).
-4. Reset every advancer's FAAB to a fresh $100.
-5. Two-phase waiver carry-forward (NULL everyone first, then assign survivors `1..K` — respects the non-deferrable unique; eliminated managers end NULL; no re-seed, surviving relative order preserved).
+3. Release non-advancers' active rosters → FAAB pool (`droppedAt = now`). **FAAB budgets are NOT reset — the one-time tournament allowance carries forward (2026-06-28 correction; the prior "reset to a fresh $100" step was removed).**
+4. Two-phase waiver carry-forward (NULL everyone first, then assign survivors `1..K` — respects the non-deferrable unique; eliminated managers end NULL; no re-seed, surviving relative order preserved).
 
 **D6 precondition:** `--apply` refuses while any `group_md` period is unfrozen (`frozen_at IS NULL`), with an explicit `--allow-incomplete-standings` override (irreversible-op guard). **Upsert-label pin:** `validateConfig` requires knockout labels to equal `KNOCKOUT_ROUNDS` exactly — a config-drift label fails loud at provision time, not silently at the irreversible transition.
 
