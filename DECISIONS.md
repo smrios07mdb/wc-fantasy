@@ -1735,15 +1735,26 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   They agree in every phase except the R32 trim window and post-Final, where the FAAB regime must lead the
   display — hence two helpers, not one.
 
-- **The migration is PARTIAL by design — a P3 follow-up remains.** Only the two scoped READ sites moved.
-  The bid/grant/batch ENFORCEMENT path still keys its cap on `league.status` via `rosterCapForLeagueStatus`
-  (`prismaStore.ts` `loadBidContext`/`loadGrantContext`/`loadBatchContext`); those are left byte-identical
-  (the shared `loadIsPlayoffParticipant`, now taking a `playoffPhaseActive` boolean, is fed a status-derived
-  boolean at those two call sites so their behavior is unchanged). Equivalence-safe because status⟺entry-
-  existence. Migrating the enforcement callers off status + adding a `switch`/`never` exhaustiveness guard
-  over `LeagueStatus` (the `complete` arm is a dead status branch — never written) is the **P3 follow-up**.
-  NB: `"group"` and `"complete"` are not written by any code path, but `"group"` IS load-bearing — the
-  transition's entry gate is `updateMany WHERE status="group"` (set out-of-band), so it is not dead.
+- **P3 (`fix/league-status-enforcement-cap`, merge HELD) closes the migration — `league.status` is fully
+  removed from the `@app/faab` enforcement path.** The bid/grant/batch ENFORCEMENT path now keys BOTH its cap
+  AND the playoff-participant signal on `loadPlayoffPhaseActive` (the `playoff_entry`-existence predicate) via
+  `rosterCapForPlayoffPhase`, exactly like the READ sites: `loadManagerBidContext` / `loadManagerFaContext` /
+  `loadBatchContext` each compute `playoffPhaseActive` ONCE and feed the cap + the participant gate, and
+  `listOverCapPlayoffSurvivors` gates on it too. Provable no-op on reachable spend behavior (status⟺entry-
+  existence; the divergent `complete` arm — where the old status form would re-widen the cap to 15 — is
+  unreachable today, so it is robustness, not a behavior change). `rosterCapForLeagueStatus` is **DELETED**
+  from `@app/shared`. **No `switch`/`never` guard was added:** a repo-wide census found NO exhaustive `switch`
+  over `LeagueStatus` anywhere (the deleted helper was a ternary; every remaining `league.status` site is an
+  `===`/`!==` equality), so a guard would be ceremony, not safety — the corrected final shape from the P3
+  plan. The cap read stays a plain pre-commit read — it never enters the `commitBatch` / `claimFreeAgent`
+  `$transaction`, so it adds no lock to the live spend path. **Survivor (by design, NOT a P3 gap):** the
+  worker batch CADENCE selector `apps/worker/src/faab/prismaStore.ts:23`
+  (`league: { status: { in: ["group", "playoff"] } }`) still reads `league.status` — it answers a DIFFERENT
+  question (which leagues are active enough to run a batch for), a separate axis from the roster cap.
+  NB: `"group"` IS load-bearing — the transition's entry gate is `updateMany WHERE status="group"` (set
+  out-of-band) — so it is not dead; `"complete"` is never written.
+  TDD red→green: `enforcementCap.contract.test.ts` (source-shape) + gated-PG `enforcementCap.integration.test.ts`
+  (its own `FAAB_CAP_PG_TEST_URL` var — disagreement / champion / group-baseline / spend-e2e for all four loads).
 
 - **Source-only: no schema, migration, RLS, or DB write.** The only new read is `playoffEntry.count` on
   the existing table/column. `packages/scoring` + `packages/recompute` are untouched and unread by this
@@ -2674,9 +2685,9 @@ Distribute `field − 1` eliminations across the 5 WC knockout rounds (R32→R16
 
 **D6 precondition:** `--apply` refuses while any `group_md` period is unfrozen (`frozen_at IS NULL`), with an explicit `--allow-incomplete-standings` override (irreversible-op guard). **Upsert-label pin:** `validateConfig` requires knockout labels to equal `KNOCKOUT_ROUNDS` exactly — a config-drift label fails loud at provision time, not silently at the irreversible transition.
 
-### FAAB roster-cap split — `league.status` NOT `period.kind`
+### FAAB roster-cap split — `playoff_entry` existence (P3), NOT `period.kind`
 
-The squad cap (15 group / 9 playoff) is a **league-phase property**, resolved by `rosterCapForLeagueStatus(league.status)` (lives in `@app/shared/src/constants.ts`), threaded to the validators as a plain number (validators stay phase-agnostic). This is a deliberate split from the lineup mode's per-period `period.kind` axis — both axes coincide in practice (playoff phase ⟺ knockout periods). **Enforced at BOTH sites:**
+The squad cap (15 group / 9 playoff) is a **league-phase property**, resolved by `rosterCapForPlayoffPhase(loadPlayoffPhaseActive(leagueId))` (the boolean cap helper in `@app/shared/src/constants.ts` + the `playoff_entry`-existence predicate in `@app/faab/prisma`), threaded to the validators as a plain number (validators stay phase-agnostic). Per CONTRACT-P3 this keys on the **data-existence playoff phase**, NOT the `league.status` field — the `rosterCapForLeagueStatus(league.status)` form was DELETED (see the P2/P3 decision block above) — and NOT the lineup mode's per-period `period.kind` axis (both axes coincide in practice — playoff phase ⟺ knockout periods). **Enforced at BOTH sites:**
 - Submission validator (`validateBidSubmission` / `validateFaGrant` in `@app/faab`)
 - Batch resolver (`resolveFaabBatch` in `@app/faab/resolve.ts`) — the batch site is a correctness necessity, not scope creep: submission can't catch cumulative awards (a manager at 8 stacking two no-drop bids → 10 > 9).
 
@@ -2747,9 +2758,7 @@ The live `/playoffs` route — the READ/PRESENTATION layer over `loadPlayoffs` (
 
 **Nothing WRITES `league.status = 'complete'`, and the single place that READS it is inert.** The only `status: "complete"` *writes* in the tree are on child entities — `draft.status` (`packages/draft/src/prismaStore.ts:120`) and `faabBatch.status` (`packages/faab/src/prismaStore.ts:301`) — neither is `league`; the `status: "complete"` *read* on the waivers path filters a child row too (`apps/web/app/waivers/loadWaivers.ts:220`, `where: { leagueId, status: "complete" }`, a cleared-batch lookup). The ONLY `league.status === 'complete'` read anywhere is the group→playoff transition's idempotency guard (`apps/worker/src/commish/transition.ts:193`, `leagueStatus === 'playoff' || leagueStatus === 'complete'` → "already in the … phase, nothing to do") — it lumps `'complete'` with `'playoff'` as a no-op skip, so it neither depends on `'complete'` ever being set nor changes behavior because it never is. No live FAAB/cap/cadence path keys behavior on `'complete'`.
 
-Writing `'complete'` would FIX NOTHING and silently:
-- **widen the roster cap 9 → 15** — `rosterCapForLeagueStatus` (`packages/shared/src/constants.ts:70-71`) returns `SQUAD_SIZE` (15) for ANY non-`'playoff'` status; and
-- **flip every `status === 'playoff'` gate**: the resolver participant logic (`packages/faab/src/prismaStore.ts:189`), `listOverCapPlayoffSurvivors → []` (`packages/faab/src/prismaStore.ts:822`), the release phase gate (`apps/web/src/faab/handleRelease.ts:72-80`, via `loadReleaseContext`'s `isPlayoffPhase`, `packages/faab/src/prismaStore.ts:721`), and the worker cadence read DROPPING the league (`apps/worker/src/faab/prismaStore.ts:23` — `league: { status: { in: ["group", "playoff"] } }`).
+Writing `'complete'` would FIX NOTHING. **Post-CONTRACT-P3 the FAAB cap + participant gates are ROBUST to it** — they derive from `playoff_entry` existence, not `league.status`: the cap stays 9 (`rosterCapForPlayoffPhase`; `rosterCapForLeagueStatus` is deleted), and the resolver participant filter, `listOverCapPlayoffSurvivors`, and the release phase gate (`loadReleaseContext`'s `isPlayoffPhase`) all key on `loadPlayoffPhaseActive`, so none of them flips. The ONE residual effect is the worker batch CADENCE selector (`apps/worker/src/faab/prismaStore.ts:23` — `league: { status: { in: ["group", "playoff"] } }`), which would DROP a `'complete'` league from future batches — harmless post-tournament (scoring is over), but it is the remaining reason the status is deliberately held at `'playoff'`.
 
 ### Post-tournament FAAB safety map (with status held at `'playoff'`)
 

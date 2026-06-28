@@ -1655,18 +1655,18 @@ waivers card's Points tab is a real-`WvPlayer`-data overview instead. `FaPickRow
 
 Pure derivation in `packages/recompute/src/transition.ts`: `cutScheduleFor(fieldSize)` (front-loaded ⌊÷5⌋ + remainder distribution; field ≥ 6), `selectPlayoffField(standings, fieldSize)`, `carryForwardWaiverOrder(current, survivingManagerIds)`.
 
-### `league.status`-vs-`period.kind` cap split
+### Cap split — `playoff_entry` existence (P3) vs `period.kind`
 
 | Axis | Value | Resolver | Enforced at |
 |---|---|---|---|
-| Ownership (squad) cap | 15 group / 9 playoff | `rosterCapForLeagueStatus(league.status)` in `@app/shared` | FAAB submission validator + FAAB batch resolver |
+| Ownership (squad) cap | 15 group / 9 playoff | `rosterCapForPlayoffPhase(loadPlayoffPhaseActive(leagueId))` (`playoff_entry` existence — CONTRACT-P3; was `rosterCapForLeagueStatus(league.status)`, now deleted) in `@app/shared` + `@app/faab/prisma` | FAAB submission validator + $0 FA grant + FAAB batch resolver |
 | Lineup mode (starting shape) | group vs knockout | `period.kind === "knockout_round"` in `@app/lineup` | `validateLineup` only |
 
 Both axes coincide in practice (playoff phase ⟺ knockout periods) but are distinct code paths by design — the validators stay phase-agnostic; the IO layer threads the correct scalar in. **The batch-resolver enforcement is a correctness necessity** (submission can't catch cumulative awards across two concurrent no-drop bids from a manager already at 8).
 
 ### `PLAYOFF_ROSTER` + `FORMATIONS_PO`
 
-`PLAYOFF_ROSTER` in `@app/shared/src/constants.ts`: `{ cap: 9, starters: 7, bench: 2, startingOutfield: 6, bounds: { GK: {min:1, max:1}, DEF: {min:2}, MID: {min:2}, FWD: {min:1} } }`. `rosterCapForLeagueStatus` is the single consumer in both FAAB validators.
+`PLAYOFF_ROSTER` in `@app/shared/src/constants.ts`: `{ cap: 9, starters: 7, bench: 2, startingOutfield: 6, bounds: { GK: {min:1, max:1}, DEF: {min:2}, MID: {min:2}, FWD: {min:1} } }`. `rosterCapForPlayoffPhase` is the single cap consumer across both FAAB validators + the $0 FA grant + the release/trim path (CONTRACT-P3; `rosterCapForLeagueStatus` was deleted — the cap derives from `playoff_entry` existence, not `league.status`).
 
 `FORMATIONS_PO` (2-2-2 / 2-3-1 / 3-2-1) is **not a stored constant** — it *emerges* from `playoffBounds()` which derives each pos-max as `startingOutfield − (other two mins)`. A drift-guard test in `packages/lineup` pins that "the set of complete shapes satisfying the derived bounds == FORMATIONS_PO."
 

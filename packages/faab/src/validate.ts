@@ -61,8 +61,9 @@ export interface BidValidationContext {
   counts: PositionCounts;
   /** The manager's active squad size (≥ `rosterCap` ⇒ full ⇒ a drop is required). */
   squadSize: number;
-  /** The squad roster cap for the league's current phase (15 group / 9 playoff). Resolved by the IO
-   *  layer from `league.status` (`rosterCapForLeagueStatus`) so this validator stays phase-agnostic. */
+  /** The squad roster cap for the league's current phase (15 group / 9 playoff). Resolved by the IO layer
+   *  from the playoff phase (`rosterCapForPlayoffPhase` / `loadPlayoffPhaseActive`) so this validator stays
+   *  phase-agnostic. */
   rosterCap: number;
   /** Players actively owned by THIS manager (validates the drop). */
   ownedByManager: ReadonlySet<string>;
@@ -81,7 +82,7 @@ export interface BidValidationContext {
    *  has played this matchday and can't be dropped yet. False when there is no drop. */
   dropLocked: boolean;
   /** D4 (trim-down) participant gate. The IO layer sets this `false` ONLY for a playoff non-participant (a
-   *  manager with no `alive` playoff_entry while `league.status === 'playoff'`); group-phase / pre-playoff
+   *  manager with no `alive` playoff_entry while the league is in its playoff phase); group-phase / pre-playoff
    *  it is always `true`. Optional + DEFAULT-PARTICIPANT (absent ⇒ participates) so group behavior — and
    *  every existing test — is byte-identical. */
   isPlayoffParticipant?: boolean;

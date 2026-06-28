@@ -2,7 +2,7 @@
  * Locked product constants, cited to the brain files. One source of truth so later prompts
  * (scoring, FAAB, draft, lineups) reference these instead of re-deriving numbers.
  */
-import type { LeagueStatus, Position, RatingSource } from "./enums";
+import type { Position, RatingSource } from "./enums";
 
 /**
  * Rating resolver priority: first non-null wins (ARCHITECTURE.md §3, DECISIONS.md → Data source).
@@ -60,27 +60,18 @@ export const PLAYOFF_ROSTER = {
 } as const;
 
 /**
- * The SQUAD roster cap for a league at its current phase: the full group squad ({@link SQUAD_SIZE} = 15)
- * until the group→playoff transition, then the reduced guillotine cap ({@link PLAYOFF_ROSTER}.cap = 9)
- * once `league.status` is `playoff` (DECISIONS.md → Theme C/D: advancers "trim 15 → ≈9"). This is the
- * SINGLE source of truth both FAAB cap-enforcement sites read — the submission validator (@app/faab
- * `validateBidSubmission` / `validateFaGrant`) and the blind-bid batch resolver (`resolveFaabBatch`'s
- * award legality) — threaded in by the IO layer so the pure validators stay phase-agnostic. `draft` /
- * `complete` keep the group cap (FAAB is inactive in those phases). NB: this is the OWNERSHIP cap only;
- * the playoff reduced STARTING XI is a separate @app/lineup formation rule, unaffected here.
- */
-export function rosterCapForLeagueStatus(status: LeagueStatus): number {
-  return status === "playoff" ? PLAYOFF_ROSTER.cap : SQUAD_SIZE;
-}
-
-/**
  * The SQUAD roster cap keyed on the data-existence PLAYOFF PHASE (does any `playoff_entry` row exist) rather
- * than the `league.status` field — the form the FAAB/waiver READ path uses to honor the phase contract
- * (DECISIONS → "FAAB/waiver phase derives from playoff_entry existence"). `true` → the reduced guillotine cap
- * ({@link PLAYOFF_ROSTER}.cap = 9); `false` → the full group squad ({@link SQUAD_SIZE} = 15). Equivalent to
- * {@link rosterCapForLeagueStatus} in every reachable phase (the group→playoff transition writes
- * `status='playoff'` and the `alive` playoff_entry rows in one $transaction, so they are twins), but read off
- * the DATA. The bid/grant/batch ENFORCEMENT sites still use the status-keyed form pending the P3 migration.
+ * than the `league.status` field. This is the SINGLE source of truth EVERY FAAB cap site reads — the READ
+ * path (the waivers loader + `loadReleaseContext`) AND the ENFORCEMENT path (the submission validators
+ * `validateBidSubmission` / `validateFaGrant` and the blind-bid batch resolver `resolveFaabBatch`'s award
+ * legality) — threaded in by the IO layer (`loadPlayoffPhaseActive`) so the pure validators stay
+ * phase-agnostic. `true` → the reduced guillotine cap ({@link PLAYOFF_ROSTER}.cap = 9); `false` → the full
+ * group squad ({@link SQUAD_SIZE} = 15). The group→playoff transition writes `status='playoff'` and the
+ * `alive` playoff_entry rows in one $transaction, so playoff_entry existence is the atomic twin of
+ * `status='playoff'` — but keying on the DATA is the phase contract (DECISIONS → "FAAB/waiver phase derives
+ * from playoff_entry existence"): it holds the trim cap through the R32 pre-kickoff window and after the
+ * Final, where the `league.status` field would mislead. NB: OWNERSHIP cap only; the playoff reduced STARTING
+ * XI is a separate @app/lineup formation rule, unaffected here.
  */
 export function rosterCapForPlayoffPhase(playoffPhaseActive: boolean): number {
   return playoffPhaseActive ? PLAYOFF_ROSTER.cap : SQUAD_SIZE;

@@ -4,20 +4,14 @@
  *   - `loadPlayoffPhaseActive` is the data-existence predicate (the atomic twin of `league.status='playoff'` —
  *     both are written in the single `applyTransition` $transaction, worker/commish/transitionStore.ts).
  *   - `loadIsPlayoffParticipant` now gates on that boolean (not a LeagueStatus string).
- *   - `rosterCapForPlayoffPhase` is the boolean cap helper, equal to `rosterCapForLeagueStatus` in every
- *     reachable phase.
+ *   - `rosterCapForPlayoffPhase` is the boolean cap helper (9 in the playoff phase, 15 otherwise).
  * selectTournamentPhase is deliberately NOT the signal here — it returns `group` during the R32 pre-kickoff
  * trim window and `complete` after the Final, either of which would wrongly re-open the cap (DECISIONS §D).
  *
  * Fake `Pick<Db,"playoffEntry">` — no DB. The real Prisma edges are pinned by release.integration.test.ts.
  */
 import { describe, it, expect } from "vitest";
-import {
-  rosterCapForLeagueStatus,
-  rosterCapForPlayoffPhase,
-  PLAYOFF_ROSTER,
-  SQUAD_SIZE,
-} from "@app/shared";
+import { rosterCapForPlayoffPhase, PLAYOFF_ROSTER, SQUAD_SIZE } from "@app/shared";
 import { loadPlayoffPhaseActive, loadIsPlayoffParticipant } from "./prismaStore";
 
 type CountDb = Parameters<typeof loadPlayoffPhaseActive>[0];
@@ -111,18 +105,14 @@ describe("loadIsPlayoffParticipant — gated on the playoffPhaseActive boolean (
   });
 });
 
-describe("rosterCapForPlayoffPhase — boolean cap helper, parity with rosterCapForLeagueStatus", () => {
-  it("true → playoff cap (9), matching rosterCapForLeagueStatus('playoff')", () => {
+describe("rosterCapForPlayoffPhase — boolean cap helper", () => {
+  it("true → playoff cap (9)", () => {
     expect(rosterCapForPlayoffPhase(true)).toBe(PLAYOFF_ROSTER.cap);
     expect(rosterCapForPlayoffPhase(true)).toBe(9);
-    expect(rosterCapForPlayoffPhase(true)).toBe(rosterCapForLeagueStatus("playoff"));
   });
 
-  it("false → group cap (15), matching every non-playoff status", () => {
+  it("false → group cap (15)", () => {
     expect(rosterCapForPlayoffPhase(false)).toBe(SQUAD_SIZE);
     expect(rosterCapForPlayoffPhase(false)).toBe(15);
-    expect(rosterCapForPlayoffPhase(false)).toBe(rosterCapForLeagueStatus("draft"));
-    expect(rosterCapForPlayoffPhase(false)).toBe(rosterCapForLeagueStatus("group"));
-    expect(rosterCapForPlayoffPhase(false)).toBe(rosterCapForLeagueStatus("complete"));
   });
 });

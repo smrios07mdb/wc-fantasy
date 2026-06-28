@@ -65,9 +65,9 @@ export interface ResolveBatchInput {
   bids: readonly BidInput[];
   /** Active league-wide ownership at batch start — an add target already owned can never be won. */
   ownedByLeague: ReadonlySet<string>;
-  /** The squad roster cap for the league's current phase (15 group / 9 playoff). Resolved by the IO
-   *  layer from `league.status` (`rosterCapForLeagueStatus`); the award legality re-checks it per award
-   *  so the batch can never push a manager over the cap by stacking no-drop wins. */
+  /** The squad roster cap for the league's current phase (15 group / 9 playoff). Resolved by the IO layer
+   *  from the playoff phase (`rosterCapForPlayoffPhase` / `loadPlayoffPhaseActive`); the award legality
+   *  re-checks it per award so the batch can never push a manager over the cap by stacking no-drop wins. */
   rosterCap: number;
   /** D4 (trim-down) resolver backstop. When set (the league is in its playoff phase), ONLY these managers
    *  — the `alive` playoff_entry holders — compete; every OTHER manager's bid is VOIDED + refunded in the
