@@ -91,7 +91,11 @@ export interface PoolLeaderRow {
 /** Everything the client renders, assembled server-side by `loadPool`. */
 export interface PoolView {
   readonly managerId: string;
-  /** Tournament phase from the reused P38 `selectTournamentPhase` — frames the page + gates the bracket. */
+  /**
+   * Tournament phase from the reused P38 `selectTournamentPhase` — frames the page. The knockout bracket
+   * NO LONGER gates on this (it returns "group" through the R32 pre-kickoff window); the bracket gates on
+   * playoff_entry existence (`playoffActive`) instead — see `selectPoolPicksView` / `loadPool`.
+   */
   readonly phase: TournamentPhase;
   readonly picks: PoolPicksView;
   readonly leaderboard: readonly PoolLeaderRow[];

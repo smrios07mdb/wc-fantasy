@@ -78,6 +78,7 @@ describe("selectPoolPicksView — group phase", () => {
       ],
       "group",
       NOW,
+      false,
     );
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD1", "MD2"]);
     expect(view.matchdays[0]!.fixtures.map((f) => f.matchId).sort()).toEqual(["a", "c"]);
@@ -89,6 +90,7 @@ describe("selectPoolPicksView — group phase", () => {
       [fx({ matchId: "a", periodKind: "group_md", periodLabel: "MD1" })],
       "group",
       NOW,
+      false,
     );
     expect(view.bracket).toEqual([]);
   });
@@ -98,6 +100,7 @@ describe("selectPoolPicksView — group phase", () => {
       [fx({ matchId: "a", periodKind: "group_md", periodLabel: "MD1" })],
       "pre-kickoff",
       NOW,
+      false,
     );
     expect(view.bracket).toEqual([]);
   });
@@ -109,6 +112,7 @@ describe("selectPoolPicksView — knockout phase", () => {
       [fx({ matchId: "k1", periodKind: "knockout_round", periodLabel: "R32" })],
       "playoff",
       NOW,
+      true,
     );
     expect(view.bracket.map((r) => r.label)).toEqual([...KNOCKOUT_ROUND_ORDER]);
   });
@@ -122,13 +126,15 @@ describe("selectPoolPicksView — knockout phase", () => {
       ],
       "playoff",
       NOW,
+      true,
     );
     const byLabel = Object.fromEntries(view.bracket.map((r) => [r.label, r.fixtures.length]));
     expect(byLabel).toEqual({ R32: 2, R16: 0, QF: 1, SF: 0, Final: 0 });
   });
 
   it("never fabricates matchups — empty future rounds are present but fixture-less", () => {
-    const view = selectPoolPicksView([], "complete", NOW);
+    // playoffActive=false + phase="complete" pins the defensive complete-OR carry-over in the gate.
+    const view = selectPoolPicksView([], "complete", NOW, false);
     expect(view.bracket.map((r) => r.label)).toEqual([...KNOCKOUT_ROUND_ORDER]);
     expect(view.bracket.every((r) => r.fixtures.length === 0)).toBe(true);
   });
@@ -141,6 +147,7 @@ describe("selectPoolPicksView — knockout phase", () => {
       ],
       "playoff",
       NOW,
+      true,
     );
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD3"]);
     expect(view.bracket.find((r) => r.label === "R16")?.fixtures.map((f) => f.matchId)).toEqual([
@@ -149,9 +156,55 @@ describe("selectPoolPicksView — knockout phase", () => {
   });
 });
 
+// ─── selectPoolPicksView — the playoff_entry gate (R32 pre-kickoff blind spot) ───────────────
+// The bracket gates on `playoffActive` (playoff_entry EXISTENCE), NOT the kickoff-derived tournament
+// phase. `selectTournamentPhase` returns "group" through the ENTIRE R32 pre-kickoff window (every
+// knockout match is still `scheduled`; it only flips to "playoff" once a KO match is in_progress/
+// completed), so a phase-gated bracket would stay hidden exactly when managers must pick the first
+// knockout games. Mirrors the FAAB CONTRACT-P2/P3 fix (phase derives from playoff_entry, not status).
+describe("selectPoolPicksView — playoff_entry gate (R32 pre-kickoff blind spot)", () => {
+  it("renders the POPULATED bracket when playoffActive even though phase is still 'group' (all KO scheduled)", () => {
+    const view = selectPoolPicksView(
+      [
+        // Knockout fixtures seeded but still `scheduled` — first KO has not kicked off yet.
+        fx({
+          matchId: "k1",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "scheduled",
+        }),
+        fx({
+          matchId: "k2",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "scheduled",
+        }),
+      ],
+      "group", // selectTournamentPhase's R32-pre-kickoff blind spot — must NOT hide the bracket
+      NOW,
+      true, // playoffActive — playoff_entry rows exist
+    );
+    // Full R32→Final frame present; R32 carries its two real fixtures, later rounds honest TBD.
+    expect(view.bracket.map((r) => r.label)).toEqual([...KNOCKOUT_ROUND_ORDER]);
+    const byLabel = Object.fromEntries(view.bracket.map((r) => [r.label, r.fixtures.length]));
+    expect(byLabel).toEqual({ R32: 2, R16: 0, QF: 0, SF: 0, Final: 0 });
+  });
+
+  it("regression-pin: NO bracket when playoffActive is false, mid group_md (unchanged group behavior)", () => {
+    const view = selectPoolPicksView(
+      [fx({ matchId: "g", periodKind: "group_md", periodLabel: "MD1" })],
+      "group",
+      NOW,
+      false, // playoffActive — no playoff_entry rows yet
+    );
+    expect(view.bracket).toEqual([]);
+    expect(view.matchdays.map((s) => s.label)).toEqual(["MD1"]);
+  });
+});
+
 describe("selectPoolPicksView — unscheduled (period not yet linked)", () => {
   it("buckets fixtures with a null periodKind into 'unscheduled' (never guessed into a phase)", () => {
-    const view = selectPoolPicksView([fx({ matchId: "u", periodKind: null })], "group", NOW);
+    const view = selectPoolPicksView([fx({ matchId: "u", periodKind: null })], "group", NOW, false);
     expect(view.unscheduled.map((f) => f.matchId)).toEqual(["u"]);
     expect(view.matchdays).toEqual([]);
   });
@@ -185,6 +238,7 @@ describe("selectPoolPicksView — Completed archive", () => {
       ],
       "group",
       archNow,
+      false,
     );
     expect(view.completed.map((f) => f.matchId)).toEqual(["old"]);
     // "old" is in no matchday; only the active MD2 section survives.
@@ -205,6 +259,7 @@ describe("selectPoolPicksView — Completed archive", () => {
       ], // 12h ago
       "group",
       archNow,
+      false,
     );
     expect(view.completed).toEqual([]);
     expect(view.matchdays.map((s) => s.label)).toEqual(["MD1"]);
@@ -224,6 +279,7 @@ describe("selectPoolPicksView — Completed archive", () => {
       ], // exactly 24h ago
       "group",
       archNow,
+      false,
     );
     expect(view.completed.map((f) => f.matchId)).toEqual(["edge"]);
     expect(view.matchdays).toEqual([]);
@@ -249,6 +305,7 @@ describe("selectPoolPicksView — Completed archive", () => {
       ],
       "group",
       archNow,
+      false,
     );
     expect(view.completed).toEqual([]);
     expect(view.matchdays[0]!.fixtures.map((f) => f.matchId).sort()).toEqual(["live", "sched"]);
@@ -274,6 +331,7 @@ describe("selectPoolPicksView — Completed archive", () => {
       ],
       "group",
       archNow,
+      false,
     );
     expect(view.matchdays).toEqual([]); // MD1 emptied → dropped, not an empty section
     expect(view.completed.map((f) => f.matchId).sort()).toEqual(["a", "b"]);
@@ -306,6 +364,7 @@ describe("selectPoolPicksView — Completed archive", () => {
       ],
       "group",
       archNow,
+      false,
     );
     expect(view.completed.map((f) => f.matchId)).toEqual(["newer", "mid", "older"]);
   });

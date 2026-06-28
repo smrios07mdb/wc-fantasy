@@ -18,6 +18,10 @@
  */
 import { prisma } from "@app/db";
 import { derivePoolResult, type LeaderboardMatch, type PoolPick } from "@app/pool";
+// Playoff phase = playoff_entry EXISTENCE (the atomic twin of league.status='playoff'), reused from the
+// FAAB read path — the SAME helper the waivers/dashboard loaders honor. Gates the Picks-tab bracket so
+// it renders through the R32 pre-kickoff window, which `selectTournamentPhase` mis-reads as "group".
+import { loadPlayoffPhaseActive } from "@app/faab/prisma";
 import { selectTournamentPhase } from "@/src/dashboard/selectTournamentPhase";
 import { createPrismaPoolPickStore } from "./prismaStore";
 import { selectPoolPicksView, buildPoolLeaderboardView } from "./poolView";
@@ -56,7 +60,7 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
   const store = createPrismaPoolPickStore(prisma);
   const now = new Date();
 
-  const [matchRows, managerRows, visiblePicks, allPickRows] = await Promise.all([
+  const [matchRows, managerRows, visiblePicks, allPickRows, playoffActive] = await Promise.all([
     prisma.fifaMatch.findMany({ select: MATCH_SELECT, orderBy: { kickoffAt: "asc" } }),
     prisma.manager.findMany({
       where: { leagueId },
@@ -70,6 +74,9 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
       where: { leagueId },
       select: { managerId: true, matchId: true, prediction: true },
     }),
+    // Playoff-phase gate for the knockout bracket — playoff_entry existence, NOT `selectTournamentPhase`
+    // (which returns "group" through the R32 pre-kickoff window). One count query, league-scoped.
+    loadPlayoffPhaseActive(prisma, leagueId),
   ]);
 
   const nameById = new Map(managerRows.map((m) => [m.id, m.displayName] as const));
@@ -153,8 +160,9 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
   return {
     managerId: viewerManagerId,
     phase,
-    // `now` (the same instant used for the reveal read above) drives the ≥24h Completed-archive cutoff.
-    picks: selectPoolPicksView(fixtures, phase, now),
+    // `now` (the same instant used for the reveal read above) drives the ≥24h Completed-archive cutoff;
+    // `playoffActive` (playoff_entry existence) gates the knockout bracket — see the import note.
+    picks: selectPoolPicksView(fixtures, phase, now, playoffActive),
     leaderboard: buildPoolLeaderboardView(
       allPicks,
       leaderboardMatches,

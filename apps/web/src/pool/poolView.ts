@@ -60,13 +60,20 @@ export function isFixtureLocked(fixture: PoolFixture, now: Date): boolean {
 }
 
 /**
- * Split fixtures into the Picks-tab structure. Phase (from the reused P38 `selectTournamentPhase`) gates
- * the bracket: it appears only once the tournament reaches knockout phase. The split is by `period.kind`.
+ * Split fixtures into the Picks-tab structure. The knockout bracket gates on `playoffActive` — the
+ * playoff_entry-EXISTENCE phase signal (the atomic twin of `league.status='playoff'`) — NOT the
+ * kickoff-derived `selectTournamentPhase`. That selector returns "group" through the ENTIRE R32
+ * pre-kickoff window (every knockout match is still `scheduled`; it flips to "playoff" only once a KO
+ * match is in_progress/completed), so a phase-gated bracket would stay hidden exactly when managers must
+ * pick the first knockout games. This mirrors the FAAB CONTRACT-P2/P3 fix (the squad-cap / participant
+ * gate moved off `league.status`/`selectTournamentPhase` onto playoff_entry existence). The within-bracket
+ * group↔knockout split is still by `period.kind` (NEVER `fifa_match.round`; DECISIONS → Pool).
  */
 export function selectPoolPicksView(
   fixtures: readonly PoolFixture[],
   phase: TournamentPhase,
   now: Date,
+  playoffActive: boolean,
 ): PoolPicksView {
   // Completed group matches ≥24h old leave their matchday and collect in one bottom archive, so the
   // Picks tab stops accumulating a scroll-tail of finished group fixtures as the tournament advances.
@@ -96,7 +103,14 @@ export function selectPoolPicksView(
     .map(([label, list]) => ({ label, fixtures: list.slice().sort(byKickoff) }));
 
   // ── knockout → the fixed R32→Final skeleton (knockout phase only) ──
-  const inKnockoutPhase = phase === "playoff" || phase === "complete";
+  // `playoffActive` (playoff_entry exists) is the authoritative gate: it is true from the group→playoff
+  // transition onward, INCLUDING through completion (the rows persist), so it covers every knockout state
+  // — crucially the R32 pre-kickoff window where `phase` is still "group". `phase === "complete"` is a
+  // defensive carry-over: playoffActive already covers a finished tournament, but the explicit OR keeps the
+  // settled bracket airtight even on pathological data. The new gate is a strict superset of the old
+  // `phase === "playoff" || phase === "complete"` in every reachable state (a KO match in_progress/completed
+  // ⟹ playoff_entry rows exist ⟹ playoffActive), so no prior render regresses.
+  const inKnockoutPhase = playoffActive || phase === "complete";
   let bracket: PoolBracketRound[] = [];
   if (inKnockoutPhase) {
     const koByLabel = new Map<string, PoolFixture[]>();

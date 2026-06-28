@@ -44,6 +44,23 @@ describe("pool loader — reveal is server-enforced via the anti-copying read", 
     expect(loader).toContain("selectTournamentPhase(");
     expect(loader).not.toMatch(/periodKind:\s*m\.round/);
   });
+
+  it("gates the knockout bracket on playoff_entry existence (loadPlayoffPhaseActive), NOT selectTournamentPhase", () => {
+    // The bracket-vs-matchday-lists split must NOT key on the kickoff-derived phase — that returns
+    // "group" through the entire R32 pre-kickoff window (CONTRACT-P2 blind spot), so the bracket would
+    // never render while the first knockout games are still `scheduled`. The loader derives `playoffActive`
+    // from playoff_entry EXISTENCE — the same data-existence signal the FAAB/waivers read path uses
+    // (CONTRACT-P2/P3) — and threads it into the pure view. selectTournamentPhase stays (pinned above) but
+    // ONLY frames the page; it no longer gates the bracket.
+    expect(loader).toContain("loadPlayoffPhaseActive(prisma, leagueId)");
+    expect(loader).toMatch(/selectPoolPicksView\(fixtures,\s*phase,\s*now,\s*playoffActive\)/);
+    // The web layer must NOT read the worker-owned `league.status` for the phase gate. Strip comments
+    // first (the import note NAMES league.status='playoff' to explain why it's avoided) so the negative
+    // guard targets CODE, not the doc prose — the same codeOnly discipline as the leak guards below.
+    const code = codeOnly(loader);
+    expect(code).not.toContain("league.status");
+    expect(code).not.toContain('=== "playoff"');
+  });
 });
 
 describe("pool client — lock disable + reveal render + route 409 surfacing", () => {
