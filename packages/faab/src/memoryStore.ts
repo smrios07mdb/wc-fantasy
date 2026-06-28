@@ -338,6 +338,10 @@ export interface MemoryFaGrantSeed {
   lockedDrops?: string[];
   /** players actively owned by SOMEONE league-wide at start (the active-ownership claim guard). */
   leagueOwned?: string[];
+  /** players on an ELIMINATED WC team (DECISIONS §D add gate). Models `fifa_team.eliminated` folded into
+   *  `getFaTargetFacts.faEligible` and the `claimFreeAgent` race belt — the SAME way prismaStore reads it.
+   *  Default empty ⇒ no elimination (existing tests byte-identical). */
+  eliminatedPlayerIds?: string[];
 }
 
 /**
@@ -352,6 +356,7 @@ export class MemoryFaGrantStore implements FaGrantStore {
   private readonly periods: Record<string, PeriodWindowView>;
   private readonly lockedDrops: Set<string>;
   private readonly leagueOwned: Set<string>;
+  private readonly eliminated: Set<string>;
   readonly grants: { managerId: string; playerAddId: string; playerDropId: string | null }[] = [];
 
   constructor(seed: MemoryFaGrantSeed) {
@@ -360,6 +365,7 @@ export class MemoryFaGrantStore implements FaGrantStore {
     this.periods = seed.periods ?? {};
     this.lockedDrops = new Set(seed.lockedDrops ?? []);
     this.leagueOwned = new Set(seed.leagueOwned ?? []);
+    this.eliminated = new Set(seed.eliminatedPlayerIds ?? []);
   }
 
   async loadManagerFaContext(managerId: string): Promise<FaGrantContext | null> {
@@ -377,7 +383,14 @@ export class MemoryFaGrantStore implements FaGrantStore {
 
   async getFaTargetFacts(_leagueId: string, playerId: string): Promise<FaTargetFacts | null> {
     const p = this.players[playerId];
-    return p ? { ...p, window: { ...p.window } } : null;
+    if (!p) return null;
+    // Add-side eliminated-team gate (DECISIONS §D): fold !teamEliminated into faEligible exactly as
+    // prismaStore does, so validateFaGrant rejects with the existing fa-not-eligible.
+    return {
+      ...p,
+      window: { ...p.window },
+      faEligible: p.faEligible && !this.eliminated.has(playerId),
+    };
   }
 
   async getDropFacts(playerId: string): Promise<{ position: Position } | null> {
@@ -396,6 +409,7 @@ export class MemoryFaGrantStore implements FaGrantStore {
     playerDropId: string | null;
     runAt: Date;
     periodId?: string | null;
+    allowEliminated?: boolean;
   }): Promise<"granted" | "conflict"> {
     // Resolve the add's WINDOW the way prismaStore.claimFreeAgent does: a pinned period (commish --period)
     // overrides the add's inferred next-fixture window. A null batch_cleared_at = the period is still
@@ -406,6 +420,10 @@ export class MemoryFaGrantStore implements FaGrantStore {
         ? this.periods[input.periodId]
         : this.players[input.playerAddId]?.window;
     if (!window || window.batchClearedAt === null) return "conflict";
+
+    // Add-side eliminated-team RACE BELT (DECISIONS §D add gate): reject an eliminated-team add unless the
+    // commissioner override (`allowEliminated`) is set — exactly as prismaStore.claimFreeAgent does.
+    if (this.eliminated.has(input.playerAddId) && input.allowEliminated !== true) return "conflict";
 
     // Live-unowned first-come guard: the add target must hold no active spot league-wide right now (the
     // active-ownership unique). Already live (no snapshot term) — so it MATCHES the prismaStore re-check.

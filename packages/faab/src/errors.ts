@@ -17,6 +17,7 @@ export type FaabBidErrorCode =
   | "over-budget"
   | "add-owned"
   | "add-kicked-off"
+  | "add-team-eliminated"
   | "bid-window-closed"
   | "drop-required"
   | "drop-not-owned"
@@ -51,6 +52,15 @@ export interface AddOwnedError {
 /** The add target's match has already kicked off — the acquisition deadline has passed. */
 export interface AddKickedOffError {
   code: "add-kicked-off";
+  message: string;
+  playerAddId: string;
+}
+
+/** The add target's WC national team has been ELIMINATED (commissioner-set `fifa_team.eliminated`) — he
+ *  may no longer be acquired (DECISIONS §D "eliminated-team add gate"). Add-side only — a DROP of an
+ *  eliminated-team player stays allowed. The sealed-bid sibling of the $0-grant's `fa-not-eligible`. */
+export interface AddTeamEliminatedError {
+  code: "add-team-eliminated";
   message: string;
   playerAddId: string;
 }
@@ -117,6 +127,7 @@ export type FaabBidError =
   | OverBudgetError
   | AddOwnedError
   | AddKickedOffError
+  | AddTeamEliminatedError
   | BidWindowClosedError
   | DropRequiredError
   | DropNotOwnedError
@@ -192,6 +203,14 @@ export function addKickedOff(playerAddId: string): AddKickedOffError {
   return {
     code: "add-kicked-off",
     message: `player ${playerAddId}'s match has already kicked off — he can no longer be acquired`,
+    playerAddId,
+  };
+}
+
+export function addTeamEliminated(playerAddId: string): AddTeamEliminatedError {
+  return {
+    code: "add-team-eliminated",
+    message: `player ${playerAddId}'s team has been eliminated from the World Cup — he can no longer be acquired`,
     playerAddId,
   };
 }

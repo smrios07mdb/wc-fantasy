@@ -52,6 +52,13 @@ function freshStore(opts: { lockedDrops?: string[] } = {}) {
         periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z"),
         periodBatchClearedAt: new Date("2026-06-10T05:30:00Z"),
       },
+      // ELIM: still sealed + upcoming, but his WC team is ELIMINATED (DECISIONS §D add gate).
+      ELIM: {
+        position: "MID",
+        periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z"),
+        periodBatchClearedAt: null,
+        addTeamEliminated: true,
+      },
     },
     leagueOwned: ["DROP"],
     lockedDrops: opts.lockedDrops,
@@ -204,6 +211,17 @@ describe("handleSubmitBid — validation + persistence", () => {
     expect((res.body as { error: string }).error).toBe("not-participant");
     expect(store.rows).toHaveLength(0);
   });
+
+  it("rejects an add whose WC team is ELIMINATED (409 add-team-eliminated) without persisting", async () => {
+    const store = freshStore();
+    const res = await handleSubmitBid(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      { ...submitBody, playerAddId: "ELIM" },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("add-team-eliminated");
+    expect(store.rows).toHaveLength(0);
+  });
 });
 
 describe("handleEditBid / handleCancelBid — self-scoped bid mutations", () => {
@@ -249,6 +267,49 @@ describe("handleEditBid / handleCancelBid — self-scoped bid mutations", () => 
     expect(res.status).toBe(409);
     expect((res.body as { error: string }).error).toBe("bid-window-closed");
     expect(store.rows[0]!.amount).toBe(10); // unchanged — no write
+  });
+
+  it("re-gates elimination on EDIT: editing a bid whose add team is now eliminated (409 add-team-eliminated) — no write", async () => {
+    const store = freshStore();
+    // A bid placed while the team was alive, on a player (ELIM) whose WC team has since been eliminated.
+    // The edit path re-validates the FIXED add target, so the raise is rejected before any write.
+    store.rows.push({
+      bidId: "elim-bid",
+      managerId: "A",
+      playerAddId: "ELIM",
+      playerDropId: "DROP",
+      amount: 10,
+      note: null,
+      status: "pending",
+    } as never);
+
+    const res = await handleEditBid(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      { managerId: "A", bidId: "elim-bid", amount: 25, playerDropId: "DROP", note: "raise" },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("add-team-eliminated");
+    expect(store.rows[0]!.amount).toBe(10); // unchanged — no write
+  });
+
+  it("CANCEL is unaffected by elimination — a bid on a now-eliminated player can always be withdrawn (200)", async () => {
+    const store = freshStore();
+    store.rows.push({
+      bidId: "elim-bid",
+      managerId: "A",
+      playerAddId: "ELIM",
+      playerDropId: "DROP",
+      amount: 10,
+      note: null,
+      status: "pending",
+    } as never);
+
+    const res = await handleCancelBid(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      { managerId: "A", bidId: "elim-bid" },
+    );
+    expect(res.status).toBe(200); // cancel runs no validator
+    expect(store.rows).toHaveLength(0);
   });
 
   it("edits the manager's own pending bid (200)", async () => {

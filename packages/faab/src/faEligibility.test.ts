@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { liveOwnedWhere, isLiveUnowned, type OwnershipRow } from "./faEligibility";
+import {
+  liveOwnedWhere,
+  isLiveUnowned,
+  isAddTeamEliminated,
+  type OwnershipRow,
+} from "./faEligibility";
 
 /**
  * Live-unowned FA eligibility (DECISIONS §D, commissioner decision Jun 18 2026 — the Prompt-48 batch-clear
@@ -77,5 +82,27 @@ describe("live-unowned FA eligibility — explicit (a)–(d)", () => {
     const rows: OwnershipRow[] = [{ leagueId: "other-league", playerId: P, droppedAt: null }];
     expect(isLiveUnowned(rows, L, P)).toBe(true);
     expect(isFreeAgentViaPredicate(rows)).toBe(true);
+  });
+});
+
+describe("isAddTeamEliminated — the add-side eliminated-team rule (DECISIONS §D add gate)", () => {
+  it("an ELIMINATED team (eliminated = true) blocks the add", () => {
+    expect(isAddTeamEliminated(true)).toBe(true);
+  });
+
+  it("an ALIVE team (eliminated = false) does not block the add", () => {
+    expect(isAddTeamEliminated(false)).toBe(false);
+  });
+
+  it("a player with NO team (team_id IS NULL ⇒ null) is NEVER eliminated → add-eligible", () => {
+    expect(isAddTeamEliminated(null)).toBe(false);
+  });
+
+  it("is ORTHOGONAL to ownership — it reads only the team flag, never a roster row", () => {
+    // The two predicates are independent dimensions: an alive-team player can still be owned (ineligible
+    // by ownership), and an eliminated-team player can be unowned (ineligible by elimination). Neither
+    // function consumes the other's input — proven structurally: this one takes only a boolean|null.
+    expect(isAddTeamEliminated(true)).toBe(true);
+    expect(isAddTeamEliminated(false)).toBe(false);
   });
 });

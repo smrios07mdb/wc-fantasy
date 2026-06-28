@@ -25,7 +25,9 @@ const okOutcome: SessionManagerOutcome = {
   isCommissioner: false,
 };
 
-function freshStore(opts: { lockedDrops?: string[]; leagueOwned?: string[] } = {}) {
+function freshStore(
+  opts: { lockedDrops?: string[]; leagueOwned?: string[]; eliminatedPlayerIds?: string[] } = {},
+) {
   return new MemoryFaGrantStore({
     managers: [
       {
@@ -40,6 +42,8 @@ function freshStore(opts: { lockedDrops?: string[]; leagueOwned?: string[] } = {
     players: {
       X: { position: "MID", window: FA_WINDOW, faEligible: true },
       DROP: { position: "MID", window: FA_WINDOW, faEligible: false },
+      // ELIM: an open FA by ownership, but his WC team is eliminated (DECISIONS §D add gate).
+      ELIM: { position: "MID", window: FA_WINDOW, faEligible: true },
       SEALED: {
         position: "MID",
         window: { batchClearedAt: null, firstKickoffAt: FA_WINDOW.firstKickoffAt },
@@ -58,6 +62,7 @@ function freshStore(opts: { lockedDrops?: string[]; leagueOwned?: string[] } = {
     },
     lockedDrops: opts.lockedDrops,
     leagueOwned: opts.leagueOwned,
+    eliminatedPlayerIds: opts.eliminatedPlayerIds,
   });
 }
 
@@ -148,6 +153,20 @@ describe("handleFaGrant — window + eligibility + grant", () => {
     expect(res.status).toBe(200);
     expect(store.ownedBy("A")).toContain("DROPPED_THIS_WINDOW");
     expect(store.ownedBy("A")).not.toContain("DROP");
+  });
+
+  it("rejects an eliminated-team FA (409 fa-not-eligible) — the add gate folds into faEligible, no grant", async () => {
+    // DECISIONS §D add gate: getFaTargetFacts ANDs !teamEliminated into faEligible, so validateFaGrant
+    // rejects with the existing fa-not-eligible (no validator change). The in-tx belt is the integration
+    // test's job; here the pre-tx fold already blocks it before claimFreeAgent is reached.
+    const store = freshStore({ eliminatedPlayerIds: ["ELIM"] });
+    const res = await handleFaGrant(
+      { resolveManager: async () => okOutcome, store, now: NOW },
+      { ...body, playerAddId: "ELIM" },
+    );
+    expect(res.status).toBe(409);
+    expect((res.body as { error: string }).error).toBe("fa-not-eligible");
+    expect(store.grants).toHaveLength(0);
   });
 
   it("enforces drop-lock (409 drop-locked) without granting", async () => {

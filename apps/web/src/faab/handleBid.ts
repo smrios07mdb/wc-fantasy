@@ -116,6 +116,7 @@ export async function handleSubmitBid(
     batchClearedAt: addFacts.periodBatchClearedAt,
     dropLocked,
     isPlayoffParticipant: ctx.isPlayoffParticipant,
+    addTeamEliminated: addFacts.addTeamEliminated,
   });
   if (error) return bidErrorResult(error);
 
@@ -186,6 +187,10 @@ export async function handleEditBid(
       batchClearedAt: addFacts.periodBatchClearedAt,
       dropLocked,
       isPlayoffParticipant: ctx.isPlayoffParticipant,
+      // The add target is FIXED on an edit — re-validate it: a team eliminated after the bid was placed
+      // makes the pending claim rejected here too (add-side, consistent with submit). Cancel runs no
+      // validator, so a bid on a now-eliminated player can always be withdrawn.
+      addTeamEliminated: addFacts.addTeamEliminated,
     },
   );
   if (error) return bidErrorResult(error);

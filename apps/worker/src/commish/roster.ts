@@ -171,6 +171,9 @@ export async function runRosterOverride(
   }
 
   // (5) Apply via the SAME atomic claim the route uses (active-ownership unique + valid-drop kept).
+  //     allowEliminated:true (D2) — the commissioner override deliberately bypasses the add-side
+  //     eliminated-team belt, exactly as it already neutralizes the window + live-unowned eligibility
+  //     above (the whole point of `commish:roster` is to repair an add the FA gate blocks).
   const outcome = await deps.store.claimFreeAgent({
     leagueId: ctx.leagueId,
     managerId: input.managerId,
@@ -178,6 +181,7 @@ export async function runRosterOverride(
     playerDropId: input.dropId,
     runAt: deps.now,
     periodId: input.pinnedPeriodId,
+    allowEliminated: true,
   });
   if (outcome === "conflict") {
     return {

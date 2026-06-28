@@ -41,6 +41,7 @@ function bid(
     dropPos?: Position | null;
     kickoff?: Date | null;
     dropLocked?: boolean;
+    eliminated?: boolean;
     id?: string;
   } = {},
 ): BidInput {
@@ -51,6 +52,7 @@ function bid(
     playerAddId,
     addPosition: opts.addPos ?? "MID",
     addTargetKickoffAt: opts.kickoff ?? null,
+    addTeamEliminated: opts.eliminated ?? false,
     playerDropId: drop,
     dropPosition: drop === null ? null : (opts.dropPos ?? "MID"),
     dropLocked: opts.dropLocked ?? false,
@@ -295,6 +297,56 @@ describe("resolveFaabBatch — void + refund the kicked-off add target (step 1)"
       }),
     );
     expect(resolutionFor(out, "a").outcome).toBe("voided_refunded");
+  });
+});
+
+// ── Eliminated-team add target: void + refund (DECISIONS §D add gate; sibling of the step-1 kickoff void) ──
+describe("resolveFaabBatch — void + refund an eliminated-team add target (add-side only)", () => {
+  it("voids+refunds an eliminated-team bid with NO budget debit, NO roster change, NO waiver move", () => {
+    const managers = [mgr("A", 1, { budget: 100, owned: ["A-drop"] })];
+    const out = resolveFaabBatch(
+      input(managers, [bid("A", "ELIM", 50, { id: "e", eliminated: true })]),
+    );
+    expect(resolutionFor(out, "e").outcome).toBe("voided_refunded");
+    // Refund = the budget was never debited; the manager keeps 100 (no delta row, like a kicked-off void).
+    expect(out.budgetDeltas).toEqual([]);
+    // No tiebreak ⇒ no move-to-bottom; the seeded order is untouched.
+    expect(out.waiverOrderChanged).toBe(false);
+    expect(out.waiverOrder).toEqual([{ managerId: "A", position: 1 }]);
+  });
+
+  it("an eliminated-team add never competes — a valid bid on ANOTHER player still wins (no interference)", () => {
+    const managers = [mgr("A", 1, { owned: ["A-drop"] }), mgr("B", 2, { owned: ["B-drop"] })];
+    const out = resolveFaabBatch(
+      input(managers, [
+        bid("A", "ELIM", 50, { id: "a-elim", eliminated: true }),
+        bid("B", "GOOD", 10, { id: "b-good" }),
+      ]),
+    );
+    expect(resolutionFor(out, "a-elim").outcome).toBe("voided_refunded");
+    expect(resolutionFor(out, "b-good").outcome).toBe("won");
+    expect(out.budgetDeltas).toEqual([{ managerId: "B", spent: 10, newBudget: 90 }]);
+  });
+
+  it("both bids on the SAME eliminated player are voided (the whole player is off the wire)", () => {
+    const managers = [mgr("A", 1, { owned: ["A-drop"] }), mgr("B", 2, { owned: ["B-drop"] })];
+    const out = resolveFaabBatch(
+      input(managers, [
+        bid("A", "ELIM", 50, { id: "a", eliminated: true }),
+        bid("B", "ELIM", 40, { id: "b", eliminated: true }),
+      ]),
+    );
+    expect(resolutionFor(out, "a").outcome).toBe("voided_refunded");
+    expect(resolutionFor(out, "b").outcome).toBe("voided_refunded");
+    expect(out.budgetDeltas).toEqual([]);
+  });
+
+  it("is inert when addTeamEliminated is false/absent — an alive-team bid wins as before (byte-identical)", () => {
+    const managers = [mgr("A", 1, { owned: ["A-drop"] })];
+    const out = resolveFaabBatch(
+      input(managers, [bid("A", "X", 5, { id: "x", eliminated: false })]),
+    );
+    expect(resolutionFor(out, "x").outcome).toBe("won");
   });
 });
 

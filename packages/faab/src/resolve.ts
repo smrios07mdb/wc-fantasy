@@ -6,7 +6,8 @@
  * the kickoffs are passed in, so the whole 8-step algorithm is unit-testable with literals.
  *
  * The 8 locked steps, all inside the single award loop unless noted:
- *  1. Void + refund any bid whose add target already kicked off (the pre-loop split into `competing`).
+ *  1. Void + refund any bid whose add target already kicked off — or whose WC team is ELIMINATED
+ *     (DECISIONS §D add gate), or (D4) whose bidder is a playoff non-participant (the pre-loop split).
  *  2. Highest bid wins, player-by-player (the loop awards the globally-highest live bid each pass).
  *  3. Tie → rolling waiver order (the per-player winner sort; lower position wins).
  *  4. Move-to-bottom ONLY when the tiebreak is USED (`tiebreakUsed` gates `moveToBottom`).
@@ -50,6 +51,12 @@ export interface BidInput {
   addPosition: Position;
   /** Kickoff of the add target's relevant fixture (UTC), or null if none upcoming. Void if <= now. */
   addTargetKickoffAt: Date | null;
+  /** True iff the add target's WC national team has been ELIMINATED (commissioner-set `fifa_team.eliminated`,
+   *  resolved by the IO layer via `isAddTeamEliminated`; a no-team player is never eliminated). Such a bid
+   *  is VOIDED + REFUNDED in the pre-loop with the SAME terminal semantics as a kicked-off add — it never
+   *  competes (no debit, no roster change, no waiver-order move). Add-side only. Optional + default-false so
+   *  every existing batch is byte-identical. */
+  addTeamEliminated?: boolean;
   /** Required once the roster is full; null only in the reinforcement open-slot case. */
   playerDropId: string | null;
   dropPosition: Position | null;
@@ -141,13 +148,18 @@ export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
 
   // (1) Void + refund (the pre-loop split): a bid does not compete if its add target already kicked off,
   //     OR (D4 trim-down) the bidder is not a playoff participant — the resolver backstop behind the
-  //     submission gate. `participantManagerIds` null ⇒ everyone participates (group phase, byte-identical).
+  //     submission gate — OR the add target's WC team has been ELIMINATED (DECISIONS §D add gate). All
+  //     three are the SAME terminal semantics: the bid never enters `competing`, so no debit, no roster
+  //     change, no waiver-order move (a clean refund). The eliminated flag is the commissioner-set
+  //     `fifa_team.eliminated`, resolved by the IO layer (a no-team add ⇒ false); add-side only — a drop
+  //     is untouched. `participantManagerIds` null / `addTeamEliminated` false ⇒ byte-identical group batch.
   const competing: BidInput[] = [];
   for (const b of bids) {
     const kickedOff =
       b.addTargetKickoffAt !== null && b.addTargetKickoffAt.getTime() <= now.getTime();
     const nonParticipant = participantManagerIds != null && !participantManagerIds.has(b.managerId);
-    if (kickedOff || nonParticipant) {
+    const teamEliminated = b.addTeamEliminated === true;
+    if (kickedOff || nonParticipant || teamEliminated) {
       resolutions.push({ bidId: b.bidId, managerId: b.managerId, outcome: "voided_refunded" });
       resolved.add(b.bidId);
     } else {

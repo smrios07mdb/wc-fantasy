@@ -25,6 +25,7 @@ import { acquisitionWindowState, type AcquisitionWindow } from "./window";
 import {
   addKickedOff,
   addOwned,
+  addTeamEliminated,
   amountNegative,
   bidWindowClosed,
   dropEqualsAdd,
@@ -86,6 +87,10 @@ export interface BidValidationContext {
    *  it is always `true`. Optional + DEFAULT-PARTICIPANT (absent ⇒ participates) so group behavior — and
    *  every existing test — is byte-identical. */
   isPlayoffParticipant?: boolean;
+  /** Add-side eliminated-team gate (DECISIONS §D "eliminated-team add gate"). The IO layer resolves it
+   *  via `isAddTeamEliminated(fifa_team.eliminated)` for the ADD target (a no-team player ⇒ `false`).
+   *  Optional + DEFAULT-NOT-ELIMINATED (absent ⇒ `false`) so every existing test is byte-identical. */
+  addTeamEliminated?: boolean;
 }
 
 export function validateBidSubmission(
@@ -110,6 +115,9 @@ export function validateBidSubmission(
   //     (`bid-window-closed`). A sealed $0 bid accepted in this gap was the MD1 strand incident. Only the
   //     still-sealed phase accepts a bid.
   if (ctx.ownedByLeague.has(sub.playerAddId)) return addOwned(sub.playerAddId);
+  // The add target's WC team is eliminated (commissioner-set) — add-side gate, sibling of the $0-grant's
+  // fa-not-eligible. Sits in the add-availability block (right after add-owned, before the window check).
+  if (ctx.addTeamEliminated === true) return addTeamEliminated(sub.playerAddId);
   const window = acquisitionWindowState(
     { batchClearedAt: ctx.batchClearedAt, firstKickoffAt: ctx.acquisitionCutoffAt },
     ctx.now,

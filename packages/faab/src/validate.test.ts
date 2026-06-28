@@ -82,6 +82,26 @@ describe("validateBidSubmission", () => {
     expect(e?.code).toBe("add-owned");
   });
 
+  it("rejects an add whose WC team is ELIMINATED (add-team-eliminated, add-side only)", () => {
+    const e = validateBidSubmission(sub(), ctx({ addTeamEliminated: true }));
+    expect(e?.code).toBe("add-team-eliminated");
+    if (e?.code === "add-team-eliminated") expect(e.playerAddId).toBe("X");
+  });
+
+  it("is unaffected when addTeamEliminated is false OR absent (default not-eliminated ⇒ eligible)", () => {
+    expect(validateBidSubmission(sub(), ctx({ addTeamEliminated: false }))).toBeNull();
+    expect(validateBidSubmission(sub(), ctx())).toBeNull(); // absent ⇒ byte-identical to before
+  });
+
+  it("the eliminated gate sits in the add block — add-owned still takes precedence", () => {
+    // An already-owned eliminated-team add reports add-owned (the earlier rule), not add-team-eliminated.
+    const e = validateBidSubmission(
+      sub({ playerAddId: "TAKEN" }),
+      ctx({ ownedByLeague: new Set(["DROP", "TAKEN"]), addTeamEliminated: true }),
+    );
+    expect(e?.code).toBe("add-owned");
+  });
+
   it("rejects an add whose PERIOD first kickoff has already passed (acquisition window closed)", () => {
     const now = new Date("2026-06-10T16:00:00Z");
     const e = validateBidSubmission(

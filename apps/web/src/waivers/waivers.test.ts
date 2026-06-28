@@ -123,14 +123,20 @@ describe("instant $0 free-agency — Waivers-tab surface (Prompt 48 route, final
     expect(loader).not.toMatch(/phase === "free-agency"/); // the pool is no longer gated on the FA phase
   });
 
-  it("the FA eligibility predicate is defined ONCE (per-player re-check + grant + batch list share it)", () => {
-    // Single source of truth: liveOwnedWhere is the ONE predicate (pure faEligibility.ts, IO-free), imported
-    // by the Prisma adapter and counted in getFaTargetFacts (one player), claimFreeAgent (the grant
-    // re-check), AND listFaIneligiblePlayerIds (the pool) — so they cannot drift. Snapshot predicate gone.
+  it("the FA eligibility predicates are each defined ONCE — ownership AND the add-side eliminated-team gate", () => {
+    // Single source of truth, now TWO orthogonal predicates in the SAME pure faEligibility.ts (IO-free):
+    //   • liveOwnedWhere — the OWNERSHIP predicate, imported by the adapter and counted in getFaTargetFacts
+    //     (one player), claimFreeAgent (the grant re-check), AND listFaIneligiblePlayerIds (the pool); and
+    //   • isAddTeamEliminated — the ADD-SIDE eliminated-team gate (DECISIONS §D), a SECOND predicate the
+    //     adapter applies at every add site (the pool union, the per-player re-check, the grant belt, the
+    //     bid facts, the batch feed) — kept SEPARATE from liveOwnedWhere (roster-only) so neither rule
+    //     absorbs the other. Each is defined once and consumed by the SAME adapter, so they cannot drift.
     expect(faElig).toContain("export function liveOwnedWhere");
+    expect(faElig).toContain("export function isAddTeamEliminated");
     expect(faStore).toContain('from "./faEligibility"');
     expect(faStore).not.toContain("snapshotOwnershipWhere");
     expect(faStore.match(/liveOwnedWhere\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
+    expect(faStore.match(/isAddTeamEliminated\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     expect(faStore).toContain("export async function listFaIneligiblePlayerIds");
   });
 

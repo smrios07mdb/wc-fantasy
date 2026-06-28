@@ -50,3 +50,19 @@ export function isLiveUnowned(
     (r) => r.leagueId === leagueId && r.playerId === playerId && r.droppedAt === null,
   );
 }
+
+/**
+ * The ADD-SIDE eliminated-team rule (DECISIONS §D "eliminated-team add gate"). A SECOND, ORTHOGONAL
+ * eligibility predicate to {@link liveOwnedWhere}/{@link isLiveUnowned} (those are OWNERSHIP-only and
+ * `roster_player`-scoped — no team join — so this rule cannot be folded into them; the IO adapter ANDs
+ * BOTH at every add site). TRUE iff the player's WC national team has been ELIMINATED, i.e. he may NOT
+ * be ADDED from the FAAB pool. The flag is the commissioner-set `fifa_team.eliminated`, resolved by the
+ * IO layer; a player with NO team (`team_id IS NULL` ⇒ `teamEliminated === null`) is NEVER eliminated →
+ * add-eligible. This is the ONE shared definition (the `null`/`false`/`true` semantics live here, not at
+ * each call site) consumed by the pool list, the per-player re-check, the grant tx, the sealed bid, and
+ * the batch resolver — so they cannot drift. ADD-SIDE ONLY: nothing here gates a drop or lineup. Pure:
+ * the boolean fact is injected (no team join, no IO).
+ */
+export function isAddTeamEliminated(teamEliminated: boolean | null): boolean {
+  return teamEliminated === true;
+}

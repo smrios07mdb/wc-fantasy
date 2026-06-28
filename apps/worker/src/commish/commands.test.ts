@@ -145,6 +145,34 @@ describe("commish:roster override", () => {
     if (res.status === "applied") expect(res.audit).toContain("commish-override");
   });
 
+  it("D2: --apply adds a player from an ELIMINATED team (override bypasses the add-side gate), $0", async () => {
+    // The live FA route rejects an eliminated-team add (fa-not-eligible / the in-tx belt). The
+    // commissioner override is a deliberate repair: it passes allowEliminated:true to claimFreeAgent —
+    // exactly as it already neutralizes the window + live-unowned eligibility — so the add SUCCEEDS here.
+    const store = new MemoryFaGrantStore({
+      managers: [
+        {
+          managerId: "m1",
+          leagueId: "L",
+          faabBudget: 100,
+          counts: { ...FULL },
+          squadSize: 15,
+          owned: new Set(["DROP"]),
+        },
+      ],
+      players: {
+        ADD: { position: "MID", window: FA_WINDOW, faEligible: true },
+        DROP: { position: "MID", window: FA_WINDOW, faEligible: false },
+      },
+      eliminatedPlayerIds: ["ADD"], // ADD's WC team is eliminated — the live route would reject it
+    });
+    const { deps } = rosterDeps(store);
+    const res = await runRosterOverride(deps, rosterInput({ apply: true }));
+    expect(res.status).toBe("applied"); // override bypassed the belt
+    expect(store.ownedBy("m1")).toContain("ADD");
+    expect(store.budgetOf("m1")).toBe(100); // still $0
+  });
+
   it("KEEPS the 15-man squad rule even with the window bypassed (no-drop add on a full squad → drop-required)", async () => {
     // The per-position cap is retired (Prompt 44 → @app/faab), but the override still cannot push a full
     // squad past 15 — a full-squad add must name a drop. (The per-position 3rd-GK/4th-FWD shape is now legal.)

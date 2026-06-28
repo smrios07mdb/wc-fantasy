@@ -20,7 +20,7 @@
 import type { PrismaClient } from "@app/db";
 import { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { rosterCapForPlayoffPhase, type Position } from "@app/shared";
-import { liveOwnedWhere } from "./faEligibility";
+import { liveOwnedWhere, isAddTeamEliminated } from "./faEligibility";
 import type { BidInput, ManagerState } from "./resolve";
 import type {
   BatchContext,
@@ -94,7 +94,9 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
             playerAddId: true,
             playerDropId: true,
             amount: true,
-            playerAdd: { select: { position: true, teamId: true } },
+            playerAdd: {
+              select: { position: true, teamId: true, team: { select: { eliminated: true } } },
+            },
             playerDrop: { select: { position: true } },
           },
         }),
@@ -153,6 +155,9 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
         playerAddId: b.playerAddId,
         addPosition: b.playerAdd.position,
         addTargetKickoffAt: kickoffByTeam.get(b.playerAdd.teamId) ?? null,
+        // Add-side eliminated-team gate (DECISIONS §D): the resolver voids+refunds this bid in its
+        // pre-loop (same terminal shape as a kicked-off add). null team ⇒ not eliminated.
+        addTeamEliminated: isAddTeamEliminated(b.playerAdd.team?.eliminated ?? null),
         playerDropId: b.playerDropId,
         dropPosition: b.playerDrop?.position ?? null,
         dropLocked:
@@ -352,7 +357,7 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
     async getPlayerFacts(playerId): Promise<PlayerFacts | null> {
       const p = await prisma.player.findUnique({
         where: { id: playerId },
-        select: { position: true, teamId: true },
+        select: { position: true, teamId: true, team: { select: { eliminated: true } } },
       });
       if (!p) return null;
       // The submission cutoff + the sealed→FA latch share the SAME add-period window the $0 FA grant
@@ -364,6 +369,8 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
         position: p.position,
         periodFirstKickoffAt: window?.firstKickoffAt ?? null,
         periodBatchClearedAt: window?.batchClearedAt ?? null,
+        // Add-side eliminated-team gate (DECISIONS §D): the validator rejects with `add-team-eliminated`.
+        addTeamEliminated: isAddTeamEliminated(p.team?.eliminated ?? null),
       };
     },
 
@@ -490,18 +497,31 @@ async function resolveAddPeriodWindow(
   return { batchClearedAt: w.batchClearedAt, firstKickoffAt: w.firstKickoffAt ?? m.kickoffAt };
 }
 
-/** The player ids that are NOT live-unowned free agents: every player holding an ACTIVE ownership row
- *  (dropped_at IS NULL) in the league. The waivers loader subtracts this from the player pool to offer
- *  EXACTLY the live free agents the $0 grant will accept — reusing the same {@link liveOwnedWhere}
- *  predicate {@link FaGrantStore.getFaTargetFacts} re-checks, so the offered list and the accepted grant
- *  cannot drift (a stale list only ever falls through to the route's `fa-conflict` 409). */
+/** The player ids that are NOT addable from the FAAB pool — the UNION of two orthogonal add-side rules
+ *  (so the waivers loader can subtract one set to offer EXACTLY the addable players):
+ *   1. OWNERSHIP — every player holding an ACTIVE ownership row (dropped_at IS NULL) in the league
+ *      (`liveOwnedWhere`), the same predicate {@link FaGrantStore.getFaTargetFacts} + `claimFreeAgent`
+ *      re-check, so the offered list and the accepted grant cannot drift; AND
+ *   2. ELIMINATION (DECISIONS §D add gate) — every player whose WC team is ELIMINATED
+ *      (`fifa_team.eliminated`), the same flag `getFaTargetFacts` / `claimFreeAgent` / the bid validator
+ *      / the batch resolver enforce. A player with no team is never eliminated. UNLIKE the ownership set
+ *      this also removes UNOWNED eliminated-team players from the pool — the whole point of the gate.
+ *  A stale list only ever falls through to the route's `fa-conflict` / `fa-not-eligible` 409. */
 export async function listFaIneligiblePlayerIds(db: Db, leagueId: string): Promise<Set<string>> {
-  const rows = await db.rosterPlayer.findMany({
-    where: liveOwnedWhere(leagueId),
-    distinct: ["playerId"],
-    select: { playerId: true },
-  });
-  return new Set(rows.map((r) => r.playerId));
+  const [owned, eliminated] = await Promise.all([
+    db.rosterPlayer.findMany({
+      where: liveOwnedWhere(leagueId),
+      distinct: ["playerId"],
+      select: { playerId: true },
+    }),
+    db.player.findMany({
+      where: { team: { eliminated: true } },
+      select: { id: true },
+    }),
+  ]);
+  const ids = new Set(owned.map((r) => r.playerId));
+  for (const p of eliminated) ids.add(p.id);
+  return ids;
 }
 
 export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
@@ -543,20 +563,24 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
     async getFaTargetFacts(leagueId, playerId): Promise<FaTargetFacts | null> {
       const p = await prisma.player.findUnique({
         where: { id: playerId },
-        select: { position: true, teamId: true },
+        select: { position: true, teamId: true, team: { select: { eliminated: true } } },
       });
       if (!p) return null;
       const window = (await resolveAddPeriodWindow(prisma, p.teamId)) ?? {
         batchClearedAt: null,
         firstKickoffAt: null,
       };
-      // FA-eligible = LIVE-UNOWNED: the target holds NO active roster row (dropped_at IS NULL) right now
-      // (commish decision Jun 18 2026 — the batch-clear snapshot + anti-snipe hold are retired). The single
-      // `liveOwnedWhere` predicate is shared with the batch `listFaIneligiblePlayerIds` (the waivers pool)
-      // and the `claimFreeAgent` re-check, so the offered list, this re-check, and the grant cannot drift.
-      // The free-agency WINDOW phase is gated separately by `validateFaGrant` (step 1), which is why the
-      // `window` (still returned) is no longer consulted for eligibility.
+      // FA-eligible = LIVE-UNOWNED (the target holds NO active roster row right now — commish decision
+      // Jun 18 2026, the batch-clear snapshot + anti-snipe hold are retired) AND the add-side eliminated-
+      // team gate (DECISIONS §D): his WC team must NOT be eliminated (a no-team player is never
+      // eliminated). The single `liveOwnedWhere` predicate is shared with the pool list + the
+      // `claimFreeAgent` re-check, and the single `isAddTeamEliminated` rule with the bid validator + the
+      // resolver — so the offered list, this re-check, and the grant cannot drift. `validateFaGrant`
+      // rejects a false `faEligible` with the existing `fa-not-eligible` (no validator change). The window
+      // phase is gated separately by `validateFaGrant` (step 1).
+      const teamEliminated = isAddTeamEliminated(p.team?.eliminated ?? null);
       const faEligible =
+        !teamEliminated &&
         (await prisma.rosterPlayer.count({ where: liveOwnedWhere(leagueId, playerId) })) === 0;
       return { position: p.position, window, faEligible };
     },
@@ -584,6 +608,7 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
       playerDropId,
       runAt,
       periodId,
+      allowEliminated,
     }): Promise<"granted" | "conflict"> {
       try {
         await prisma.$transaction(async (tx) => {
@@ -595,11 +620,21 @@ export function createPrismaFaGrantStore(prisma: Db): FaGrantStore {
           // ownership predicate; the route already gated it (defensive belt-and-suspenders / commish path).
           const player = await tx.player.findUnique({
             where: { id: playerAddId },
-            select: { teamId: true },
+            select: { teamId: true, team: { select: { eliminated: true } } },
           });
           const window = await resolveAddPeriodWindow(tx, player?.teamId ?? null, periodId);
           const T = window?.batchClearedAt ?? null;
           if (T === null) throw new FaConflict(); // the period's batch window is not open
+
+          // Add-side eliminated-team RACE BELT (DECISIONS §D add gate): the add target's WC team must NOT
+          // be eliminated (`fifa_team.eliminated`, the SAME flag the pool list + the per-player re-check +
+          // the bid validator + the resolver enforce) — catches a team flipped eliminated between the
+          // pre-tx validate and this commit, mirroring the live-unowned belt below. A no-team player is
+          // never eliminated. The commissioner override (`allowEliminated`) deliberately bypasses it (the
+          // commish roster repair); the live manager route never passes it.
+          if (isAddTeamEliminated(player?.team?.eliminated ?? null) && allowEliminated !== true) {
+            throw new FaConflict();
+          }
 
           // Re-check FA eligibility under the LIVE-UNOWNED predicate (commish decision Jun 18 2026): the
           // add must hold NO active roster row right now — the SAME `liveOwnedWhere` the pool + per-player

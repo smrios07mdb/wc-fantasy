@@ -84,6 +84,10 @@ export interface PlayerFacts {
    *  batch has not yet cleared. NOT-NULL ⇒ the period left sealed-bid for free agency, so a sealed bid is
    *  rejected (`bid-window-closed`); resolved from the SAME add-period window as `periodFirstKickoffAt`. */
   periodBatchClearedAt: Date | null;
+  /** Add-side eliminated-team gate (DECISIONS §D): the add target's WC team is eliminated
+   *  (`fifa_team.eliminated`, resolved by the IO layer via `isAddTeamEliminated`; a no-team player ⇒
+   *  false). Optional + default-false (absent ⇒ not eliminated) so existing bid-test seeds are unchanged. */
+  addTeamEliminated?: boolean;
 }
 
 /** A bid as persisted/echoed by the route. */
@@ -167,7 +171,10 @@ export interface FaGrantStore {
    *  is no longer an open FA (a clean rejection, fully rolled back). An optional `periodId` (the
    *  commissioner `--period` pin) resolves the snapshot instant T from THAT period's batch_cleared_at
    *  instead of the add's next-fixture-inferred period — which, for an already-played player, points at a
-   *  still-sealed next matchday (T null) and wrongly conflicts. Omitted (live route) ⇒ next-fixture. */
+   *  still-sealed next matchday (T null) and wrongly conflicts. Omitted (live route) ⇒ next-fixture.
+   *  `allowEliminated` (D2) is the commissioner override: when true the add-side eliminated-team belt is
+   *  bypassed so a commissioner can deliberately add a player from an eliminated team (default false /
+   *  omitted ⇒ the belt enforces — the live manager route never passes it). Mirrors the kickoff bypass. */
   claimFreeAgent(input: {
     leagueId: string;
     managerId: string;
@@ -175,6 +182,7 @@ export interface FaGrantStore {
     playerDropId: string | null;
     runAt: Date;
     periodId?: string | null;
+    allowEliminated?: boolean;
   }): Promise<"granted" | "conflict">;
 }
 
