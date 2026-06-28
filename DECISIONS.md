@@ -699,6 +699,31 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   LATCH + the kickoff cutoff (`acquisitionWindowState`, `batch_cleared_at`, `claimFreeAgent`'s `T===null`
   guard, the commish `--period` pin) are a SEPARATE gate and are not touched. `/waivers` now offers the
   live-unowned pool in EVERY phase (the phase-split snapshot branch is retired). SCORING.md untouched.
+- **AMENDMENT — eliminated-team players are GATED out of adds (commissioner flag; `feat/faab-exclude-eliminated`,
+  Jun 28 2026).** This **reverses** the Theme-D "natural filtering — eliminated-team players sit in the pool,
+  worthless" note (§ playoff reinforcement above): a player whose WC national team has been **eliminated** is
+  **removed from the FAAB pool and cannot be ADDED**. **Sourcing is MANUAL** — the commissioner sets the
+  additive `fifa_team.eliminated Boolean @default(false)` flag by **raw SQL**; there is **no worker /
+  derivation / standings logic** that writes it (and the `@app/ingest` team upsert writes `name` only, so a
+  boot/daily roster sync never resets it). **ADD-SIDE ONLY:** dropping an eliminated-team player stays
+  allowed, and an already-fielded player keeps scoring (`release.ts` and `@app/lineup/validate.ts` are
+  byte-untouched — their inputs carry no team field, so the gate is structurally unreachable from them).
+  ONE **second, orthogonal** pure predicate `isAddTeamEliminated(teamEliminated: boolean | null)`
+  (`packages/faab/src/faEligibility.ts`; a no-team player ⇒ `null` ⇒ eligible) is kept **separate** from the
+  ownership `liveOwnedWhere` (roster-only) so neither rule absorbs the other, and is applied by the IO
+  adapter at **all five add sites**: the pool list (`listFaIneligiblePlayerIds` unions in eliminated-team
+  ids — removes even UNOWNED ones), the per-player re-check (`getFaTargetFacts` ANDs `!teamEliminated` into
+  `faEligible`, so `validateFaGrant` rejects with the **existing `fa-not-eligible`** — no validator change),
+  the **grant tx race belt** (`claimFreeAgent` throws `FaConflict` beside the live-unowned re-check), the
+  sealed bid (`validateBidSubmission` returns the **new `add-team-eliminated`** code; the edit path
+  re-validates the fixed add so it too rejects, **cancel runs no validator** so a bid can always be
+  withdrawn), and the **batch resolver** (`resolveFaabBatch` **voids+refunds** an eliminated-team winner in
+  its pre-loop with the **SAME terminal semantics as a kicked-off add** — no debit, no roster change, no
+  waiver-order move; a bid placed while alive, then eliminated before the batch clears, can never grant).
+  **D2 — commissioner override:** `claimFreeAgent` takes `allowEliminated` (default false); `commish:roster`
+  passes `true`, bypassing the belt for a deliberate manual add exactly as it already neutralizes the window
+  + live-unowned eligibility. Additive migration only (no backfill — the default back-fills existing rows).
+  See ARCHITECTURE §3 "Eliminated-team add gate". SCORING.md untouched.
 - **Fixed (`fix/faab-sealed-bid-latch-boundary`) — the sealed→free-agency boundary is the LATCH, not first
   kickoff.** Prompts 47/48 left bid submission gated ONLY on the period's first kickoff
   (`acquisitionCutoffAt`), so the sealed-bid phase did not actually END at batch-clear. **The MD1 strand
@@ -771,8 +796,12 @@ knocked out — which is exactly what *forces* reinforcement each round.
   release all non-advancers' rosters → advancers **trim 15 → ≈9 (7+2)** by the **trim deadline =
   first playoff pre-dawn batch** → reset budgets ($100); the rolling waiver order carries forward
   (eliminated managers removed). All released players hit
-  **waivers** for that first batch. (Players from WC teams already eliminated in the group stage
-  are in the pool but worthless — natural filtering; managers trim them first.)
+  **waivers** for that first batch. (~~Players from WC teams already eliminated in the group stage
+  are in the pool but worthless — natural filtering; managers trim them first.~~ **REVERSED Jun 28 2026
+  → the eliminated-team ADD GATE:** a player whose WC team is eliminated is **removed from the FAAB pool
+  and cannot be added** — see *AMENDMENT — eliminated-team players are GATED out of adds* in §D below.
+  "Natural filtering" let an eliminated-team player be acquired and field a 0-point slot; the gate
+  prevents the acquisition. DROPS stay allowed; an already-fielded player keeps scoring.)
 - **Between every knockout round:** a **reinforcement window** opens when the round's scoring
   closes (cut processed, loser's ~9 players freed) and runs to the next round's first relevant
   kickoff. The daily batch + free agency operate normally inside it; WC rest days leave **≥1 batch

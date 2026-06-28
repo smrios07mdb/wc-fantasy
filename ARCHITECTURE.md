@@ -289,6 +289,21 @@ only the cadence and the acquisition cutoff moved.
   snapshot table, no new schema (history-derived) + the existing active-ownership unique. **NOT touched:**
   the sealed→free-agency WINDOW phase (`acquisitionWindowState` / `batch_cleared_at` latch / kickoff
   cutoff / the commish `--period` pin) is a SEPARATE gate. The 1-cycle waiver hold was removed earlier.
+- **Eliminated-team add gate (`feat/faab-exclude-eliminated`, Jun 28 2026; reverses the Theme-D "natural
+  filtering" note).** A SECOND, ORTHOGONAL eligibility dimension to live-unowned: a player whose WC team is
+  **eliminated** (the commissioner-set, raw-SQL-only additive `fifa_team.eliminated`) **cannot be ADDED**.
+  One pure predicate `isAddTeamEliminated(teamEliminated)` (co-located in `faEligibility.ts`, kept SEPARATE
+  from `liveOwnedWhere` so neither absorbs the other; a no-team player ⇒ eligible) is applied by the IO
+  adapter at all five add sites — the pool (`listFaIneligiblePlayerIds` unions in eliminated ids), the
+  per-player re-check (`getFaTargetFacts` folds `!teamEliminated` into `faEligible` ⇒ existing
+  `fa-not-eligible`), the **grant tx race belt** (`claimFreeAgent` → `FaConflict`), the sealed bid
+  (`validateBidSubmission` ⇒ new `add-team-eliminated`; edit re-validates, cancel doesn't), and the **batch
+  resolver** — **`resolve.ts` is now INTENTIONALLY touched**: `resolveFaabBatch` **voids+refunds** an
+  eliminated-team winner in its pre-loop split with the SAME terminal semantics as a kicked-off add (no
+  debit / no roster change / no waiver-order move), so a bid placed while the team was alive can never grant
+  after elimination. **ADD-SIDE ONLY:** the drop path (`release.ts`) + `@app/lineup` are byte-untouched.
+  **D2:** `claimFreeAgent` takes `allowEliminated` (default false); `commish:roster` passes `true` to repair
+  a deliberate manual add. Purity intact (the predicate is pure; the `fifa_team` read is in the adapter).
 - **Schema.** `period.waiver_batch_at` + `period.batch_cleared_at` (migration
   `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS). The FA grant needs
   **no new schema** (history-derived eligibility + the existing active-ownership unique).
