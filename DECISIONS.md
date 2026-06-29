@@ -621,6 +621,17 @@ late-correction freeze above) gates **commissioner-only restatement** and waits 
 decoupled on purpose: dropping a played player after close is safe because his **locked** lineup slot
 stays (scoring reads the slot); only **unlocked** slots release. Infra: ARCHITECTURE.md §22.
 
+#### ⚠️ AMENDMENT (feat/tick-status-advance — P1a: dual-writer status-advance removes the status-open SPOF)
+
+**Problem.** The status-advance above runs on ONE writer — the hourly `wc-fantasy-period-close` cron — so a cron stall is a single point of failure for the `pending → open` mount (the knockout FA-window). This is worse than a delay: if the cron is down across a tight knockout round's whole open→complete span, that round's `open` is **skipped permanently**. On recovery `selectPeriodStatusTransitions` sweeps the now-completed round straight into `toClose` (`pending → closed`; the close `updateMany` WHERE is `status != "closed"`), so `open` is never emitted and the round's FA window is lost. (The cron has already stalled once — the MD3 freeze miss, 2026-06-28.)
+
+**Decision — add a SECOND writer on the resident worker tick (additive; the cron is UNCHANGED).** The resident 60s scheduler tick now re-runs the **same UNCHANGED pure `selectPeriodStatusTransitions`** over its own unfiltered periods+fixtures read and applies the result through the **same guarded `updateMany`** shape (`apps/worker/src/period/{store,prismaStore,memoryStore,dispatch}.ts`, wired LAST in `scheduler.ts`'s tick). Because each write WHERE-matches the expected prior status, cron + tick running near-simultaneously is a clean idempotent no-op for whichever writer loses the race — the `dispatchFaabBatches` `batch_cleared_at`-latch precedent. Steady state emits empty arrays and skips the transaction. The two writers are EQUIVALENT (same selector, same guard): the tick removes the cron's single-point-of-failure on status-open without changing any outcome.
+
+**Out of scope / deliberate non-fixes.**
+- **Freeze stays cron-only.** Freeze's plain `period.update` relies on the `frozenAt: null` *query filter*, not a WHERE-guard, so it is NOT safe to dual-write and is left on the cron. (A late freeze is self-healing anyway — it only widens the auto-restatement window; it never locks a wrong value.)
+- **The anomaly path is NOT bypassed.** A stuck-`open` anomalous wave blocks the next wave's open INSIDE the pure selector regardless of caller (`periodStatus.ts:85-96` — `current` resolves to the still-`open` anomalous wave, which is `open` not `pending` → empty `toOpen`), so the second writer behaves identically. Anomaly detection is tracked separately (BACKLOG).
+- **No DB heartbeat.** A persisted last-run/heartbeat column for cron-stall detection was REJECTED as migration-class and made unnecessary by this redundancy. Infra: ARCHITECTURE.md §22; BACKLOG → P1a (closed) + P2 (open-before-seed readiness guard, deferred).
+
 ### D. FAAB & Waivers  ✅ LOCKED (this thread)
 Tiebreak principle (previously locked) **confirmed and sharpened**; budget, processing cadence,
 free-agency rules, and the load-bearing **playoff reinforcement** mechanism now fully defined.

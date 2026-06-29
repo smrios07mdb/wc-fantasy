@@ -17,6 +17,8 @@ import { createPrismaNotifyTriggerStore } from "./notify/prismaStore";
 import type { NotifyTriggerStore } from "./notify/store";
 import { createPrismaFaabCadenceStore } from "./faab/prismaStore";
 import type { FaabCadenceStore } from "./faab/store";
+import { createPrismaPeriodStatusStore } from "./period/prismaStore";
+import type { PeriodStatusStore } from "./period/store";
 import { config } from "./config";
 
 export const feed: FeedClient = createBalldontlieClient({
@@ -39,5 +41,11 @@ export const draftStore: DraftStore = createPrismaDraftStore(prisma);
 // the trigger runs in the scheduler tick.
 export const faabBatchStore: FaabBatchStore = createPrismaFaabBatchStore(prisma);
 export const faabCadenceStore: FaabCadenceStore = createPrismaFaabCadenceStore(prisma);
+
+// Period status-lifecycle advance (P1a — the dual-writer redundancy; DECISIONS.md "dual-writer
+// status-advance"). The resident tick re-runs the same pure `selectPeriodStatusTransitions` and applies
+// it through the same guarded `updateMany` as the `wc-fantasy-period-close` cron — a SECOND writer that
+// removes the silent status-open SPOF. The cron stays the primary writer (UNCHANGED).
+export const periodStatusStore: PeriodStatusStore = createPrismaPeriodStatusStore(prisma);
 
 export { prisma };

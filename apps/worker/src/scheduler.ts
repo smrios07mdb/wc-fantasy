@@ -7,9 +7,11 @@ import {
   notifyTriggerStore,
   faabBatchStore,
   faabCadenceStore,
+  periodStatusStore,
 } from "./wiring";
 import { dispatchPlayersNotStarting, dispatchMatchStarting } from "./notify/triggers";
 import { dispatchFaabBatches } from "./faab/dispatch";
+import { dispatchPeriodStatusAdvance } from "./period/dispatch";
 import { runRecomputeSweep } from "./recompute";
 import {
   decideMatchModes,
@@ -258,6 +260,23 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
         if (r.attempts > 0) log.debug("notify.match_starting", { ...r });
       } catch (err) {
         log.error("notify.match_starting.error", { message: (err as Error).message });
+      }
+
+      // Period status-lifecycle advance (P1a — the redundant SECOND writer; DECISIONS.md "dual-writer
+      // status-advance"). Re-run the SAME pure `selectPeriodStatusTransitions` the hourly
+      // `wc-fantasy-period-close` cron runs and apply it through the SAME guarded updateMany (WHERE =
+      // expected prior status), so a near-simultaneous cron run is a clean no-op for whichever writer loses
+      // the race. This removes the silent status-open SPOF: a stalled cron no longer skips a round's
+      // `pending → open` (FA-window) mount. Runs LAST so every step above sees the same period.status it
+      // would under the cron-only world. Isolated so an advance failure never starves the tick; freeze
+      // stays cron-only (its plain update relies on the frozenAt:null query filter, not a WHERE-guard).
+      try {
+        const { toClose, toOpen } = await dispatchPeriodStatusAdvance(periodStatusStore);
+        if (toClose.length > 0 || toOpen.length > 0) {
+          log.info("period.status.advanced", { closed: toClose.length, opened: toOpen.length });
+        }
+      } catch (err) {
+        log.error("period.status.advance.error", { message: (err as Error).message });
       }
 
       // NOTE: the draft timer is NOT ticked here. A draft's per-pick clock needs a far tighter cadence
