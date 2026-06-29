@@ -70,7 +70,7 @@ Cover ONLY the code paths whose failure corrupts the live tournament (scoring, l
 **Cross-cutting invariants — mark each PASS / FAIL / INVESTIGATE with evidence**
 - **Participant invariant** — no `score_player_match` row for a non-participant, via ANY write path (live, settle, dirty-sweep, manual).
 - **Lock invariant** — locked iff `locked_at != null && <= now`; all writes through one choke point; the appeared⇒locked backstop has no gap.
-- **FAAB ledger invariant** — no double-spend; every kickoff void refunds; budget resets at the playoff boundary.
+- **FAAB ledger invariant** — no double-spend; every kickoff void refunds; budget is NOT reset at the playoff boundary (one-time tournament allowance carries forward).
 - **Unique ownership** — one player ↔ one roster per league, DB-enforced.
 - **Guillotine consistency** — live provisional "zone" (`playoffsView` / `resolveRoundCut`) equals the eventual write (`applyRoundCut`); `applyRoundCut` idempotent.
 - **`league.status` consumers** — enumerate every read (this also feeds the open derive-vs-write routing decision; list, don't resolve).

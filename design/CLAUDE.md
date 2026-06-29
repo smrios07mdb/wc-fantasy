@@ -30,7 +30,7 @@ design work is making these instantly legible. Guiding constraint translated for
 - **Guillotine playoffs:** lowest scorer eliminated each knockout round on a **reduced roster**;
   survivors reinforce via FAAB. Per-round cut count ≈2 early, tapering to 1. **Playoff field size
   is flexible (likely 8 or 10), fixed only at the group→playoff transition.**
-- **FAAB blind-bid waivers:** $100 budget, **resets to fresh $100 at playoff transition**. Bids are
+- **FAAB blind-bid waivers:** $100 budget, **one-time for the entire tournament — never reset at the playoff transition** (group-stage spend carries forward). Bids are
   **sealed** (you see only your own pending). Batch results history. **Rolling waiver order.**
   **Void + refund** if you bid on a player whose match already kicked off. Free-agency fallthrough.
 - **Acquisition cutoff:** can't pick up a player once *his* match kicks off.

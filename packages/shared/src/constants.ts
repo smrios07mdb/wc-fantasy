@@ -92,7 +92,8 @@ export function rosterCapForPlayoffPhase(playoffPhaseActive: boolean): number {
  * DEFAULT_RATING_SOURCE_PRIORITY (global rules), these are NOT global.
  */
 export const LEAGUE_SEED_DEFAULTS = {
-  /** Starting FAAB budget; full reset to a fresh $100 at the group->playoff transition. */
+  /** Starting FAAB budget: one-time $100 allowance for the ENTIRE tournament — NOT reset at the
+   * group→playoff transition; group-stage spend carries into the playoffs. */
   faabBudget: 100,
   /** Daily pre-dawn blind-bid batch clock, league-local, must precede the day's first kickoff. */
   faabBatchLocalTime: "06:00",
