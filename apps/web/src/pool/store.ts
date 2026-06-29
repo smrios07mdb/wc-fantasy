@@ -10,12 +10,21 @@
  */
 import type { MatchStatus, PeriodKind, PoolPrediction } from "@app/shared";
 
-/** The match facts a submission needs — lifecycle status, the RESOLVED phase, and kickoff (the lock). */
+/**
+ * The match facts a submission needs — lifecycle status, the RESOLVED phase, kickoff (the lock), and the two
+ * sides' names so the @app/pool guard can reject a pick on an UNRESOLVED knockout fixture (SEC-P4). Mirrors
+ * the engine's `PoolPickFacts` (this port re-declares the shape so the IO layer keeps no @app/pool type
+ * dependency); each name is null when its team FK is unset, a `Team {id}` string while the slot is TBD.
+ */
 export interface PoolMatchFacts {
   status: MatchStatus;
   /** Resolved from `fifa_match.periodId → period.kind`; null when the period is unseeded. */
   periodKind: PeriodKind | null;
   kickoffAt: Date;
+  /** Home side name (null FK → null; `Team {id}` while the bracket slot is undecided). */
+  homeTeamName: string | null;
+  /** Away side name (null FK → null; `Team {id}` while the bracket slot is undecided). */
+  awayTeamName: string | null;
 }
 
 /** A persisted / echoed pool pick. */

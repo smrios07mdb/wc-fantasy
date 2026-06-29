@@ -17,6 +17,7 @@
 import {
   buildPoolLeaderboard,
   isPickLocked,
+  isTeamNameResolved,
   weightForPeriod,
   type LeaderboardMatch,
   type PoolPick,
@@ -62,26 +63,23 @@ export function isFixtureLocked(fixture: PoolFixture, now: Date): boolean {
 
 /**
  * A knockout slot is an UNRESOLVED placeholder when the feed has not yet filled in the real advancer. The
- * feed names placeholders `Team {balldontlie_team_id}` (e.g. "Team 273"); resolved sides carry a real
- * nation name ("Brazil"). Detection is by NAME — `fifa_team.country` AND `.abbreviation` are NULL for
- * EVERY team (real and placeholder) in the live DB, so neither flag/code field can be used (DECISIONS →
- * Pool). Anchored `^Team \d+$` (trimmed): correct whether the feed later re-points the fixture to a real
- * team UUID or renames the row in place.
+ * feed names placeholders `Team {balldontlie_team_id}` (e.g. "Team 273"); resolved sides carry a real nation
+ * name ("Brazil"). The detection predicate (`isPlaceholderTeamName`) now lives in `@app/pool` so this UI gate
+ * and the server write-time guard (`validatePickSubmission`, SEC-P4) key on EXACTLY one regex — no drift
+ * between what the UI hides and what the server rejects. Re-exported here for this module's existing callers.
  */
-export function isPlaceholderTeamName(name: string): boolean {
-  return /^Team \d+$/.test(name.trim());
-}
+export { isPlaceholderTeamName } from "@app/pool";
 
 /** A side is RESOLVED when it is present and not a `Team {id}` placeholder (type-guards to PoolTeam). */
 export function isTeamResolved(team: PoolTeam | null): team is PoolTeam {
-  return team !== null && !isPlaceholderTeamName(team.name);
+  return team !== null && isTeamNameResolved(team.name);
 }
 
 /**
  * A knockout match is PICKABLE only when BOTH sides are resolved real teams. If either side is still an
- * unresolved placeholder the match must render as TBD with NO pick controls — a manager must not pick a
- * match between unknown teams. View-only: a crafted POST is still accepted by the route, so a server-side
- * guard rejecting a pick on an undecided match is a recommended FOLLOW-UP (fairness), out of scope here.
+ * unresolved placeholder the match must render as TBD with NO pick controls — a manager must not pick a match
+ * between unknown teams. The server now enforces the SAME rule at write time (SEC-P4): the gated route
+ * rejects a crafted pick on an undecided knockout fixture via the shared `isPlaceholderTeamName` predicate.
  */
 export function isKnockoutFixturePickable(fixture: Pick<PoolFixture, "home" | "away">): boolean {
   return isTeamResolved(fixture.home) && isTeamResolved(fixture.away);

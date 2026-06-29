@@ -9,7 +9,12 @@
  * `fifa_match.round` (which carries raw feed text — non-null even for group games; see DECISIONS → Pool).
  */
 import type { MatchStatus, PeriodKind, PoolPrediction } from "@app/shared";
-import { drawNotAllowedKnockout, pickLocked, type PoolPickError } from "./errors";
+import {
+  drawNotAllowedKnockout,
+  pickLocked,
+  pickOnUndecidedMatch,
+  type PoolPickError,
+} from "./errors";
 
 export type { PoolPrediction } from "@app/shared";
 
@@ -23,6 +28,17 @@ export interface LockableMatch {
 export interface SubmittableMatch extends LockableMatch {
   /** Resolved by the IO loader from `fifa_match.periodId → period.kind`; null when the period is unseeded. */
   periodKind: PeriodKind | null;
+}
+
+/**
+ * The submission-VALIDATION input: a `SubmittableMatch` plus the two sides' names so the write-time guard can
+ * reject a pick on an UNRESOLVED knockout fixture (SEC-P4). Kept SEPARATE from `PoolMatch` (the scoring
+ * projection) so the result/leaderboard path stays byte-untouched — only the validator + its IO facts grow.
+ * A side is `null` when its team FK is unset; a real-but-undecided slot carries a `Team {id}` placeholder name.
+ */
+export interface PoolPickFacts extends SubmittableMatch {
+  homeTeamName: string | null;
+  awayTeamName: string | null;
 }
 
 /** A fixture as the pool engine reads it — a DB-free projection of `fifa_match` + its `period.kind`. */
@@ -164,16 +180,51 @@ export function isPickLocked(m: LockableMatch, now: Date): boolean {
 }
 
 /**
- * Write-time guard for a submission: reject a locked match, and reject DRAW on a knockout. When the
- * period is unseeded (`periodKind` null) DRAW is PERMITTED (permissive write; the result simply scores
- * null until the period is linked). Returns the typed error, or null when the submission is allowed.
+ * THE single source of truth for "is this a TBD bracket placeholder?": the feed names not-yet-decided
+ * knockout slots `Team {balldontlie_team_id}` (e.g. "Team 273"); resolved sides carry a real nation name
+ * ("Brazil"). Detection is by NAME because `fifa_team.country` AND `.abbreviation` are NULL for EVERY team in
+ * the live DB (DECISIONS → Pool), so neither flag/code field can be used. Lifted here from `poolView.ts` so
+ * the write-time guard (`validatePickSubmission`) and the UI gate (`isKnockoutFixturePickable`, which now
+ * consumes this) agree on EXACTLY one predicate — no drift between what the UI hides and the server rejects.
+ */
+export function isPlaceholderTeamName(name: string): boolean {
+  return /^Team \d+$/.test(name.trim());
+}
+
+/** A side is RESOLVED when it is present (FK not null) and not a `Team {id}` placeholder. */
+export function isTeamNameResolved(name: string | null): boolean {
+  return name !== null && !isPlaceholderTeamName(name);
+}
+
+/**
+ * Write-time guard for a submission: reject a locked match, reject a pick on an UNRESOLVED knockout fixture
+ * (SEC-P4 — neither side decided yet), and reject DRAW on a knockout. Returns the typed error, or null when
+ * the submission is allowed.
+ *
+ * Order is deliberate: lock (time) → undecided (the matchup doesn't exist yet, so NO prediction is valid) →
+ * DRAW (a prediction-value rule that only applies once the fixture is a real 2-way). Group (1X2) fixtures
+ * always carry both teams, so the knockout-only guards never fire for them.
+ *
+ * BOUNDARY (deliberate): both knockout guards key on `periodKind === "knockout_round"`, so an UNSEEDED
+ * fixture (`periodKind` null — period row not linked yet) no-ops BOTH and DRAW is permitted, mirroring the
+ * engine's documented permissive-when-unseeded stance (the pick simply scores null until the period links).
+ * In steady state provisioning seeds all five knockout periods, so live knockout fixtures carry
+ * `knockout_round`; the residual (an unseeded fixture with a placeholder side) is data-integrity-only — it
+ * can never affect scoring or the anti-copying reveal. Widening the undecided check to the null-period case
+ * would need a matching UI gate (which today applies only to bracket-classified fixtures) to avoid drift.
  */
 export function validatePickSubmission(
   prediction: PoolPrediction,
-  m: SubmittableMatch,
+  m: PoolPickFacts,
   now: Date,
 ): PoolPickError | null {
   if (isPickLocked(m, now)) return pickLocked();
+  if (
+    m.periodKind === "knockout_round" &&
+    !(isTeamNameResolved(m.homeTeamName) && isTeamNameResolved(m.awayTeamName))
+  ) {
+    return pickOnUndecidedMatch();
+  }
   if (prediction === "DRAW" && m.periodKind === "knockout_round") return drawNotAllowedKnockout();
   return null;
 }

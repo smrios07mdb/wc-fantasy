@@ -5,10 +5,13 @@ import {
   weightForPeriod,
   buildPoolLeaderboard,
   isPickLocked,
+  isPlaceholderTeamName,
+  isTeamNameResolved,
   validatePickSubmission,
   type PoolMatch,
   type LeaderboardMatch,
   type PoolPick,
+  type PoolPickFacts,
 } from "./pool";
 
 // ── fixtures ───────────────────────────────────────────────────────────────────
@@ -240,48 +243,97 @@ describe("isPickLocked", () => {
 
 describe("validatePickSubmission", () => {
   const open = new Date(KICKOFF.getTime() - 1);
+  // A fully-defaulted OPEN fixture with BOTH sides resolved (real nation names); override per case.
+  const facts = (over: Partial<PoolPickFacts> = {}): PoolPickFacts => ({
+    status: "scheduled",
+    kickoffAt: KICKOFF,
+    periodKind: "group_md",
+    homeTeamName: "Brazil",
+    awayTeamName: "Argentina",
+    ...over,
+  });
 
   it("rejects a pick once the match is locked", () => {
-    const err = validatePickSubmission(
-      "HOME",
-      { status: "scheduled", kickoffAt: KICKOFF, periodKind: "group_md" },
-      new Date(KICKOFF.getTime()),
-    );
+    const err = validatePickSubmission("HOME", facts(), new Date(KICKOFF.getTime()));
     expect(err?.code).toBe("pick-locked");
   });
-  it("rejects DRAW on a knockout match", () => {
-    const err = validatePickSubmission(
-      "DRAW",
-      { status: "scheduled", kickoffAt: KICKOFF, periodKind: "knockout_round" },
-      open,
-    );
+  it("rejects DRAW on a (resolved) knockout match", () => {
+    const err = validatePickSubmission("DRAW", facts({ periodKind: "knockout_round" }), open);
     expect(err?.code).toBe("draw-not-allowed-knockout");
   });
   it("allows DRAW on a group match", () => {
-    expect(
-      validatePickSubmission(
-        "DRAW",
-        { status: "scheduled", kickoffAt: KICKOFF, periodKind: "group_md" },
-        open,
-      ),
-    ).toBeNull();
+    expect(validatePickSubmission("DRAW", facts(), open)).toBeNull();
   });
   it("allows DRAW when the period is unseeded (permissive write, honest-null score)", () => {
-    expect(
-      validatePickSubmission(
-        "DRAW",
-        { status: "scheduled", kickoffAt: KICKOFF, periodKind: null },
-        open,
-      ),
-    ).toBeNull();
+    expect(validatePickSubmission("DRAW", facts({ periodKind: null }), open)).toBeNull();
   });
   it("allows a valid HOME pick on an open group match", () => {
+    expect(validatePickSubmission("HOME", facts(), open)).toBeNull();
+  });
+
+  // ── SEC-P4: reject a pick on an UNDECIDED knockout fixture (placeholder name or null FK) ──
+  it("rejects a pick on a knockout match with a placeholder HOME side", () => {
+    const err = validatePickSubmission(
+      "HOME",
+      facts({ periodKind: "knockout_round", homeTeamName: "Team 273" }),
+      open,
+    );
+    expect(err?.code).toBe("pick-on-undecided-match");
+  });
+  it("rejects a pick on a knockout match with a placeholder AWAY side", () => {
+    const err = validatePickSubmission(
+      "AWAY",
+      facts({ periodKind: "knockout_round", awayTeamName: "Team 9" }),
+      open,
+    );
+    expect(err?.code).toBe("pick-on-undecided-match");
+  });
+  it("rejects a pick on a knockout match with a null (unset FK) side", () => {
+    const err = validatePickSubmission(
+      "HOME",
+      facts({ periodKind: "knockout_round", awayTeamName: null }),
+      open,
+    );
+    expect(err?.code).toBe("pick-on-undecided-match");
+  });
+  it("undecided takes precedence over the DRAW rule (an undecided knockout rejects ANY prediction)", () => {
+    const err = validatePickSubmission(
+      "DRAW",
+      facts({ periodKind: "knockout_round", homeTeamName: "Team 1", awayTeamName: "Team 2" }),
+      open,
+    );
+    expect(err?.code).toBe("pick-on-undecided-match");
+  });
+  it("allows a HOME pick on a RESOLVED knockout match (no over-rejection)", () => {
+    expect(
+      validatePickSubmission("HOME", facts({ periodKind: "knockout_round" }), open),
+    ).toBeNull();
+  });
+  it("does NOT apply the undecided guard to a GROUP fixture (knockout-only; group always has both teams)", () => {
+    // Even with a placeholder-shaped name, a group_md fixture is never rejected by the undecided guard.
     expect(
       validatePickSubmission(
         "HOME",
-        { status: "scheduled", kickoffAt: KICKOFF, periodKind: "group_md" },
+        facts({ periodKind: "group_md", homeTeamName: "Team 5" }),
         open,
       ),
     ).toBeNull();
+  });
+});
+
+describe("isPlaceholderTeamName / isTeamNameResolved (the shared resolved-team predicate)", () => {
+  it("flags `Team {id}` placeholder names (trimmed)", () => {
+    expect(isPlaceholderTeamName("Team 273")).toBe(true);
+    expect(isPlaceholderTeamName("  Team 42  ")).toBe(true);
+  });
+  it("does not flag real nation names (only the exact `Team \\d+` shape is a placeholder)", () => {
+    expect(isPlaceholderTeamName("Brazil")).toBe(false);
+    expect(isPlaceholderTeamName("Team USA")).toBe(false);
+    expect(isPlaceholderTeamName("Team")).toBe(false);
+  });
+  it("isTeamNameResolved: a real name resolves; a placeholder or null does not", () => {
+    expect(isTeamNameResolved("Brazil")).toBe(true);
+    expect(isTeamNameResolved("Team 7")).toBe(false);
+    expect(isTeamNameResolved(null)).toBe(false);
   });
 });

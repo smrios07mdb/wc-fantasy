@@ -40,6 +40,11 @@ export function createPrismaPoolPickStore(prisma: Db): PoolPickStore {
           kickoffAt: true,
           period: { select: { kind: true, label: true } },
           isThirdPlace: true,
+          // The two sides' names feed the SEC-P4 undecided-match guard (a TBD knockout slot carries a
+          // `Team {id}` placeholder name, or a null FK). Mirrors loadPool's MATCH_SELECT; name is the only
+          // resolved-team signal (fifa_team.country/.abbreviation are NULL for all teams — DECISIONS → Pool).
+          homeTeam: { select: { name: true } },
+          awayTeam: { select: { name: true } },
         },
       });
       if (!m) return null;
@@ -47,7 +52,13 @@ export function createPrismaPoolPickStore(prisma: Db): PoolPickStore {
       // route through resolvePoolPeriod so the 3rd-place play-off resolves to knockout_round — making
       // validatePickSubmission REJECT a DRAW on it (a 2-way fixture), exactly like every other knockout pick.
       const { periodKind } = resolvePoolPeriod(m);
-      return { status: m.status, periodKind, kickoffAt: m.kickoffAt };
+      return {
+        status: m.status,
+        periodKind,
+        kickoffAt: m.kickoffAt,
+        homeTeamName: m.homeTeam?.name ?? null,
+        awayTeamName: m.awayTeam?.name ?? null,
+      };
     },
 
     async upsertPick(input: UpsertPickInput): Promise<PersistedPoolPick> {

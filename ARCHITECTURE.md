@@ -721,9 +721,14 @@ Minimal, for a private league of friends.
     would silently empty that modal — caught in adversarial review). A knockout match is
     **pickable only when BOTH sides are resolved real teams**; undecided slots — feed placeholders named
     `Team {balldontlie_team_id}`, detected by `/^Team \d+$/` since `fifa_team.country`/`.abbreviation` are
-    NULL for ALL teams — render as **TBD with NO pick buttons** (pure predicates in `poolView.ts`:
-    `isPlaceholderTeamName` / `isTeamResolved` / `isKnockoutFixturePickable`). A server-side guard rejecting
-    a pick on an undecided match is a recommended follow-up (view-only here); the unlinked 3rd-place match is
+    NULL for ALL teams — render as **TBD with NO pick buttons** (`poolView.ts`: `isTeamResolved` /
+    `isKnockoutFixturePickable`, both now keying on the `isPlaceholderTeamName` predicate **lifted into
+    `@app/pool`**). **SEC-P4 (DONE, 2026-06-28): the server enforces the SAME rule at write time** — `POST
+    /api/pool/pick` → `validatePickSubmission` rejects a pick on an undecided knockout fixture (placeholder
+    name or null team FK) with `pick-on-undecided-match` → HTTP 409, via that one shared predicate (the write
+    path's `getMatchFacts` now selects `homeTeam.name`/`awayTeam.name`; the 3rd-place play-off is covered via
+    `resolvePoolPeriod`'s `knockout_round` synthesis). The guard is knockout-only — group + unseeded
+    (`periodKind` null) fixtures no-op it (see DECISIONS → 2026-06-28 SEC-P4). The unlinked 3rd-place match is
     a separate thread, not rendered) and **Leaderboard** (all league members, ranked by pool
     points). It is
     **form-driven CRUD**: every pick is a `POST /api/pool/pick` round-trip (the Prompt-40 gated route)

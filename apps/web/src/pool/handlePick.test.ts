@@ -34,13 +34,48 @@ function deps(
   return { resolveManager: async () => outcome, store, now };
 }
 
-/** A store seeded with one manager (m1 in lg1) and three submittable/edge matches. */
+/** Both sides resolved to real nation names — the default for every fixture that isn't testing the SEC-P4 guard. */
+const RESOLVED = { homeTeamName: "Brazil", awayTeamName: "Argentina" } as const;
+
+/** A store seeded with one manager (m1 in lg1) and the submittable/edge matches (incl. SEC-P4 undecided ones). */
 function submitStore(): MemoryPoolPickStore {
-  return new MemoryPoolPickStore()
-    .setManagerLeague("m1", "lg1")
-    .setMatch("g-open", { status: "scheduled", periodKind: "group_md", kickoffAt: future })
-    .setMatch("g-locked", { status: "scheduled", periodKind: "group_md", kickoffAt: past })
-    .setMatch("k-open", { status: "scheduled", periodKind: "knockout_round", kickoffAt: future });
+  return (
+    new MemoryPoolPickStore()
+      .setManagerLeague("m1", "lg1")
+      .setMatch("g-open", {
+        status: "scheduled",
+        periodKind: "group_md",
+        kickoffAt: future,
+        ...RESOLVED,
+      })
+      .setMatch("g-locked", {
+        status: "scheduled",
+        periodKind: "group_md",
+        kickoffAt: past,
+        ...RESOLVED,
+      })
+      .setMatch("k-open", {
+        status: "scheduled",
+        periodKind: "knockout_round",
+        kickoffAt: future,
+        ...RESOLVED,
+      })
+      // SEC-P4 fixtures: an undecided knockout with a `Team {id}` placeholder side, and one with a null FK.
+      .setMatch("k-undecided", {
+        status: "scheduled",
+        periodKind: "knockout_round",
+        kickoffAt: future,
+        homeTeamName: "Team 273",
+        awayTeamName: "Brazil",
+      })
+      .setMatch("k-null", {
+        status: "scheduled",
+        periodKind: "knockout_round",
+        kickoffAt: future,
+        homeTeamName: "Argentina",
+        awayTeamName: null,
+      })
+  );
 }
 
 const submit = (over: Partial<SubmitPickBody> = {}): SubmitPickBody => ({
@@ -102,18 +137,80 @@ describe("handleSubmitPick", () => {
     expect(res.body).toMatchObject({ error: "draw-not-allowed-knockout" });
   });
 
+  it("409 pick-on-undecided-match when a knockout side is a placeholder team (SEC-P4)", async () => {
+    const res = await handleSubmitPick(
+      deps(ok("m1"), submitStore()),
+      submit({ matchId: "k-undecided", prediction: "HOME" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: "pick-on-undecided-match" });
+  });
+
+  it("409 pick-on-undecided-match when a knockout side is a null FK (SEC-P4)", async () => {
+    const res = await handleSubmitPick(
+      deps(ok("m1"), submitStore()),
+      submit({ matchId: "k-null", prediction: "AWAY" }),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: "pick-on-undecided-match" });
+  });
+
+  it("200 on a RESOLVED knockout fixture — the SEC-P4 guard does not over-reject", async () => {
+    const res = await handleSubmitPick(
+      deps(ok("m1"), submitStore()),
+      submit({ matchId: "k-open", prediction: "HOME" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, pick: { matchId: "k-open", prediction: "HOME" } });
+  });
+
   it("409 DRAW on the 3rd-place play-off — getMatchFacts resolves is_third_place → knockout_round (T-3RD)", async () => {
     // The production getMatchFacts (prismaStore) resolves the period-less 3rd-place match to knockout_round
     // via resolvePoolPeriod, so the handler rejects a DRAW on it exactly like any other knockout 2-way.
-    const store = new MemoryPoolPickStore()
-      .setManagerLeague("m1", "lg1")
-      .setMatch("tp", { status: "scheduled", periodKind: "knockout_round", kickoffAt: future });
+    // Seeded with RESOLVED teams so the DRAW rule (not the SEC-P4 undecided guard) is what fires.
+    const store = new MemoryPoolPickStore().setManagerLeague("m1", "lg1").setMatch("tp", {
+      status: "scheduled",
+      periodKind: "knockout_round",
+      kickoffAt: future,
+      ...RESOLVED,
+    });
     const res = await handleSubmitPick(
       deps(ok("m1"), store),
       submit({ matchId: "tp", prediction: "DRAW" }),
     );
     expect(res.status).toBe(409);
     expect(res.body).toMatchObject({ error: "draw-not-allowed-knockout" });
+  });
+
+  it("409 pick-on-undecided-match on the 3rd-place play-off while TBD; 200 once both teams resolve (SEC-P4 + T-3RD)", async () => {
+    // The 3rd-place match is a synthesized knockout_round (T-3RD). Until the semis are played both sides are
+    // `Team {id}` placeholders → the undecided guard rejects ANY pick; once resolved, a HOME pick succeeds.
+    const tbd = new MemoryPoolPickStore().setManagerLeague("m1", "lg1").setMatch("tp", {
+      status: "scheduled",
+      periodKind: "knockout_round",
+      kickoffAt: future,
+      homeTeamName: "Team 11",
+      awayTeamName: "Team 12",
+    });
+    const rejected = await handleSubmitPick(
+      deps(ok("m1"), tbd),
+      submit({ matchId: "tp", prediction: "HOME" }),
+    );
+    expect(rejected.status).toBe(409);
+    expect(rejected.body).toMatchObject({ error: "pick-on-undecided-match" });
+
+    const resolved = new MemoryPoolPickStore().setManagerLeague("m1", "lg1").setMatch("tp", {
+      status: "scheduled",
+      periodKind: "knockout_round",
+      kickoffAt: future,
+      homeTeamName: "Croatia",
+      awayTeamName: "Morocco",
+    });
+    const accepted = await handleSubmitPick(
+      deps(ok("m1"), resolved),
+      submit({ matchId: "tp", prediction: "HOME" }),
+    );
+    expect(accepted.status).toBe(200);
   });
 
   it("200 creates then UPSERTS the same (manager, match) pick", async () => {
@@ -151,8 +248,18 @@ describe("handleReadPicks (anti-copying)", () => {
     return new MemoryPoolPickStore()
       .setManagerLeague("m1", "lg1")
       .setManagerLeague("m2", "lg1")
-      .setMatch("g-done", { status: "completed", periodKind: "group_md", kickoffAt: past })
-      .setMatch("g-future", { status: "scheduled", periodKind: "group_md", kickoffAt: future })
+      .setMatch("g-done", {
+        status: "completed",
+        periodKind: "group_md",
+        kickoffAt: past,
+        ...RESOLVED,
+      })
+      .setMatch("g-future", {
+        status: "scheduled",
+        periodKind: "group_md",
+        kickoffAt: future,
+        ...RESOLVED,
+      })
       .seedPick({ leagueId: "lg1", managerId: "m1", matchId: "g-done", prediction: "DRAW" })
       .seedPick({ leagueId: "lg1", managerId: "m1", matchId: "g-future", prediction: "HOME" })
       .seedPick({ leagueId: "lg1", managerId: "m2", matchId: "g-done", prediction: "AWAY" })

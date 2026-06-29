@@ -14,13 +14,15 @@ const future = new Date("2026-07-18T18:00:00.000Z");
 const now = new Date("2026-07-01T00:00:00.000Z");
 // The exact DB shape of the 3rd-place match: flagged, and ALWAYS period-less (period_id NULL).
 const thirdPlaceSource = { isThirdPlace: true, period: null } as const;
+// Both sides resolved to real nation names — so the DRAW/lock rules (not the SEC-P4 undecided guard) fire.
+const RESOLVED = { homeTeamName: "Croatia", awayTeamName: "Morocco" } as const;
 
 describe("T-3RD write path (resolvePoolPeriod → validatePickSubmission, as prismaStore.getMatchFacts does)", () => {
   it("rejects a DRAW on the 3rd-place play-off (a 2-way knockout, not a 1X2 group game)", () => {
     const { periodKind } = resolvePoolPeriod(thirdPlaceSource);
     const err = validatePickSubmission(
       "DRAW",
-      { status: "scheduled", periodKind, kickoffAt: future },
+      { status: "scheduled", periodKind, kickoffAt: future, ...RESOLVED },
       now,
     );
     expect(err?.code).toBe("draw-not-allowed-knockout");
@@ -29,10 +31,18 @@ describe("T-3RD write path (resolvePoolPeriod → validatePickSubmission, as pri
   it("allows a HOME/AWAY pick on the 3rd-place play-off", () => {
     const { periodKind } = resolvePoolPeriod(thirdPlaceSource);
     expect(
-      validatePickSubmission("HOME", { status: "scheduled", periodKind, kickoffAt: future }, now),
+      validatePickSubmission(
+        "HOME",
+        { status: "scheduled", periodKind, kickoffAt: future, ...RESOLVED },
+        now,
+      ),
     ).toBeNull();
     expect(
-      validatePickSubmission("AWAY", { status: "scheduled", periodKind, kickoffAt: future }, now),
+      validatePickSubmission(
+        "AWAY",
+        { status: "scheduled", periodKind, kickoffAt: future, ...RESOLVED },
+        now,
+      ),
     ).toBeNull();
   });
 
@@ -41,7 +51,35 @@ describe("T-3RD write path (resolvePoolPeriod → validatePickSubmission, as pri
     expect(
       validatePickSubmission(
         "DRAW",
-        { status: "scheduled", periodKind: null, kickoffAt: future },
+        { status: "scheduled", periodKind: null, kickoffAt: future, ...RESOLVED },
+        now,
+      ),
+    ).toBeNull();
+  });
+
+  // ── SEC-P4: the synthesized knockout 3rd-place fixture is unpickable while its teams are TBD ──
+  it("rejects ANY pick on the 3rd-place play-off while both sides are `Team {id}` placeholders", () => {
+    const { periodKind } = resolvePoolPeriod(thirdPlaceSource); // → "knockout_round" (T-3RD synthesis)
+    const err = validatePickSubmission(
+      "HOME",
+      {
+        status: "scheduled",
+        periodKind,
+        kickoffAt: future,
+        homeTeamName: "Team 11",
+        awayTeamName: "Team 12",
+      },
+      now,
+    );
+    expect(err?.code).toBe("pick-on-undecided-match");
+  });
+
+  it("accepts a pick on the 3rd-place play-off once BOTH semis resolve its two sides", () => {
+    const { periodKind } = resolvePoolPeriod(thirdPlaceSource);
+    expect(
+      validatePickSubmission(
+        "HOME",
+        { status: "scheduled", periodKind, kickoffAt: future, ...RESOLVED },
         now,
       ),
     ).toBeNull();
