@@ -155,6 +155,20 @@ services:
       - fromGroup: wc-fantasy-shared
       - key: DATABASE_URL # pooled (:6543) — runtime
         sync: false
+      # A-lite cron-resilience DETECTION (DECISIONS.md "A-lite cron detection"): two best-effort,
+      # env-gated, fire-and-forget observational pings from job:period-close. Both are PURELY
+      # observational — an UNSET value = the signal is silently off and the job is byte-identical, so
+      # they stay sync:false and Sergio sets the real monitor URLs per-service in the Render dashboard.
+      #   • PERIOD_CLOSE_HEARTBEAT_URL — liveness dead-man's-switch ("it ran"); the job appends `/fail`
+      #     on the crash path. Point at a Healthchecks.io-style check (~hourly period + ~15min grace).
+      #     If a native Render "notify on cron failure" toggle is used instead, leave this UNSET.
+      #   • PERIOD_CLOSE_ATTENTION_URL — pinged ONLY when a run reports anomalies (a postponed/abandoned
+      #     fixture that may block the next round's status-open → run the runbook pre-flight). Point at a
+      #     check/webhook that alerts on receipt, with dedup so a multi-day postponement doesn't spam.
+      - key: PERIOD_CLOSE_HEARTBEAT_URL
+        sync: false
+      - key: PERIOD_CLOSE_ATTENTION_URL
+        sync: false
 
   # ── Cron: group-standings refresh (T18 — game-detail Standings tab) ──────────────────────────────
   # Daily re-pull of the WC `group_standings` table so the Standings tab reflects the latest positions /

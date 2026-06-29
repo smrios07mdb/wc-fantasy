@@ -299,6 +299,31 @@ mount once the batch clears. Confirm either way:
 > state (cron healthy, no anomaly) needs **no action** — the round opens automatically. See BACKLOG →
 > FAAB-FA-P2 (resolved not-a-bug) and DECISIONS → "`period.status` DOES transition".
 
+### External detection signals (A-lite — set up once, then passive)
+
+> **Operator setup (Sergio, Render dashboard) — one-time.** Code ships the signals **INERT**: they do
+> nothing until you set the env values AND configure the external monitor. They are purely
+> observational and can never affect the job (an unset value = the signal is silently off), so there is
+> no rush and no risk — but configuring them turns the two gaps above from **silent misses** into
+> **alarms**.
+
+`job:period-close` emits two env-gated, fire-and-forget pings (`apps/worker/src/jobs/heartbeat.ts`):
+
+- **`PERIOD_CLOSE_HEARTBEAT_URL` — liveness (dead-man's-switch).** Pinged on every successful run;
+  `…/fail` is pinged on a crash. Point it at a **Healthchecks.io-style check** (~hourly period +
+  ~15 min grace) that alerts on a **missed** ping → catches a stalled/crashed cron, including the
+  freeze miss the dual-writer does NOT cover. `/fail` gives an immediate crash alert instead of waiting
+  out the grace window. _(If you instead enable a native Render "notify on cron failure" toggle for
+  liveness, leave this UNSET — the code no-ops it.)_
+- **`PERIOD_CLOSE_ATTENTION_URL` — anomaly attention.** Pinged ONLY when a run reports `anomalies > 0`
+  (a postponed/abandoned fixture — the **step-1 gap above**, which a healthy cron cannot self-report).
+  Point it at a check/webhook that **alerts on receipt** (Slack/email/SMS), with **dedup** so a
+  multi-day postponed match doesn't spam hourly. On an alert → run this pre-flight (step 1).
+
+Both keys are declared `sync:false` on the `wc-fantasy-period-close` block in `render.yaml`; set the
+real URLs per-service in the dashboard. See BACKLOG → A-lite + DECISIONS → "A-lite: cron-resilience
+DETECTION".
+
 ---
 
 ## Appendix

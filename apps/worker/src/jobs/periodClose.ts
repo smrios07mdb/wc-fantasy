@@ -28,6 +28,24 @@ import {
 } from "@app/recompute";
 import { prisma } from "../wiring";
 import { log } from "../logger";
+import {
+  reportPeriodCloseSuccess,
+  reportPeriodCloseFailure,
+  type PeriodCloseSignalUrls,
+} from "./heartbeat";
+
+/**
+ * The A-lite cron-resilience monitor URLs (DECISIONS.md "A-lite cron detection"), read from env at
+ * call time. Unset = that signal is silently off, so the job stays byte-identical in local / test /
+ * pre-monitor environments. The pings themselves are PURELY observational and can never affect this
+ * job's freeze/close work, its logs-of-record, or its 0/1 exit code (see ./heartbeat).
+ */
+function periodCloseSignalUrls(): PeriodCloseSignalUrls {
+  return {
+    heartbeatUrl: process.env.PERIOD_CLOSE_HEARTBEAT_URL,
+    attentionUrl: process.env.PERIOD_CLOSE_ATTENTION_URL,
+  };
+}
 
 async function main(): Promise<void> {
   const now = new Date();
@@ -149,11 +167,25 @@ async function main(): Promise<void> {
     closed: toClose.length,
     opened: toOpen.length,
   });
+
+  // Best-effort observational signals (A-lite cron detection) — fired AFTER the work + the done log,
+  // and behaviorally inert: `reportPeriodCloseSuccess` swallows every failure and never throws, so it
+  // cannot perturb the freeze/close result above nor the success exit below. Liveness ("it ran") +
+  // attention (only when anomalies may be blocking the next round's status-open). Awaited so the ping
+  // is actually delivered before the process exits; the ~5s hard timeout bounds the wait.
+  await reportPeriodCloseSuccess(periodCloseSignalUrls(), {
+    anomalies: anomalyIds.length,
+    leagueId: league.id,
+  });
 }
 
 main()
   .then(() => process.exit(0))
-  .catch((err) => {
+  .catch(async (err) => {
     log.error("job.periodClose.error", { message: (err as Error).message });
+    // Best-effort crash signal (Healthchecks.io `/fail`) for immediate alerting — fired AFTER the
+    // error log-of-record and BEFORE the exit code, and it never rethrows. The non-zero exit is
+    // unchanged whether or not the ping reaches the monitor.
+    await reportPeriodCloseFailure(periodCloseSignalUrls());
     process.exit(1);
   });
