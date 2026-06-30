@@ -195,3 +195,36 @@ describe("vsfield re-skin — colour + shape invariants (BRAND.md §1, ARCHITECT
     expect(page).toContain('export const dynamic = "force-dynamic"');
   });
 });
+
+describe("vsfield — match cards link to the match detail page (mirrors dashboard MatchRow)", () => {
+  it("renders each fixture card as an <a> to /games/<matchId>, not a non-interactive div", () => {
+    expect(components).toContain(
+      '<a className="v2-match" key={m.matchId} href={`/games/${m.matchId}`}>',
+    );
+    expect(components).not.toContain('<div className="v2-match" key={m.matchId}>');
+    // neutralised anchor styling so the card reads identically to its former div, per the
+    // dashboard .db-match-row precedent (apps/web/app/_dashboard/dashboard.css)
+    expect(css).toMatch(/^\.v2-match\s*\{[^}]*text-decoration:\s*none;/m);
+  });
+});
+
+describe("vsfield — eliminated managers hidden from the LIVE field only (CONTRACT-P3 data-existence)", () => {
+  it("reads playoff_entry status='eliminated' (never league.status) gated on the league, not a phase flag", () => {
+    expect(loader).toContain("prisma.playoffEntry.findMany");
+    // pins the actual where-clause shape: filtered by leagueId + status, never a league.status read
+    expect(loader).toContain('where: { leagueId, status: "eliminated" }');
+  });
+
+  it("filters + re-ranks the live `field` only when isLivePeriod — buildVsField itself stays untouched", () => {
+    expect(loader).toContain("export function filterEliminatedFromField(");
+    expect(loader).toContain("if (!isLivePeriod || eliminatedManagerIds.size === 0) return field;");
+    expect(loader).toContain("rank: i + 1");
+    // composed as a loader-side sibling of the engine output, like `benches` — buildVsField.ts is
+    // called once with the FULL manager list (its output is filtered after), so the Season tab
+    // (view.season) is unaffected
+    expect(loader).toContain("const view = buildVsField(input);");
+    expect(loader).toContain(
+      "const field = filterEliminatedFromField(view.field, eliminatedManagerIds, isLivePeriod);",
+    );
+  });
+});

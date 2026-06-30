@@ -135,6 +135,12 @@
   text-align: left;
   flex: none;
   color: var(--text-primary);
+  /* Links to the match detail page (/games/[matchId]): neutralise default anchor styling so the
+     card reads identically to its former non-interactive div, plus a hover affordance. */
+  text-decoration: none;
+}
+.v2-match:hover {
+  background: var(--surface-3);
 }
 .v2-match-clock {
   display: inline-flex;

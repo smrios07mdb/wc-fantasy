@@ -18,7 +18,7 @@ import {
   type PeriodForSelect,
 } from "@/src/period/selectablePeriods";
 import type { BenchPlayerView, ManagerBench, VsFieldViewWithBenches } from "@/src/vsfield/benches";
-import type { StarterState } from "@app/vsfield";
+import type { FieldEntry, StarterState } from "@app/vsfield";
 
 /** Max wall-clock window to consider a period still live after its last scheduled kickoff. */
 const MATCH_DURATION_MS = 120 * 60 * 1000; // covers regulation + extra time
@@ -30,6 +30,26 @@ import {
   type PeriodMatchInput,
   type PeriodScores,
 } from "@app/vsfield";
+
+/**
+ * Hide eliminated managers from the LIVE field only (CONTRACT-P3 data-existence contract: playoff
+ * participation reads from `playoff_entry`, never `league.status`). A prior/historical period view
+ * (`isLivePeriod = false`) keeps everyone, matching the matchday selector's "fully revealed because the
+ * matchday is over" convention; the Season tab (`view.season`) is untouched in all cases — it's the
+ * all-season record, not a live-field concept. PURE — extracted + exported (same convention as
+ * `playerPointsLookup`) so the filter/re-rank is unit-tested without a live DB. `buildVsField` itself
+ * stays untouched: this filters its OUTPUT, composed loader-side like `benches`.
+ */
+export function filterEliminatedFromField(
+  field: FieldEntry[],
+  eliminatedManagerIds: ReadonlySet<string>,
+  isLivePeriod: boolean,
+): FieldEntry[] {
+  if (!isLivePeriod || eliminatedManagerIds.size === 0) return field;
+  return field
+    .filter((e) => !eliminatedManagerIds.has(e.managerId))
+    .map((e, i) => ({ ...e, rank: i + 1 }));
+}
 
 /**
  * Build a (playerId → points) lookup from the period's `score_player_match` rows, defaulting a player
@@ -130,7 +150,7 @@ export async function loadVsField(
   const leagueId = viewer.leagueId;
   const now = new Date();
 
-  const [managerRows, periodRows, standingRows] = await Promise.all([
+  const [managerRows, periodRows, standingRows, eliminatedEntryRows] = await Promise.all([
     // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
     // no current-period score_manager_period row (and no XI) MUST still appear, so buildVsField pads
     // him to 0 points + empty XI and he is a free win for everyone strictly above (Prompt 04 line 42 /
@@ -163,6 +183,13 @@ export async function loadVsField(
         totalPoints: true,
         seed: true,
       },
+    }),
+    // CONTRACT-P3 data-existence contract: playoff participation is read from playoff_entry, NEVER
+    // league.status. Group-phase leagues have zero rows here (query is a no-op then), so the live-field
+    // hide below is automatically playoff-phase-scoped by data existence, not a phase flag.
+    prisma.playoffEntry.findMany({
+      where: { leagueId, status: "eliminated" },
+      select: { managerId: true },
     }),
   ]);
 
@@ -367,5 +394,9 @@ export async function loadVsField(
     matchStateByTeam,
   );
 
-  return { ...buildVsField(input), benches, selectablePeriods, isLivePeriod };
+  const view = buildVsField(input);
+  const eliminatedManagerIds = new Set(eliminatedEntryRows.map((e) => e.managerId));
+  const field = filterEliminatedFromField(view.field, eliminatedManagerIds, isLivePeriod);
+
+  return { ...view, field, benches, selectablePeriods, isLivePeriod };
 }
