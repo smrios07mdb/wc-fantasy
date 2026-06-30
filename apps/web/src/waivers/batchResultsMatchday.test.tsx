@@ -64,6 +64,7 @@ function view(over: Partial<WaiversView> = {}): WaiversView {
     faabBudget: 100,
     roster: [],
     lockedPlayerIds: [],
+    watchedPlayerIds: [],
     freeAgents: [
       player("mbappe", {
         name: "Kylian Mbappé",

@@ -38,4 +38,11 @@ describe("loadWaivers — trim-down contract", () => {
   it("uses the current-period R32 first kickoff as the conservative forfeit bound", () => {
     expect(loader).toContain("currentPeriodRow.matches[0].kickoffAt.toISOString()");
   });
+
+  it("threads the viewer's PRIVATE watchlist onto the view as a self-scoped id-set (T2)", () => {
+    // A self-scoped read (the viewer's own stars), surfaced as an id-set on the view (NOT a per-player flag).
+    expect(loader).toContain("prisma.watchlist.findMany");
+    expect(loader).toContain("where: { managerId: viewerManagerId }");
+    expect(loader).toContain("watchedPlayerIds: watchlistRows.map((w) => w.playerId)");
+  });
 });

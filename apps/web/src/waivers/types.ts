@@ -137,6 +137,8 @@ export interface WaiversView {
   readonly lockedPlayerIds: readonly string[];
   /** League-wide unowned players — the composer's free-agent picker source. */
   readonly freeAgents: readonly WvPlayer[];
+  /** Player ids the viewer has starred (their PRIVATE watchlist) — drives the FA star toggle + filter. */
+  readonly watchedPlayerIds: readonly string[];
   readonly claims: readonly WvClaim[];
   readonly batches: readonly WvBatch[];
   readonly waiverOrder: readonly WvWaiverSeat[];

@@ -107,6 +107,7 @@ describe("WaiversClient release-panel mount condition", () => {
       roster: roster({ GK: 1, DEF: 3, MID: 3, FWD: 3 }), // 10
       lockedPlayerIds: [],
       freeAgents: [],
+      watchedPlayerIds: [],
       claims: [],
       batches: [],
       waiverOrder: [],

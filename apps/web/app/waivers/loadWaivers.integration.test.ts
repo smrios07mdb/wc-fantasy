@@ -40,6 +40,7 @@ describe.skipIf(!SAFE)(
 
     beforeEach(async () => {
       // Wipe the FK chain this loader touches, child-first.
+      await prisma.watchlist.deleteMany({});
       await prisma.faabBid.deleteMany({});
       await prisma.faabBatch.deleteMany({});
       await prisma.rosterPlayer.deleteMany({});

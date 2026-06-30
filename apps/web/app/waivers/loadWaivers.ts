@@ -73,65 +73,79 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   const leagueId = manager.leagueId;
   const now = new Date();
 
-  const [league, managerRows, pendingBids, rosterRows, upcomingMatches, seasonScores, periodRows] =
-    await Promise.all([
-      prisma.league.findUnique({
-        where: { id: leagueId },
-        select: { timezone: true },
-      }),
-      // Rolling waiver order + names (public). Seeded managers sort by position; unseeded (null) last.
-      prisma.manager.findMany({
-        where: { leagueId },
-        select: { id: true, displayName: true, waiverOrderPosition: true },
-        orderBy: [{ waiverOrderPosition: "asc" }, { displayName: "asc" }],
-      }),
-      // The viewer's OWN pending claims (self-scoped).
-      prisma.faabBid.findMany({
-        where: { managerId: viewerManagerId, status: "pending" },
-        select: {
-          id: true,
-          amount: true,
-          playerAdd: { select: PLAYER_SELECT },
-          playerDrop: { select: PLAYER_SELECT },
-        },
-      }),
-      // The viewer's current squad.
-      prisma.rosterPlayer.findMany({
-        where: { managerId: viewerManagerId, droppedAt: null },
-        select: { player: { select: PLAYER_SELECT } },
-      }),
-      // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff AND next
-      // opponent. The team-name joins feed `resolveOpponentByPlayer`'s "vs/@ + flag + name" label.
-      prisma.fifaMatch.findMany({
-        where: { status: { in: ["scheduled", "in_progress"] } },
-        select: {
-          homeTeamId: true,
-          awayTeamId: true,
-          kickoffAt: true,
-          homeTeam: { select: { name: true } },
-          awayTeam: { select: { name: true } },
-        },
-        orderBy: { kickoffAt: "asc" },
-      }),
-      // Season fantasy points per player (sum across matches) — "if available, else —".
-      prisma.scorePlayerMatch.groupBy({ by: ["playerId"], _sum: { points: true } }),
-      // Periods + each one's first kickoff — drives the "next batch" acquisition-window element. Mirrors
-      // the worker cadence read (period + MIN-kickoff fixture) so web shows the EXACT instant it fires.
-      prisma.period.findMany({
-        where: { leagueId },
-        select: {
-          id: true,
-          label: true,
-          status: true,
-          waiverBatchAt: true,
-          batchClearedAt: true,
-          // matches[0].kickoffAt feeds the batch-window first kickoff + selectCurrentPeriod. batchClearedAt
-          // (above) keys the per-matchday Batch results labels (T11 Fix B); no other period read is needed.
-          matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
-        },
-        orderBy: [{ opensAt: "asc" }, { label: "asc" }],
-      }),
-    ]);
+  const [
+    league,
+    managerRows,
+    pendingBids,
+    rosterRows,
+    upcomingMatches,
+    seasonScores,
+    periodRows,
+    watchlistRows,
+  ] = await Promise.all([
+    prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { timezone: true },
+    }),
+    // Rolling waiver order + names (public). Seeded managers sort by position; unseeded (null) last.
+    prisma.manager.findMany({
+      where: { leagueId },
+      select: { id: true, displayName: true, waiverOrderPosition: true },
+      orderBy: [{ waiverOrderPosition: "asc" }, { displayName: "asc" }],
+    }),
+    // The viewer's OWN pending claims (self-scoped).
+    prisma.faabBid.findMany({
+      where: { managerId: viewerManagerId, status: "pending" },
+      select: {
+        id: true,
+        amount: true,
+        playerAdd: { select: PLAYER_SELECT },
+        playerDrop: { select: PLAYER_SELECT },
+      },
+    }),
+    // The viewer's current squad.
+    prisma.rosterPlayer.findMany({
+      where: { managerId: viewerManagerId, droppedAt: null },
+      select: { player: { select: PLAYER_SELECT } },
+    }),
+    // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff AND next
+    // opponent. The team-name joins feed `resolveOpponentByPlayer`'s "vs/@ + flag + name" label.
+    prisma.fifaMatch.findMany({
+      where: { status: { in: ["scheduled", "in_progress"] } },
+      select: {
+        homeTeamId: true,
+        awayTeamId: true,
+        kickoffAt: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+      },
+      orderBy: { kickoffAt: "asc" },
+    }),
+    // Season fantasy points per player (sum across matches) — "if available, else —".
+    prisma.scorePlayerMatch.groupBy({ by: ["playerId"], _sum: { points: true } }),
+    // Periods + each one's first kickoff — drives the "next batch" acquisition-window element. Mirrors
+    // the worker cadence read (period + MIN-kickoff fixture) so web shows the EXACT instant it fires.
+    prisma.period.findMany({
+      where: { leagueId },
+      select: {
+        id: true,
+        label: true,
+        status: true,
+        waiverBatchAt: true,
+        batchClearedAt: true,
+        // matches[0].kickoffAt feeds the batch-window first kickoff + selectCurrentPeriod. batchClearedAt
+        // (above) keys the per-matchday Batch results labels (T11 Fix B); no other period read is needed.
+        matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
+      },
+      orderBy: [{ opensAt: "asc" }, { label: "asc" }],
+    }),
+    // The viewer's OWN private watchlist (self-scoped, mirrors the pendingBids/rosterRows self-scope
+    // above). Just the starred player ids — the UI keys its star toggle + "Watched" filter off this set.
+    prisma.watchlist.findMany({
+      where: { managerId: viewerManagerId },
+      select: { playerId: true },
+    }),
+  ]);
 
   // The current period for the waiver window: the OPEN wave, else the soonest PENDING by first
   // fixture kickoff. Null (all closed / none pending) → the "next batch" element is hidden.
@@ -320,6 +334,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     roster,
     lockedPlayerIds: [...lockedSet],
     freeAgents,
+    watchedPlayerIds: watchlistRows.map((w) => w.playerId),
     claims,
     batches,
     waiverOrder,

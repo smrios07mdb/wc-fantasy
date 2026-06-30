@@ -106,6 +106,19 @@ export function freeAgentNations(freeAgents: readonly WvPlayer[]): string[] {
 }
 
 /**
+ * The free agents the viewer has starred — the "Watched only" filter (T2 — Waiver Watchlist). Keyed on
+ * `p.id` against the viewer's private watchlist set, mirroring how `claimableFreeAgents` keys its
+ * `takenAddIds` exclusion. Pure + display-only; preserves the input order. A starred player who has left
+ * the pool (acquired, eliminated) simply isn't in `freeAgents`, so he drops out — no stale row.
+ */
+export function watchedFreeAgents(
+  freeAgents: readonly WvPlayer[],
+  watched: ReadonlySet<string>,
+): WvPlayer[] {
+  return freeAgents.filter((p) => watched.has(p.id));
+}
+
+/**
  * Project the current period's acquisition phase into the "next batch" element's display strings. PURE:
  * the phase + the two instants are computed upstream via the shared `@app/faab` `acquisitionWindowState`
  * / `effectiveBatchAt`, so this only maps state → copy (DECISIONS.md → Theme D). The three phases mirror

@@ -50,6 +50,8 @@ function mount(freeAgents: WvPlayer[]) {
       errorMessage={null}
       onGrant={() => {}}
       onOpen={() => {}}
+      watched={new Set()}
+      onToggleStar={() => {}}
     />,
   );
 }

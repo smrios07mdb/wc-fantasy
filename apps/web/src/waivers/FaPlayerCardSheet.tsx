@@ -19,18 +19,24 @@
  */
 import { useState } from "react";
 import type { WvPlayer } from "./types";
-import { CutoffTag, NationFlag, Pos } from "./components";
+import { CutoffTag, IconStar, NationFlag, Pos } from "./components";
 import { PlayerStatsTab, usePlayerTournamentStats } from "@/components/PlayerStatsTab";
 
 export function FaPlayerCardSheet({
   player,
   now,
+  watched,
   onClose,
+  onToggleStar,
 }: {
   player: WvPlayer;
   /** The client's live clock — drives the Acquisition `CutoffTag` (no separate ticker). */
   now: Date;
+  /** Whether the viewer has starred this player (T2 — private watchlist). */
+  watched: boolean;
   onClose: () => void;
+  /** Toggle the private star from the card header. */
+  onToggleStar: (player: WvPlayer) => void;
 }) {
   const [tab, setTab] = useState<"points" | "stats">("points");
   // Eager on mount — the Stats tab is hot the instant it's selected; a failure degrades quietly.
@@ -65,6 +71,16 @@ export function FaPlayerCardSheet({
               <small>pts</small>
             </span>
           )}
+          <button
+            type="button"
+            className={"pc-star" + (watched ? " is-on" : "")}
+            onClick={() => onToggleStar(player)}
+            aria-pressed={watched}
+            aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+            title={watched ? "Remove from watchlist" : "Add to watchlist"}
+          >
+            <IconStar filled={watched} />
+          </button>
         </div>
 
         {/* ─── Tab strip: Points | Stats (default Points, per the shared card) ──── */}

@@ -19,8 +19,13 @@
 import { useState } from "react";
 import { type Position } from "@app/shared";
 import type { WvClaim, WvPlayer } from "./types";
-import { claimableFreeAgents, droppableRoster, freeAgentNations } from "./waiversLogic";
-import { CutoffTag, FaPickRow, KitChip, NationFlag, Pos } from "./components";
+import {
+  claimableFreeAgents,
+  droppableRoster,
+  freeAgentNations,
+  watchedFreeAgents,
+} from "./waiversLogic";
+import { CutoffTag, FaPickRow, IconStar, KitChip, NationFlag, Pos } from "./components";
 import { NationFilter } from "@/components/NationFilter";
 
 const POS_FILTERS: ReadonlyArray<"ALL" | Position> = ["ALL", "GK", "DEF", "MID", "FWD"];
@@ -43,6 +48,8 @@ export function FreeAgentPanel({
   errorMessage,
   onGrant,
   onOpen,
+  watched,
+  onToggleStar,
 }: {
   /** false in the locked phase → browse only, "Add" disabled. */
   enabled: boolean;
@@ -60,15 +67,22 @@ export function FreeAgentPanel({
   onGrant: (payload: FaGrantPayload) => void;
   /** Opens the view-only player card for a row (sibling control — never selects for acquisition). */
   onOpen: (player: WvPlayer) => void;
+  /** The viewer's starred player ids (T2 — private watchlist): drives the row star + "Watched" filter. */
+  watched: ReadonlySet<string>;
+  /** Toggle a player's private star (a sibling control — never selects for acquisition). */
+  onToggleStar: (player: WvPlayer) => void;
 }) {
   const [selected, setSelected] = useState<WvPlayer | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<"ALL" | Position>("ALL");
   const [nation, setNation] = useState<string | "ALL">("ALL");
+  const [watchedOnly, setWatchedOnly] = useState(false);
 
   const nations = freeAgentNations(freeAgents);
-  const fas = claimableFreeAgents(freeAgents, claims, now, { query, position, nation });
+  const base = claimableFreeAgents(freeAgents, claims, now, { query, position, nation });
+  // "Watched only" narrows the (already cutoff/position/nation-filtered) pool to the viewer's stars.
+  const fas = watchedOnly ? watchedFreeAgents(base, watched) : base;
   const drops = droppableRoster(roster, lockedPlayerIds);
   // A full squad must drop a player to add one (the engine's `drop-required` rule); an open slot may not.
   // FULL is keyed on the threaded PHASE cap (15 group / 9 playoff), NOT a hardcoded SQUAD_SIZE — the
@@ -109,18 +123,32 @@ export function FreeAgentPanel({
               </button>
             ))}
           </div>
-          <NationFilter nations={nations} value={nation} onChange={setNation} />
+          <div className="wv-comp-filters">
+            <NationFilter nations={nations} value={nation} onChange={setNation} />
+            <button
+              type="button"
+              className={"chip wv-watch-chip" + (watchedOnly ? " is-active" : "")}
+              aria-pressed={watchedOnly}
+              onClick={() => setWatchedOnly((v) => !v)}
+            >
+              <IconStar filled={watchedOnly} /> Watched
+            </button>
+          </div>
           <div className="wv-comp-list">
             {fas.length === 0 && (
-              <div className="wv-comp-empty t-sm text-tertiary">No free agents match.</div>
+              <div className="wv-comp-empty t-sm text-tertiary">
+                {watchedOnly ? "No watched free agents match." : "No free agents match."}
+              </div>
             )}
             {fas.slice(0, 40).map((p) => (
               <FaPickRow
                 key={p.id}
                 player={p}
                 selected={selected?.id === p.id}
+                watched={watched.has(p.id)}
                 onSelect={setSelected}
                 onOpen={onOpen}
+                onToggleStar={onToggleStar}
               />
             ))}
           </div>

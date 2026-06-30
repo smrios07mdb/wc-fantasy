@@ -680,6 +680,58 @@
   background: var(--surface-2);
   color: var(--text-secondary);
 }
+/* T2: the FA picker row's THIRD trailer — the private watchlist star (a sibling to .wv-comp-fa-info, same
+   stopPropagation so a tap never selects for acquisition). Cloned from .wv-comp-fa-info; .is-on = starred. */
+.wv-comp-fa-star {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.wv-comp-fa-star:hover {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.wv-comp-fa-star.is-on {
+  color: var(--accent);
+}
+/* T2: the FA-pool filter row — the collapsible NationFilter + the "Watched" toggle chip, side by side. */
+.wv-comp-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wv-watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* T2: the watchlist star in the player-card header (beside the season-points hero). */
+.pc-star {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.pc-star:hover {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.pc-star.is-on {
+  color: var(--accent);
+}
 /* The view-only player card mounts at the .wv-app root and can be opened from inside the bid composer
    modal (.wv-scrim, z-index 90). Lift the shared .pc-scrim above it WITHIN the waivers app only — a
    route-scoped override, leaving the global ds.css token untouched. */

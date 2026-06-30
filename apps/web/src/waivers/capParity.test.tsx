@@ -61,6 +61,8 @@ function renderFa(rosterCap: number, squadSize: number, onGrant = vi.fn()) {
       errorMessage={null}
       onGrant={onGrant}
       onOpen={vi.fn()}
+      watched={new Set()}
+      onToggleStar={vi.fn()}
     />,
   );
   return onGrant;
@@ -82,6 +84,8 @@ function renderComposer(rosterCap: number, squadSize: number, onSubmit = vi.fn()
       onClose={vi.fn()}
       onSubmit={onSubmit}
       onOpen={vi.fn()}
+      watched={new Set()}
+      onToggleStar={vi.fn()}
     />,
   );
   return onSubmit;

@@ -153,6 +153,7 @@ model League {
   allowlist      AllowlistEmail[]
   poolPicks      PoolPick[]
   playoffEntries PlayoffEntry[]
+  watchlist      Watchlist[]
 
   @@map("league")
 }
@@ -199,6 +200,7 @@ model Manager {
   notificationPref    NotificationPreference?
   notificationsSent   NotificationSent[]
   playoffEntries      PlayoffEntry[]
+  watchlist           Watchlist[]
   currentDraftPointer Draft[]                 @relation("DraftCurrentManager")
 
   @@unique([leagueId, userId])
@@ -348,6 +350,9 @@ model Player {
   // FAAB bids referencing this player
   bidsAsAdd  FaabBid[] @relation("BidAdd")
   bidsAsDrop FaabBid[] @relation("BidDrop")
+
+  // private per-manager waiver watchlist (a "star")
+  watchlist Watchlist[]
 
   @@index([teamId])
   @@index([position])
@@ -647,6 +652,28 @@ model FaabBid {
   @@index([managerId])
   @@index([batchId])
   @@map("faab_bid")
+}
+
+/// A private per-manager "star" on a player — a personal waiver bookmark. Fully DECOUPLED from FAAB
+/// budget / roster / bids / scoring: a star costs nothing and claims nothing. Owner-only RLS (exactly one
+/// SELECT policy, no league-visible reveal) lives in the raw-SQL migration 20260630120000_watchlist,
+/// mirroring faab_bid's strictly-owner-only policy family. v1 surfaces it on /waivers free-agent rows.
+model Watchlist {
+  id        String   @id @default(uuid())
+  leagueId  String   @map("league_id")
+  managerId String   @map("manager_id")
+  playerId  String   @map("player_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  league  League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  manager Manager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([managerId, playerId], map: "watchlist_manager_player_uq")
+  @@index([managerId])
+  @@index([leagueId])
+  @@index([playerId])
+  @@map("watchlist")
 }
 
 // ────────────────────────────────────────────────────────────────────────────

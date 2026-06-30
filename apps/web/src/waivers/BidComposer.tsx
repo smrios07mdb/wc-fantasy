@@ -16,8 +16,18 @@ import {
   composerMaxBid,
   droppableRoster,
   freeAgentNations,
+  watchedFreeAgents,
 } from "./waiversLogic";
-import { CutoffTag, FaPickRow, KitChip, NationFlag, Pos, Refund, Sealed } from "./components";
+import {
+  CutoffTag,
+  FaPickRow,
+  IconStar,
+  KitChip,
+  NationFlag,
+  Pos,
+  Refund,
+  Sealed,
+} from "./components";
 import { NationFilter } from "@/components/NationFilter";
 
 const POS_FILTERS: ReadonlyArray<"ALL" | Position> = ["ALL", "GK", "DEF", "MID", "FWD"];
@@ -43,6 +53,8 @@ export function BidComposer({
   onClose,
   onSubmit,
   onOpen,
+  watched,
+  onToggleStar,
 }: {
   editClaim: WvClaim | null;
   /** The league's CURRENT-PHASE squad cap (15 group / 9 playoff), threaded from the server loader — the
@@ -62,6 +74,10 @@ export function BidComposer({
   onSubmit: (payload: BidPayload) => void;
   /** Opens the view-only player card for a picker row (sibling control — never selects to bid). */
   onOpen: (player: WvPlayer) => void;
+  /** The viewer's starred player ids (T2 — private watchlist): drives the row star + "Watched" filter. */
+  watched: ReadonlySet<string>;
+  /** Toggle a player's private star (a sibling control — never selects to bid). */
+  onToggleStar: (player: WvPlayer) => void;
 }) {
   const [selected, setSelected] = useState<WvPlayer | null>(editClaim ? editClaim.add : null);
   const [amount, setAmount] = useState<number>(editClaim ? editClaim.amount : 1);
@@ -69,12 +85,15 @@ export function BidComposer({
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<"ALL" | Position>("ALL");
   const [nation, setNation] = useState<string | "ALL">("ALL");
+  const [watchedOnly, setWatchedOnly] = useState(false);
 
   const editingBidId = editClaim?.bidId ?? null;
   const nations = editClaim ? [] : freeAgentNations(freeAgents);
-  const fas = editClaim
+  const baseFas = editClaim
     ? []
     : claimableFreeAgents(freeAgents, claims, now, { query, position, nation, editingBidId });
+  // "Watched only" narrows the (already cutoff/position/nation-filtered) pool to the viewer's stars.
+  const fas = watchedOnly ? watchedFreeAgents(baseFas, watched) : baseFas;
   const drops = droppableRoster(roster, lockedPlayerIds);
   const maxBid = composerMaxBid(faabBudget, claims, editingBidId);
   // A drop is required only once the squad is at the PHASE cap (15 group / 9 playoff) — parity with the
@@ -142,11 +161,23 @@ export function BidComposer({
                     </button>
                   ))}
                 </div>
-                <NationFilter nations={nations} value={nation} onChange={setNation} />
+                <div className="wv-comp-filters">
+                  <NationFilter nations={nations} value={nation} onChange={setNation} />
+                  <button
+                    type="button"
+                    className={"chip wv-watch-chip" + (watchedOnly ? " is-active" : "")}
+                    aria-pressed={watchedOnly}
+                    onClick={() => setWatchedOnly((v) => !v)}
+                  >
+                    <IconStar filled={watchedOnly} /> Watched
+                  </button>
+                </div>
                 <div className="wv-comp-list">
                   {fas.length === 0 && (
                     <div className="wv-comp-empty t-sm text-tertiary">
-                      No claimable free agents match.
+                      {watchedOnly
+                        ? "No watched free agents match."
+                        : "No claimable free agents match."}
                     </div>
                   )}
                   {fas.slice(0, 40).map((p) => (
@@ -154,8 +185,10 @@ export function BidComposer({
                       key={p.id}
                       player={p}
                       selected={selected?.id === p.id}
+                      watched={watched.has(p.id)}
                       onSelect={setSelected}
                       onOpen={onOpen}
+                      onToggleStar={onToggleStar}
                     />
                   ))}
                 </div>

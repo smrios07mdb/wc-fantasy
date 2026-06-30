@@ -10,6 +10,7 @@ import {
   isClaimVoid,
   isPlayerCutoffPassed,
   sortClaims,
+  watchedFreeAgents,
 } from "./waiversLogic";
 import { DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
 import { formatInLeagueTz, selectCurrentPeriod } from "@app/shared";
@@ -325,5 +326,35 @@ describe("selectCurrentPeriod (period picker — opensAt never seeded, batchClea
     expect(selectCurrentPeriod([noFixtures, MD1], (p) => p.batchClearedAt === null)?.id).toBe(
       "md1",
     );
+  });
+});
+
+describe("watchedFreeAgents — the private 'Watched only' filter (T2)", () => {
+  const pool = [player({ id: "a" }), player({ id: "b" }), player({ id: "c" })];
+
+  it("empty watched set → no rows", () => {
+    expect(watchedFreeAgents(pool, new Set())).toEqual([]);
+  });
+
+  it("partial set → only the starred players, input order preserved", () => {
+    expect(watchedFreeAgents(pool, new Set(["c", "a"])).map((p) => p.id)).toEqual(["a", "c"]);
+  });
+
+  it("all watched → the whole pool", () => {
+    expect(watchedFreeAgents(pool, new Set(["a", "b", "c"])).map((p) => p.id)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("a starred id no longer in the pool simply drops out (no stale row)", () => {
+    expect(watchedFreeAgents(pool, new Set(["a", "gone"])).map((p) => p.id)).toEqual(["a"]);
+  });
+
+  it("is pure — does not mutate the input pool", () => {
+    const before = pool.map((p) => p.id);
+    watchedFreeAgents(pool, new Set(["a"]));
+    expect(pool.map((p) => p.id)).toEqual(before);
   });
 });

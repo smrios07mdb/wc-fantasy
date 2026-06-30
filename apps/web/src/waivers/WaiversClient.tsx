@@ -93,6 +93,16 @@ export function WaiversClient({ view }: { view: WaiversView }) {
     return () => clearInterval(id);
   }, []);
 
+  // The viewer's PRIVATE watchlist (T2). Seeded from the server view, then re-synced after each
+  // router.refresh (a new view object → new watchedPlayerIds reference → the effect re-hydrates from server
+  // truth). `handleToggleStar` flips it OPTIMISTICALLY so the star feels instant, reverting if the write fails.
+  const [watchedIds, setWatchedIds] = useState<ReadonlySet<string>>(
+    () => new Set(view.watchedPlayerIds),
+  );
+  useEffect(() => {
+    setWatchedIds(new Set(view.watchedPlayerIds));
+  }, [view.watchedPlayerIds]);
+
   const sortedClaims = useMemo(() => sortClaims(view.claims), [view.claims]);
   const budget = useMemo(
     () => computeBudget(view.faabBudget, view.claims),
@@ -173,6 +183,29 @@ export function WaiversClient({ view }: { view: WaiversView }) {
     setBusyBidId(null);
     if (ok) router.refresh();
     else setListError(friendly(data));
+  }
+
+  // Toggle a private watchlist star (T2). Optimistic: flip locally first (instant feedback), POST the toggle
+  // to the dedicated /api/manager/watchlist route, then router.refresh() to reconcile with server truth;
+  // revert on failure. Fully DECOUPLED from FAAB — the body carries no managerId (resolved server-side) and
+  // never touches budget / claims / roster. There is no error surface: a star is best-effort, costs nothing.
+  async function handleToggleStar(player: WvPlayer) {
+    const next = !watchedIds.has(player.id);
+    const flip = (add: boolean) =>
+      setWatchedIds((prev) => {
+        const s = new Set(prev);
+        if (add) s.add(player.id);
+        else s.delete(player.id);
+        return s;
+      });
+    flip(next);
+    const res = await fetch("/api/manager/watchlist", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ playerId: player.id, watched: next }),
+    });
+    if (res.ok) router.refresh();
+    else flip(!next); // revert the optimistic flip
   }
 
   // Instant $0 free-agency pickup — the same fetch→router.refresh shape as a bid, but against the
@@ -301,6 +334,8 @@ export function WaiversClient({ view }: { view: WaiversView }) {
                 errorMessage={faError}
                 onGrant={handleGrant}
                 onOpen={setCardPlayer}
+                watched={watchedIds}
+                onToggleStar={handleToggleStar}
               />
             )}
 
@@ -418,13 +453,21 @@ export function WaiversClient({ view }: { view: WaiversView }) {
           onClose={closeComposer}
           onSubmit={handleSubmit}
           onOpen={setCardPlayer}
+          watched={watchedIds}
+          onToggleStar={handleToggleStar}
         />
       )}
 
       {/* The player drill-down is the period-less FaPlayerCardSheet — the FA pool / claims / player cards
           are live/global by design (the T11 over-applied per-matchday box-score swap was removed). */}
       {cardPlayer && (
-        <FaPlayerCardSheet player={cardPlayer} now={now} onClose={() => setCardPlayer(null)} />
+        <FaPlayerCardSheet
+          player={cardPlayer}
+          now={now}
+          watched={watchedIds.has(cardPlayer.id)}
+          onClose={() => setCardPlayer(null)}
+          onToggleStar={handleToggleStar}
+        />
       )}
     </div>
   );

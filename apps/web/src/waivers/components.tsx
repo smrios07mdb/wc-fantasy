@@ -93,6 +93,23 @@ function IconInfo() {
     </svg>
   );
 }
+/** Watchlist star (T2) — outline when not watched, filled when watched. Used by the FA row + card header. */
+export function IconStar({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+    </svg>
+  );
+}
 export { Sealed, Refund };
 
 // ── atoms ──────────────────────────────────────────────────────────────────────
@@ -182,13 +199,19 @@ export function CutoffTag({ player, now }: { player: WvPlayer; now: Date }) {
 export function FaPickRow({
   player,
   selected,
+  watched,
   onSelect,
   onOpen,
+  onToggleStar,
 }: {
   player: WvPlayer;
   selected: boolean;
+  /** Whether the viewer has starred this player (T2 — private watchlist). */
+  watched: boolean;
   onSelect: (player: WvPlayer) => void;
   onOpen: (player: WvPlayer) => void;
+  /** Toggle the private star — a sibling control; its `stopPropagation` never selects for acquisition. */
+  onToggleStar: (player: WvPlayer) => void;
 }) {
   return (
     <div className="wv-comp-fa-wrap">
@@ -207,6 +230,18 @@ export function FaPickRow({
           <OpponentLine opponent={player.opponent ?? null} />
         </div>
         <Pos p={player.position} />
+      </button>
+      <button
+        className={"wv-comp-fa-star" + (watched ? " is-on" : "")}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleStar(player);
+        }}
+        aria-pressed={watched}
+        aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+        title={watched ? "Remove from watchlist" : "Add to watchlist"}
+      >
+        <IconStar filled={watched} />
       </button>
       <button
         className="wv-comp-fa-info"
