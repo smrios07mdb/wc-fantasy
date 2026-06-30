@@ -1139,6 +1139,34 @@ evaluate under the caller's RLS, find zero rows for everyone, and silently hide 
 (the `score_manager_period` nested-RLS trap). The helper returns only a boolean — no `fifa_match` rows leak.
 Regression coverage: `poolPickRls.integration.test.ts` (DB-gated, role-switched).
 
+**`watchlist` table (T2 — private per-manager "star", 2026-06-30; migration HELD for Sergio).** A
+personal player bookmark surfaced on `/waivers` (`id`, `league_id`, `manager_id`, `player_id`,
+`created_at @db.Timestamptz(6)`; FKs → league / manager / player, all `onDelete: Cascade`;
+`UNIQUE(manager_id, player_id)` = `watchlist_manager_player_uq` = the upsert/idempotency key; indexes on
+each of `manager_id` / `league_id` / `player_id`). RLS = `ENABLE` (not FORCE) + **four owner-only
+`TO authenticated` policies** (`watchlist_select_own` USING / `_insert_own` WITH CHECK / `_update_own`
+USING+WITH CHECK / `_delete_own` USING), each gating on `EXISTS (SELECT 1 FROM manager m WHERE m.id =
+watchlist.manager_id AND m.user_id = (auth.uid())::text)`. Exactly **ONE SELECT policy, owner-only** —
+this mirrors `faab_bid`'s strictly-private family (minus its `status` gate) and deliberately **diverges**
+from both `pool_pick` (whose SELECT is league-scoped + clock-gated for the anti-copying reveal) and
+`faab_bid_select_settled` (its league-visible settled reveal): a star is private forever, never shown to
+rivals. The migration `20260630120000_watchlist` is **DDL-only** (the `prisma migrate diff` output
+verbatim) — mirroring `group_standing` / `fix_faab_settled_rls`: **NO** in-migration self-test, **NO**
+`SECURITY DEFINER` helper (the predicate touches only `manager`, resolvable via `manager_select_own`),
+**NOT** added to the `supabase_realtime` publication (private, server-refresh — like `faab_bid`,
+**unlike** `pool_pick`). Both portability shims (`authenticated` role + `auth.uid()`) ARE carried because
+the policies read the JWT. **Write path** = `POST /api/manager/watchlist` (`{ playerId, watched }`;
+`handleToggleWatch`/`parseWatchlistBody` behind `getSessionManager()` — 401/403 before any DB; `managerId`
+resolved server-side, never trusted from the client; `watched:true` → idempotent upsert, `watched:false` →
+delete (missing row 200)), written via the Prisma owner (RLS = defence-in-depth). The toggle is
+**scope-agnostic** (any valid `playerId`; FA-only is a UX choice) and **fully decoupled** — touches no
+bid/batch/roster/lineup/budget row and no engine/recompute/dirty-mark/Realtime. **Read path** = `loadWaivers`
+adds one self-scoped `watchlist.findMany({ where: { managerId } })` → `WaiversView.watchedPlayerIds:
+readonly string[]` (an id-set, not a per-`WvPlayer` boolean) + pure `watchedFreeAgents(...)`; UI surfaces it
+as a star on `FaPickRow` + the `FaPlayerCardSheet` header + a "Watched" filter beside `<NationFilter>`.
+Regression coverage: gated `watchlistRls.integration.test.ts` (own `WATCHLIST_RLS_PG_TEST_URL` + SAFE
+guard, uuid-casting `auth.uid()`, 11 tests). See DECISIONS → 2026-06-30 (T2) + PROJECT.md → 2026-06-30 (T2).
+
 **`@app/pool` (pure engine)** mirrors `recompute/standing.ts` purity — no IO/clock/DB, grep-proven by
 `purity.test.ts`: `derivePoolResult` (group → H/D/A; knockout → advancer via FT→ET→pens; pending or
 `periodKind == null` → null), `scorePick`, `weightForPeriod` (flat 1, escalating-weight seam),

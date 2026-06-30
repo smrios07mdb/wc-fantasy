@@ -1,17 +1,27 @@
 # T2 — Waiver Watchlist ("star a player to track") — DESIGN
 
-> **Status: DRAFT — pending Chat lock.** This is an investigation + design proposal ONLY. No
-> implementation has been written: no Prisma/schema change, no migration, no RLS policy/SQL applied, no
-> API endpoint, no UI/React, no test code, no DB writes, no code branch. The implementation thread (after
-> this design is locked in a Chat review with Sergio as merge authority) will use an isolated worktree off
-> `main`.
+> **Status: LOCKED + IMPLEMENTED** (`feat/waiver-watchlist`, 2026-06-30; merge HELD — Sergio owns the
+> migration + RLS). The four commissioner decisions in §9 (FA-only star surface but a scope-agnostic write
+> API · private-to-owner · no new per-player data · star on the FA row + card + "Watched" filter) were
+> settled in Chat and built **as specified**, and the DDL-only / gated-suite test strategy was settled and
+> implemented as below.
+>
+> **One supersession to note:** the in-migration role-switched **self-test** described in §3 ("In-migration
+> self-test (Theme-F)") and §8 step 1 was **SUPERSEDED** by the settled test strategy. The shipped migration
+> is **DDL-only** (mirroring `group_standing` 20260626120000 + `fix_faab_settled_rls` — no embedded DO-block
+> self-test, no `supabase_realtime` entry, no `SECURITY DEFINER` helper); the RLS proof instead lives in the
+> gated Postgres integration suite `apps/web/src/manager/watchlistRls.integration.test.ts` (own
+> `WATCHLIST_RLS_PG_TEST_URL` var + SAFE guard, uuid-casting `auth.uid()`, 11 tests). Both portability shims
+> (`authenticated` role + `auth.uid()`) are still included because the owner-only policies read the JWT via
+> `(auth.uid())::text`. The body sections below are the original (read-only discovery) design and otherwise
+> hold as built.
 >
 > **Class:** migration-class (new table + RLS). **Merge authority:** Sergio (per BACKLOG.md → T2 and the
 > CLAUDE.md merge policy for migration / RLS changes).
-> **Date:** 2026-06-30. **Author:** Claude Code (read-only discovery pass).
+> **Date:** 2026-06-30. **Author:** Claude Code.
 >
-> The SQL/Prisma/policy blocks below are **proposal sketches for review** — they describe the intended
-> shape and cite the analog code they mirror. They are NOT applied to any file and are NOT a migration.
+> The SQL/Prisma/policy blocks below were **proposal sketches for review** at design time; the as-built
+> shape is captured in PROJECT/DECISIONS/ARCHITECTURE 2026-06-30 (T2).
 
 ---
 
