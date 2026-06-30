@@ -93,6 +93,7 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
           so the body keeps only the screen label + the live round line + the layout toggle + ConnPill. */}
       <div className="po-screenhead">
         <div className="po-screenhead-title">
+          <img src="/brand/parrot.png" alt="" className="po-parrot" />
           <b className="display">Guillotine</b>
           <span className="t-micro text-tertiary" style={{ letterSpacing: ".06em" }}>
             {currentRound

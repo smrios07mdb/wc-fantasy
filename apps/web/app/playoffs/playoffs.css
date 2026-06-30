@@ -57,6 +57,15 @@
   font-size: 18px;
   font-weight: 800;
 }
+/* personality glyph only (BRAND.md §6) — sizing references .lp-cta-parrot, scaled down for an inline
+   header chip; the AppShell topbar still owns the one brand lockup (no second mark). */
+.po-parrot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--hairline-strong);
+  align-self: center;
+}
 .po-layout-tabs {
   display: flex;
   gap: 4px;

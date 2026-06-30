@@ -404,7 +404,7 @@ export function MarketingLanding() {
             <h2>
               Reach for glory.
               <br />
-              (Yes, the parrot&rsquo;s&nbsp;coming.)
+              (Yes, the parrot&rsquo;s&nbsp;here.)
             </h2>
             <p>
               Eleven friends chase one trophy. Ten of them spend the next four years explaining what
@@ -1276,6 +1276,7 @@ export function MarketingLanding() {
       {/* ===================================================================== CTA */}
       <section className="lp-cta">
         <div className="lp-container lp-cta-card lp-reveal">
+          <img src="/brand/parrot.png" alt="" className="lp-cta-parrot" />
           <h2>Claim your spot in the XI.</h2>
           <p>
             The draft fills as friends join. Sign in with your invited email to claim your spot and

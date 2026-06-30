@@ -42,6 +42,12 @@ describe("landing page — each state still renders its key affordance", () => {
     expect(marketing).not.toMatch(/<form\b/);
   });
 
+  it("signin → the CTA renders the parrot mascot glyph (BRAND.md §6 personality moment)", () => {
+    expect(marketing).toContain('src="/brand/parrot.png"');
+    expect(marketing).toContain('className="lp-cta-parrot"');
+    expect(landingCss).toMatch(/^\.lp-cta-parrot\s*\{/m);
+  });
+
   it("hub → POST sign-out + the three live screens, with the brand mark in the header", () => {
     expect(chrome).toContain('action="/auth/sign-out"');
     expect(chrome).toContain('method="post"');
