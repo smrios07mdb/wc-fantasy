@@ -104,6 +104,8 @@ reference; convert to your component API / Tailwind as you like.
 | Splash / loading | `LockupStacked` | see `XI Brand.html` → "Launch splash" |
 | Browser tab | favicon (`icon-tile` reads down to 16px) | every prototype head |
 | Small brand badge (everywhere) | the shared **`.vf-logo`** 28px chip is now the trophy on a night field (was a letter "W") | per-screen `<style>` `.vf-logo` (and `.dr-logo` / `.cm-logo` / `.logo` / `.au-logo` variants) |
+| Landing CTA card | `parrot.png` roundel, `.lp-cta-parrot` (66px, ring) | `app/_landing/MarketingLanding.tsx`, `landing.css` |
+| `/playoffs` Guillotine screenhead | `parrot.png` roundel, `.po-parrot` (24px, inline header chip — route-scoped, NOT a second brand lockup) | `app/playoffs/PlayoffsClient.tsx`, `playoffs.css` |
 
 **App name vs league name:** **XI** is the product (fixed). The **league name** is still the
 `"WC Fantasy League"` placeholder (`COMPONENT_MAP.md §0` — a 4-spot swap, +`SHELL_LEAGUE_NAME`).
@@ -115,6 +117,10 @@ The nav shows **XI** as the brand and the league name as context; don't conflate
 Use the parrot for **personality** moments only: a notification/empty-state glyph, a loading wink,
 a fun alt-favicon, splash flourish. **Do not** use it as the default manager avatar — manager avatars
 stay the initials `Avatar` (`vsfield/components.jsx`). (User decision, locked.)
+
+First two personality moments shipped: the landing CTA card and the `/playoffs` screenhead (§5
+table above). Both are decorative `<img alt="">`, route-scoped CSS, no avatar surface touched —
+`vsFieldSkin.test.ts`'s no-parrot-on-avatars guard still passes.
 
 ---
 
