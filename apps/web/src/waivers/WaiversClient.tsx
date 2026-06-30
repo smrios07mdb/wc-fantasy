@@ -13,7 +13,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WaiversView, WvClaim, WvPlayer } from "./types";
 import { computeBudget, isClaimVoid, sortClaims } from "./waiversLogic";
-import { BatchBar, ClaimRow, FaabBar, Refund, ResultsBatch, WaiverOrderRail } from "./components";
+import {
+  BatchBar,
+  ClaimRow,
+  FaabBar,
+  Refund,
+  ResultsBatch,
+  TeamBudgetsRail,
+  WaiverOrderRail,
+} from "./components";
 import { BidComposer, type BidPayload } from "./BidComposer";
 import { FreeAgentPanel, type FaGrantPayload } from "./FreeAgentPanel";
 import { FaPlayerCardSheet } from "./FaPlayerCardSheet";
@@ -409,6 +417,9 @@ export function WaiversClient({ view }: { view: WaiversView }) {
             </div>
             <div className="wv-card">
               <WaiverOrderRail order={view.waiverOrder} myPosition={myPosition} />
+            </div>
+            <div className="wv-card">
+              <TeamBudgetsRail budgets={view.teamBudgets} />
             </div>
           </aside>
         </div>

@@ -28,6 +28,7 @@ import type {
   WvClaim,
   WvPlayer,
   WvResult,
+  WvTeamBudget,
   WvWaiverSeat,
 } from "@/src/waivers/types";
 
@@ -88,9 +89,12 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       select: { timezone: true },
     }),
     // Rolling waiver order + names (public). Seeded managers sort by position; unseeded (null) last.
+    // Also carries faabBudget — the SAME stored column the resolver debits on a won claim
+    // (`prismaStore.ts` `data: { faabBudget: { decrement: r.amount } }`), never recomputed from bid
+    // history, so the team-budgets rail is read-only and always agrees with the engine.
     prisma.manager.findMany({
       where: { leagueId },
-      select: { id: true, displayName: true, waiverOrderPosition: true },
+      select: { id: true, displayName: true, waiverOrderPosition: true, faabBudget: true },
       orderBy: [{ waiverOrderPosition: "asc" }, { displayName: "asc" }],
     }),
     // The viewer's OWN pending claims (self-scoped).
@@ -309,6 +313,16 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       isMe: m.id === viewerManagerId,
     }));
 
+  // Every team's remaining FAAB, budget-desc — display-only, read straight off `manager.faabBudget`.
+  const teamBudgets: WvTeamBudget[] = [...managerRows]
+    .sort((a, b) => b.faabBudget - a.faabBudget)
+    .map((m) => ({
+      managerId: m.id,
+      name: m.id === viewerManagerId ? "You" : m.displayName,
+      budget: m.faabBudget,
+      isMe: m.id === viewerManagerId,
+    }));
+
   // The phase squad cap (15 group / 9 playoff) is VIEW-DRIVEN (no hardcoded 15 in the client). D4
   // participation gates the affordances; outside the playoff phase everyone participates. The phase is
   // derived from playoff_entry EXISTENCE (the data-existence contract the dashboard/playoffs loaders honor),
@@ -338,6 +352,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     claims,
     batches,
     waiverOrder,
+    teamBudgets,
     batchWindow,
     timezone: league?.timezone ?? "UTC",
     isPlayoffPhase: playoffPhaseActive,

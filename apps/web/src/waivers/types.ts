@@ -117,6 +117,16 @@ export interface WvWaiverSeat {
   readonly isMe: boolean;
 }
 
+/** One team's remaining FAAB for the league-wide budgets rail — read straight off
+ *  `manager.faabBudget` (the column the resolver debits on a won claim), never recomputed from bid
+ *  history. Display-only; budget-desc order is computed server-side in the loader. */
+export interface WvTeamBudget {
+  readonly managerId: string;
+  readonly name: string;
+  readonly budget: number;
+  readonly isMe: boolean;
+}
+
 /** The viewing manager's budget. All three are engine-consistent (see WaiversClient budget notes). */
 export interface WvBudget {
   /** manager.faabBudget — the remaining pool, already net of won spend. */
@@ -142,6 +152,8 @@ export interface WaiversView {
   readonly claims: readonly WvClaim[];
   readonly batches: readonly WvBatch[];
   readonly waiverOrder: readonly WvWaiverSeat[];
+  /** Every team's remaining FAAB, budget-desc — the league-wide budgets rail (display-only). */
+  readonly teamBudgets: readonly WvTeamBudget[];
   /**
    * The current period's acquisition-window state for the "next batch" element. Null when no period is
    * live (nothing open and nothing pending — e.g. the season is over). The IANA tz is baked into the

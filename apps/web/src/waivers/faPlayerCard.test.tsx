@@ -82,6 +82,7 @@ function view(over: Partial<WaiversView> = {}): WaiversView {
     claims: [],
     batches: [],
     waiverOrder: [],
+    teamBudgets: [],
     batchWindow: FA_WINDOW,
     timezone: "UTC",
     isPlayoffPhase: false,

@@ -11,7 +11,14 @@
 import type { Position } from "@app/shared";
 import { Flag } from "../../app/draft/Flag";
 import { toIso2 } from "../draft/flag";
-import type { OpponentInfo, WvBatchWindow, WvPlayer, WvResult, WvResultGroup } from "./types";
+import type {
+  OpponentInfo,
+  WvBatchWindow,
+  WvPlayer,
+  WvResult,
+  WvResultGroup,
+  WvTeamBudget,
+} from "./types";
 import { groupResultsByPlayer, isPlayerCutoffPassed } from "./waiversLogic";
 
 // ── icons (ported 1:1 from the design glyphs) ──────────────────────────────────
@@ -362,6 +369,33 @@ export function WaiverOrderRail({
       <div className="wv-order-note t-micro">
         Order rotates as claims are won · <b>equal bids break on this order</b>
       </div>
+    </div>
+  );
+}
+
+// ── league-wide team budgets ─────────────────────────────────────────────────────
+export function TeamBudgetsRail({ budgets }: { budgets: readonly WvTeamBudget[] }) {
+  return (
+    <div className="wv-budgets">
+      <div className="wv-order-head">
+        <span className="t-label">Team budgets</span>
+      </div>
+      <table className="dtable wv-budgets-table">
+        <thead>
+          <tr>
+            <th>Team</th>
+            <th className="num">FAAB</th>
+          </tr>
+        </thead>
+        <tbody>
+          {budgets.map((team) => (
+            <tr key={team.managerId} className={team.isMe ? "row-me" : ""}>
+              <td>{team.name}</td>
+              <td className="num mono">${team.budget}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

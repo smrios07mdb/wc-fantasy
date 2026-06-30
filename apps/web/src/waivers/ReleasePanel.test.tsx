@@ -111,6 +111,7 @@ describe("WaiversClient release-panel mount condition", () => {
       claims: [],
       batches: [],
       waiverOrder: [],
+      teamBudgets: [],
       batchWindow: null,
       timezone: "UTC",
       isPlayoffPhase: true,

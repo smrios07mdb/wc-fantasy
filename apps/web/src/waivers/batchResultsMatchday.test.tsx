@@ -77,6 +77,7 @@ function view(over: Partial<WaiversView> = {}): WaiversView {
     claims: [],
     batches: [MD2_BATCH],
     waiverOrder: [],
+    teamBudgets: [],
     batchWindow: {
       phase: "free-agency",
       caption: "Free agency open — locks at",
