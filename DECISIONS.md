@@ -2925,7 +2925,7 @@ Distribute `field − 1` eliminations across the 5 WC knockout rounds (R32→R16
 0. Conditional `league.status` `group→playoff` claim; 0 rows ⇒ abort (idempotent, belt-and-suspenders with the orchestrator skip).
 1. Write `cut_count` onto the 5 knockout periods (upsert by `(league, label)` — they pre-exist from provisioning).
 2. One `alive` `playoff_entry` per top-N seeded manager.
-3. Release non-advancers' active rosters → FAAB pool (`droppedAt = now`). **FAAB budgets are NOT reset — the one-time tournament allowance carries forward (2026-06-28 correction; the prior "reset to a fresh $100" step was removed).**
+3. Release non-advancers' active rosters → FAAB pool (`droppedAt = now`). **FAAB budgets are NOT reset — the one-time tournament allowance carries forward (2026-06-28 correction; the prior "reset to a fresh $100" step was removed).** **Known-stale surface (2026-06-30, FAAB-COPY-P1, BACKLOG.md):** `/playoffs` `ReinforceModule` + `PLAYOFF_EXPLAINER` copy still says "FAAB reset to $100" — engine/decision corrected here, UI strings not yet updated; fix belongs to the FAAB thread.
 4. Two-phase waiver carry-forward (NULL everyone first, then assign survivors `1..K` — respects the non-deferrable unique; eliminated managers end NULL; no re-seed, surviving relative order preserved).
 
 **D6 precondition:** `--apply` refuses while any `group_md` period is unfrozen (`frozen_at IS NULL`), with an explicit `--allow-incomplete-standings` override (irreversible-op guard). **Upsert-label pin:** `validateConfig` requires knockout labels to equal `KNOCKOUT_ROUNDS` exactly — a config-drift label fails loud at provision time, not silently at the irreversible transition.
