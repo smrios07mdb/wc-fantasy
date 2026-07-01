@@ -154,6 +154,7 @@ model League {
   poolPicks      PoolPick[]
   playoffEntries PlayoffEntry[]
   watchlist      Watchlist[]
+  commishAudits  CommishAudit[]
 
   @@map("league")
 }
@@ -222,6 +223,9 @@ model AppUser {
   managers     Manager[]
   manualStats  ManualStatPlayerMatch[]
   claimedEmail AllowlistEmail?
+  /// Commissioner audit rows this user authored / reversed (named relations disambiguate the two FKs).
+  commishAuditsActed    CommishAudit[] @relation("CommishAuditActor")
+  commishAuditsReversed CommishAudit[] @relation("CommishAuditReverser")
 
   @@map("app_user")
 }
@@ -1094,4 +1098,42 @@ model NotificationSent {
   @@unique([managerId, kind, subjectId], map: "notification_sent_uq")
   @@index([managerId])
   @@map("notification_sent")
+}
+
+/// Commissioner audit log — the append-only governance ledger. Every commissioner WRITE action
+/// (penalty entry, stat correction, rating override, roster/lineup repair, period freeze, field lock,
+/// ops config) records ONE row here through the server-side `recordCommishAudit` helper. This is the
+/// cross-cutting dependency every later commissioner write slice writes into; Thread 1 ships it EMPTY
+/// (no callers wired). `action_type` is a free TEXT column DELIBERATELY (not a Prisma enum) so a new
+/// slice's action string needs no migration — the closed set lives as the app-level `CommishActionType`
+/// union in @app/shared. `target_ref` is a structured pointer ({matchId,playerId} | {managerId} |
+/// {periodId}); `delta` is a display string (e.g. "+5 pts"); a reversible row can later be undone
+/// (stamps reversed_at / reversed_by_user_id). Written by the server (table-owner / service-role) ONLY:
+/// RLS grants a commissioner-only SELECT for defense-in-depth, but NO client write policy (default-deny
+/// — every insert goes through the RLS-bypassing owner client). Not published to Realtime.
+model CommishAudit {
+  id               String    @id @default(uuid())
+  leagueId         String    @map("league_id")
+  /// → app_user. Nullable so a future 'system'/automated row can carry a null actor.
+  actorUserId      String?   @map("actor_user_id")
+  /// One of the CommishActionType values (@app/shared). Free TEXT, NOT a Prisma enum (see model doc).
+  actionType       String    @map("action_type")
+  summary          String
+  detail           String?
+  reason           String?
+  /// Structured pointer to the affected entity: { matchId, playerId } | { managerId } | { periodId }.
+  targetRef        Json?     @map("target_ref")
+  /// Human-readable point/budget delta, e.g. "+5 pts" or "-$12".
+  delta            String?
+  reversible       Boolean   @default(false)
+  reversedAt       DateTime? @map("reversed_at") @db.Timestamptz(6)
+  reversedByUserId String?   @map("reversed_by_user_id")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  league     League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  actor      AppUser? @relation("CommishAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  reversedBy AppUser? @relation("CommishAuditReverser", fields: [reversedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, createdAt])
+  @@map("commish_audit")
 }

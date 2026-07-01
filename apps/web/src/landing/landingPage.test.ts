@@ -23,7 +23,10 @@ const draftDs = read("draft/ds.css");
 describe("landing page — four-outcome branch is preserved (visual re-skin only)", () => {
   it("maps every view to its own state component and keeps the IO edge unchanged", () => {
     expect(page).toContain('view === "hub"');
-    expect(page).toContain("<Hub displayName=");
+    // <Hub> threads the resolved identity (now multi-line — it also carries the commissioner flag for the
+    // gated console nav entry); assert the render + the displayName prop independently of line wrapping.
+    expect(page).toContain("<Hub");
+    expect(page).toContain("displayName={outcome.manager.displayName}");
     expect(page).toContain('view === "unlinked"');
     expect(page).toContain("<Unlinked />");
     expect(page).toContain('view === "denied"');

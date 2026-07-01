@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import type { NavId, NavItem } from "@/src/shell/crossNav";
+import { COMMISH_NAV_ITEM, type NavId, type NavItem } from "@/src/shell/crossNav";
 
 // Three-dot "more" glyph — distinct from all other NavIcon glyphs.
 function MoreIcon() {
@@ -24,11 +24,14 @@ export function MoreSheet({
   active,
   moreHasActive,
   signedInAs,
+  isCommissioner,
   moreItems,
 }: {
   active: NavId | null;
   moreHasActive: boolean;
   signedInAs?: string;
+  /** When true, appends the gated Commissioner console entry to the More sheet (IA §3 slate entry). */
+  isCommissioner?: boolean;
   moreItems: readonly NavItem[];
 }) {
   const [open, setOpen] = useState(false);
@@ -79,6 +82,21 @@ export function MoreSheet({
                 {item.label}
               </a>
             ))}
+            {/* Gated Commissioner console entry — appended only for commissioners (IA §3 slate entry). */}
+            {isCommissioner && (
+              <a
+                href={COMMISH_NAV_ITEM.href}
+                className={
+                  active === "commish"
+                    ? "sh-more-item sh-more-commish is-active"
+                    : "sh-more-item sh-more-commish"
+                }
+                aria-current={active === "commish" ? "page" : undefined}
+                onClick={close}
+              >
+                {COMMISH_NAV_ITEM.label}
+              </a>
+            )}
           </div>
 
           <div className="sh-more-footer">

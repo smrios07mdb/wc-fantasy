@@ -20,13 +20,26 @@ export type NavId =
   | "pool"
   | "playoffs"
   | "scoring"
-  | "settings";
+  | "settings"
+  | "commish";
 
 export interface NavItem {
   readonly id: NavId;
   readonly href: string;
   readonly label: string;
 }
+
+/**
+ * The commissioner console entry (Commissioner console Thread 1). Kept DELIBERATELY OUT of the always-rendered
+ * NAV_ITEMS / BOTTOM_TAB_ITEMS / MORE_SHEET_ITEMS lists — it is `is_commissioner`-gated, so AppShell / MoreSheet
+ * render it ONLY when the viewer is a commissioner (`isCommissioner` prop). Design IA §3 places Commissioner in
+ * the More overflow / avatar menu (the "elevated privileges" slate entry), never a primary bottom tab.
+ */
+export const COMMISH_NAV_ITEM: NavItem = {
+  id: "commish",
+  href: "/commish",
+  label: "Commissioner",
+};
 
 // Full list for the top strip (desktop ≥640px). Home first, then feature screens.
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -105,7 +118,9 @@ export function selectMobileNavPartition(active: NavId | null): {
   moreHasActive: boolean;
 } {
   if (active === null) return { bottomActive: null, moreActive: null, moreHasActive: false };
-  const moreHasActive = MORE_IDS.has(active);
+  // `commish` is the gated More-area entry (COMMISH_NAV_ITEM) — it is not in MORE_SHEET_ITEMS, but it lives
+  // in the More overflow (IA §3), so treat it like a More item: light the More button, claim no bottom tab.
+  const moreHasActive = MORE_IDS.has(active) || active === "commish";
   return {
     bottomActive: moreHasActive ? null : active,
     moreActive: moreHasActive ? active : null,

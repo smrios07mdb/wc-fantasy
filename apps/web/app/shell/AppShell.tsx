@@ -32,6 +32,7 @@ import {
   NAV_ITEMS,
   BOTTOM_TAB_ITEMS,
   MORE_SHEET_ITEMS,
+  COMMISH_NAV_ITEM,
   selectMobileNavPartition,
   type NavId,
 } from "@/src/shell/crossNav";
@@ -111,6 +112,13 @@ function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
       </>
     ),
+    // Commissioner = a shield (the "elevated privileges" console; slate treatment lives in the console itself).
+    commish: (
+      <>
+        <path d="M12 3 5 6v5c0 4.4 3 7.6 7 9 4-1.4 7-4.6 7-9V6l-7-3Z" />
+        <path d="M9.2 12.2 11 14l3.6-4" />
+      </>
+    ),
   };
   return (
     <svg
@@ -132,10 +140,15 @@ function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
 export function AppShell({
   active,
   signedInAs,
+  isCommissioner,
   children,
 }: {
   active: NavId;
   signedInAs?: string;
+  /** When true, the gated Commissioner console entry (COMMISH_NAV_ITEM) is rendered. Threaded by the
+   *  callers that already know the viewer's commissioner status (the hub page, the /commish layout); other
+   *  screens omit it for now — surfacing it everywhere is a documented follow-up seam (see DECISIONS.md). */
+  isCommissioner?: boolean;
   children: ReactNode;
 }) {
   const { moreHasActive } = selectMobileNavPartition(active);
@@ -178,6 +191,22 @@ export function AppShell({
                 </a>
               );
             })}
+            {/* Gated Commissioner console entry — rendered ONLY for commissioners (COMMISH_NAV_ITEM is kept
+                out of the shared nav lists). Slate "elevated privileges" hook via .sh-nav-commish. */}
+            {isCommissioner && (
+              <a
+                href={COMMISH_NAV_ITEM.href}
+                className={
+                  active === "commish"
+                    ? "sh-nav-item sh-nav-commish is-active"
+                    : "sh-nav-item sh-nav-commish"
+                }
+                aria-current={active === "commish" ? "page" : undefined}
+              >
+                <NavIcon id="commish" />
+                {COMMISH_NAV_ITEM.label}
+              </a>
+            )}
           </nav>
         </div>
 
@@ -221,6 +250,7 @@ export function AppShell({
           active={active}
           moreHasActive={moreHasActive}
           signedInAs={signedInAs}
+          isCommissioner={isCommissioner}
           moreItems={MORE_SHEET_ITEMS}
         />
       </nav>

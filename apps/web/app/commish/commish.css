@@ -1,0 +1,560 @@
+/*
+ * Route-scoped styles for the commissioner console (`/commish`). Imported by CommishConsole (the pool/playoffs
+ * pattern); the global ds.css supplies every token EXCEPT `--adm-edge`, which is the admin-local "elevated
+ * privileges" slate mechanism — declared on the console root here (= --locked slate; --ytp orange under the
+ * warning look). Ported from design/design_reference/Commissioner.html's <style> block; class names kept as
+ * `adm-*` for fidelity (they are unique to this surface in the app, so the global import can't collide).
+ *
+ * Adapted for the real app: ONE responsive tree (the design's separate desktop/mobile trees were a
+ * side-by-side presenter artifact) with NATURAL flow — no fixed-height flex column / internal overflow (the
+ * console mounts inside AppShell's scrollable content; a fixed-height model would clip, per the playoffs gotcha).
+ */
+
+/* ── root + the slate "elevated privileges" token ─────────────────────────────────────────────── */
+.adm-console {
+  --adm-edge: var(--locked);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 32px;
+}
+.adm-console.adm-look-warning {
+  --adm-edge: var(--ytp);
+}
+
+/* ── elevated ribbon ──────────────────────────────────────────────────────────────────────────── */
+.adm-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  position: relative;
+  flex-wrap: wrap;
+  row-gap: 3px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--adm-edge) 9%, var(--surface-1));
+  border: 1px solid color-mix(in srgb, var(--adm-edge) 22%, var(--hairline));
+  box-shadow: inset 3px 0 0 var(--adm-edge);
+}
+.adm-ribbon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--adm-edge);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex: none;
+}
+.adm-ribbon-copy {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  min-width: 0;
+  flex: 1;
+}
+
+/* ── CommishBadge (slate) ─────────────────────────────────────────────────────────────────────── */
+.adm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--locked-soft);
+  color: var(--locked);
+  border: 1px solid color-mix(in srgb, var(--locked) 30%, transparent);
+}
+.adm-badge-sm {
+  height: 20px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
+/* ── tabs ─────────────────────────────────────────────────────────────────────────────────────── */
+.adm-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+}
+.adm-tab {
+  position: relative;
+  padding: 9px 14px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font: 700 14px/1 var(--font-sans);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.adm-tab:hover {
+  color: var(--text-primary);
+}
+.adm-tab.is-active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent);
+}
+
+/* ── body grid ────────────────────────────────────────────────────────────────────────────────── */
+.adm-body {
+  display: grid;
+  grid-template-columns: 1fr 332px;
+  gap: 16px;
+  align-items: start;
+}
+.adm-main,
+.adm-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ── card ─────────────────────────────────────────────────────────────────────────────────────── */
+.adm-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.adm-card-h {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid var(--hairline);
+}
+.adm-card-ht {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.adm-card-h > :last-child {
+  flex: none;
+}
+.adm-card-title {
+  font-size: 15px;
+  font-weight: 800;
+  font-family: var(--font-display);
+  line-height: 1.25;
+}
+.adm-card-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.adm-card-b {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── system status ────────────────────────────────────────────────────────────────────────────── */
+.adm-status .adm-card-b {
+  padding: 13px 14px;
+}
+.adm-status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.adm-stat-row {
+  display: flex;
+  gap: 10px;
+}
+.adm-stat-mini {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+}
+.adm-stat-mini b {
+  font-size: var(--fs-body);
+  font-weight: 800;
+}
+.adm-stat-mini b.is-warn {
+  color: var(--ytp);
+}
+
+/* ── audit log ────────────────────────────────────────────────────────────────────────────────── */
+.adm-auditlog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.adm-audit {
+  display: flex;
+  gap: 11px;
+  padding: 11px 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  position: relative;
+}
+.adm-audit-ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+}
+.adm-audit.tone-warn .adm-audit-ico {
+  background: var(--ytp-soft);
+  color: var(--ytp);
+}
+.adm-audit.tone-danger .adm-audit-ico {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.adm-audit.tone-info .adm-audit-ico {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.adm-audit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.adm-audit-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.adm-audit-title {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.adm-audit-delta {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--win);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.adm-audit-detail {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.adm-audit-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 5px;
+  margin-top: 3px;
+}
+.adm-audit-type {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.adm-audit-sep {
+  color: var(--text-disabled);
+  font-size: 10px;
+}
+.adm-audit-actor,
+.adm-audit-when {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+/* The Reverse control is INERT this thread (records intent only) — rendered disabled. */
+.adm-audit-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font: 700 11px/1 var(--font-sans);
+  padding: 5px 9px;
+  border-radius: var(--r-sm);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.adm-audit-lockflag {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.adm-audit-allflag {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.adm-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+}
+
+/* ── inert task-panel placeholder (the four write tabs — later threads) ────────────────────────── */
+.adm-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+  padding: 34px 22px;
+  color: var(--text-tertiary);
+}
+.adm-placeholder-title {
+  font-size: var(--fs-body);
+  font-weight: 800;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+}
+.adm-placeholder-copy {
+  font-size: var(--fs-sm);
+  max-width: 44ch;
+  line-height: 1.5;
+}
+.adm-placeholder-tag {
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--adm-edge);
+  border: 1px solid color-mix(in srgb, var(--adm-edge) 30%, transparent);
+  background: color-mix(in srgb, var(--adm-edge) 10%, transparent);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+}
+
+/* ── view-as switcher ─────────────────────────────────────────────────────────────────────────── */
+.adm-viewas {
+  position: relative;
+}
+.adm-viewas-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font: 600 13px/1 var(--font-sans);
+  cursor: pointer;
+}
+.adm-viewas-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+.adm-viewas-btn b {
+  color: var(--text-primary);
+}
+.adm-viewas-btn.is-active {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--accent-soft);
+}
+.adm-viewas-menu {
+  position: absolute;
+  right: 0;
+  top: 42px;
+  z-index: 40;
+  width: 240px;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--e3);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.adm-viewas-head {
+  padding: 4px 8px 6px;
+}
+.adm-viewas-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.adm-viewas-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  text-decoration: none;
+}
+.adm-viewas-opt:hover {
+  background: var(--surface-2);
+}
+.adm-viewas-opt.is-sel {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.adm-viewas-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* ── view-as banner + manager inspector ───────────────────────────────────────────────────────── */
+.adm-vab {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+}
+.adm-vab-txt {
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.adm-vab-txt b {
+  font-weight: 800;
+}
+.adm-vab .btn {
+  margin-left: auto;
+}
+.adm-mgrview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.adm-mgrview-card {
+  width: 100%;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.adm-mgrview-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.adm-mgrview-name {
+  font-size: 22px;
+  font-weight: 800;
+  font-family: var(--font-display);
+}
+.adm-mgrview-sub {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.adm-mgrview-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.adm-mvtile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 11px;
+}
+.adm-mvtile b {
+  font-size: 18px;
+  font-weight: 800;
+}
+.adm-mgrview-note {
+  display: flex;
+  gap: 9px;
+  padding: 12px 14px;
+  background: var(--info-soft);
+  border-radius: var(--r-md);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.adm-mgrview-note svg {
+  color: var(--info);
+  flex: none;
+  margin-top: 1px;
+}
+.adm-mgrview-note b {
+  color: var(--text-primary);
+}
+/* Read-only roster list (owned players) — a compact grouped list under the tiles. */
+.adm-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.adm-roster-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+.adm-roster-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+.adm-roster-team {
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ── responsive ───────────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .adm-body {
+    grid-template-columns: 1fr;
+  }
+  .adm-mgrview-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

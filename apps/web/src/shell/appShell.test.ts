@@ -133,4 +133,12 @@ describe("global surface — collision A resolved (Prompt 20, mandatory)", () =>
       expect(perRoute, `${route}/ds.css must match styles/ds.css byte-for-byte`).toBe(canonical);
     }
   });
+
+  it("gates the Commissioner console entry on the isCommissioner prop (COMMISH_NAV_ITEM, its own glyph)", () => {
+    // The gated entry renders ONLY when the viewer is a commissioner — it is NOT in the shared nav lists.
+    expect(shell).toContain("COMMISH_NAV_ITEM");
+    expect(shell).toContain("isCommissioner");
+    // The glyph map Record<NavId, ReactNode> is exhaustive, so the union's `commish` member needs a glyph.
+    expect(shell).toMatch(/commish:\s*\(/);
+  });
 });

@@ -20,6 +20,7 @@
  * state) lives in `_landing/MarketingLanding`. `/sign-in` itself stays unstyled — its design (`Join.html`)
  * was NOT in this handoff bundle, so skinning it is a flagged follow-up.
  */
+import { resolveCommissioner } from "@app/shared";
 import { getSessionManager } from "@/lib/auth/manager";
 import { selectLandingView } from "@/src/landing/selectLandingView";
 import { BrandLink, LpRoot, SignOutButton } from "./_landing/chrome";
@@ -39,7 +40,16 @@ export default async function Home() {
 
   // `hub` is reachable only from the `ok` outcome (see selectLandingView), so this narrow always holds.
   if (view === "hub" && outcome.kind === "ok")
-    return <Hub displayName={outcome.manager.displayName} managerId={outcome.manager.id} />;
+    return (
+      <Hub
+        displayName={outcome.manager.displayName}
+        managerId={outcome.manager.id}
+        isCommissioner={resolveCommissioner({
+          isCommissioner: outcome.isCommissioner,
+          email: outcome.manager.email,
+        })}
+      />
+    );
   if (view === "unlinked") return <Unlinked />;
   if (view === "denied") return <Denied />;
   // view === "signin" (plus the unreachable hub-without-ok) → the logged-out front door.
@@ -61,10 +71,18 @@ function SignIn() {
  * `managerId` is the resolved manager's DB id — passed to `loadDashboard` which reuses
  * `loadDraftRoom` (the same read /draft uses; no second draft source).
  */
-async function Hub({ displayName, managerId }: { displayName: string; managerId: string }) {
+async function Hub({
+  displayName,
+  managerId,
+  isCommissioner,
+}: {
+  displayName: string;
+  managerId: string;
+  isCommissioner: boolean;
+}) {
   const data = await loadDashboard(managerId);
   return (
-    <AppShell active="home" signedInAs={displayName}>
+    <AppShell active="home" signedInAs={displayName} isCommissioner={isCommissioner}>
       <Dashboard data={data} />
     </AppShell>
   );

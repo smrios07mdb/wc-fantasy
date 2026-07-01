@@ -3,6 +3,7 @@ import {
   NAV_ITEMS,
   BOTTOM_TAB_ITEMS,
   MORE_SHEET_ITEMS,
+  COMMISH_NAV_ITEM,
   selectActiveNav,
   selectMobileNavPartition,
 } from "./crossNav";
@@ -176,5 +177,28 @@ describe("selectMobileNavPartition — maps active NavId to primary/secondary bu
       // moreHasActive flag is consistent with moreActive
       expect(moreHasActive).toBe(inMore);
     }
+  });
+});
+
+describe("COMMISH_NAV_ITEM — the is_commissioner-gated console entry", () => {
+  it("points at /commish with the commish id", () => {
+    expect(COMMISH_NAV_ITEM).toEqual({ id: "commish", href: "/commish", label: "Commissioner" });
+  });
+
+  it("is kept OUT of every always-rendered list (so non-commissioners never see it)", () => {
+    const ids = [
+      ...NAV_ITEMS.map((i) => i.id),
+      ...BOTTOM_TAB_ITEMS.map((i) => i.id),
+      ...MORE_SHEET_ITEMS.map((i) => i.id),
+    ];
+    expect(ids).not.toContain("commish");
+  });
+
+  it("is treated as a More-area item by the mobile partition (lights the More button, no bottom tab)", () => {
+    expect(selectMobileNavPartition("commish")).toEqual({
+      bottomActive: null,
+      moreActive: "commish",
+      moreHasActive: true,
+    });
   });
 });

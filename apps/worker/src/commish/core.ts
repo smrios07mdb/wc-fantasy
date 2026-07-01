@@ -11,17 +11,20 @@
  * audit line per applied action.
  */
 
-/** The league commissioner's email (also flagged `manager.is_commissioner`); the gate's hard fallback. */
-export const COMMISSIONER_EMAIL = "smrios07@gmail.com";
+import { COMMISSIONER_EMAIL, resolveCommissioner } from "@app/shared";
+
+/** The league commissioner's email (also flagged `manager.is_commissioner`); the gate's hard fallback.
+ *  Re-exported from @app/shared (the single source of truth shared with the web `/commish` gate). */
+export { COMMISSIONER_EMAIL };
 
 /** The acting identity may run the override iff it is the commissioner — by the `is_commissioner` flag
- *  OR the known commissioner email (case-insensitive). Mirrors `canActAsManager({scope:"admin"})`. */
+ *  OR the known commissioner email (case-insensitive). Delegates to @app/shared `resolveCommissioner`, so
+ *  the CLI gate and the web `/commish` gate are literally the same predicate. */
 export function isCommissionerActor(actor: {
   email: string | null;
   isCommissioner: boolean;
 }): boolean {
-  if (actor.isCommissioner) return true;
-  return (actor.email ?? "").trim().toLowerCase() === COMMISSIONER_EMAIL;
+  return resolveCommissioner(actor);
 }
 
 // ── name → id resolution (ambiguity is an ERROR, never a silent guess) ──────────────
