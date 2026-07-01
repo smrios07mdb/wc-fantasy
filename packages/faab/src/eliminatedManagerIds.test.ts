@@ -22,18 +22,21 @@ import { loadEliminatedManagerIds } from "./prismaStore";
 type Db = Parameters<typeof loadEliminatedManagerIds>[0];
 
 /**
- * Fake whose surface is `playoffEntry.count` (phase signal), `playoffEntry.findMany` (alive filter), and
+ * Fake whose surface is `playoffEntry.count` (phase signal), `playoffEntry.findMany` (SURVIVOR filter), and
  * `manager.findMany` (the league universe). `count` returns the TOTAL entry rows (any status) so the phase
- * flips exactly as `loadPlayoffPhaseActive` sees it; `findMany` honours the `status: "alive"` filter.
+ * flips exactly as `loadPlayoffPhaseActive` sees it; `findMany` honours the `status: { in: [...] }` survivor
+ * filter (`alive` + the terminal `champion`).
  */
 function fakeDb(entries: { managerId: string; status: string }[], managerIds: string[]): Db {
   return {
     playoffEntry: {
       count: async () => entries.length,
-      findMany: async (args: { where: { status?: string } }) =>
-        entries
-          .filter((e) => (args.where.status ? e.status === args.where.status : true))
-          .map((e) => ({ managerId: e.managerId })),
+      findMany: async (args: { where: { status?: { in: string[] } } }) => {
+        const wanted = args.where.status?.in;
+        return entries
+          .filter((e) => (wanted ? wanted.includes(e.status) : true))
+          .map((e) => ({ managerId: e.managerId }));
+      },
     },
     manager: {
       findMany: async () => managerIds.map((id) => ({ id })),
@@ -84,13 +87,11 @@ describe("loadEliminatedManagerIds — data-existence eliminated set (phase-gate
     expect((await loadEliminatedManagerIds(db, "L")).has("m2")).toBe(true);
   });
 
-  it("a `champion` (status !== 'alive') is in the set — only 'alive' survives (matches loadIsPlayoffParticipant)", async () => {
-    // The predicate is strictly `status === 'alive'` — the established D4 contract loadIsPlayoffParticipant
-    // already encodes (champion ⇒ not a participant). At tournament-complete advanceStore flips the winner
-    // alive→champion, so by the data-existence contract the champion is "not alive" → in the set. This never
-    // surfaces on /vsfield (the hide is isLivePeriod-gated and there is NO live period at complete); on
-    // /waivers it strikes the champion's budget row in the terminal, window-closed state. Pinned here as
-    // INTENTIONAL + spec-faithful (the prompt: "survivors status='alive' are the only ones NOT struck").
+  it("a `champion` is NOT in the set — champion is alive-equivalent for DISPLAY (terminal form of 'survived')", async () => {
+    // `champion` counts as a survivor HERE (display strike/hide) — the winner must not be struck/hidden. This
+    // is DISPLAY-ONLY and deliberately DIVERGES from loadIsPlayoffParticipant / the FAAB enforcement + cap
+    // predicates, which stay strictly status==='alive' (a separate axis; enforcement is moot post-tournament).
+    // At Final-complete only the guillotined 'loser' is eliminated; the champion stays in.
     const db = fakeDb(
       [
         { managerId: "champ", status: "champion" },
@@ -98,10 +99,10 @@ describe("loadEliminatedManagerIds — data-existence eliminated set (phase-gate
       ],
       ["champ", "loser"],
     );
-    expect(await loadEliminatedManagerIds(db, "L")).toEqual(new Set(["champ", "loser"]));
+    expect(await loadEliminatedManagerIds(db, "L")).toEqual(new Set(["loser"]));
   });
 
-  it("returns EXACTLY the non-alive managers — (non-advancer ∪ guillotined), survivors excluded", async () => {
+  it("returns EXACTLY the non-survivor managers — (non-advancer ∪ guillotined), survivors excluded", async () => {
     // m1 alive (survivor), m2 eliminated (guillotined mid-playoffs), m3 alive (survivor), m4 no row
     // (group non-advancer). Eliminated set = {m2, m4}; the survivors m1,m3 are the only ones kept.
     const db = fakeDb(

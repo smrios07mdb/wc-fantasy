@@ -714,35 +714,48 @@ export async function loadIsPlayoffParticipant(
 }
 
 /**
- * The SET of league managers who are OUT OF CONTENTION — the data-existence eliminated predicate applied
- * league-wide (the set twin of {@link loadIsPlayoffParticipant}, negated). A manager is eliminated iff the
- * playoff phase is active AND they do NOT hold an `alive` playoff_entry, which is the ONLY correct "out"
- * signal because it catches BOTH:
+ * The SET of league managers who are OUT OF CONTENTION for DISPLAY (the /vsfield live-field hide + the
+ * /waivers budgets-rail strike) — the data-existence eliminated predicate applied league-wide. A manager is
+ * eliminated iff the playoff phase is active AND they do NOT hold a SURVIVOR playoff_entry
+ * (`status IN ('alive','champion')`), which is the ONLY correct "out" signal because it catches BOTH:
  *   - group-phase NON-ADVANCERS — they have NO playoff_entry row at all (status is NULL, never the string
  *     'eliminated'), so a `status = 'eliminated'` read silently misses them; and
  *   - managers guillotined DURING the playoffs — status flipped to 'eliminated'.
- * Playoff survivors (status='alive') are the only managers left OUT of the returned set.
+ * Survivors (`status='alive'`, plus the terminal `status='champion'`) are the only managers left OUT of the
+ * returned set.
  *
- * PHASE-GATED to EMPTY during the group phase: before the group→playoff transition there are ZERO alive
- * rows, so a naive "not alive" derivation would mark EVERYONE eliminated and blank the whole live field /
- * budgets rail. Gating on {@link loadPlayoffPhaseActive} (ANY playoff_entry row exists) returns an empty
- * set until the transition fires — nobody is struck/hidden during group play. Both /vsfield (hide) and
- * /waivers (strike) call THIS one helper so the two surfaces cannot drift apart again.
+ * `champion` is alive-equivalent HERE because it is the terminal form of "survived": the tournament winner
+ * must not be struck (waivers) or hidden (vsfield). This is a DISPLAY concern ONLY and deliberately DIVERGES
+ * from {@link loadIsPlayoffParticipant} and the FAAB ENFORCEMENT / roster-cap predicates, which stay strictly
+ * `status === 'alive'` — a SEPARATE axis, left untouched (enforcement is moot post-tournament anyway).
+ * Folding champion in also CLOSES the sub-60s Final-advance-before-tick window: after the manual
+ * `commish:advance --round Final --apply` crowns the champion (alive→champion) but BEFORE the ~60s worker
+ * tick closes the Final period, `isLivePeriod` is still true; with a strict `alive`-only set that window has
+ * ZERO survivors and `filterEliminatedFromField` would blank the whole leaderboard. With champion counted in,
+ * the winner remains and the field is never emptied.
+ *
+ * PHASE-GATED to EMPTY during the group phase: before the group→playoff transition there are ZERO survivor
+ * rows, so a naive "not a survivor" derivation would mark EVERYONE eliminated and blank the whole live field /
+ * budgets rail. Gating on {@link loadPlayoffPhaseActive} (ANY playoff_entry row exists) returns an empty set
+ * until the transition fires — nobody is struck/hidden during group play. Both /vsfield (hide) and /waivers
+ * (strike) call THIS one helper so the two surfaces cannot drift apart again.
  */
 export async function loadEliminatedManagerIds(
   db: Pick<Db, "playoffEntry" | "manager">,
   leagueId: string,
 ): Promise<Set<string>> {
   if (!(await loadPlayoffPhaseActive(db, leagueId))) return new Set();
-  const [managers, aliveEntries] = await Promise.all([
+  const [managers, survivorEntries] = await Promise.all([
     db.manager.findMany({ where: { leagueId }, select: { id: true } }),
+    // `champion` is alive-equivalent for DISPLAY — the terminal form of "survived" (see doc above). This is
+    // NOT the enforcement/participant axis (loadIsPlayoffParticipant stays `alive`-only) — do not unify them.
     db.playoffEntry.findMany({
-      where: { leagueId, status: "alive" },
+      where: { leagueId, status: { in: ["alive", "champion"] } },
       select: { managerId: true },
     }),
   ]);
-  const aliveIds = new Set(aliveEntries.map((e) => e.managerId));
-  return new Set(managers.filter((m) => !aliveIds.has(m.id)).map((m) => m.id));
+  const survivorIds = new Set(survivorEntries.map((e) => e.managerId));
+  return new Set(managers.filter((m) => !survivorIds.has(m.id)).map((m) => m.id));
 }
 
 /**

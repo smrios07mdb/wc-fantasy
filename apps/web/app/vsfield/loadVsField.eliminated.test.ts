@@ -66,10 +66,12 @@ function elimDb(entries: { managerId: string; status: string }[], managerIds: st
   return {
     playoffEntry: {
       count: async () => entries.length,
-      findMany: async (args: { where: { status?: string } }) =>
-        entries
-          .filter((e) => (args.where.status ? e.status === args.where.status : true))
-          .map((e) => ({ managerId: e.managerId })),
+      findMany: async (args: { where: { status?: { in: string[] } } }) => {
+        const wanted = args.where.status?.in;
+        return entries
+          .filter((e) => (wanted ? wanted.includes(e.status) : true))
+          .map((e) => ({ managerId: e.managerId }));
+      },
     },
     manager: { findMany: async () => managerIds.map((id) => ({ id })) },
   } as unknown as ElimDb;
@@ -115,5 +117,24 @@ describe("vsfield hide-set — loadEliminatedManagerIds feeds filterEliminatedFr
     expect(eliminated.size).toBe(0);
     const field = fieldOf("m1", "m2", "m3");
     expect(filterEliminatedFromField(field, eliminated, true)).toEqual(field);
+  });
+
+  it("keeps the CHAMPION on the live field at Final-advance-before-tick — field is NOT fully blanked", async () => {
+    // The sub-60s window the champion=alive-equivalent rule closes: the manual Final cut has crowned the
+    // champion (alive→champion) and everyone else is eliminated, but the ~60s worker tick hasn't closed the
+    // Final period yet, so isLivePeriod is still true. A strict alive-only set would mark EVERYONE eliminated
+    // (zero alive rows) and blank the whole leaderboard; counting champion as a survivor keeps the winner.
+    const db = elimDb(
+      [
+        { managerId: "champ", status: "champion" },
+        { managerId: "l1", status: "eliminated" },
+        { managerId: "l2", status: "eliminated" },
+      ],
+      ["champ", "l1", "l2"],
+    );
+    const eliminated = await loadEliminatedManagerIds(db, "L");
+    const out = filterEliminatedFromField(fieldOf("champ", "l1", "l2"), eliminated, true);
+    expect(out.map((e) => e.managerId)).toEqual(["champ"]); // NOT empty — champion remains, re-ranked to 1
+    expect(out.map((e) => e.rank)).toEqual([1]);
   });
 });

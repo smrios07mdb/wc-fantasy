@@ -1837,11 +1837,16 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   `loadIsPlayoffParticipant`: **eliminated iff `loadPlayoffPhaseActive` AND not in the `alive` set** —
   catching no-row non-advancers AND `"eliminated"` guillotines, leaving only `alive` survivors. Both surfaces
   call ONE shared helper, `loadEliminatedManagerIds(db, leagueId)` in `@app/faab/prisma`, so they cannot
-  drift. It is **phase-gated to empty** pre-transition (zero `alive` rows would otherwise blank the whole
-  live field — the field-blanking guard). **Champion** (`status="champion"`, not `alive`) is included in the
-  set by the same "only `alive` survives" rule this block already established — a spec-faithful terminal-state
-  edge (waivers strike only; never the `isLivePeriod`-gated vsfield hide), pinned by a test and flagged, not
-  silently decided. See ARCHITECTURE.md §27 (Follow-up fix).
+  drift. It is **phase-gated to empty** pre-transition (zero survivor rows would otherwise blank the whole
+  live field — the field-blanking guard). **Champion is DISPLAY-alive-equivalent:** the survivor set is
+  `status IN ('alive','champion')`, so the tournament winner is NOT struck (`/waivers`) or hidden
+  (`/vsfield`) — `champion` is the terminal form of "survived." This is DISPLAY-ONLY and deliberately does
+  NOT touch `loadIsPlayoffParticipant` or the FAAB **enforcement**/roster-cap predicates, which stay strictly
+  `status === "alive"` (a SEPARATE axis — enforcement is moot post-tournament). Counting champion in also
+  CLOSES a sub-60s transient: between the manual `commish:advance --round Final --apply` (crowns the champion)
+  and the ~60s tick that closes the Final period, `isLivePeriod` is still true; a strict `alive`-only set
+  would have had zero survivors and blanked the whole live field. See ARCHITECTURE.md §27 (Champion =
+  alive-equivalent for display).
 
 ## Quiniela (`/pool`) knockout bracket gates on `playoff_entry` existence, not `selectTournamentPhase` — the same R32 pre-kickoff blind spot as CONTRACT-P2/P3 (2026-06-28 — `worktree-pool-playoff-bracket-gate`, merge HELD)
 
