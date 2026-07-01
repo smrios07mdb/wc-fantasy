@@ -75,6 +75,21 @@ const IcoArrowR = () => (
     <path d="M5 12h14M13 6l6 6-6 6" />
   </svg>
 );
+// Coins (two overlapping) — a money-persistence glyph for the "budget carries over" STATE pill,
+// distinct from IcoArrowR (the forward-navigation CTA affordance).
+const IcoCoins = () => (
+  <svg
+    viewBox="0 0 24 24"
+    width="12"
+    height="12"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+  >
+    <circle cx="9" cy="9" r="6" />
+    <path d="M15 5.2a6 6 0 0 1 0 11.6" />
+  </svg>
+);
 
 /** The red blade with a little guillotine on top — the visual signature of the cut (the user's ask). */
 function GuillotineIcon({ dropped }: { dropped: boolean }) {
@@ -474,7 +489,7 @@ export function ReinforceModule({ reinforcement }: { reinforcement: WaiversView 
         <span className="t-label">Reinforce your survivors</span>
         {reinforcement.isPlayoffPhase && (
           <span className="po-reset-tag">
-            <IcoArrowR />
+            <IcoCoins />
             Carries over · no reset
           </span>
         )}
