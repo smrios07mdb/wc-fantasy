@@ -20,7 +20,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@app/db";
-import { createCommishStatStore } from "./commishStatStore";
+import { createCommishStatStore, createCommishRescore } from "./commishStatStore";
 import type { RecordCommishAuditInput } from "./recordCommishAudit";
 
 const TEST_URL = process.env.COMMISH_WRITE_PG_TEST_URL;
@@ -44,6 +44,53 @@ function auditFor(overrides: Partial<RecordCommishAuditInput> = {}): RecordCommi
     targetRef: { matchId: M1, playerId: P1 },
     reversible: true,
     ...overrides,
+  };
+}
+
+// A real (all-zero except a 90' appearance) feed stat line so the participant gate
+// (`playerAppearedInMatch` → `statHasData`) passes and the re-score writes a `score_player_match`
+// row. Mirrors the pure `commishStatScoring.test.ts` baseline, so the appearance-only score is stable
+// and a delta between two re-scores that differ ONLY in the manual penalty row isolates the +2 term.
+function zeroStatLine() {
+  return {
+    minutesPlayed: 90,
+    goals: 0,
+    assists: 0,
+    keyPasses: 0,
+    dribblesAttempted: 0,
+    dribblesCompleted: 0,
+    duelsWon: 0,
+    duelsLost: 0,
+    passesTotal: 0,
+    passesAccurate: 0,
+    longBallsTotal: 0,
+    longBallsAccurate: 0,
+    wasFouled: 0,
+    clearances: 0,
+    interceptions: 0,
+    tacklesWon: 0,
+    blockedShots: 0,
+    saves: 0,
+    savesInsideBox: 0,
+    punches: 0,
+    highClaims: 0,
+    possessionLost: 0,
+    shotsOnTarget: 0,
+    ballRecoveries: 0,
+    bigChancesCreated: 0,
+    crossesAccurate: 0,
+    touches: 0,
+  };
+}
+
+function penaltyWrite(won: number, committed: number) {
+  return {
+    matchId: M1,
+    playerId: P1,
+    penaltyWon: won,
+    penaltyCommitted: committed,
+    reason: "VAR pen",
+    enteredByUserId: USER,
   };
 }
 
@@ -154,6 +201,48 @@ describe.skipIf(!SAFE)("commish stat write store — real Postgres (write + audi
     expect(manuals).toHaveLength(1); // absolute upsert — the same (match, player) row, now 0/0
     expect(manuals[0]).toMatchObject({ penaltyWon: 0, penaltyCommitted: 0, dirty: true });
     expect(await db.commishAudit.count({ where: { leagueId: LG } })).toBe(2); // append-only ledger
+  });
+
+  it("idempotent SET — re-submitting penalty_won=1 re-scores to the SAME +2 (never +4): one manual row, one audit per write", async () => {
+    // The end-to-end proof that the ABSOLUTE upsert (penalty_won is SET to 1, never incremented) means a
+    // re-run of the identical write does not accumulate: the engine keeps reading `penalty_won = 1` off the
+    // single manual row, so the re-score lands on the same score. Exercises the REAL sync trigger
+    // (`createCommishRescore` → `recomputePlayerMatch`) on Postgres, reading the persisted `score_player_match`.
+    const rescore = createCommishRescore(db);
+    // Feed footprint → the participant gate passes and each re-score persists a score row.
+    await db.statPlayerMatch.create({ data: { matchId: M1, playerId: P1, ...zeroStatLine() } });
+
+    const scoreNow = async () =>
+      (await db.scorePlayerMatch.findUnique({
+        where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+      }))!.points;
+
+    // Baseline: 90' appearance only, no manual penalty row yet.
+    expect((await rescore(M1, P1)).scored).toBe(true);
+    const baseline = await scoreNow();
+
+    // First SET: penalty_won = 1 → +2 over baseline.
+    await store.applyPenalty({ write: penaltyWrite(1, 0), audit: auditFor() });
+    expect((await rescore(M1, P1)).scored).toBe(true);
+    const afterFirst = await scoreNow();
+    expect(afterFirst - baseline).toBe(2);
+
+    // Re-submit the IDENTICAL penalty_won = 1. Absolute upsert ⇒ still +2 over baseline, NOT +4.
+    await store.applyPenalty({ write: penaltyWrite(1, 0), audit: auditFor() });
+    expect((await rescore(M1, P1)).scored).toBe(true);
+    const afterSecond = await scoreNow();
+    expect(afterSecond - baseline).toBe(2);
+    expect(afterSecond).toBe(afterFirst); // idempotent: the second re-score is a no-op on the total
+
+    // Exactly ONE manual row (upsert keyed by (match, player)), penalty_won latched at 1 — never doubled.
+    const manuals = await db.manualStatPlayerMatch.findMany({
+      where: { matchId: M1, playerId: P1 },
+    });
+    expect(manuals).toHaveLength(1);
+    expect(manuals[0]).toMatchObject({ penaltyWon: 1, penaltyCommitted: 0 });
+
+    // Append-only ledger: exactly one audit row per write (2 writes → 2). No score-driven double-count.
+    expect(await db.commishAudit.count({ where: { leagueId: LG } })).toBe(2);
   });
 
   it("applyRating set writes source='manual' (dirty), clear DELETEs it — each with its own audit row", async () => {
