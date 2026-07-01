@@ -2029,3 +2029,27 @@ The single server-side writer every later slice calls (inside its mutation trans
 
 ### Invariants + verification
 Byte-untouched: `packages/scoring`, `packages/recompute`, the resolver, `enforce_lineup_lock()`, the FAAB engine, the transition/advance engines, existing RLS on other tables, any Realtime publication. Gate green (typecheck/lint/format/**2831 passed / 68 skipped**/`@app/web` build, `/commish` `ƒ`) + gated-PG RLS suite `commishAuditRls.integration.test.ts` 9/9 (own `COMMISH_AUDIT_PG_TEST_URL` + SAFE double-latch; RED-verified by dropping the SELECT policy) + `migrate deploy` proven on a throwaway PG. A 6-lane adversarial (opus) review of the diff returned zero findings. See PROJECT.md → 2026-07-01 (Commissioner console Thread 1) + DECISIONS.md → 2026-07-01 (Commissioner console Thread 1) + BACKLOG.md → Commissioner console.
+
+### §28.2 — Thread 2: penalty entry + rating override (the first `recordCommishAudit` callers; source-only)
+
+Two commissioner writes on the Stat-corrections tab. Both feed the EXISTING adapter/resolver (`manual_stat_player_match` → +2/−2; `rating_player_match` source=`manual` beats balldontlie) — this thread only writes the feed-gap rows + an audit row + fires a re-score. No migration; stacks on §28.
+
+**Endpoints (thin routes → pure handler → injected store):**
+
+- `POST /api/commish/penalty` (`apps/web/app/api/commish/penalty/route.ts`) — parses `{matchId, playerId, penaltyWon, penaltyCommitted, reason}`, wires real deps, calls `handleCommishPenalty`.
+- `POST /api/commish/rating` (`.../commish/rating/route.ts`) — parses `{matchId, playerId, rating, reason}` (`rating: null` or `clear:true` ⇒ clear), calls `handleCommishRating`.
+
+**The pure handlers (`apps/web/src/commish/handleStatCorrection.ts`, DB-free, `{status, body}`).** Shared shape: gate (401 no-session / 403 non-commissioner, BEFORE any read) → semantic validation with a specific error code (reason required; penalty counts ≥ 0 integers; rating 0–10) → resolve+validate the (match, player) via `store.getMatchPlayer` (`invalid_match_player` when absent OR the player's team isn't one of the match's two — mirrors the adapter `teamInMatch` gate) → `store.applyPenalty`/`applyRating` (write + audit atomic) → `deps.rescore(matchId, playerId)`. Injected-dep idiom (cf. `handleStartDraft`/`handleBid`) → unit-tested with a spy store + spy rescore (`handleStatCorrection.test.ts`).
+
+**The write store (`apps/web/src/commish/commishStatStore.ts`, server-only).** `createCommishStatStore(prisma)`:
+
+- `applyPenalty` — `$transaction`: UPSERT `manual_stat_player_match` by (match, player) — absolute + idempotent (same create/update payload), `reason` + `entered_by_user_id` + `dirty=true`, "Clear" = 0/0 — THEN `recordCommishAudit(audit, tx.commishAudit.create)` (the Thread-1 seam, with the tx client as the injected insert) → **exactly one audit row per write, all-or-nothing**.
+- `applyRating` — `$transaction`: UPSERT `rating_player_match` (`matchId_playerId_source`, source=`manual`, `dirty=true`) OR (clear) `deleteMany({source:"manual"})` → then the audit insert.
+
+**The re-score trigger (`createCommishRescore(prisma)`, server-only).** After the committed write: `recomputePlayerMatch(store, m, p)` → for each `getAffectedManagerPeriods`, `recomputeManagerPeriod(..., {allowFrozen:true})` → `recomputeStanding` per affected league. Reuses `createPrismaStore` (`@app/recompute/prisma`) + public `@app/recompute` orchestration only (no pipeline internals). `allowFrozen:true` is the commissioner override so a frozen-period correction restates the leaderboard (the freeze gate is at `recomputeManagerPeriod`; the worker sweep runs without it — DECISIONS §2). Idempotent with a concurrent worker sweep.
+
+**The audit call sites.** `recordCommishAudit` is now WIRED (Thread 1 shipped it with zero callers): two callers, both inside `applyPenalty`/`applyRating`'s transaction. `action_type` = `penalty_applied` (the pre-seeded union value, NOT the prompt's prose `penalty_entry` — DECISIONS §3) / `rating_override`; `target_ref = {matchId, playerId}`; `reversible=true`; `delta` = "+2/−2 pts" / "rating N".
+
+**The UI.** `CommishConsole.tsx`'s Stat-corrections tab (was inert) renders `StatCorrectionsPanel`: match `<select>` → match-scoped player `<select>` (URL-driven `?tab=stats&match=&player=` via `router.push`, so selection survives refresh) → penalty + rating forms (prefilled from `loadCommish`'s new `statCorrections` block, POST + `router.refresh`), a frozen-period banner, `// TODO(2b)`. `loadCommish` gains `buildStatCorrections` (matches list + the selected match's two squads + current manual penalty + resolved rating via the shared `pickRating`); `page.tsx` threads `?match/?player/?tab` and computes the initial tab.
+
+**Invariants + gate.** Engine byte-untouched (empty `git diff --stat` on `packages/scoring` + `packages/recompute`). Gate green (typecheck/lint/format/**2873 passed / 72 skipped**/`@app/web` build, `/commish` `ƒ` + 2 API routes) + gated-PG on throwaway `postgres:16`: `commishAuditRls` 10/10 (incl. PART-A confirm-1) + `commishStatWrite.integration.test.ts` 3/3 (own `COMMISH_WRITE_PG_TEST_URL` + SAFE latch, distinct from the audit suite's URL so they never co-run). **Source-only → merge HELD.** See PROJECT.md → 2026-07-01 (Commissioner console Thread 2) + DECISIONS.md → 2026-07-01 (Commissioner console Thread 2) + BACKLOG.md → Commissioner console.
