@@ -299,6 +299,53 @@ describe("handleCommishPenalty", () => {
     expect(res.body).toMatchObject({ scored: true });
     expect((res.body as { warning?: string }).warning).toBeUndefined();
   });
+
+  it("re-score THROWS after the write+audit commit (frozen override) → 200 saved-but-restate-pending, NOT a 500", async () => {
+    // The write + audit `$transaction` has already committed by the time the sync re-score fires (the frozen-
+    // override rollup, which throws here). The throw must NOT surface as a bare 500 that hides the durable write.
+    const { store, penaltyCalls } = spyStore({
+      getMatchPlayer: async () => ({ ...IN_MATCH, periodFrozen: true }),
+    });
+    const rescore = async (): Promise<{ scored: boolean }> => {
+      throw new Error("recomputeManagerPeriod blew up past the freeze gate");
+    };
+    const res = await handleCommishPenalty(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      penaltyBody(),
+    );
+
+    // Write + audit still landed — they committed BEFORE the throwing re-score.
+    expect(penaltyCalls).toHaveLength(1);
+    // Distinguishable, actionable partial-success — never a generic 500.
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      frozenOverride: true,
+      scored: false,
+      restatePending: true,
+      warning: "restate_pending",
+      auditId: "aud-pen",
+    });
+    // The remedy — re-submit the identical (absolute, idempotent) correction — is spelled out for the operator.
+    expect((res.body as { message: string }).message).toMatch(/re-submit/i);
+    // restate-pending takes precedence: the feed-participation warning must NOT also appear.
+    expect((res.body as { warning: string }).warning).not.toBe("no_match_participation");
+  });
+
+  it("distinguishes restate-pending (post-write) from a clean pre-write validation reject", async () => {
+    // A pre-write reject persists NOTHING and returns 4xx `{ error }`; the post-write restate-pending persists
+    // the row + audit and returns a 200 with `ok:true` + `restatePending`. The two must never look alike.
+    const { store: goodStore } = spyStore();
+    const { rescore: okRescore } = spyRescore(true);
+    const preWrite = await handleCommishPenalty(
+      { resolveManager: resolver(OK_COMMISH), store: goodStore, rescore: okRescore },
+      penaltyBody({ reason: "  " }), // fails validation BEFORE any write
+    );
+    expect(preWrite.status).toBe(400);
+    expect(preWrite.body).toEqual({ error: "reason_required" });
+    expect((preWrite.body as { ok?: boolean }).ok).toBeUndefined();
+    expect((preWrite.body as { restatePending?: boolean }).restatePending).toBeUndefined();
+  });
 });
 
 // ── B2 rating ─────────────────────────────────────────────────────────────────────────────────────
@@ -413,5 +460,32 @@ describe("handleCommishRating", () => {
     );
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: "invalid_match_player" });
+  });
+
+  it("re-score THROWS after the write+audit commit → 200 saved-but-restate-pending, the manual write stays durable", async () => {
+    const { store, ratingCalls } = spyStore({
+      getMatchPlayer: async () => ({ ...IN_MATCH, periodFrozen: true }),
+    });
+    const rescore = async (): Promise<{ scored: boolean }> => {
+      throw new Error("rescore failed after commit");
+    };
+    const res = await handleCommishRating(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      ratingBody({ rating: 8.5 }),
+    );
+
+    expect(ratingCalls).toHaveLength(1); // upsert + audit committed before the throw
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      rating: 8.5,
+      source: "manual",
+      frozenOverride: true,
+      scored: false,
+      restatePending: true,
+      warning: "restate_pending",
+      auditId: "aud-rat",
+    });
+    expect((res.body as { message: string }).message).toMatch(/re-submit/i);
   });
 });

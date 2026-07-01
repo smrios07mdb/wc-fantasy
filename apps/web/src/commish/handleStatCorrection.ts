@@ -99,6 +99,55 @@ const MINUS = "−"; // − : matches the engine's breakdown strings (never ASCI
 const FROZEN_NOTE =
   "Applied to a FROZEN period — commissioner override re-scored the result past the freeze gate.";
 
+/**
+ * Post-commit signal. The write + the `commish_audit` row have ALREADY committed (the store's `$transaction`
+ * returned) by the time the synchronous re-score fires — so if that re-score THROWS, the correction is durable
+ * but the leaderboard has not yet been restated. We must NOT let the throw become a bare 500: that would hide
+ * the persisted write and read as "nothing happened", tempting a duplicate re-entry. Instead the handler catches
+ * it and returns a distinguishable 200 partial-success (mirroring the existing `no_match_participation` shape),
+ * carrying `restatePending: true`.
+ *
+ * Remedy = re-submit the identical correction. The writes are ABSOLUTE + idempotent (a penalty/rating is SET to
+ * the same value, never accumulated — see the idempotent-SET proof), so a repeat is safe. For a FROZEN period it
+ * is the ONLY restate path: the worker sweep runs WITHOUT the freeze override, so `dirty=true` alone will re-score
+ * `score_player_match` but leave the frozen manager-period rollup (the leaderboard) stale until the write path
+ * itself restates again with `allowFrozen`. This stays DISTINCT from a pre-write validation reject, which
+ * persists nothing and returns a clean 4xx `{ error }`.
+ */
+const RESTATE_PENDING_WARNING = "restate_pending";
+const RESTATE_PENDING_MESSAGE =
+  "Correction saved and recorded in the audit log, but the automatic re-score failed — the leaderboard is not " +
+  "yet restated. Re-submit the identical correction to restate; the write is absolute and idempotent, so " +
+  "re-submitting is safe.";
+
+/** Fire the post-commit sync re-score, converting a throw into the durable saved-but-restate-pending signal. */
+async function fireRescore(
+  rescore: CommishStatDeps["rescore"],
+  matchId: string,
+  playerId: string,
+): Promise<{ scored: boolean; restatePending: boolean }> {
+  try {
+    const { scored } = await rescore(matchId, playerId);
+    return { scored, restatePending: false };
+  } catch {
+    // The row + audit already committed above; only the derived re-score failed. Surface it, don't 500.
+    return { scored: false, restatePending: true };
+  }
+}
+
+/** Extra outcome fields for a 200 write response. restate-pending (re-score threw) takes precedence over the
+ *  pending-feed-participation warning; a fully-scored write adds nothing. */
+function outcomeFields(scored: boolean, restatePending: boolean): Record<string, unknown> {
+  if (restatePending) {
+    return {
+      restatePending: true,
+      warning: RESTATE_PENDING_WARNING,
+      message: RESTATE_PENDING_MESSAGE,
+    };
+  }
+  return scored ? {} : { warning: "no_match_participation" };
+}
+
 /** A commissioner or a rejection. Shared by both handlers, run BEFORE any body read/validation. */
 type GatePass = { ok: true; managerId: string; userId: string | null };
 function gate(outcome: SessionManagerOutcome): GatePass | { ok: false; result: HandlerResult } {
@@ -178,7 +227,8 @@ export async function handleCommishPenalty(
     },
   });
 
-  const { scored } = await deps.rescore(matchId, playerId);
+  // The write + audit have committed. Fire the sync re-score; a throw here becomes restate-pending, never a 500.
+  const { scored, restatePending } = await fireRescore(deps.rescore, matchId, playerId);
 
   return {
     status: 200,
@@ -191,7 +241,7 @@ export async function handleCommishPenalty(
       // scored=false ⇒ the player has no feed participation yet; the write is stored + dirty and will apply once
       // the feed records them. Surfaced (not hidden) so the 200 isn't read as "already reflected in the score".
       scored,
-      ...(scored ? {} : { warning: "no_match_participation" }),
+      ...outcomeFields(scored, restatePending),
       auditId,
     },
   };
@@ -238,7 +288,8 @@ export async function handleCommishRating(
     },
   });
 
-  const { scored } = await deps.rescore(matchId, playerId);
+  // The write + audit have committed. Fire the sync re-score; a throw here becomes restate-pending, never a 500.
+  const { scored, restatePending } = await fireRescore(deps.rescore, matchId, playerId);
 
   return {
     status: 200,
@@ -248,7 +299,7 @@ export async function handleCommishRating(
       source: clearing ? null : "manual",
       frozenOverride: t.ctx.periodFrozen,
       scored,
-      ...(scored ? {} : { warning: "no_match_participation" }),
+      ...outcomeFields(scored, restatePending),
       auditId,
     },
   };

@@ -20,7 +20,9 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@app/db";
+import type { SessionManagerOutcome } from "@app/auth";
 import { createCommishStatStore, createCommishRescore } from "./commishStatStore";
+import { handleCommishPenalty } from "./handleStatCorrection";
 import type { RecordCommishAuditInput } from "./recordCommishAudit";
 
 const TEST_URL = process.env.COMMISH_WRITE_PG_TEST_URL;
@@ -243,6 +245,71 @@ describe.skipIf(!SAFE)("commish stat write store — real Postgres (write + audi
 
     // Append-only ledger: exactly one audit row per write (2 writes → 2). No score-driven double-count.
     expect(await db.commishAudit.count({ where: { leagueId: LG } })).toBe(2);
+  });
+
+  it("frozen correction + re-score THROWS after commit → row + audit DURABLE, response is saved-but-restate-pending (not a 500)", async () => {
+    // The transient-throw gap: the write + `commish_audit` row commit in one `$transaction`, THEN the sync
+    // frozen-override re-score runs. If it throws, the write must stay durable and the handler must return a
+    // distinguishable saved-but-restate-pending payload — never a bare 500 that hides the persisted correction.
+    // We drive the REAL Prisma store on Postgres and inject a throwing `rescore` to force the post-commit failure.
+    const FROZEN_PERIOD = "period_frozen_w";
+    await db.period.create({
+      data: {
+        id: FROZEN_PERIOD,
+        leagueId: LG,
+        kind: "group_md",
+        label: "MD1",
+        frozenAt: new Date("2026-06-21T00:00:00Z"),
+      },
+    });
+    await db.fifaMatch.update({ where: { id: M1 }, data: { periodId: FROZEN_PERIOD } });
+
+    const commish: SessionManagerOutcome = {
+      kind: "ok",
+      manager: {
+        id: MGR,
+        userId: USER,
+        email: "w-comm@example.com",
+        isCommissioner: true,
+        displayName: "comm",
+      },
+      isCommissioner: true,
+    };
+    const throwingRescore = async (): Promise<{ scored: boolean }> => {
+      throw new Error("recomputeManagerPeriod blew up past the freeze gate");
+    };
+
+    const res = await handleCommishPenalty(
+      { resolveManager: async () => commish, store, rescore: throwingRescore },
+      {
+        matchId: M1,
+        playerId: P1,
+        penaltyWon: 1,
+        penaltyCommitted: 0,
+        reason: "VAR pen, feed missed it",
+      },
+    );
+
+    // Distinguishable, actionable payload — NOT a generic 500.
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      frozenOverride: true,
+      scored: false,
+      restatePending: true,
+      warning: "restate_pending",
+    });
+    expect((res.body as { message: string }).message).toMatch(/re-submit/i);
+
+    // The write + audit are DURABLE despite the post-commit re-score throw.
+    const manual = await db.manualStatPlayerMatch.findUnique({
+      where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+    });
+    expect(manual).toMatchObject({ penaltyWon: 1, penaltyCommitted: 0, dirty: true });
+    const audits = await db.commishAudit.findMany({ where: { leagueId: LG } });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ actionType: "penalty_applied" });
+    expect(audits[0]!.detail?.toLowerCase()).toContain("frozen"); // override note recorded on the durable audit
   });
 
   it("applyRating set writes source='manual' (dirty), clear DELETEs it — each with its own audit row", async () => {
