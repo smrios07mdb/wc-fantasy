@@ -4,7 +4,7 @@ Living work queue for XI — The Starting Eleven. Maintained alongside the brain
 (`PROJECT.md` / `DECISIONS.md` / `ARCHITECTURE.md` / `SCORING.md`); re-upload to Project
 knowledge when it changes. **Guiding constraint: boring and reliable over clever.**
 
-_Last updated: 2026-06-30._
+_Last updated: 2026-07-01._
 
 ---
 
@@ -96,6 +96,16 @@ T15 (the mobile audit) is deliberately deferred to the end: running it before th
 ## Open questions
 
 - ~~**T5** — screenshot text was truncated; confirm the full intent when the thread opens.~~ RESOLVED 2026-06-21: "the user's own Games tab" = `/pool` (Quiniela, the match pick'em). Detail opens from the dashboard matchday rows AND a separate non-intrusive tap target on the Quiniela fixture cards (the teams-score area → `/games/[matchId]`); the HOME/DRAW/AWAY pick buttons are untouched.
+
+---
+
+## Web Push notifications — DONE in code; one operator step (PUSH-KEYS) open
+
+Web Push is **COMPLETE in code and merged** — `f054ded` (41a: transport + preference model + Settings UI, inert sender) + `2ffb3a8` (41b: the three worker triggers, sender live). Shipped surface: `@app/notify` (pure core + `send` / `prisma` subpaths), the `push_subscription` / `notification_preference` / `notification_sent` tables with self-only RLS (`notification_sent`'s `(manager_id, kind, subject_id)` UNIQUE = server-side send-dedup), `/api/notifications/{subscribe,unsubscribe,preferences,test}`, `apps/web/public/sw.js` + `apps/web/src/notifications/pushClient.ts`, and the three idempotent triggers `draft_turn` / `player_not_starting` / `match_starting`. In-app live updates run on Supabase Realtime — a separate mechanism, unrelated to push. There is **no `PUSH-1..5` epic** and nothing here is unbuilt; the one open child is operator-only:
+
+| ID | Item | Value | Effort | Risk | Status | Notes |
+|----|------|-------|--------|------|--------|-------|
+| PUSH-KEYS | Set the VAPID keys so device delivery goes live | Med | S | operator / dashboard (no code) | `TODO` (operator — Sergio) | The ONLY remaining step. `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` are `sync:false` and empty on BOTH `wc-fantasy-web` and `wc-fantasy-worker`. Generate one keypair (`npx web-push generate-vapid-keys`), set all three on both services in the Render dashboard (never commit them), then **rebuild web** (the public key is build-time inlined for the browser subscribe). Until then `sendPush` has no signing material and device delivery is dormant — the code is complete, just unkeyed. Real OS-permission + on-device delivery are live-only (not in-session verifiable). See PROJECT.md → 2026-07-01 + DECISIONS.md → 2026-07-01 (Web Push status) + ARCHITECTURE.md §13 (Deploy state). |
 
 ---
 

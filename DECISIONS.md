@@ -2312,6 +2312,20 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   @app/notify" was not yet true — only the VAPID env was wired). Device delivery remains a **live-only**
   inference (the test runner has no push service) — flagged to confirm on deploy.
 
+### 2026-07-01 — Web Push status: COMPLETE in code (41a + 41b), pending operator VAPID keys (PUSH-KEYS)
+
+Correcting two planning-time mis-framings (neither was ever committed to these docs): Web Push is **not**
+"non-functional for want of keys," and it is **not** an unbuilt IO shell needing a 5-part epic. Hash-anchored
+against `origin/main`: the transport, the three tables, the four routes, `sw.js` + the browser enrolment
+(`f054ded`, 41a) and all three worker triggers (`2ffb3a8`, 41b) are merged and unit-tested — the 41a/41b
+bullets above are the design of record. Send-dedup is the `notification_sent(manager_id, kind, subject_id)`
+UNIQUE ledger claimed inside `dispatchToManager` (at-most-once). **Sole remainder = PUSH-KEYS** (operator /
+dashboard, no code): set the three `sync:false` VAPID vars (`NEXT_PUBLIC_VAPID_PUBLIC_KEY` /
+`VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`) on `wc-fantasy-web` + `wc-fantasy-worker` and rebuild web; until then
+`sendPush` is unkeyed (dormant), not broken. This **supersedes** any reading of the 41a "inert" / "inert
+until the triggers land" bullets as the current end-state. See BACKLOG → Web Push notifications + PROJECT.md
+→ 2026-07-01.
+
 ## Player avatars (P46)
 
 - **`player.country` column is never populated; country must come from the `fifa_team.name` join.** `ingestRosters` stores the national team via `team_id` FK but does not write the denormalized `player.country` text column. Any loader feeding a player card must use `team: { select: { name: true } }` in its Prisma select and map `country: p.team?.name ?? null` — the pattern established in `loadDraftRoom.toPlayer` (P34) and now mirrored in `loadLineup` (fix/avatar-flag-badge). This was the root cause of `.pa-flag` being invisible on the lineup surface: the lineup loader read the never-populated column, `FlagBadge` received `null`, and its early-return guard fired. Source-contract guards: `playerAvatarWiring.test.ts` "joins team name instead of reading player.country".

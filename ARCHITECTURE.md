@@ -1307,6 +1307,15 @@ layer. A worker-local trigger-read port (`notify/store.ts`) holds the two reads 
 Each dispatch is isolated in its own try/catch so a notify failure never starves the autopick or
 ingestion/recompute loops. Actual device delivery stays a live-only inference (no push service in CI).
 
+**Deploy state (2026-07-01).** COMPLETE in code — 41a (`f054ded`) + 41b (`2ffb3a8`) are both on `main`:
+the transport, the three tables, the four routes, `sw.js`/`pushClient`, and all three worker triggers ship
+and are unit-tested. The sole remaining step is **operator-only, no code**: set the three VAPID env vars
+(`NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`, all `sync:false` and empty today)
+on `wc-fantasy-web` + `wc-fantasy-worker` in Render and rebuild web — tracked as **PUSH-KEYS** (BACKLOG).
+Until the keys are set `sendPush` has no signing material, so device delivery is dormant; the code path is
+neither "unbuilt" nor "non-functional," only unkeyed. (The 41a "inert" note above is the *then*-state of
+that commit, superseded by the 41b triggers.) See DECISIONS → 2026-07-01 (Web Push status).
+
 ## 14. Lineup + waivers polish (Prompt 51)
 
 Two display-only primitives moved into **`@app/shared`** (the single cross-cutting source; no engine
