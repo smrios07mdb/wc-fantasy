@@ -230,7 +230,7 @@ function bannerContent(
     return {
       eyebrow: PHASE_EYEBROW["playoff"],
       title,
-      sub: `${sv.roundLabel ?? "Knockouts"} · ${sv.aliveNow}→${sv.survivesNow} survive · ${sv.cutCount} cut this round · reduced roster, FAAB reset to $100`,
+      sub: `${sv.roundLabel ?? "Knockouts"} · ${sv.aliveNow}→${sv.survivesNow} survive · ${sv.cutCount} cut this round · reduced roster, FAAB carries over (no reset)`,
       big: `${sv.aliveNow} left`,
       bigMono: true,
       ctaLabel: "Playoff theater",

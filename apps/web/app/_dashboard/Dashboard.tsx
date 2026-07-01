@@ -9,7 +9,7 @@
  *   - Pre-draft + draft modules: built in Prompt 37.
  *   - Group modules: built in Prompt 38 — record, standings, matchday.
  *   - Playoff modules: Survival (the guillotine bracket — current round + your margin to the blade) +
- *     Reinforce (FAAB reset), from PlayoffsView (READ-ONLY). The live experience stays in /playoffs.
+ *     Reinforce (FAAB carries over), from PlayoffsView (READ-ONLY). The live experience stays in /playoffs.
  *   - Complete modules: Champion (podium) + Your run (knockout finish), from PlayoffsView (READ-ONLY).
  *
  * STOP seams (data not available in production this prompt):
@@ -528,9 +528,10 @@ function SurvivalModule({ playoffs }: { playoffs: PlayoffsView }) {
 }
 
 /**
- * FAAB reinforcement reminder — the knockout-window budget resets to a fresh $100; survivors reinforce
- * via blind FAAB. A SUMMARY that links into /waivers (the reset surface) — it does not duplicate the
- * waivers screen. Sourced from the loader-attached `reinforcement` (loadWaivers' WaiversView, READ-ONLY).
+ * FAAB reinforcement reminder — the one-time $100 tournament budget carries into the knockouts (NEVER
+ * reset; group-stage spend carries forward); survivors reinforce via blind FAAB. A SUMMARY that links
+ * into /waivers — it does not duplicate the waivers screen. Sourced from the loader-attached
+ * `reinforcement` (loadWaivers' WaiversView, READ-ONLY).
  * CSS: .db-reinforce / .db-rf-* (new). Renders the reminder even when reinforcement is null (graceful).
  */
 function ReinforceModule({ playoffs }: { playoffs: PlayoffsView }) {
@@ -539,7 +540,7 @@ function ReinforceModule({ playoffs }: { playoffs: PlayoffsView }) {
   return (
     <Module title="Reinforce your survivors" cta={{ label: "Open waivers", href: "/waivers" }}>
       <div className="db-reinforce">
-        <span className="pill pill-win db-rf-tag">FAAB reset · $100</span>
+        <span className="pill pill-win db-rf-tag">FAAB carries over · $100</span>
         {w && (
           <div className="db-rf-budget">
             <b className="mono">${w.faabBudget}</b>
@@ -552,7 +553,8 @@ function ReinforceModule({ playoffs }: { playoffs: PlayoffsView }) {
           </div>
         )}
         <p className="db-rf-note t-caption text-secondary">
-          Survivors reinforce via blind FAAB — your budget resets to a fresh $100 for the knockouts.
+          Survivors reinforce via blind FAAB — your one $100 tournament budget carries into the
+          knockouts (it does not reset).
         </p>
       </div>
     </Module>
@@ -673,7 +675,7 @@ function modulesFor(phase: DashboardPhase): ModuleKey[] {
     case "group":
       return ["record", "standings", "matchday"];
     case "playoff":
-      // The guillotine bracket + the FAAB-reset reminder, from PlayoffsView. (The design also lists
+      // The guillotine bracket + the FAAB carry-over reminder, from PlayoffsView. (The design also lists
       // lock/fixtures/activity — not PlayoffsView-derivable; dropped, same call the group arm made.)
       return ["survival", "reinforce"];
     case "complete":

@@ -677,7 +677,8 @@ export function MarketingLanding() {
                   Sealed bids — nobody sees your number
                 </li>
                 <li>
-                  <Check />A fresh $100 budget for the playoff reload
+                  <Check />
+                  One $100 budget for the whole tournament — carries into the playoffs
                 </li>
                 <li>
                   <Check />

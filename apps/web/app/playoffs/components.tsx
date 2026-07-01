@@ -467,13 +467,19 @@ export function PoLockStrip({ pitch }: { pitch: ReducedPitch }) {
 }
 
 // ── reinforce (FAAB) ───────────────────────────────────────────────────────────────────────
-/** The playoff FAAB reset is a fresh $100 (DECISIONS Theme D); the meter reads available/100. */
-const FAAB_RESET = 100;
+/**
+ * FAAB is a single one-time $100 for the ENTIRE tournament (group + playoffs) — NEVER reset or
+ * replenished at the knockouts; group-stage spend carries forward (DECISIONS §guillotine-FAAB,
+ * 2026-06-28 correction). This local is the display-meter denominator ONLY — do NOT read it as the
+ * runtime budget (LEAGUE_SEED_DEFAULTS.faabBudget is flagged not-for-runtime-reads; the per-manager
+ * balance is `reinforcement.faabBudget`).
+ */
+const FAAB_TOURNAMENT_BUDGET = 100;
 
 export function ReinforceModule({ reinforcement }: { reinforcement: WaiversView | null }) {
   if (!reinforcement) return null;
   const left = reinforcement.faabBudget;
-  const pct = Math.max(0, Math.min(100, Math.round((left / FAAB_RESET) * 100)));
+  const pct = Math.max(0, Math.min(100, Math.round((left / FAAB_TOURNAMENT_BUDGET) * 100)));
   return (
     <div className="po-reinforce">
       <div className="po-reinforce-head">
@@ -481,22 +487,25 @@ export function ReinforceModule({ reinforcement }: { reinforcement: WaiversView 
         {reinforcement.isPlayoffPhase && (
           <span className="po-reset-tag">
             <IcoReset />
-            FAAB reset to ${FAAB_RESET}
+            Carries over · no reset
           </span>
         )}
       </div>
       <div className="po-faab">
         <div className="po-faab-fig">
           <b className="display mono">${left}</b>
-          <span className="t-micro text-tertiary">of ${FAAB_RESET} left</span>
+          <span className="t-micro text-tertiary">
+            of your ${FAAB_TOURNAMENT_BUDGET} tournament budget
+          </span>
         </div>
         <div className={"meter" + (pct <= 25 ? " is-low" : "")} style={{ flex: 1 }}>
           <span style={{ width: pct + "%" }} />
         </div>
       </div>
       <p className="po-reinforce-copy t-caption text-secondary">
-        Each surviving manager gets a clean <b>${FAAB_RESET}</b> at the group→playoff transition.
-        Blind sealed bids; ties break on the rolling waiver order.
+        Your FAAB is one <b>${FAAB_TOURNAMENT_BUDGET}</b> budget for the whole tournament.
+        Group-stage spend carries into the playoffs — it does not reset. Blind sealed bids; ties
+        break on the rolling waiver order.
       </p>
       <a className="btn btn-primary btn-block" href="/waivers">
         Open waivers
@@ -977,8 +986,9 @@ interface LayoutProps {
 const PLAYOFF_EXPLAINER = (
   <>
     Playoff lineups shrink to <b>7 starters (1 GK + 6 outfield) + 2 bench</b>. Lock-on-play still
-    applies. FAAB <b>reset to $100</b> at the transition so survivors can reinforce. Field size and
-    exact cut counts are fixed by the commissioner — values here are <b>provisional</b>.
+    applies. FAAB <b>carries over</b> — a single $100 for the entire tournament (no playoff reset),
+    so survivors reinforce with whatever balance they had left. Field size and exact cut counts are
+    fixed by the commissioner — values here are <b>provisional</b>.
   </>
 );
 

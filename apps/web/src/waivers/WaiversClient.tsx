@@ -285,8 +285,8 @@ export function WaiversClient({ view }: { view: WaiversView }) {
         <div className="wv-resetbanner">
           <Refund />
           <span>
-            <b>FAAB reset.</b> Budgets returned to a fresh <b>$100</b> for the guillotine —
-            group-stage spend is wiped.
+            <b>FAAB carries over.</b> Your one <b>$100</b> tournament budget carries into the
+            guillotine — group-stage spend is <b>not</b> wiped or replenished.
           </span>
         </div>
       )}
