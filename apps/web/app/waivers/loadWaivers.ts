@@ -83,6 +83,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     seasonScores,
     periodRows,
     watchlistRows,
+    eliminatedEntryRows,
   ] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
@@ -148,6 +149,13 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     prisma.watchlist.findMany({
       where: { managerId: viewerManagerId },
       select: { playerId: true },
+    }),
+    // Eliminated managers (CONTRACT-P3 data-existence contract: playoff participation reads from
+    // `playoff_entry`, NEVER `league.status`) — same read loadVsField.ts already uses to hide these
+    // managers from the live field. Here they're kept + struck, not removed.
+    prisma.playoffEntry.findMany({
+      where: { leagueId, status: "eliminated" },
+      select: { managerId: true },
     }),
   ]);
 
@@ -314,6 +322,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     }));
 
   // Every team's remaining FAAB, budget-desc — display-only, read straight off `manager.faabBudget`.
+  const eliminatedManagerIds = new Set(eliminatedEntryRows.map((e) => e.managerId));
   const teamBudgets: WvTeamBudget[] = [...managerRows]
     .sort((a, b) => b.faabBudget - a.faabBudget)
     .map((m) => ({
@@ -321,6 +330,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       name: m.id === viewerManagerId ? "You" : m.displayName,
       budget: m.faabBudget,
       isMe: m.id === viewerManagerId,
+      eliminated: eliminatedManagerIds.has(m.id),
     }));
 
   // The phase squad cap (15 group / 9 playoff) is VIEW-DRIVEN (no hardcoded 15 in the client). D4

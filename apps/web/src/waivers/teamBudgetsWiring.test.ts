@@ -33,6 +33,21 @@ describe("loadWaivers.ts — threads each team's remaining FAAB onto the view", 
   });
 });
 
+describe("loadWaivers.ts — stamps eliminated onto each team budget (CONTRACT-P3 data-existence contract)", () => {
+  it("reads playoffEntry rows scoped to status: eliminated", () => {
+    expect(loader).toMatch(
+      /prisma\.playoffEntry\.findMany\(\{\s*where: \{ leagueId, status: "eliminated" \}/,
+    );
+  });
+
+  it("stamps eliminated onto each teamBudgets row from that read, not from league.status", () => {
+    expect(loader).toContain(
+      "const eliminatedManagerIds = new Set(eliminatedEntryRows.map((e) => e.managerId));",
+    );
+    expect(loader).toContain("eliminated: eliminatedManagerIds.has(m.id),");
+  });
+});
+
 describe("the rail renders each team's budget (display-only, current manager highlighted)", () => {
   it("components.tsx defines TeamBudgetsRail using the global .dtable/.row-me table styling", () => {
     expect(components).toContain("export function TeamBudgetsRail(");
@@ -43,5 +58,10 @@ describe("the rail renders each team's budget (display-only, current manager hig
   it("WaiversView carries the budget-desc teamBudgets list reusing WvTeamBudget", () => {
     expect(types).toContain("export interface WvTeamBudget");
     expect(types).toContain("readonly teamBudgets: readonly WvTeamBudget[]");
+  });
+
+  it("WvTeamBudget carries eliminated, and the rail strikes the row when set", () => {
+    expect(types).toContain("readonly eliminated: boolean");
+    expect(components).toContain('team.eliminated ? "row-elim" : ""');
   });
 });

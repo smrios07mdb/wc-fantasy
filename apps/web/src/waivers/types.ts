@@ -125,6 +125,9 @@ export interface WvTeamBudget {
   readonly name: string;
   readonly budget: number;
   readonly isMe: boolean;
+  /** True when this manager's `playoff_entry.status` is "eliminated" (CONTRACT-P3 data-existence
+   *  contract) — strikes the row in the rail without removing it. */
+  readonly eliminated: boolean;
 }
 
 /** The viewing manager's budget. All three are engine-consistent (see WaiversClient budget notes). */

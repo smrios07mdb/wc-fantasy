@@ -389,7 +389,10 @@ export function TeamBudgetsRail({ budgets }: { budgets: readonly WvTeamBudget[] 
         </thead>
         <tbody>
           {budgets.map((team) => (
-            <tr key={team.managerId} className={team.isMe ? "row-me" : ""}>
+            <tr
+              key={team.managerId}
+              className={`${team.isMe ? "row-me" : ""} ${team.eliminated ? "row-elim" : ""}`.trim()}
+            >
               <td>{team.name}</td>
               <td className="num mono">${team.budget}</td>
             </tr>

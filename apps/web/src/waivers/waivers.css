@@ -479,6 +479,16 @@
   background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent);
 }
+
+/* team budgets rail — eliminated manager (CONTRACT-P3 data-existence contract): kept in place,
+ * struck through + de-emphasized rather than removed. .row-me (current manager) still wins the
+ * accent highlight if it's somehow the eliminated row. */
+.wv-budgets-table .row-elim td {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+  text-decoration-color: var(--elim);
+}
+
 .wv-order-n {
   width: 18px;
   text-align: center;
