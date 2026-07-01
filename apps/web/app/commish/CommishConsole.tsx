@@ -12,12 +12,15 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import "./commish.css";
 import type {
   CommishAuditView,
   CommishConsoleView,
   CommishManagerInspector,
   CommishManagerOption,
+  CommishStatCorrectionsView,
+  CommishStatCurrent,
   CommishSystemStatus,
 } from "@/src/commish/commishView";
 
@@ -45,8 +48,15 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-export function CommishConsole({ view }: { view: CommishConsoleView }) {
-  const [tab, setTab] = useState<TabId>("field");
+export function CommishConsole({
+  view,
+  initialTab,
+}: {
+  view: CommishConsoleView;
+  initialTab?: string | null;
+}) {
+  // The initial tab is URL-derived (Stat-corrections deep-links via ?tab=stats&match=…); default to the field tab.
+  const [tab, setTab] = useState<TabId>(TABS.find((t) => t.id === initialTab)?.id ?? "field");
   const inspector = view.inspector;
   const activeTab = TABS.find((t) => t.id === tab)!;
 
@@ -84,7 +94,11 @@ export function CommishConsole({ view }: { view: CommishConsoleView }) {
 
           <div className="adm-body">
             <div className="adm-main">
-              <TaskPlaceholder title={activeTab.label} copy={activeTab.copy} />
+              {tab === "stats" ? (
+                <StatCorrectionsPanel view={view.statCorrections} />
+              ) : (
+                <TaskPlaceholder title={activeTab.label} copy={activeTab.copy} />
+              )}
             </div>
             <div className="adm-rail">
               <SystemStatusCard status={view.status} leagueName={view.leagueName} />
@@ -116,6 +130,383 @@ function TaskPlaceholder({ title, copy }: { title: string; copy: string }) {
         </div>
       </div>
     </section>
+  );
+}
+
+// ── stat corrections (Thread 2): penalty entry + rating override ────────────────────────────────
+function errorText(status: number, body: { error?: string }): string {
+  const map: Record<string, string> = {
+    reason_required: "A reason is required.",
+    rating_out_of_range: "Rating must be between 0 and 10.",
+    invalid_match_player: "That player isn't part of the selected match.",
+    bad_request: "Invalid input.",
+    forbidden: "Not permitted.",
+    no_session: "Your session expired — sign in again.",
+    no_league: "Could not resolve your league.",
+  };
+  return map[body.error ?? ""] ?? `Request failed (${status}).`;
+}
+
+type FormMsg = { ok: boolean; text: string } | null;
+
+function StatCorrectionsPanel({ view }: { view: CommishStatCorrectionsView }) {
+  const router = useRouter();
+  const { matches, selectedMatchId, selectedPlayerId, players, current } = view;
+
+  const goMatch = (matchId: string) =>
+    router.push(matchId ? `/commish?tab=stats&match=${matchId}` : "/commish?tab=stats");
+  const goPlayer = (playerId: string) => {
+    if (!selectedMatchId) return;
+    const base = `/commish?tab=stats&match=${selectedMatchId}`;
+    router.push(playerId ? `${base}&player=${playerId}` : base);
+  };
+  const refresh = () => router.refresh();
+  const selKey = `${selectedMatchId ?? "-"}:${selectedPlayerId ?? "-"}`;
+
+  return (
+    <section className="adm-card">
+      <div className="adm-card-h">
+        <div className="adm-card-ht">
+          <h3 className="adm-card-title">Stat corrections</h3>
+          <span className="adm-card-sub">Penalty entry · rating override</span>
+        </div>
+        <span className="adm-badge adm-badge-sm">Re-scores + logged</span>
+      </div>
+      <div className="adm-card-b">
+        <div className="adm-field">
+          <label className="t-label" htmlFor="sc-match">
+            Match
+          </label>
+          <select
+            id="sc-match"
+            className="adm-select"
+            value={selectedMatchId ?? ""}
+            onChange={(e) => goMatch(e.target.value)}
+          >
+            <option value="">Select a match…</option>
+            {matches.map((m) => (
+              <option key={m.matchId} value={m.matchId}>
+                {m.label}
+                {m.periodLabel ? ` — ${m.periodLabel}` : ""}
+                {m.periodFrozen ? " ❄ frozen" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedMatchId && (
+          <div className="adm-field">
+            <label className="t-label" htmlFor="sc-player">
+              Player
+            </label>
+            <select
+              id="sc-player"
+              className="adm-select"
+              value={selectedPlayerId ?? ""}
+              onChange={(e) => goPlayer(e.target.value)}
+            >
+              <option value="">Select a player…</option>
+              {players.map((p) => (
+                <option key={p.playerId} value={p.playerId}>
+                  {p.name} · {p.position}
+                  {p.teamName ? ` · ${p.teamName}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {selectedMatchId && selectedPlayerId && current ? (
+          <>
+            {current.periodFrozen && (
+              <div className="adm-frozen" role="note">
+                This match&rsquo;s period is <b>frozen</b>. A correction still re-scores via
+                commissioner override — the leaderboard is restated and the action is logged.
+              </div>
+            )}
+            <PenaltyForm
+              key={`pen:${selKey}`}
+              target={{ selectedMatchId, selectedPlayerId }}
+              current={current}
+              onDone={refresh}
+            />
+            <RatingForm
+              key={`rat:${selKey}`}
+              target={{ selectedMatchId, selectedPlayerId }}
+              current={current}
+              onDone={refresh}
+            />
+            {/* TODO(2b): general stat-line editor (any feed stat via manual_stat_player_match.extra + an adapter overlay). */}
+          </>
+        ) : (
+          <p className="adm-hint">
+            {selectedMatchId
+              ? "Pick a player to correct their penalty entry or match rating."
+              : "Pick a match, then a player, to enter a penalty or override the rating."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+interface FormTarget {
+  selectedMatchId: string;
+  selectedPlayerId: string;
+}
+
+function PenaltyForm({
+  target,
+  current,
+  onDone,
+}: {
+  target: FormTarget;
+  current: CommishStatCurrent;
+  onDone: () => void;
+}) {
+  const [won, setWon] = useState(String(current.penaltyWon));
+  const [committed, setCommitted] = useState(String(current.penaltyCommitted));
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  const net = (Number(won) || 0) * 2 - (Number(committed) || 0) * 2;
+  const preview = net === 0 ? "0 pts" : net > 0 ? `+${net} pts` : `−${Math.abs(net)} pts`;
+
+  async function submit(clear: boolean) {
+    if (reason.trim() === "") {
+      setMsg({ ok: false, text: "A reason is required." });
+      return;
+    }
+    setPending(true);
+    setMsg(null);
+    const payload = {
+      matchId: target.selectedMatchId,
+      playerId: target.selectedPlayerId,
+      penaltyWon: clear ? 0 : Math.max(0, Math.trunc(Number(won) || 0)),
+      penaltyCommitted: clear ? 0 : Math.max(0, Math.trunc(Number(committed) || 0)),
+      reason,
+    };
+    try {
+      const res = await fetch("/api/commish/penalty", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        delta?: string;
+        error?: string;
+        scored?: boolean;
+      };
+      if (res.ok) {
+        // Sync the inputs to what was just written — otherwise "Clear (0/0)" leaves stale non-zero counts that
+        // read as un-cleared and would re-apply the old penalty on the next Save.
+        setWon(String(payload.penaltyWon));
+        setCommitted(String(payload.penaltyCommitted));
+        setReason("");
+        setMsg({
+          ok: true,
+          text:
+            body.scored === false
+              ? "Saved + logged — pending: this player has no match data yet; it applies once the feed records them."
+              : `Saved (${body.delta ?? "updated"}). Re-scored + logged.`,
+        });
+        onDone();
+      } else {
+        setMsg({ ok: false, text: errorText(res.status, body) });
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(false);
+      }}
+    >
+      <div className="adm-form-h">
+        Penalty entry <span className="adm-form-sub">+2 won / −2 committed</span>
+      </div>
+      <div className="adm-form-row">
+        <label className="adm-inline">
+          <span className="t-label">Won</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            className="adm-num"
+            value={won}
+            onChange={(e) => setWon(e.target.value)}
+          />
+        </label>
+        <label className="adm-inline">
+          <span className="t-label">Committed</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            className="adm-num"
+            value={committed}
+            onChange={(e) => setCommitted(e.target.value)}
+          />
+        </label>
+        <span className="adm-preview">{preview}</span>
+      </div>
+      <input
+        className="adm-input"
+        placeholder="Reason (required — recorded to the audit log)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="adm-form-actions">
+        <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
+          Save penalty
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={pending}
+          onClick={() => void submit(true)}
+        >
+          Clear (0/0)
+        </button>
+        {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+      </div>
+    </form>
+  );
+}
+
+function RatingForm({
+  target,
+  current,
+  onDone,
+}: {
+  target: FormTarget;
+  current: CommishStatCurrent;
+  onDone: () => void;
+}) {
+  const [rating, setRating] = useState(
+    current.resolvedRating != null ? String(current.resolvedRating) : "",
+  );
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  async function submit(clear: boolean) {
+    if (reason.trim() === "") {
+      setMsg({ ok: false, text: "A reason is required." });
+      return;
+    }
+    if (!clear) {
+      const r = Number(rating);
+      if (rating.trim() === "" || Number.isNaN(r) || r < 0 || r > 10) {
+        setMsg({ ok: false, text: "Enter a rating between 0 and 10." });
+        return;
+      }
+    }
+    setPending(true);
+    setMsg(null);
+    const payload = clear
+      ? { matchId: target.selectedMatchId, playerId: target.selectedPlayerId, clear: true, reason }
+      : {
+          matchId: target.selectedMatchId,
+          playerId: target.selectedPlayerId,
+          rating: Number(rating),
+          reason,
+        };
+    try {
+      const res = await fetch("/api/commish/rating", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; scored?: boolean };
+      if (res.ok) {
+        // Clear empties the override input (the field falls back to balldontlie after refresh); a set keeps the
+        // entered value so the form matches the just-written state.
+        setRating(clear ? "" : String(Number(rating)));
+        setReason("");
+        setMsg({
+          ok: true,
+          text:
+            body.scored === false
+              ? "Saved + logged — pending: this player has no match data yet; it applies once the feed records them."
+              : clear
+                ? "Override cleared. Re-scored + logged."
+                : "Rating saved. Re-scored + logged.",
+        });
+        onDone();
+      } else {
+        setMsg({ ok: false, text: errorText(res.status, body) });
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(false);
+      }}
+    >
+      <div className="adm-form-h">
+        Rating override <span className="adm-form-sub">0–10 · manual beats balldontlie</span>
+      </div>
+      <div className="adm-current">
+        <span className="t-label">Current (as scored)</span>
+        <b>{current.resolvedRating != null ? current.resolvedRating : "—"}</b>
+        <span className="adm-src">
+          {current.resolvedRatingSource ? `via ${current.resolvedRatingSource}` : "no rating"}
+        </span>
+      </div>
+      <div className="adm-form-row">
+        <label className="adm-inline">
+          <span className="t-label">Override</span>
+          <input
+            type="number"
+            min={0}
+            max={10}
+            step={0.1}
+            className="adm-num"
+            value={rating}
+            onChange={(e) => setRating(e.target.value)}
+          />
+        </label>
+      </div>
+      <input
+        className="adm-input"
+        placeholder="Reason (required — recorded to the audit log)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="adm-form-actions">
+        <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
+          Save rating
+        </button>
+        {current.hasManualRating && (
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={pending}
+            onClick={() => void submit(true)}
+          >
+            Clear override
+          </button>
+        )}
+        {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+      </div>
+    </form>
   );
 }
 

@@ -114,8 +114,19 @@ describe.skipIf(!SAFE)("commish_audit commissioner-only RLS — real Postgres", 
     });
     await db.commishAudit.createMany({
       data: [
+        // a_in_1 / a_in_2: NULL actor (no actor_user_id). a_in_3: FOREIGN actor — authored by USER_MEMBER,
+        // a DIFFERENT user than the commissioner reader (USER_COMM) and NOT a commissioner. Both shapes let
+        // PART A / confirm-1 prove the SELECT gate is "reader is a commissioner in this league", never
+        // "reader authored this row".
         { id: "a_in_1", leagueId: "lg_in", actionType: "penalty_applied", summary: "in-1" },
         { id: "a_in_2", leagueId: "lg_in", actionType: "stat_correction", summary: "in-2" },
+        {
+          id: "a_in_3",
+          leagueId: "lg_in",
+          actorUserId: USER_MEMBER,
+          actionType: "rating_override",
+          summary: "in-3-foreign-actor",
+        },
         { id: "a_out_1", leagueId: "lg_out", actionType: "penalty_applied", summary: "out-1" },
       ],
     });
@@ -154,10 +165,24 @@ describe.skipIf(!SAFE)("commish_audit commissioner-only RLS — real Postgres", 
   }
 
   it("a commissioner reads EVERY audit row in their league", async () => {
-    expect(await visibleIds("authenticated", USER_COMM)).toEqual(["a_in_1", "a_in_2"]);
+    expect(await visibleIds("authenticated", USER_COMM)).toEqual(["a_in_1", "a_in_2", "a_in_3"]);
   });
 
-  it("a NON-commissioner league-mate reads ZERO (commissioner-only, not a league reveal)", async () => {
+  it("PART A/confirm-1: a commissioner reads a FOREIGN-actor row AND a NULL-actor row in their league — the gate is 'commissioner in this league', NOT 'authored this row'", async () => {
+    // The audit-log loader path is the owner-bypass read; this asserts the RLS backstop on the Data API
+    // surface has the SAME shape: a_in_3 was authored by USER_MEMBER (a different user), a_in_1 has a NULL
+    // actor, and the commissioner (USER_COMM) sees BOTH. The SELECT policy never references actor_user_id, so
+    // "who wrote the row" cannot narrow (or widen) what a commissioner reads. This is the completeness half of
+    // the Thread-1 audit-read confirm PART B relies on (every write's audit row is visible to the commissioner
+    // regardless of which commissioner — or system actor — authored it).
+    const ids = await visibleIds("authenticated", USER_COMM);
+    expect(ids).toContain("a_in_3"); // foreign-actor row (authored by USER_MEMBER)
+    expect(ids).toContain("a_in_1"); // null-actor row (system/unattributed)
+  });
+
+  it("a NON-commissioner league-mate reads ZERO — even the row they AUTHORED (commissioner-only, not a league reveal, not an author reveal)", async () => {
+    // USER_MEMBER authored a_in_3, yet reads nothing: the gate is is_commissioner, not authorship — the
+    // converse of confirm-1, closing the "author can read their own row" loophole.
     expect(await visibleIds("authenticated", USER_MEMBER)).toEqual([]);
   });
 
@@ -172,7 +197,7 @@ describe.skipIf(!SAFE)("commish_audit commissioner-only RLS — real Postgres", 
 
   it("the Prisma OWNER (the server's only reader/writer) reads EVERY row — RLS bypass, defense-in-depth", async () => {
     const rows = await db.commishAudit.findMany({ select: { id: true }, orderBy: { id: "asc" } });
-    expect(rows.map((r) => r.id)).toEqual(["a_in_1", "a_in_2", "a_out_1"]);
+    expect(rows.map((r) => r.id)).toEqual(["a_in_1", "a_in_2", "a_in_3", "a_out_1"]);
   });
 
   it("the Prisma OWNER (service-role path — recordCommishAudit) can INSERT a row", async () => {
@@ -180,7 +205,7 @@ describe.skipIf(!SAFE)("commish_audit commissioner-only RLS — real Postgres", 
       data: { leagueId: "lg_in", actionType: "rating_override", summary: "owner-insert" },
     });
     const n = await db.commishAudit.count({ where: { leagueId: "lg_in" } });
-    expect(n).toBe(3);
+    expect(n).toBe(4); // a_in_1 + a_in_2 + a_in_3 + the owner insert
   });
 
   it("an authenticated COMMISSIONER CANNOT INSERT (no write policy → RLS default-deny)", async () => {

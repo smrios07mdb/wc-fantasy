@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { resolveCommissioner } from "@app/shared";
 import {
   COMMISSIONER_EMAIL,
   isCommissionerActor,
@@ -35,6 +36,38 @@ describe("commissioner gate", () => {
   it("refuses a non-commissioner", () => {
     expect(isCommissionerActor({ email: "rando@x.com", isCommissioner: false })).toBe(false);
     expect(isCommissionerActor({ email: null, isCommissioner: false })).toBe(false);
+  });
+});
+
+// ── Commissioner console Thread 2 · PART A / confirm-2 (worker-gate identity) ─────────────────────
+// Thread 1 collapsed the worker CLI gate onto the shared `@app/shared` predicate (isCommissionerActor →
+// resolveCommissioner). This locks in that the delegation is a pure pass-through: for EVERY (flag, email)
+// input — including the smrios07 email fallback and a plain non-commissioner — the worker gate returns the
+// SAME boolean the shared predicate does, so the web `/commish` gate and the CLI gate can never drift. If a
+// later refactor reintroduces bespoke logic in the worker gate, this identity breaks and this test goes RED.
+describe("PART A/confirm-2: isCommissionerActor is IDENTICAL to the shared resolveCommissioner", () => {
+  const flags = [true, false];
+  const emails = [
+    null,
+    "",
+    COMMISSIONER_EMAIL, // exact commissioner email → fallback grants
+    "SMRIOS07@GMAIL.COM", // case-insensitive fallback
+    "  smrios07@gmail.com  ", // whitespace-trimmed fallback
+    "rando@x.com", // ordinary member email
+  ];
+  for (const isCommissioner of flags) {
+    for (const email of emails) {
+      it(`matches resolveCommissioner for { isCommissioner: ${isCommissioner}, email: ${JSON.stringify(email)} }`, () => {
+        const input = { isCommissioner, email };
+        expect(isCommissionerActor(input)).toBe(resolveCommissioner(input));
+      });
+    }
+  }
+
+  it("the fallback grant is the smrios07 email regardless of the flag; a non-commissioner is refused", () => {
+    // Anchor the identity to the two load-bearing behaviors PART B depends on, not just self-consistency.
+    expect(isCommissionerActor({ isCommissioner: false, email: COMMISSIONER_EMAIL })).toBe(true);
+    expect(isCommissionerActor({ isCommissioner: false, email: "rando@x.com" })).toBe(false);
   });
 });
 

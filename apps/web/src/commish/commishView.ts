@@ -64,6 +64,49 @@ export interface CommishManagerInspector {
   roster: CommishRosterPlayer[];
 }
 
+/** Thread 2 · Stat-corrections tab — one scoreable match option (label + its fantasy period + freeze state). */
+export interface CommishStatMatchOption {
+  matchId: string;
+  /** "Home vs Away" (team names; "TBD" when a fixture's team is unset). */
+  label: string;
+  /** The match's fantasy period label ("MD1" / "Round of 16" / …), or null when unlinked. */
+  periodLabel: string | null;
+  /** The match's period is frozen — a correction here is a commissioner override (surfaced in the panel). */
+  periodFrozen: boolean;
+  kickoffIso: string;
+}
+
+/** One selectable player in the chosen match (both squads). */
+export interface CommishStatPlayerOption {
+  playerId: string;
+  name: string;
+  position: Position;
+  teamName: string | null;
+}
+
+/** The current stored correction state for the selected (match, player) — prefills the two forms. */
+export interface CommishStatCurrent {
+  penaltyWon: number;
+  penaltyCommitted: number;
+  penaltyReason: string | null;
+  /** The resolved rating + source AS SCORED (a manual override wins over balldontlie). */
+  resolvedRating: number | null;
+  resolvedRatingSource: string | null;
+  /** A manual override row currently exists (so "Clear override" is meaningful). */
+  hasManualRating: boolean;
+  periodFrozen: boolean;
+}
+
+/** The Stat-corrections tab's data: the match picker, the (match-scoped) player picker, and the current state.
+ *  Selection is URL-driven (`?match=&player=`) so it survives refresh; the write forms POST + `router.refresh`. */
+export interface CommishStatCorrectionsView {
+  matches: CommishStatMatchOption[];
+  selectedMatchId: string | null;
+  selectedPlayerId: string | null;
+  players: CommishStatPlayerOption[];
+  current: CommishStatCurrent | null;
+}
+
 export interface CommishConsoleView {
   leagueId: string;
   leagueName: string;
@@ -74,6 +117,8 @@ export interface CommishConsoleView {
   managers: CommishManagerOption[];
   /** Present only when a valid `?as=<managerId>` (in this league) is selected. */
   inspector: CommishManagerInspector | null;
+  /** Thread 2 Stat-corrections tab data (matches empty while inspecting a manager via `?as=`). */
+  statCorrections: CommishStatCorrectionsView;
 }
 
 // ── pure shapers ──────────────────────────────────────────────────────────────────────────────────

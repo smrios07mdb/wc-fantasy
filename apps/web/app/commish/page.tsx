@@ -26,8 +26,14 @@ export default async function CommishPage({
   const params = await searchParams;
   const asParam = params.as;
   const selectedManagerId = typeof asParam === "string" ? asParam : null;
+  const matchId = typeof params.match === "string" ? params.match : null;
+  const playerId = typeof params.player === "string" ? params.player : null;
+  const tabParam = typeof params.tab === "string" ? params.tab : null;
+  // Land on the Stat-corrections tab whenever a match/player is being inspected (the selection is URL-driven,
+  // so a full-navigation match pick must re-open the right tab); otherwise honor an explicit ?tab.
+  const initialTab = matchId ? "stats" : tabParam;
 
-  const view = await loadCommish(access.managerId, selectedManagerId);
+  const view = await loadCommish(access.managerId, selectedManagerId, { matchId, playerId });
   if (!view) {
     return (
       <div style={{ display: "grid", placeItems: "center", padding: "48px 18px" }}>
@@ -41,5 +47,5 @@ export default async function CommishPage({
     );
   }
 
-  return <CommishConsole view={view} />;
+  return <CommishConsole view={view} initialTab={initialTab} />;
 }

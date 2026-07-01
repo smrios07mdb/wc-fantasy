@@ -549,6 +549,132 @@
   white-space: nowrap;
 }
 
+/* ── stat corrections (Thread 2): penalty entry + rating override ──────────────────────────────── */
+.adm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.adm-select {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--r-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+}
+.adm-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+.adm-hint {
+  padding: 22px 6px;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.adm-frozen {
+  display: block;
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-md, 8px);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--ytp);
+  background: var(--ytp-soft);
+  border: 1px solid color-mix(in srgb, var(--ytp) 34%, transparent);
+}
+.adm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 10px);
+  background: color-mix(in srgb, var(--adm-edge) 4%, var(--surface));
+}
+.adm-form-h {
+  font-weight: 800;
+  font-family: var(--font-display);
+  color: var(--text-secondary);
+}
+.adm-form-sub {
+  margin-left: 6px;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+.adm-form-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.adm-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.adm-num {
+  width: 96px;
+  padding: 8px 10px;
+  border-radius: var(--r-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-primary);
+}
+.adm-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+}
+.adm-num:focus-visible,
+.adm-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+.adm-preview {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  padding-bottom: 6px;
+}
+.adm-current {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.adm-current b {
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+}
+.adm-src {
+  color: var(--text-tertiary);
+}
+.adm-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.adm-msg {
+  font-size: var(--fs-sm);
+}
+.adm-msg.is-ok {
+  color: var(--pos, #35c48a);
+}
+.adm-msg.is-err {
+  color: var(--ytp);
+}
+
 /* ── responsive ───────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .adm-body {
