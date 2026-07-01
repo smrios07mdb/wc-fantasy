@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:layout": "node apps/web/scripts/verify-pitch-layout.mjs",
+    "test:playoffs-hero": "node apps/web/scripts/verify-playoffs-hero.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,md,yaml,yml}\"",

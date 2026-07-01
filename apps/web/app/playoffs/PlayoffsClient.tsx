@@ -13,7 +13,7 @@
  * the fresh JWT, tearing the prior one down first. `setAuth`-before-subscribe + the change-nudge→refetch +
  * the visibility-gated poll are all inside the (unit-tested) `startPlayoffsLive`.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { startPlayoffsLive } from "@/src/playoffs/liveController";
 import { fetchPlayoffs } from "@/src/playoffs/snapshotClient";
@@ -21,13 +21,18 @@ import type { RealtimeClientLike } from "@/src/playoffs/realtime";
 import { buildReducedPitch } from "@/src/playoffs/theaterView";
 import type { PlayoffsView } from "./loadPlayoffs";
 import {
-  ChampionBanner,
   ConnPill,
   DesktopPlayoffs,
   MobilePlayoffs,
   type ConnState,
+  type HeroDrop,
 } from "./components";
 import "./playoffs.css";
+
+// The blade choreography timing (client-side; the loader is clockless). wind = "Chocoyo raises the
+// blade", drop = "Chocoyo swings" → "CHOP!"; then the hero settles back onto the new live round.
+const BLADE_WIND_MS = 850;
+const BLADE_SETTLE_MS = 1950;
 
 export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
   const [view, setView] = useState<PlayoffsView>(initialView);
@@ -40,6 +45,76 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
 
   // The viewer's reduced playoff pitch, mapped from the server-composed reducedLineup (live lock + pts).
   const pitch = useMemo(() => buildReducedPitch(view.reducedLineup), [view.reducedLineup]);
+
+  // ── the blade CHOREOGRAPHY — a purely CLIENT-side state machine (STOP seam: no loader/view-model
+  // change; the snapshot is clockless). At rest the hero centres on the live round (idle sway) or, once
+  // complete, the settled champion state. The drop fires ONE-TIME only when a round the client is
+  // WATCHING flips live→past between refetches — detected by a transition latch over per-round-idx status
+  // (round idx is a stable identity). It never loops and never fires on mount for an already-past round.
+  const [drop, setDrop] = useState<HeroDrop>({
+    focusIdx: initialView.currentRoundIdx,
+    phase: "rest",
+  });
+  const prevStatusRef = useRef<string[] | null>(null);
+  const currentIdxRef = useRef(view.currentRoundIdx);
+  currentIdxRef.current = view.currentRoundIdx;
+  const reducedMotionRef = useRef(false);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Read the reduced-motion preference once (client only); declared BEFORE the latch so the ref is set.
+  useEffect(() => {
+    reducedMotionRef.current =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
+    };
+  }, []);
+
+  useEffect(() => {
+    const cur = view.rounds.map((r) => r.status);
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = cur;
+
+    // No history yet (first render) or reduced motion → never animate; just settle on the current round.
+    if (!prev || reducedMotionRef.current) {
+      setDrop((d) =>
+        d.phase === "rest" && d.focusIdx === view.currentRoundIdx
+          ? d
+          : { focusIdx: view.currentRoundIdx, phase: "rest" },
+      );
+      return;
+    }
+
+    // A round the client was watching flipped live→past → a cut just landed. Play wind → drop → settle
+    // onto the (now-advanced) live round. Round idx is stable, so this is unambiguous across refetches.
+    const flipped = cur.findIndex((s, i) => prev[i] === "live" && s === "past");
+    if (flipped === -1) {
+      // No cut this refetch — keep the hero on the current round, but never interrupt a running swing.
+      setDrop((d) =>
+        d.phase !== "rest" || d.focusIdx === view.currentRoundIdx
+          ? d
+          : { focusIdx: view.currentRoundIdx, phase: "rest" },
+      );
+      return;
+    }
+
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    setDrop({ focusIdx: flipped, phase: "wind" });
+    timersRef.current.push(
+      setTimeout(() => setDrop({ focusIdx: flipped, phase: "drop" }), BLADE_WIND_MS),
+    );
+    // Settle onto the LATEST live round (currentIdxRef, not the stale closure) once reactions clear.
+    timersRef.current.push(
+      setTimeout(
+        () => setDrop({ focusIdx: currentIdxRef.current, phase: "rest" }),
+        BLADE_SETTLE_MS,
+      ),
+    );
+  }, [view]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -93,7 +168,8 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
           so the body keeps only the screen label + the live round line + the layout toggle + ConnPill. */}
       <div className="po-screenhead">
         <div className="po-screenhead-title">
-          <img src="/brand/parrot.png" alt="" className="po-parrot" />
+          {/* The mascot is the CHOCOYO HERO below now (parrot peeking from the trophy, hoisting the
+              machete) — not a tiny header chip; the screenhead keeps only the screen label + round line. */}
           <b className="display">Guillotine</b>
           <span className="t-micro text-tertiary" style={{ letterSpacing: ".06em" }}>
             {currentRound
@@ -122,32 +198,28 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
         </div>
       </div>
 
-      {view.complete && view.champion && (
-        <ChampionBanner
-          champion={view.champion}
-          names={view.managerNames}
-          viewerId={view.managerId}
-        />
-      )}
-
       {conn === "reconnecting" && (
         <div className="po-banner po-banner-recon">
           Reconnecting — points may be a moment behind.
         </div>
       )}
 
+      {/* The champion / tournament-complete endgame is OWNED BY THE HERO (it swaps the CHOP framing for
+          the celebratory trophy in-place), so there is no separate top-of-page ChampionBanner. */}
       <DesktopPlayoffs
         view={view}
         pitch={pitch}
         layout={layout}
         viewRoundIdx={viewRoundIdx}
         onViewRound={setPinnedRoundIdx}
+        drop={drop}
       />
       <MobilePlayoffs
         view={view}
         layout={layout}
         viewRoundIdx={viewRoundIdx}
         onViewRound={setPinnedRoundIdx}
+        drop={drop}
       />
     </div>
   );
