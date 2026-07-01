@@ -11,6 +11,7 @@
  * `buildVsField` suite cover the shapes it produces. It is shared by the SSR page AND `GET /api/vsfield`.
  */
 import { prisma } from "@app/db";
+import { loadEliminatedManagerIds } from "@app/faab/prisma";
 import { selectCurrentPeriod, isLockedNow, type Position } from "@app/shared";
 import {
   resolveDisplayedPeriodId,
@@ -150,7 +151,7 @@ export async function loadVsField(
   const leagueId = viewer.leagueId;
   const now = new Date();
 
-  const [managerRows, periodRows, standingRows, eliminatedEntryRows] = await Promise.all([
+  const [managerRows, periodRows, standingRows, eliminatedManagerIds] = await Promise.all([
     // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
     // no current-period score_manager_period row (and no XI) MUST still appear, so buildVsField pads
     // him to 0 points + empty XI and he is a free win for everyone strictly above (Prompt 04 line 42 /
@@ -184,13 +185,14 @@ export async function loadVsField(
         seed: true,
       },
     }),
-    // CONTRACT-P3 data-existence contract: playoff participation is read from playoff_entry, NEVER
-    // league.status. Group-phase leagues have zero rows here (query is a no-op then), so the live-field
-    // hide below is automatically playoff-phase-scoped by data existence, not a phase flag.
-    prisma.playoffEntry.findMany({
-      where: { leagueId, status: "eliminated" },
-      select: { managerId: true },
-    }),
+    // The set of managers OUT OF CONTENTION for the live field — the data-existence eliminated predicate,
+    // shared with /waivers via @app/faab/prisma so the two surfaces cannot drift (CONTRACT-P2/P3: playoff
+    // participation is read from playoff_entry, NEVER league.status). It is EMPTY during the group phase
+    // (no playoff_entry rows exist yet), so the hide below stays inert until the group→playoff transition;
+    // once active it catches BOTH non-advancers (NO playoff_entry row — status is NULL, never the string
+    // 'eliminated', the case the old status='eliminated' read silently missed) AND managers guillotined
+    // mid-playoffs (status='eliminated'). Survivors (status='alive') are the only ones kept on the field.
+    loadEliminatedManagerIds(prisma, leagueId),
   ]);
 
   // Current period: the open wave (if any), else the earliest period whose last match has not yet
@@ -395,7 +397,6 @@ export async function loadVsField(
   );
 
   const view = buildVsField(input);
-  const eliminatedManagerIds = new Set(eliminatedEntryRows.map((e) => e.managerId));
   const field = filterEliminatedFromField(view.field, eliminatedManagerIds, isLivePeriod);
 
   return { ...view, field, benches, selectablePeriods, isLivePeriod };

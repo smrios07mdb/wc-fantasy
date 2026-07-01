@@ -208,11 +208,15 @@ describe("vsfield — match cards link to the match detail page (mirrors dashboa
   });
 });
 
-describe("vsfield — eliminated managers hidden from the LIVE field only (CONTRACT-P3 data-existence)", () => {
-  it("reads playoff_entry status='eliminated' (never league.status) gated on the league, not a phase flag", () => {
-    expect(loader).toContain("prisma.playoffEntry.findMany");
-    // pins the actual where-clause shape: filtered by leagueId + status, never a league.status read
-    expect(loader).toContain('where: { leagueId, status: "eliminated" }');
+describe("vsfield — eliminated managers hidden from the LIVE field only (CONTRACT-P2/P3 data-existence)", () => {
+  it("derives the hide-set from the shared loadEliminatedManagerIds helper, never a local status='eliminated' read", () => {
+    // The fix: a group-phase NON-ADVANCER holds NO playoff_entry row (status is NULL), so a
+    // `status: "eliminated"` read silently missed him and left him on the live field. The hide-set is now
+    // the ONE data-existence predicate shared with /waivers via @app/faab/prisma — phase-gated to EMPTY
+    // before the group→playoff transition (no playoff_entry rows), so the field is never blanked in group.
+    expect(loader).toContain('from "@app/faab/prisma"');
+    expect(loader).toContain("loadEliminatedManagerIds(prisma, leagueId)");
+    expect(loader).not.toContain('status: "eliminated"');
   });
 
   it("filters + re-ranks the live `field` only when isLivePeriod — buildVsField itself stays untouched", () => {

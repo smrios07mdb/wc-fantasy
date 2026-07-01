@@ -1828,6 +1828,21 @@ P36 — Home-nation flags resolved. England = St George's Cross, Scotland = Salt
   the existing table/column. `packages/scoring` + `packages/recompute` are untouched and unread by this
   path (FAAB/waiver loaders carry no scoring-engine dependency); no scoring or standings behavior change.
 
+- **The "eliminated manager" set is the SAME contract in set form — the `status="eliminated"` VALUE alone is
+  the wrong signal (`fix/eliminated-predicate-data-existence`, Jun 30 2026, merge HELD).** The `/vsfield`
+  live-field hide (§27) and the `/waivers` budgets-rail strike originally read
+  `playoff_entry.findMany({ status: "eliminated" })` as "who is out." That MISSES group-phase
+  **non-advancers**, who hold **no `playoff_entry` row at all** (`status` NULL) — only guillotined-during-
+  playoffs managers ever carry `status="eliminated"`. The corrected predicate is the set-form negation of
+  `loadIsPlayoffParticipant`: **eliminated iff `loadPlayoffPhaseActive` AND not in the `alive` set** —
+  catching no-row non-advancers AND `"eliminated"` guillotines, leaving only `alive` survivors. Both surfaces
+  call ONE shared helper, `loadEliminatedManagerIds(db, leagueId)` in `@app/faab/prisma`, so they cannot
+  drift. It is **phase-gated to empty** pre-transition (zero `alive` rows would otherwise blank the whole
+  live field — the field-blanking guard). **Champion** (`status="champion"`, not `alive`) is included in the
+  set by the same "only `alive` survives" rule this block already established — a spec-faithful terminal-state
+  edge (waivers strike only; never the `isLivePeriod`-gated vsfield hide), pinned by a test and flagged, not
+  silently decided. See ARCHITECTURE.md §27 (Follow-up fix).
+
 ## Quiniela (`/pool`) knockout bracket gates on `playoff_entry` existence, not `selectTournamentPhase` — the same R32 pre-kickoff blind spot as CONTRACT-P2/P3 (2026-06-28 — `worktree-pool-playoff-bracket-gate`, merge HELD)
 
 - **The /pool (Quiniela) Picks tab now renders the knockout bracket gated on `playoffActive` —

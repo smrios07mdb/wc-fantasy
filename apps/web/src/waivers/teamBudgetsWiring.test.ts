@@ -33,17 +33,19 @@ describe("loadWaivers.ts — threads each team's remaining FAAB onto the view", 
   });
 });
 
-describe("loadWaivers.ts — stamps eliminated onto each team budget (CONTRACT-P3 data-existence contract)", () => {
-  it("reads playoffEntry rows scoped to status: eliminated", () => {
-    expect(loader).toMatch(
-      /prisma\.playoffEntry\.findMany\(\{\s*where: \{ leagueId, status: "eliminated" \}/,
-    );
+describe("loadWaivers.ts — stamps eliminated onto each team budget (CONTRACT-P2/P3 data-existence)", () => {
+  it("derives the eliminated set from the shared loadEliminatedManagerIds helper, never a local status='eliminated' read", () => {
+    // The bug fix: a group-phase NON-ADVANCER holds NO playoff_entry row (status is NULL), so a
+    // `status: "eliminated"` read silently misses him. Both surfaces (/vsfield hide, /waivers strike) now
+    // delegate to the ONE data-existence predicate in @app/faab/prisma so they cannot drift apart.
+    expect(loader).toContain('from "@app/faab/prisma"');
+    expect(loader).toContain("loadEliminatedManagerIds");
+    expect(loader).toContain("loadEliminatedManagerIds(prisma, leagueId)");
+    // the old missed-non-advancer read is gone — no local playoff_entry status='eliminated' subtraction
+    expect(loader).not.toContain('status: "eliminated"');
   });
 
-  it("stamps eliminated onto each teamBudgets row from that read, not from league.status", () => {
-    expect(loader).toContain(
-      "const eliminatedManagerIds = new Set(eliminatedEntryRows.map((e) => e.managerId));",
-    );
+  it("stamps eliminated onto each teamBudgets row from that derived set", () => {
     expect(loader).toContain("eliminated: eliminatedManagerIds.has(m.id),");
   });
 });

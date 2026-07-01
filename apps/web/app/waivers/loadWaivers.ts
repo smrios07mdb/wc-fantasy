@@ -12,6 +12,7 @@ import { prisma } from "@app/db";
 import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
 import {
   listFaIneligiblePlayerIds,
+  loadEliminatedManagerIds,
   loadIsPlayoffParticipant,
   loadPlayoffPhaseActive,
 } from "@app/faab/prisma";
@@ -83,7 +84,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     seasonScores,
     periodRows,
     watchlistRows,
-    eliminatedEntryRows,
+    eliminatedManagerIds,
   ] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
@@ -150,13 +151,13 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       where: { managerId: viewerManagerId },
       select: { playerId: true },
     }),
-    // Eliminated managers (CONTRACT-P3 data-existence contract: playoff participation reads from
-    // `playoff_entry`, NEVER `league.status`) — same read loadVsField.ts already uses to hide these
-    // managers from the live field. Here they're kept + struck, not removed.
-    prisma.playoffEntry.findMany({
-      where: { leagueId, status: "eliminated" },
-      select: { managerId: true },
-    }),
+    // Eliminated managers — the data-existence eliminated set, the SAME shared helper loadVsField.ts uses
+    // to hide them from the live field (so the two surfaces cannot drift). CONTRACT-P2/P3: playoff
+    // participation reads from `playoff_entry`, NEVER `league.status`. EMPTY during the group phase (no
+    // playoff_entry rows), so nobody is struck until the group→playoff transition; then it catches BOTH
+    // non-advancers (NO playoff_entry row — status NULL, never 'eliminated') AND mid-playoff guillotines.
+    // Here they're kept + struck, not removed.
+    loadEliminatedManagerIds(prisma, leagueId),
   ]);
 
   // The current period for the waiver window: the OPEN wave, else the soonest PENDING by first
@@ -322,7 +323,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
     }));
 
   // Every team's remaining FAAB, budget-desc — display-only, read straight off `manager.faabBudget`.
-  const eliminatedManagerIds = new Set(eliminatedEntryRows.map((e) => e.managerId));
+  // `eliminatedManagerIds` (the data-existence set, resolved in the Promise.all above) strikes each row.
   const teamBudgets: WvTeamBudget[] = [...managerRows]
     .sort((a, b) => b.faabBudget - a.faabBudget)
     .map((m) => ({
