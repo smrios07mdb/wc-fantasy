@@ -22,11 +22,13 @@ import {
   toInspector,
   type CommishConsoleView,
   type CommishManagerOption,
+  type CommishOpsView,
   type CommishRepairView,
   type CommishRosterPlayer,
   type CommishStatCorrectionsView,
   type CommishStatPlayerOption,
 } from "@/src/commish/commishView";
+import { periodFreezable, periodLive } from "@/src/commish/handleFreeze";
 
 /** How many recent audit rows the console renders (empty until later write slices populate the ledger). */
 const AUDIT_LIMIT = 50;
@@ -39,6 +41,9 @@ const EMPTY_STAT_CORRECTIONS: CommishStatCorrectionsView = {
   players: [],
   current: null,
 };
+
+/** An empty Ops view (used while inspecting a manager via `?as=`, where the tabs are hidden). */
+const EMPTY_OPS: CommishOpsView = { periods: [] };
 
 /** An empty Repair view (used while inspecting a manager via `?as=`, where the tabs are hidden). */
 const EMPTY_REPAIR: CommishRepairView = {
@@ -121,6 +126,7 @@ export async function loadCommish(
         repairSel?.managerId ?? null,
         repairSel?.periodId ?? null,
       );
+  const ops = selectedManagerId ? EMPTY_OPS : await buildOps(leagueId);
 
   return {
     leagueId,
@@ -137,6 +143,51 @@ export async function loadCommish(
     inspector,
     statCorrections,
     repair,
+    ops,
+  };
+}
+
+/**
+ * Assemble the Game-operations freeze panel (Thread 4): every league period with its frozen state, the
+ * SAME `freezable`/`live` predicates the write handler enforces (button state and server guard cannot
+ * disagree), and the count of unprocessed manager_period dirty markers (what an unfreeze would let the
+ * worker's next sweep restate). READ-ONLY; the writes go through POST /api/commish/freeze · /unfreeze.
+ */
+async function buildOps(leagueId: string): Promise<CommishOpsView> {
+  const [periodRows, dirtyGroups] = await Promise.all([
+    prisma.period.findMany({
+      where: { leagueId },
+      select: {
+        id: true,
+        label: true,
+        status: true,
+        kind: true,
+        frozenAt: true,
+        matches: { select: { status: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.recomputeDirty.groupBy({
+      by: ["periodId"],
+      where: { scope: "manager_period", processedAt: null },
+      _count: { _all: true },
+    }),
+  ]);
+  const pendingByPeriod = new Map(dirtyGroups.map((g) => [g.periodId, g._count._all]));
+  return {
+    periods: periodRows.map((p) => {
+      const fixtureStatuses = p.matches.map((m) => m.status);
+      return {
+        periodId: p.id,
+        label: p.label,
+        kind: p.kind as "group_md" | "knockout_round",
+        status: p.status,
+        frozenAtIso: p.frozenAt?.toISOString() ?? null,
+        live: periodLive(fixtureStatuses),
+        freezable: periodFreezable(p.status, fixtureStatuses),
+        pendingDirty: pendingByPeriod.get(p.id) ?? 0,
+      };
+    }),
   };
 }
 

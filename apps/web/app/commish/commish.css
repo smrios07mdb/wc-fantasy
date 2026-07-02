@@ -731,6 +731,105 @@
   accent-color: var(--accent);
 }
 
+/* ── Thread 4 · game operations: period freeze / unfreeze ─────────────────────────────────────── */
+.adm-ops-copy {
+  margin: 0 0 12px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.adm-freezes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.adm-freeze {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-2, var(--surface));
+  padding: 10px 12px;
+}
+.adm-freeze.is-frozen {
+  border-color: color-mix(in srgb, var(--locked) 45%, var(--border));
+  background: color-mix(in srgb, var(--locked) 8%, var(--surface-2, var(--surface)));
+}
+.adm-freeze-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.adm-freeze-id {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-right: auto;
+}
+.adm-freeze-label {
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.adm-freeze-sub {
+  font-size: var(--fs-xs, 12px);
+  color: var(--text-tertiary);
+}
+.adm-livedot-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  color: var(--live);
+  background: var(--live-soft);
+}
+.adm-livedot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+}
+.adm-freeze-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: var(--r-md, 8px);
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-secondary);
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  cursor: pointer;
+}
+.adm-freeze-btn:hover:not(:disabled) {
+  border-color: var(--locked);
+  color: var(--text-primary);
+}
+.adm-freeze-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.adm-freeze-btn.is-frozen {
+  color: var(--locked);
+  border-color: color-mix(in srgb, var(--locked) 50%, transparent);
+  background: var(--locked-soft);
+}
+.adm-freeze-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+.adm-freeze-confirm-copy {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 /* ── responsive ───────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .adm-body {

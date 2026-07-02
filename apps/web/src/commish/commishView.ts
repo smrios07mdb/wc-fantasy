@@ -186,6 +186,26 @@ export interface CommishRepairView {
   rosterCap: number;
 }
 
+/** One period row on the Game-operations freeze panel (Thread 4). `freezable`/`live` are computed
+ *  SERVER-side by the shared handler predicates (handleFreeze.ts) so the button state and the write
+ *  guard can never disagree; `pendingDirty` = unprocessed manager_period markers (the corrections an
+ *  unfreeze would let the worker's next sweep restate). */
+export interface CommishFreezePeriodView {
+  periodId: string;
+  label: string;
+  kind: "group_md" | "knockout_round";
+  status: string;
+  frozenAtIso: string | null;
+  live: boolean;
+  freezable: boolean;
+  pendingDirty: number;
+}
+
+/** The Game-operations tab data (Thread 4 ships the freeze panel; other ops controls are later threads). */
+export interface CommishOpsView {
+  periods: CommishFreezePeriodView[];
+}
+
 export interface CommishConsoleView {
   leagueId: string;
   leagueName: string;
@@ -200,6 +220,8 @@ export interface CommishConsoleView {
   statCorrections: CommishStatCorrectionsView;
   /** Thread 3a Roster/Lineup-repair tab data (empty while inspecting a manager via `?as=`). */
   repair: CommishRepairView;
+  /** Thread 4 Game-operations tab data (empty while inspecting a manager via `?as=`). */
+  ops: CommishOpsView;
 }
 
 // ── pure shapers ──────────────────────────────────────────────────────────────────────────────────

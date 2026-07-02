@@ -19,8 +19,10 @@ import {
   STAT_FIELD_META,
   type CommishAuditView,
   type CommishConsoleView,
+  type CommishFreezePeriodView,
   type CommishManagerInspector,
   type CommishManagerOption,
+  type CommishOpsView,
   type CommishRepairView,
   type CommishRosterPlayer,
   type CommishStatCorrectionsView,
@@ -107,6 +109,8 @@ export function CommishConsole({
                 <StatCorrectionsPanel view={view.statCorrections} />
               ) : tab === "repair" ? (
                 <RepairPanel view={view.repair} managers={view.managers} />
+              ) : tab === "ops" ? (
+                <OpsPanel view={view.ops} />
               ) : (
                 <TaskPlaceholder title={activeTab.label} copy={activeTab.copy} />
               )}
@@ -144,6 +148,313 @@ function TaskPlaceholder({ title, copy }: { title: string; copy: string }) {
   );
 }
 
+// ── game operations (Thread 4): period freeze / unfreeze ────────────────────────────────────────
+//
+// COPY CONTRACT (Step-0 discovery — the design prototype's "Lineups locked · scoring paused" is WRONG
+// and must not ship): `frozen_at` gates AUTO-RESTATEMENT only. Freeze = results final now (late feed /
+// rating corrections stop auto-restating); unfreeze = re-open auto-restatement (pending corrections
+// apply on the worker's next sweep) and the hourly close job RE-FREEZES the period on its next pass.
+
+const FREEZE_CONFIRM_WORD = "FREEZE";
+
+function OpsPanel({ view }: { view: CommishOpsView }) {
+  const router = useRouter();
+  // One inline confirm open at a time: the period being acted on + which action.
+  const [confirm, setConfirm] = useState<{ periodId: string; mode: "freeze" | "unfreeze" } | null>(
+    null,
+  );
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  const openConfirm = (periodId: string, mode: "freeze" | "unfreeze") => {
+    setMsg(null);
+    setConfirm((c) =>
+      c && c.periodId === periodId && c.mode === mode ? null : { periodId, mode },
+    );
+  };
+
+  return (
+    <section className="adm-card">
+      <div className="adm-card-h">
+        <div className="adm-card-ht">
+          <h3 className="adm-card-title">Game operations</h3>
+          <span className="adm-card-sub">Period freeze — results finality</span>
+        </div>
+        <span className="adm-badge adm-badge-sm">Restatement gate · logged</span>
+      </div>
+      <div className="adm-card-b">
+        <p className="adm-ops-copy">
+          Freezing a period marks its results <b>final</b>: late feed or rating corrections stop
+          auto-restating its scores. It does <b>not</b> lock lineups and does <b>not</b> pause live
+          scoring. The hourly close job freezes settled periods on its own; freeze early to finalize
+          now, unfreeze to let a pending correction restate.
+        </p>
+        <div className="adm-freezes">
+          {view.periods.length === 0 && (
+            <p className="adm-hint">No periods yet — the schedule hasn&apos;t been provisioned.</p>
+          )}
+          {view.periods.map((p) => (
+            <FreezeRow
+              key={p.periodId}
+              period={p}
+              confirmMode={confirm?.periodId === p.periodId ? confirm.mode : null}
+              onToggleConfirm={openConfirm}
+              onClose={() => setConfirm(null)}
+              onResult={(m) => {
+                setMsg(m);
+                if (m.ok) {
+                  setConfirm(null);
+                  router.refresh();
+                }
+              }}
+            />
+          ))}
+        </div>
+        {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+      </div>
+    </section>
+  );
+}
+
+function FreezeRow({
+  period,
+  confirmMode,
+  onToggleConfirm,
+  onClose,
+  onResult,
+}: {
+  period: CommishFreezePeriodView;
+  confirmMode: "freeze" | "unfreeze" | null;
+  onToggleConfirm: (periodId: string, mode: "freeze" | "unfreeze") => void;
+  onClose: () => void;
+  onResult: (m: NonNullable<FormMsg>) => void;
+}) {
+  const frozen = period.frozenAtIso != null;
+  const kindLabel = period.kind === "group_md" ? "Group" : "Knockout";
+  const frozenSince = period.frozenAtIso ? period.frozenAtIso.slice(0, 10) : null;
+
+  return (
+    <div className={frozen ? "adm-freeze is-frozen" : "adm-freeze"}>
+      <div className="adm-freeze-row">
+        <div className="adm-freeze-id">
+          <span className="adm-freeze-label">{period.label}</span>
+          <span className="adm-freeze-sub">
+            {kindLabel} · {period.status}
+            {frozenSince ? ` · frozen since ${frozenSince}` : ""}
+            {frozen && period.pendingDirty > 0
+              ? ` · ${period.pendingDirty} pending correction${period.pendingDirty === 1 ? "" : "s"} held`
+              : ""}
+          </span>
+        </div>
+        {period.live && (
+          <span className="adm-livedot-pill">
+            <span className="adm-livedot" />
+            live
+          </span>
+        )}
+        {frozen ? (
+          <button
+            type="button"
+            className="adm-freeze-btn is-frozen"
+            onClick={() => onToggleConfirm(period.periodId, "unfreeze")}
+          >
+            Frozen — unfreeze
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="adm-freeze-btn"
+            disabled={!period.freezable}
+            title={
+              period.freezable
+                ? undefined
+                : "Live or unplayed fixtures — a period can be frozen only after every fixture has finished."
+            }
+            onClick={() => onToggleConfirm(period.periodId, "freeze")}
+          >
+            Freeze…
+          </button>
+        )}
+      </div>
+      {confirmMode === "freeze" && (
+        <FreezeConfirm period={period} onClose={onClose} onResult={onResult} />
+      )}
+      {confirmMode === "unfreeze" && (
+        <UnfreezeConfirm period={period} onClose={onClose} onResult={onResult} />
+      )}
+    </div>
+  );
+}
+
+/** Type-to-confirm FREEZE (the design's confirmWord pattern, with the CORRECTED effect copy). */
+function FreezeConfirm({
+  period,
+  onClose,
+  onResult,
+}: {
+  period: CommishFreezePeriodView;
+  onClose: () => void;
+  onResult: (m: NonNullable<FormMsg>) => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const armed = typed.trim() === FREEZE_CONFIRM_WORD && reason.trim() !== "";
+
+  async function submit() {
+    setPending(true);
+    try {
+      const res = await fetch("/api/commish/freeze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ periodId: period.periodId, reason: reason.trim() }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (res.ok) {
+        onResult({ ok: true, text: `${period.label} frozen — results are final now.` });
+      } else {
+        onResult({ ok: false, text: errorText(res.status, body) });
+      }
+    } catch {
+      onResult({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="adm-freeze-confirm">
+      <p className="adm-freeze-confirm-copy">
+        Freezing marks <b>{period.label}</b>&apos;s results <b>final now</b> — late feed or rating
+        corrections stop auto-restating this period until it is unfrozen. Lineups and live scoring
+        are unaffected.
+      </p>
+      <div className="adm-field">
+        <label className="t-label" htmlFor={`fz-word-${period.periodId}`}>
+          Type <b>{FREEZE_CONFIRM_WORD}</b> to confirm
+        </label>
+        <input
+          id={`fz-word-${period.periodId}`}
+          className="adm-input"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder={FREEZE_CONFIRM_WORD}
+          autoComplete="off"
+        />
+      </div>
+      <div className="adm-field">
+        <label className="t-label" htmlFor={`fz-reason-${period.periodId}`}>
+          Reason (logged)
+        </label>
+        <input
+          id={`fz-reason-${period.periodId}`}
+          className="adm-input"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. results verified — finalize ahead of the window"
+        />
+      </div>
+      <div className="adm-form-actions">
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          disabled={!armed || pending}
+          onClick={() => void submit()}
+        >
+          {pending ? "Freezing…" : "Freeze period"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Plain confirm for unfreeze — reason REQUIRED; carries the re-freeze + pending-corrections copy. */
+function UnfreezeConfirm({
+  period,
+  onClose,
+  onResult,
+}: {
+  period: CommishFreezePeriodView;
+  onClose: () => void;
+  onResult: (m: NonNullable<FormMsg>) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit() {
+    setPending(true);
+    try {
+      const res = await fetch("/api/commish/unfreeze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ periodId: period.periodId, reason: reason.trim() }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        pendingDirty?: number;
+      };
+      if (res.ok) {
+        const n = body.pendingDirty ?? 0;
+        const restate =
+          n > 0
+            ? `${n} pending correction${n === 1 ? "" : "s"} will restate on the next sweep.`
+            : "No pending corrections right now.";
+        onResult({
+          ok: true,
+          text: `${period.label} unfrozen — ${restate} Re-freezes automatically on the next hourly pass.`,
+        });
+      } else {
+        onResult({ ok: false, text: errorText(res.status, body) });
+      }
+    } catch {
+      onResult({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="adm-freeze-confirm">
+      <p className="adm-freeze-confirm-copy">
+        Unfreezing re-opens auto-restatement for <b>{period.label}</b>: pending corrections apply on
+        the worker&apos;s next sweep. It re-freezes automatically on the close job&apos;s next
+        hourly pass (up to ~1h window to let corrections restate).
+        {period.pendingDirty > 0
+          ? ` ${period.pendingDirty} pending correction${period.pendingDirty === 1 ? "" : "s"} currently held.`
+          : ""}
+      </p>
+      <div className="adm-field">
+        <label className="t-label" htmlFor={`uf-reason-${period.periodId}`}>
+          Reason (required, logged)
+        </label>
+        <input
+          id={`uf-reason-${period.periodId}`}
+          className="adm-input"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. late rating correction for MD2 needs to restate"
+        />
+      </div>
+      <div className="adm-form-actions">
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          disabled={reason.trim() === "" || pending}
+          onClick={() => void submit()}
+        >
+          {pending ? "Unfreezing…" : "Unfreeze"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── stat corrections (Thread 2): penalty entry + rating override ────────────────────────────────
 function errorText(status: number, body: { error?: string; message?: string }): string {
   // Repair rejections carry the runner's own reason (409-class) — surface it verbatim.
@@ -160,6 +471,8 @@ function errorText(status: number, body: { error?: string; message?: string }): 
     unknown_manager: "That manager isn't in your league.",
     invalid_player: "Unknown player.",
     invalid_period: "Unknown period.",
+    already_frozen: "That period is already frozen.",
+    not_frozen: "That period isn't frozen.",
   };
   return map[body.error ?? ""] ?? `Request failed (${status}).`;
 }
