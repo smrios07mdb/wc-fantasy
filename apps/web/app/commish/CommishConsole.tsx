@@ -13,15 +13,17 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { Position } from "@app/shared";
 import "./commish.css";
-import type {
-  CommishAuditView,
-  CommishConsoleView,
-  CommishManagerInspector,
-  CommishManagerOption,
-  CommishStatCorrectionsView,
-  CommishStatCurrent,
-  CommishSystemStatus,
+import {
+  STAT_FIELD_META,
+  type CommishAuditView,
+  type CommishConsoleView,
+  type CommishManagerInspector,
+  type CommishManagerOption,
+  type CommishStatCorrectionsView,
+  type CommishStatCurrent,
+  type CommishSystemStatus,
 } from "@/src/commish/commishView";
 
 const TABS = [
@@ -138,8 +140,9 @@ function errorText(status: number, body: { error?: string }): string {
   const map: Record<string, string> = {
     reason_required: "A reason is required.",
     rating_out_of_range: "Rating must be between 0 and 10.",
+    unknown_stat_key: "That stat can't be corrected here.",
     invalid_match_player: "That player isn't part of the selected match.",
-    bad_request: "Invalid input.",
+    bad_request: "Invalid input — stat values must be whole numbers ≥ 0.",
     forbidden: "Not permitted.",
     no_session: "Your session expired — sign in again.",
     no_league: "Could not resolve your league.",
@@ -162,13 +165,14 @@ function StatCorrectionsPanel({ view }: { view: CommishStatCorrectionsView }) {
   };
   const refresh = () => router.refresh();
   const selKey = `${selectedMatchId ?? "-"}:${selectedPlayerId ?? "-"}`;
+  const selectedPlayer = players.find((p) => p.playerId === selectedPlayerId) ?? null;
 
   return (
     <section className="adm-card">
       <div className="adm-card-h">
         <div className="adm-card-ht">
           <h3 className="adm-card-title">Stat corrections</h3>
-          <span className="adm-card-sub">Penalty entry · rating override</span>
+          <span className="adm-card-sub">Penalty · rating · stat line</span>
         </div>
         <span className="adm-badge adm-badge-sm">Re-scores + logged</span>
       </div>
@@ -236,7 +240,13 @@ function StatCorrectionsPanel({ view }: { view: CommishStatCorrectionsView }) {
               current={current}
               onDone={refresh}
             />
-            {/* TODO(2b): general stat-line editor (any feed stat via manual_stat_player_match.extra + an adapter overlay). */}
+            <StatLineEditor
+              key={`stat:${selKey}`}
+              target={{ selectedMatchId, selectedPlayerId }}
+              current={current}
+              role={selectedPlayer?.position ?? null}
+              onDone={refresh}
+            />
           </>
         ) : (
           <p className="adm-hint">
@@ -504,6 +514,183 @@ function RatingForm({
             Clear override
           </button>
         )}
+        {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+      </div>
+    </form>
+  );
+}
+
+// ── general stat-line editor (2b): override any SCORED feed stat ───────────────────────────────────
+const STAT_GROUPS: string[] = [...new Set(STAT_FIELD_META.map((f) => f.group))];
+
+/** Does a field score for the role actually played? A value entered for a non-scoring role is a points
+ *  no-op (the engine role-gates GK / outfield lines); we dim it rather than block it. */
+function scoresForRole(scoresFor: "all" | "outfield" | "gk", role: Position | null): boolean {
+  if (scoresFor === "all" || role === null) return true;
+  return scoresFor === "gk" ? role === "GK" : role !== "GK";
+}
+
+function emptyStatValues(): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const f of STAT_FIELD_META) m[f.key] = "";
+  return m;
+}
+
+function StatLineEditor({
+  target,
+  current,
+  role,
+  onDone,
+}: {
+  target: FormTarget;
+  current: CommishStatCurrent;
+  role: Position | null;
+  onDone: () => void;
+}) {
+  // Prefill each input with the CURRENT override (blank = no override → the field falls back to the feed).
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const m = emptyStatValues();
+    for (const f of STAT_FIELD_META) {
+      const ov = current.statOverrides[f.key];
+      if (ov != null) m[f.key] = String(ov);
+    }
+    return m;
+  });
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  const overrideCount = STAT_FIELD_META.filter((f) => (values[f.key] ?? "").trim() !== "").length;
+
+  async function submit(clearAll: boolean) {
+    if (reason.trim() === "") {
+      setMsg({ ok: false, text: "A reason is required." });
+      return;
+    }
+    // The overlay is ABSOLUTE: every non-blank input is a SET; a blanked field is simply omitted → cleared
+    // (feed passthrough). "Clear all overrides" posts an empty map.
+    const overrides: Record<string, number> = {};
+    if (!clearAll) {
+      for (const f of STAT_FIELD_META) {
+        const raw = (values[f.key] ?? "").trim();
+        if (raw === "") continue;
+        const num = Number(raw);
+        if (!Number.isInteger(num) || num < 0) {
+          setMsg({ ok: false, text: `${f.label} must be a whole number ≥ 0.` });
+          return;
+        }
+        overrides[f.key] = num;
+      }
+    }
+    setPending(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/commish/stat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          matchId: target.selectedMatchId,
+          playerId: target.selectedPlayerId,
+          overrides,
+          reason,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        delta?: string;
+        error?: string;
+        scored?: boolean;
+      };
+      if (res.ok) {
+        if (clearAll) setValues(emptyStatValues());
+        setReason("");
+        setMsg({
+          ok: true,
+          text:
+            body.scored === false
+              ? "Saved + logged — pending: this player has no match data yet; it applies once the feed records them."
+              : `Saved (${body.delta ?? "updated"}). Re-scored + logged.`,
+        });
+        onDone();
+      } else {
+        setMsg({ ok: false, text: errorText(res.status, body) });
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(false);
+      }}
+    >
+      <div className="adm-form-h">
+        Stat line{" "}
+        <span className="adm-form-sub">
+          override any scored feed stat · re-scores through the engine
+        </span>
+      </div>
+      {!current.hasStatRow && (
+        <div className="adm-hint">
+          No feed stat line for this player yet — an override is stored and applies once the feed
+          records them.
+        </div>
+      )}
+      {STAT_GROUPS.map((group) => (
+        <div className="adm-statgroup" key={group}>
+          <div className="adm-statgroup-h t-label">{group}</div>
+          <div className="adm-statgrid">
+            {STAT_FIELD_META.filter((f) => f.group === group).map((f) => {
+              const feed = current.feedStats[f.key];
+              const dim = !scoresForRole(f.scoresFor, role);
+              return (
+                <label className={dim ? "adm-statfield is-dim" : "adm-statfield"} key={f.key}>
+                  <span className="adm-statfield-l">
+                    {f.label}
+                    {dim && <span className="adm-statfield-gate"> · n/a for {role}</span>}
+                  </span>
+                  <span className="adm-statfield-feed">feed {feed ?? "—"}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className="adm-num adm-statfield-in"
+                    placeholder={feed != null ? String(feed) : "—"}
+                    value={values[f.key] ?? ""}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <input
+        className="adm-input"
+        placeholder="Reason (required — recorded to the audit log)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="adm-form-actions">
+        <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
+          Save stat line
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={pending || overrideCount === 0}
+          onClick={() => void submit(true)}
+        >
+          Clear all overrides
+        </button>
+        <span className="adm-preview">
+          {overrideCount} override{overrideCount === 1 ? "" : "s"}
+        </span>
         {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
       </div>
     </form>

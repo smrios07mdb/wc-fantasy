@@ -40,10 +40,79 @@ export interface StatRow {
   touches: number | null;
 }
 
-/** `manual_stat_player_match`: the feed-gap fields the operator tags (penalty won/committed). */
+/**
+ * The bounded set of RAW feed stat fields a commissioner may override via the 2b general stat-line editor
+ * (`manual_stat_player_match.extra.statOverrides`). It is exactly the `StatRow` fields the ENGINE scores —
+ * the four inert denominators (`dribblesAttempted`, `duelsLost`, `passesTotal`, `longBallsTotal`) are
+ * EXCLUDED because `scorePlayerMatch` scores only their `completed`/`won`/`accurate` companions, so
+ * overriding them would be a silent points no-op. `satisfies keyof StatRow` keeps every key type-checked
+ * against the row shape; the adapter's allowlist-integrity test pins this set against what the engine
+ * actually reads (so "23" can never drift silently). This is the single source of truth for the allowlist —
+ * the write boundary, the store parse, and the UI all key off it.
+ */
+export const OVERRIDABLE_STAT_KEYS = [
+  "minutesPlayed",
+  "goals",
+  "assists",
+  "keyPasses",
+  "dribblesCompleted",
+  "duelsWon",
+  "passesAccurate",
+  "longBallsAccurate",
+  "wasFouled",
+  "clearances",
+  "blockedShots",
+  "interceptions",
+  "tacklesWon",
+  "shotsOnTarget",
+  "ballRecoveries",
+  "bigChancesCreated",
+  "crossesAccurate",
+  "touches",
+  "possessionLost",
+  "saves",
+  "savesInsideBox",
+  "punches",
+  "highClaims",
+] as const satisfies readonly (keyof StatRow)[];
+
+export type OverridableStatKey = (typeof OVERRIDABLE_STAT_KEYS)[number];
+
+/** A sparse commissioner stat overlay — per allowed field, a value that WINS over the feed (nullish). */
+export type StatOverrides = Readonly<Partial<Record<OverridableStatKey, number>>>;
+
+const OVERRIDABLE_STAT_KEY_SET: ReadonlySet<string> = new Set(OVERRIDABLE_STAT_KEYS);
+
+/**
+ * Parse the sparse commissioner overlay out of `manual_stat_player_match.extra.statOverrides` — PURE and
+ * defensive: it keeps ONLY allowlisted keys carrying a finite number, and returns `undefined` when there is
+ * nothing to apply (no `extra`, no `statOverrides`, or no valid entries) so the merge is a clean passthrough.
+ * It deliberately ignores every other `extra` key (e.g. `rolePlayed`), so the two co-tenants never collide.
+ * The write boundary is the primary guard (bounded keys + Int≥0); this is defense in depth at read time.
+ */
+export function parseStatOverrides(extra: unknown): StatOverrides | undefined {
+  if (!extra || typeof extra !== "object" || Array.isArray(extra)) return undefined;
+  const raw = (extra as Record<string, unknown>).statOverrides;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Partial<Record<OverridableStatKey, number>> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (OVERRIDABLE_STAT_KEY_SET.has(k) && typeof v === "number" && Number.isFinite(v)) {
+      out[k as OverridableStatKey] = v;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * `manual_stat_player_match`: the feed-gap fields the operator tags. `penaltyWon`/`penaltyCommitted` are the
+ * dedicated columns (Thread 2). `statOverrides` is the 2b sparse general overlay parsed from `extra` — read
+ * ONLY by {@link buildScoreInput} at the ScoreInput level; the participant gate never inspects `manual`, so a
+ * manual-only override can never fabricate participation.
+ */
 export interface ManualRow {
   penaltyWon: number;
   penaltyCommitted: number;
+  statOverrides?: StatOverrides;
 }
 
 /** One `event_match` row (goal / card / substitution / …). */
@@ -442,6 +511,14 @@ function cardsFor(
  */
 export function buildScoreInput(b: ScoreInputBundle): ScoreInput {
   const s = b.stat;
+  // 2b commissioner overlay: per allowed raw field the manual value WINS over the feed (nullish `??` — an
+  // explicit 0 wins), and the feed passes through wherever the overlay is unset (sparse; a partial overlay
+  // never zeroes an untouched field). This is read HERE, at the ScoreInput level — NEVER merged into b.stat —
+  // so `playerAppearedInMatch` (which reads b.stat) still gates a manual-only correction on a feed
+  // non-participant to scored:false/pending. The four inert StatRow denominators are not overridable
+  // (excluded from OVERRIDABLE_STAT_KEYS), so they keep reading the raw feed value.
+  const so = b.manual?.statOverrides;
+  const ov = (k: OverridableStatKey): number => n(so?.[k] ?? s?.[k]);
   const window = onPitchWindow(b.events, b.playerId);
   const cards = cardsFor(b.events, b.playerId);
 
@@ -463,38 +540,38 @@ export function buildScoreInput(b: ScoreInputBundle): ScoreInput {
 
   return {
     role: b.role,
-    minutesPlayed: n(s?.minutesPlayed),
+    minutesPlayed: ov("minutesPlayed"),
     rating: b.rating,
     ratingSource: b.ratingSource,
 
-    goals: n(s?.goals),
-    assists: n(s?.assists),
+    goals: ov("goals"),
+    assists: ov("assists"),
 
-    keyPasses: n(s?.keyPasses),
-    dribblesAttempted: n(s?.dribblesAttempted),
-    dribblesCompleted: n(s?.dribblesCompleted),
-    duelsWon: n(s?.duelsWon),
-    duelsLost: n(s?.duelsLost),
-    passesTotal: n(s?.passesTotal),
-    passesAccurate: n(s?.passesAccurate),
-    longBallsTotal: n(s?.longBallsTotal),
-    longBallsAccurate: n(s?.longBallsAccurate),
-    wasFouled: n(s?.wasFouled),
-    clearances: n(s?.clearances),
-    blockedShots: n(s?.blockedShots),
-    interceptions: n(s?.interceptions),
-    tacklesWon: n(s?.tacklesWon),
-    possessionLost: n(s?.possessionLost),
-    shotsOnTarget: n(s?.shotsOnTarget),
-    ballRecoveries: n(s?.ballRecoveries),
-    bigChancesCreated: n(s?.bigChancesCreated),
-    crossesAccurate: n(s?.crossesAccurate),
-    touches: n(s?.touches),
+    keyPasses: ov("keyPasses"),
+    dribblesAttempted: n(s?.dribblesAttempted), // inert — engine scores dribblesCompleted, not attempted
+    dribblesCompleted: ov("dribblesCompleted"),
+    duelsWon: ov("duelsWon"),
+    duelsLost: n(s?.duelsLost), // inert — engine scores duelsWon, not lost
+    passesTotal: n(s?.passesTotal), // inert — engine scores passesAccurate, not total
+    passesAccurate: ov("passesAccurate"),
+    longBallsTotal: n(s?.longBallsTotal), // inert — engine scores longBallsAccurate, not total
+    longBallsAccurate: ov("longBallsAccurate"),
+    wasFouled: ov("wasFouled"),
+    clearances: ov("clearances"),
+    blockedShots: ov("blockedShots"),
+    interceptions: ov("interceptions"),
+    tacklesWon: ov("tacklesWon"),
+    possessionLost: ov("possessionLost"),
+    shotsOnTarget: ov("shotsOnTarget"),
+    ballRecoveries: ov("ballRecoveries"),
+    bigChancesCreated: ov("bigChancesCreated"),
+    crossesAccurate: ov("crossesAccurate"),
+    touches: ov("touches"),
 
-    saves: n(s?.saves),
-    savesInsideBox: n(s?.savesInsideBox),
-    punches: n(s?.punches),
-    highClaims: n(s?.highClaims),
+    saves: ov("saves"),
+    savesInsideBox: ov("savesInsideBox"),
+    punches: ov("punches"),
+    highClaims: ov("highClaims"),
 
     teamGoalsAgainst: teamGoalsAgainst(b.team),
     goalsConcededWhileOn: goalsConcededWhileOn(b, window),

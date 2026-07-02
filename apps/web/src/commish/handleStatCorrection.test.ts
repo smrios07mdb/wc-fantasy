@@ -9,11 +9,14 @@ import type { SessionManagerOutcome } from "@app/auth";
 import {
   handleCommishPenalty,
   handleCommishRating,
+  handleCommishStatCorrection,
   type CommishStatStore,
   type MatchPlayerContext,
   type PenaltyBody,
   type RatingBody,
+  type StatBody,
 } from "./handleStatCorrection";
+import type { StatOverrides } from "@app/recompute";
 
 const OK_COMMISH: SessionManagerOutcome = {
   kind: "ok",
@@ -48,9 +51,10 @@ const IN_MATCH: MatchPlayerContext = {
   periodFrozen: false,
 };
 
-function spyStore(over: Partial<CommishStatStore> = {}) {
+function spyStore(over: Partial<CommishStatStore> = {}, priorOverrides: StatOverrides = {}) {
   const penaltyCalls: Parameters<CommishStatStore["applyPenalty"]>[0][] = [];
   const ratingCalls: Parameters<CommishStatStore["applyRating"]>[0][] = [];
+  const statCalls: Parameters<CommishStatStore["applyStatCorrection"]>[0][] = [];
   const store: CommishStatStore = {
     getManagerLeagueId: async () => "lg1",
     getMatchPlayer: async () => IN_MATCH,
@@ -62,9 +66,14 @@ function spyStore(over: Partial<CommishStatStore> = {}) {
       ratingCalls.push(input);
       return { auditId: "aud-rat" };
     },
+    getStatOverrides: async () => priorOverrides,
+    applyStatCorrection: async (input) => {
+      statCalls.push(input);
+      return { auditId: "aud-stat" };
+    },
     ...over,
   };
-  return { store, penaltyCalls, ratingCalls };
+  return { store, penaltyCalls, ratingCalls, statCalls };
 }
 
 function spyRescore(scored = true) {
@@ -93,6 +102,13 @@ const ratingBody = (over: Partial<RatingBody> = {}): RatingBody => ({
   playerId: "p1",
   rating: 8.5,
   reason: "Feed rating was clearly wrong for this match",
+  ...over,
+});
+const statBody = (over: Partial<StatBody> = {}): StatBody => ({
+  matchId: "m1",
+  playerId: "p1",
+  overrides: { goals: 2 },
+  reason: "Feed missed a goal that VAR later awarded",
   ...over,
 });
 
@@ -487,5 +503,223 @@ describe("handleCommishRating", () => {
       auditId: "aud-rat",
     });
     expect((res.body as { message: string }).message).toMatch(/re-submit/i);
+  });
+});
+
+// ── 2b general stat-line correction ─────────────────────────────────────────────────────────────────
+describe("handleCommishStatCorrection", () => {
+  it("gate: no session → 401; non-commissioner → 403; nothing written", async () => {
+    const { store, statCalls } = spyStore();
+    const { rescore, calls } = spyRescore();
+    const a = await handleCommishStatCorrection(
+      { resolveManager: resolver(NO_SESSION), store, rescore },
+      statBody(),
+    );
+    expect(a.status).toBe(401);
+    const b = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_MEMBER), store, rescore },
+      statBody(),
+    );
+    expect(b.status).toBe(403);
+    expect(statCalls).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("happy path: N-field overlay → ONE applyStatCorrection (one audit row) + ONE re-score", async () => {
+    const { store, statCalls } = spyStore();
+    const { rescore, calls } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ overrides: { goals: 2, assists: 1 } }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      overrides: { goals: 2, assists: 1 },
+      frozenOverride: false,
+      auditId: "aud-stat",
+    });
+    expect(statCalls).toHaveLength(1);
+    const { write, audit } = statCalls[0]!;
+    expect(write).toEqual({
+      matchId: "m1",
+      playerId: "p1",
+      overrides: { goals: 2, assists: 1 },
+      reason: "Feed missed a goal that VAR later awarded",
+      enteredByUserId: "user1",
+    });
+    expect(audit.actionType).toBe("stat_correction");
+    expect(audit.leagueId).toBe("lg1");
+    expect(audit.actorUserId).toBe("user1");
+    expect(audit.targetRef).toEqual({ matchId: "m1", playerId: "p1" });
+    expect(audit.reason).toBe("Feed missed a goal that VAR later awarded");
+    expect(audit.reversible).toBe(true);
+    // delta is a raw field-change string (feed→N), NOT a points total.
+    expect(audit.delta).toBe("goals feed→2 · assists feed→1");
+    expect(res.body).toMatchObject({ delta: "goals feed→2 · assists feed→1" });
+    expect(calls).toEqual([["m1", "p1"]]);
+  });
+
+  it("delta uses the PRIOR overlay as the before-value (N→M)", async () => {
+    const { store, statCalls } = spyStore({}, { goals: 1 });
+    const { rescore } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ overrides: { goals: 3 } }),
+    );
+    expect(res.status).toBe(200);
+    expect(statCalls[0]!.audit.delta).toBe("goals 1→3");
+  });
+
+  it("clear-all (empty overrides) is a valid, absolute write → still one audit row + re-score", async () => {
+    const { store, statCalls } = spyStore({}, { goals: 2 });
+    const { rescore, calls } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ overrides: {} }),
+    );
+    expect(res.status).toBe(200);
+    expect(statCalls).toHaveLength(1);
+    expect(statCalls[0]!.write.overrides).toEqual({});
+    expect(statCalls[0]!.audit.summary.toLowerCase()).toContain("clear");
+    expect(statCalls[0]!.audit.delta).toBe("goals 2→feed");
+    expect(calls).toEqual([["m1", "p1"]]);
+  });
+
+  it("idempotent SET: re-submitting the identical overlay still writes ONE audit row (delta 'no change')", async () => {
+    const { store, statCalls } = spyStore({}, { goals: 2 });
+    const { rescore } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ overrides: { goals: 2 } }),
+    );
+    expect(res.status).toBe(200);
+    expect(statCalls).toHaveLength(1); // one audit per save (governance), even when nothing changed
+    expect(statCalls[0]!.write.overrides).toEqual({ goals: 2 }); // absolute SET, never accumulated
+    expect(statCalls[0]!.audit.delta).toBe("no change");
+  });
+
+  it("reason missing/blank → 400 reason_required, BEFORE any DB read or write", async () => {
+    let read = false;
+    const { store, statCalls } = spyStore({
+      getMatchPlayer: async () => {
+        read = true;
+        return IN_MATCH;
+      },
+    });
+    const { rescore } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ reason: "   " }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "reason_required" });
+    expect(read).toBe(false);
+    expect(statCalls).toHaveLength(0);
+  });
+
+  it("unknown / inert stat key → 400 unknown_stat_key; nothing written", async () => {
+    const { store, statCalls } = spyStore();
+    const { rescore } = spyRescore();
+    const bad = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ overrides: { goalz: 2 } }),
+    );
+    expect(bad.status).toBe(400);
+    expect(bad.body).toEqual({ error: "unknown_stat_key" });
+    // dribblesAttempted is a real StatRow field but is NOT scored → not in the allowlist → rejected too.
+    const inert = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody({ overrides: { dribblesAttempted: 5 } }),
+    );
+    expect(inert.body).toEqual({ error: "unknown_stat_key" });
+    expect(statCalls).toHaveLength(0);
+  });
+
+  it("negative / fractional value → 400 bad_request", async () => {
+    const { store, statCalls } = spyStore();
+    const { rescore } = spyRescore();
+    expect(
+      (
+        await handleCommishStatCorrection(
+          { resolveManager: resolver(OK_COMMISH), store, rescore },
+          statBody({ overrides: { goals: -1 } }),
+        )
+      ).body,
+    ).toEqual({ error: "bad_request" });
+    expect(
+      (
+        await handleCommishStatCorrection(
+          { resolveManager: resolver(OK_COMMISH), store, rescore },
+          statBody({ overrides: { goals: 1.5 } }),
+        )
+      ).body,
+    ).toEqual({ error: "bad_request" });
+    expect(statCalls).toHaveLength(0);
+  });
+
+  it("bad (match,player) → 404 invalid_match_player; no write, no re-score", async () => {
+    const { store, statCalls } = spyStore({ getMatchPlayer: async () => null });
+    const { rescore, calls } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody(),
+    );
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: "invalid_match_player" });
+    expect(statCalls).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("FROZEN period: not swallowed — 200, write + re-score, frozen note on the audit detail", async () => {
+    const { store, statCalls } = spyStore({
+      getMatchPlayer: async () => ({ ...IN_MATCH, periodFrozen: true }),
+    });
+    const { rescore, calls } = spyRescore();
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody(),
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as { frozenOverride: boolean }).frozenOverride).toBe(true);
+    expect(statCalls[0]!.audit.detail?.toLowerCase()).toContain("frozen");
+    expect(calls).toEqual([["m1", "p1"]]);
+  });
+
+  it("scored=false (no feed footprint): 200 + write + audit land, surfaces scored:false + pending warning", async () => {
+    const { store, statCalls } = spyStore();
+    const { rescore } = spyRescore(false); // adapter participant gate rejected the manual-only correction
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody(),
+    );
+    expect(res.status).toBe(200);
+    expect(statCalls).toHaveLength(1);
+    expect(res.body).toMatchObject({ ok: true, scored: false, warning: "no_match_participation" });
+  });
+
+  it("re-score THROWS after commit → 200 saved-but-restate-pending, NOT a 500", async () => {
+    const { store, statCalls } = spyStore({
+      getMatchPlayer: async () => ({ ...IN_MATCH, periodFrozen: true }),
+    });
+    const rescore = async (): Promise<{ scored: boolean }> => {
+      throw new Error("recomputeManagerPeriod blew up past the freeze gate");
+    };
+    const res = await handleCommishStatCorrection(
+      { resolveManager: resolver(OK_COMMISH), store, rescore },
+      statBody(),
+    );
+    expect(statCalls).toHaveLength(1); // overlay + audit committed before the throw
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      frozenOverride: true,
+      scored: false,
+      restatePending: true,
+      warning: "restate_pending",
+      auditId: "aud-stat",
+    });
+    expect((res.body as { message: string }).message).toMatch(/re-submit/i);
+    expect((res.body as { warning: string }).warning).not.toBe("no_match_participation");
   });
 });

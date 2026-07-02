@@ -675,12 +675,52 @@
   color: var(--ytp);
 }
 
+/* ── 2b general stat-line editor ──────────────────────────────────────────────────────────────── */
+.adm-statgroup {
+  margin-top: 4px;
+}
+.adm-statgroup-h {
+  margin-bottom: 6px;
+}
+.adm-statgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 10px;
+}
+.adm-statfield {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+}
+.adm-statfield-l {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.adm-statfield-gate {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+.adm-statfield-feed {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.adm-num.adm-statfield-in {
+  width: 100%;
+}
+.adm-statfield.is-dim {
+  opacity: 0.55;
+}
+
 /* ── responsive ───────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .adm-body {
     grid-template-columns: 1fr;
   }
   .adm-mgrview-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .adm-statgrid {
     grid-template-columns: repeat(2, 1fr);
   }
 }

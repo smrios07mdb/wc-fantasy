@@ -1,12 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
+import type { Position } from "@app/shared";
 import { scorePlayerMatch, SCORE_CATEGORIES as C, type ScoreBreakdown } from "@app/scoring";
 import {
   buildScoreInput,
   playerAppearedInMatch,
   reconcileConceded,
+  parseStatOverrides,
+  OVERRIDABLE_STAT_KEYS,
   type ScoreInputBundle,
   type EventRow,
   type ShotRow,
+  type StatRow,
 } from "./adapter";
 
 // A team-A (home) player who did nothing; tests switch on the fields they exercise.
@@ -605,3 +609,204 @@ function teamCtx() {
 function pen(playerId: string, shotType: string, minute: number | null = null): ShotRow {
   return shot({ playerId, isPenalty: true, situation: "penalty", shotType, minute });
 }
+
+// ── 2b — commissioner general stat-line overlay (manual_stat_player_match.extra.statOverrides) ─────
+//
+// The overlay is a SPARSE, field-level correction: per allowed raw field the manual value WINS over the
+// feed value (nullish — an explicit 0 wins), and the feed passes through wherever the overlay is unset.
+// It is merged at the ScoreInput level inside buildScoreInput; it is NEVER folded into b.stat, so it can
+// never fabricate participation (see the gate-isolation block).
+
+describe("2b overlay — sparse field-level merge (manual wins, feed passthrough)", () => {
+  it("manual override WINS for the overridden field; the feed passes through elsewhere", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "MID",
+        stat: { ...zeroStat(), goals: 1, assists: 3 },
+        manual: { penaltyWon: 0, penaltyCommitted: 0, statOverrides: { goals: 2 } },
+      }),
+    );
+    expect(i.goals).toBe(2); // overlaid
+    expect(i.assists).toBe(3); // unset → feed passthrough
+  });
+
+  it("an explicit 0 override WINS over a non-zero feed value (nullish `??`, not `||`)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "MID",
+        stat: { ...zeroStat(), goals: 5 },
+        manual: { penaltyWon: 0, penaltyCommitted: 0, statOverrides: { goals: 0 } },
+      }),
+    );
+    expect(i.goals).toBe(0);
+  });
+
+  it("no overlay → every field is the raw feed value (byte-identical to no-manual behavior)", () => {
+    const stat = { ...zeroStat(), goals: 2, assists: 1, keyPasses: 4, saves: 6, savesInsideBox: 2 };
+    const withNone = buildScoreInput(bundle({ role: "GK", stat }));
+    const withEmpty = buildScoreInput(
+      bundle({ role: "GK", stat, manual: { penaltyWon: 0, penaltyCommitted: 0 } }),
+    );
+    expect(withEmpty).toEqual(withNone);
+  });
+
+  it("overlay never zeroes an unspecified feed field (wholesale-replace is rejected)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "MID",
+        stat: { ...zeroStat(), goals: 1, assists: 2, keyPasses: 6, touches: 50 },
+        manual: { penaltyWon: 0, penaltyCommitted: 0, statOverrides: { goals: 3 } },
+      }),
+    );
+    expect(i.goals).toBe(3); // overridden
+    expect(i.assists).toBe(2); // untouched
+    expect(i.keyPasses).toBe(6); // untouched
+    expect(i.touches).toBe(50); // untouched
+  });
+
+  it("penalty columns are UNTOUCHED by the overlay (Thread 2 keeps working)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "FWD",
+        stat: { ...zeroStat() },
+        manual: { penaltyWon: 1, penaltyCommitted: 0, statOverrides: { goals: 2 } },
+      }),
+    );
+    expect(i.penaltyWon).toBe(1);
+    expect(i.penaltyCommitted).toBe(0);
+    expect(i.goals).toBe(2);
+  });
+
+  it("a scored overlay flows through the engine (goals 0→2 for a FWD ⇒ +8)", () => {
+    const i = buildScoreInput(
+      bundle({
+        role: "FWD",
+        stat: { ...zeroStat() },
+        manual: { penaltyWon: 0, penaltyCommitted: 0, statOverrides: { goals: 2 } },
+      }),
+    );
+    expect(scorePlayerMatch(i).total).toBe(8); // 2 goals × 4 (FWD)
+  });
+});
+
+describe("2b overlay — gate isolation (a manual-only override never fabricates participation)", () => {
+  it("no feed stat row + an overlay ⇒ playerAppearedInMatch stays FALSE (scored:false/pending)", () => {
+    const b = bundle({
+      role: "GK",
+      stat: null,
+      manual: { penaltyWon: 0, penaltyCommitted: 0, statOverrides: { goals: 2, saves: 4 } },
+      events: [],
+      shots: [],
+    });
+    expect(playerAppearedInMatch(b)).toBe(false);
+    // the merged ScoreInput still carries the override — it just isn't scored until the player appears.
+    expect(buildScoreInput(b).saves).toBe(4);
+  });
+
+  it("a real feed footprint + an overlay ⇒ playerAppearedInMatch is TRUE", () => {
+    const b = bundle({
+      role: "MID",
+      stat: { ...zeroStat(), minutesPlayed: 90 },
+      manual: { penaltyWon: 0, penaltyCommitted: 0, statOverrides: { goals: 2 } },
+    });
+    expect(playerAppearedInMatch(b)).toBe(true);
+  });
+});
+
+describe("2b overlay — parseStatOverrides (bounded to the 23 allowlist, defensive)", () => {
+  it("returns undefined when extra is null / has no statOverrides key", () => {
+    expect(parseStatOverrides(null)).toBeUndefined();
+    expect(parseStatOverrides({ rolePlayed: "GK" })).toBeUndefined();
+    expect(parseStatOverrides({ statOverrides: {} })).toBeUndefined();
+  });
+
+  it("keeps only allowed keys with finite-number values; drops inert keys and non-numbers", () => {
+    expect(parseStatOverrides({ statOverrides: { goals: 2, assists: 1 } })).toEqual({
+      goals: 2,
+      assists: 1,
+    });
+    // dribblesAttempted is an inert field (never scored) → not in the allowlist → dropped.
+    expect(parseStatOverrides({ statOverrides: { goals: 2, dribblesAttempted: 5 } })).toEqual({
+      goals: 2,
+    });
+    // non-number / non-finite values are dropped defensively (write boundary enforces Int≥0).
+    expect(
+      parseStatOverrides({ statOverrides: { goals: "x", assists: 1, touches: Number.NaN } }),
+    ).toEqual({ assists: 1 });
+  });
+
+  it("coexists with rolePlayed in the same extra object (does not read or clobber it)", () => {
+    expect(parseStatOverrides({ rolePlayed: "GK", statOverrides: { saves: 4 } })).toEqual({
+      saves: 4,
+    });
+  });
+});
+
+// ── 2b — allowlist integrity: OVERRIDABLE_STAT_KEYS ⟺ the raw StatRow fields the ENGINE actually scores ──
+//
+// Structural (NOT a hand-count): probe every StatRow field by bumping it 0→BIG for each role and asking
+// whether scorePlayerMatch's total moves. The scored set MUST equal the allowlist; the un-scored remainder
+// MUST be exactly the four inert denominators. Adding a 28th StatRow field forces the Record literal below
+// to be updated, which forces this test to classify it — so "23" can never silently drift.
+describe("2b allowlist integrity — 23 scored fields, 4 inert", () => {
+  // A Record<keyof StatRow, true> literal is exhaustive by construction: TS rejects a missing OR excess key.
+  const STAT_ROW_KEY_SET: Record<keyof StatRow, true> = {
+    minutesPlayed: true,
+    goals: true,
+    assists: true,
+    keyPasses: true,
+    dribblesAttempted: true,
+    dribblesCompleted: true,
+    duelsWon: true,
+    duelsLost: true,
+    passesTotal: true,
+    passesAccurate: true,
+    longBallsTotal: true,
+    longBallsAccurate: true,
+    wasFouled: true,
+    clearances: true,
+    blockedShots: true,
+    interceptions: true,
+    tacklesWon: true,
+    saves: true,
+    savesInsideBox: true,
+    punches: true,
+    highClaims: true,
+    possessionLost: true,
+    shotsOnTarget: true,
+    ballRecoveries: true,
+    bigChancesCreated: true,
+    crossesAccurate: true,
+    touches: true,
+  };
+  const STAT_ROW_KEYS = Object.keys(STAT_ROW_KEY_SET) as (keyof StatRow)[];
+  const ROLES: Position[] = ["GK", "DEF", "MID", "FWD"];
+  const BIG = 120; // crosses every per-N bucket (÷25 touches is the coarsest) and the 60' appearance gate
+
+  const scoresForSomeRole = (key: keyof StatRow): boolean =>
+    ROLES.some((role) => {
+      const base = scorePlayerMatch(buildScoreInput(bundle({ role, stat: { ...zeroStat() } })));
+      const bumped = scorePlayerMatch(
+        buildScoreInput(bundle({ role, stat: { ...zeroStat(), [key]: BIG } })),
+      );
+      return base.total !== bumped.total;
+    });
+
+  it("every allowlist key actually moves points for at least one role", () => {
+    for (const key of OVERRIDABLE_STAT_KEYS) {
+      expect(scoresForSomeRole(key), `allowlist key "${key}" should be scored`).toBe(true);
+    }
+  });
+
+  it("the scored raw-field set EQUALS the allowlist (no missing scored field, no inert allowlist key)", () => {
+    const scored = STAT_ROW_KEYS.filter(scoresForSomeRole).sort();
+    expect(scored).toEqual([...OVERRIDABLE_STAT_KEYS].sort());
+  });
+
+  it("the un-scored remainder is exactly the four inert denominators", () => {
+    const inert = STAT_ROW_KEYS.filter((k) => !scoresForSomeRole(k)).sort();
+    expect(inert).toEqual(
+      ["dribblesAttempted", "duelsLost", "longBallsTotal", "passesTotal"].sort(),
+    );
+  });
+});

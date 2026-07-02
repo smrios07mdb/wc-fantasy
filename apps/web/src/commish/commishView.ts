@@ -5,6 +5,7 @@
  * file is data only.
  */
 import type { Position } from "@app/shared";
+import type { OverridableStatKey } from "@app/recompute";
 
 /** One audit-log row, shaped for the AuditLog component. `whenLabel` is computed SERVER-side from a threaded
  *  `now` so the server and client render the identical relative string (no hydration mismatch). */
@@ -84,7 +85,7 @@ export interface CommishStatPlayerOption {
   teamName: string | null;
 }
 
-/** The current stored correction state for the selected (match, player) — prefills the two forms. */
+/** The current stored correction state for the selected (match, player) — prefills the forms. */
 export interface CommishStatCurrent {
   penaltyWon: number;
   penaltyCommitted: number;
@@ -95,7 +96,50 @@ export interface CommishStatCurrent {
   /** A manual override row currently exists (so "Clear override" is meaningful). */
   hasManualRating: boolean;
   periodFrozen: boolean;
+  /** 2b — the raw FEED value per overridable field (null when the column is null); the editor shows these
+   *  as the "current" baseline. Absent keys render as "—". */
+  feedStats: Partial<Record<OverridableStatKey, number | null>>;
+  /** 2b — the current stored commissioner overlay (prefills the override inputs). */
+  statOverrides: Partial<Record<OverridableStatKey, number>>;
+  /** 2b — whether a feed `stat_player_match` row exists at all (drives the "no feed data yet → pending" hint). */
+  hasStatRow: boolean;
 }
+
+/** 2b — one overridable stat field's display metadata (label + section), ordered for the editor. The `key`
+ *  set mirrors `OVERRIDABLE_STAT_KEYS` (@app/recompute) — the allowlist-integrity test guards that set. */
+export interface CommishStatFieldMeta {
+  key: OverridableStatKey;
+  label: string;
+  group: string;
+  /** Roles for which this line actually scores; a value entered for another role is a points no-op (hinted). */
+  scoresFor: "all" | "outfield" | "gk";
+}
+
+export const STAT_FIELD_META: readonly CommishStatFieldMeta[] = [
+  { key: "minutesPlayed", label: "Minutes", group: "Appearance", scoresFor: "all" },
+  { key: "goals", label: "Goals", group: "Attacking", scoresFor: "all" },
+  { key: "assists", label: "Assists", group: "Attacking", scoresFor: "all" },
+  { key: "shotsOnTarget", label: "Shots on target", group: "Attacking", scoresFor: "all" },
+  { key: "bigChancesCreated", label: "Big chances created", group: "Attacking", scoresFor: "all" },
+  { key: "keyPasses", label: "Key passes", group: "Attacking", scoresFor: "all" },
+  { key: "crossesAccurate", label: "Accurate crosses", group: "Attacking", scoresFor: "all" },
+  { key: "dribblesCompleted", label: "Dribbles completed", group: "Possession", scoresFor: "all" },
+  { key: "passesAccurate", label: "Accurate passes", group: "Possession", scoresFor: "all" },
+  { key: "longBallsAccurate", label: "Accurate long balls", group: "Possession", scoresFor: "all" },
+  { key: "touches", label: "Touches", group: "Possession", scoresFor: "all" },
+  { key: "possessionLost", label: "Possession lost", group: "Possession", scoresFor: "all" },
+  { key: "duelsWon", label: "Duels won", group: "Possession", scoresFor: "all" },
+  { key: "wasFouled", label: "Fouls won", group: "Possession", scoresFor: "all" },
+  { key: "clearances", label: "Clearances", group: "Defending", scoresFor: "outfield" },
+  { key: "blockedShots", label: "Blocks", group: "Defending", scoresFor: "outfield" },
+  { key: "interceptions", label: "Interceptions", group: "Defending", scoresFor: "outfield" },
+  { key: "tacklesWon", label: "Tackles won", group: "Defending", scoresFor: "outfield" },
+  { key: "ballRecoveries", label: "Ball recoveries", group: "Defending", scoresFor: "outfield" },
+  { key: "saves", label: "Saves", group: "Goalkeeping", scoresFor: "gk" },
+  { key: "savesInsideBox", label: "Saves inside box", group: "Goalkeeping", scoresFor: "gk" },
+  { key: "punches", label: "Punches", group: "Goalkeeping", scoresFor: "gk" },
+  { key: "highClaims", label: "High claims", group: "Goalkeeping", scoresFor: "gk" },
+];
 
 /** The Stat-corrections tab's data: the match picker, the (match-scoped) player picker, and the current state.
  *  Selection is URL-driven (`?match=&player=`) so it survives refresh; the write forms POST + `router.refresh`. */

@@ -9,6 +9,7 @@ import { Prisma, type PrismaClient } from "@app/db";
 import { POSITIONS, type Position, type RatingSource } from "@app/shared";
 import type { ScoreBreakdown } from "@app/scoring";
 import { pickRating } from "./resolver";
+import { parseStatOverrides } from "./adapter";
 import type {
   EventRow,
   ManualRow,
@@ -119,7 +120,13 @@ export function createPrismaStore(prisma: Db): RecomputeStore {
         : null;
 
       const manualRow: ManualRow | null = manual
-        ? { penaltyWon: manual.penaltyWon, penaltyCommitted: manual.penaltyCommitted }
+        ? {
+            penaltyWon: manual.penaltyWon,
+            penaltyCommitted: manual.penaltyCommitted,
+            // 2b: the sparse commissioner overlay lives in the SAME extra JSON as `rolePlayed` (read by
+            // roleFrom above); parseStatOverrides reads only the statOverrides sub-key, so the two coexist.
+            statOverrides: parseStatOverrides(manual.extra),
+          }
         : null;
 
       const eventRows: EventRow[] = events.map((e) => ({

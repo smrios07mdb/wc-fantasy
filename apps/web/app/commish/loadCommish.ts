@@ -10,7 +10,12 @@
  */
 import { prisma } from "@app/db";
 import { POSITIONS, type Position, type RatingSource } from "@app/shared";
-import { pickRating } from "@app/recompute";
+import {
+  pickRating,
+  parseStatOverrides,
+  OVERRIDABLE_STAT_KEYS,
+  type OverridableStatKey,
+} from "@app/recompute";
 import { loadStandings } from "@/app/standings/loadStandings";
 import {
   toAuditView,
@@ -182,7 +187,7 @@ async function buildStatCorrections(
 
   let current: CommishStatCorrectionsView["current"] = null;
   if (selectedPlayerId) {
-    const [manual, ratings] = await Promise.all([
+    const [manual, ratings, stat] = await Promise.all([
       prisma.manualStatPlayerMatch.findUnique({
         where: { matchId_playerId: { matchId, playerId: selectedPlayerId } },
       }),
@@ -190,10 +195,19 @@ async function buildStatCorrections(
         where: { matchId, playerId: selectedPlayerId },
         select: { source: true, rating: true },
       }),
+      prisma.statPlayerMatch.findUnique({
+        where: { matchId_playerId: { matchId, playerId: selectedPlayerId } },
+      }),
     ]);
     const { rating, source } = pickRating(
       ratings.map((r) => ({ source: r.source as RatingSource, rating: r.rating })),
     );
+    // 2b — the raw FEED value per overridable field (the editor's "current" baseline), and the current overlay.
+    const feedStats: Partial<Record<OverridableStatKey, number | null>> = {};
+    if (stat) {
+      const row = stat as unknown as Record<string, number | null>;
+      for (const key of OVERRIDABLE_STAT_KEYS) feedStats[key] = row[key] ?? null;
+    }
     current = {
       penaltyWon: manual?.penaltyWon ?? 0,
       penaltyCommitted: manual?.penaltyCommitted ?? 0,
@@ -202,6 +216,9 @@ async function buildStatCorrections(
       resolvedRatingSource: source,
       hasManualRating: ratings.some((r) => r.source === "manual"),
       periodFrozen: match.period?.frozenAt != null,
+      feedStats,
+      statOverrides: parseStatOverrides(manual?.extra) ?? {},
+      hasStatRow: stat != null,
     };
   }
 

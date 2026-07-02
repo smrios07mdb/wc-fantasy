@@ -336,4 +336,140 @@ describe.skipIf(!SAFE)("commish stat write store — real Postgres (write + audi
     });
     expect(overrides).toBe(2); // one per write (set + clear)
   });
+
+  // ── 2b general stat-line overlay (extra.statOverrides) on real Postgres ─────────────────────────
+  it("stat overlay: a multi-field SET re-scores through the engine and is idempotent (real PG)", async () => {
+    const rescore = createCommishRescore(db);
+    // A real feed footprint (90' appearance) so the participant gate passes and the re-score persists a row.
+    await db.statPlayerMatch.create({ data: { matchId: M1, playerId: P1, ...zeroStatLine() } });
+    const scoreNow = async () =>
+      (await db.scorePlayerMatch.findUnique({
+        where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+      }))!.points;
+
+    expect((await rescore(M1, P1)).scored).toBe(true);
+    const baseline = await scoreNow(); // FWD, 90' appearance only → +2
+
+    // SET goals=2, assists=1 via the overlay (feed has 0/0). FWD: 2×4 + 1×3 = +11 over baseline.
+    await store.applyStatCorrection({
+      write: {
+        matchId: M1,
+        playerId: P1,
+        overrides: { goals: 2, assists: 1 },
+        reason: "VAR goal + a missed assist the feed never posted",
+        enteredByUserId: USER,
+      },
+      audit: auditFor({
+        actionType: "stat_correction",
+        summary: "Stat correction: 2 fields",
+        delta: "goals feed→2 · assists feed→1",
+      }),
+    });
+    expect((await rescore(M1, P1)).scored).toBe(true);
+    const afterSet = await scoreNow();
+    expect(afterSet - baseline).toBe(11);
+
+    // The overlay lives in extra.statOverrides; the penalty columns default to 0 and are untouched.
+    const manual = await db.manualStatPlayerMatch.findUnique({
+      where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+    });
+    expect(manual!.extra).toEqual({ statOverrides: { goals: 2, assists: 1 } });
+    expect(manual).toMatchObject({ penaltyWon: 0, penaltyCommitted: 0, dirty: true });
+
+    // Re-submit the IDENTICAL overlay → absolute SET, so still +11 (never accumulates).
+    await store.applyStatCorrection({
+      write: {
+        matchId: M1,
+        playerId: P1,
+        overrides: { goals: 2, assists: 1 },
+        reason: "re-submit identical",
+        enteredByUserId: USER,
+      },
+      audit: auditFor({ actionType: "stat_correction" }),
+    });
+    expect((await rescore(M1, P1)).scored).toBe(true);
+    expect(await scoreNow()).toBe(afterSet);
+
+    const manuals = await db.manualStatPlayerMatch.findMany({
+      where: { matchId: M1, playerId: P1 },
+    });
+    expect(manuals).toHaveLength(1); // one row, upsert-keyed by (match, player)
+    expect(
+      await db.commishAudit.count({ where: { leagueId: LG, actionType: "stat_correction" } }),
+    ).toBe(2); // append-only: one audit per write
+  });
+
+  it("stat overlay coexists with rolePlayed in the SAME extra; clear-all removes ONLY statOverrides", async () => {
+    // Seed a goalie-emergency role override directly in extra (§3), the other extra co-tenant.
+    await db.manualStatPlayerMatch.create({
+      data: { matchId: M1, playerId: P1, extra: { rolePlayed: "GK" }, dirty: true },
+    });
+
+    await store.applyStatCorrection({
+      write: {
+        matchId: M1,
+        playerId: P1,
+        overrides: { saves: 4 },
+        reason: "keeper save miscount",
+        enteredByUserId: USER,
+      },
+      audit: auditFor({ actionType: "stat_correction", summary: "Stat correction: 1 field" }),
+    });
+    const afterSet = await db.manualStatPlayerMatch.findUnique({
+      where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+    });
+    expect(afterSet!.extra).toEqual({ rolePlayed: "GK", statOverrides: { saves: 4 } });
+
+    // Clear-all: statOverrides dropped, rolePlayed PRESERVED (read-modify-write, not a wholesale replace).
+    await store.applyStatCorrection({
+      write: {
+        matchId: M1,
+        playerId: P1,
+        overrides: {},
+        reason: "revert the saves override",
+        enteredByUserId: USER,
+      },
+      audit: auditFor({
+        actionType: "stat_correction",
+        summary: "Stat correction: cleared all overrides",
+      }),
+    });
+    const afterClear = await db.manualStatPlayerMatch.findUnique({
+      where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+    });
+    expect(afterClear!.extra).toEqual({ rolePlayed: "GK" });
+  });
+
+  it("gate isolation: an overlay on a feed NON-participant stays scored:false; no score row, write durable", async () => {
+    const rescore = createCommishRescore(db);
+    // NO stat_player_match row, NO events, NO shots for P1 → the adapter participant gate must reject.
+    await store.applyStatCorrection({
+      write: {
+        matchId: M1,
+        playerId: P1,
+        overrides: { goals: 2 },
+        reason: "pending — the feed hasn't posted this player yet",
+        enteredByUserId: USER,
+      },
+      audit: auditFor({ actionType: "stat_correction" }),
+    });
+
+    const { scored } = await rescore(M1, P1);
+    expect(scored).toBe(false); // the overlay NEVER fabricates participation
+    expect(
+      await db.scorePlayerMatch.findUnique({
+        where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+      }),
+    ).toBeNull();
+
+    // The correction is durable + dirty, so it folds in the moment the feed records the player.
+    const manual = await db.manualStatPlayerMatch.findUnique({
+      where: { matchId_playerId: { matchId: M1, playerId: P1 } },
+    });
+    expect(manual!.extra).toEqual({ statOverrides: { goals: 2 } });
+    expect(manual!.dirty).toBe(true);
+    expect(
+      await db.commishAudit.count({ where: { leagueId: LG, actionType: "stat_correction" } }),
+    ).toBe(1);
+  });
 });

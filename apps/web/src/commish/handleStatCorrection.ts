@@ -21,7 +21,9 @@
  */
 import type { SessionManagerOutcome } from "@app/auth";
 import type { CommishAuditTargetRef } from "@app/shared";
+import type { StatOverrides } from "@app/recompute";
 import type { RecordCommishAuditInput } from "./recordCommishAudit";
+import { formatStatOverrideDelta, validateStatOverrides } from "./statOverrideExtra";
 
 /** Minimal (match, player) context the write path validates + surfaces (frozen period → override note). */
 export interface MatchPlayerContext {
@@ -48,7 +50,16 @@ export type RatingWrite =
   | { kind: "set"; matchId: string; playerId: string; rating: number }
   | { kind: "clear"; matchId: string; playerId: string };
 
-/** The write port. Both `apply*` methods persist the manual row + the audit row atomically (store-owned tx). */
+/** 2b: absolute sparse stat overlay for one (match, player). An EMPTY `overrides` map is "clear all". */
+export interface StatCorrectionWrite {
+  matchId: string;
+  playerId: string;
+  overrides: StatOverrides;
+  reason: string;
+  enteredByUserId: string | null;
+}
+
+/** The write port. Each `apply*` method persists the manual row + the audit row atomically (store-owned tx). */
 export interface CommishStatStore {
   getManagerLeagueId(managerId: string): Promise<string | null>;
   getMatchPlayer(matchId: string, playerId: string): Promise<MatchPlayerContext | null>;
@@ -58,6 +69,12 @@ export interface CommishStatStore {
   }): Promise<{ auditId: string }>;
   applyRating(input: {
     write: RatingWrite;
+    audit: RecordCommishAuditInput;
+  }): Promise<{ auditId: string }>;
+  /** 2b: the CURRENT stored overlay for a (match, player) — read to compute the audit's field-change delta. */
+  getStatOverrides(matchId: string, playerId: string): Promise<StatOverrides>;
+  applyStatCorrection(input: {
+    write: StatCorrectionWrite;
     audit: RecordCommishAuditInput;
   }): Promise<{ auditId: string }>;
 }
@@ -84,6 +101,15 @@ export interface RatingBody {
   playerId: string;
   /** A 0–10 value to set, or `null` to CLEAR (delete) the manual override row. */
   rating: number | null;
+  reason: string;
+}
+
+export interface StatBody {
+  matchId: string;
+  playerId: string;
+  /** The complete, absolute set of field overrides (bounded server-side to the 23-key allowlist + Int≥0).
+   *  An EMPTY object clears all overrides; omitting a field the operator blanked clears just that field. */
+  overrides: Record<string, number>;
   reason: string;
 }
 
@@ -297,6 +323,73 @@ export async function handleCommishRating(
       ok: true,
       rating: clearing ? null : rating,
       source: clearing ? null : "manual",
+      frozenOverride: t.ctx.periodFrozen,
+      scored,
+      ...outcomeFields(scored, restatePending),
+      auditId,
+    },
+  };
+}
+
+// ── 2b — general stat-line correction ─────────────────────────────────────────────────────────────
+/**
+ * Generalizes the Thread-2 write shape to N raw feed fields in ONE save: gate → validate (allowlist + Int≥0 +
+ * reason) BEFORE any read → resolve+validate (match, player) → SET the absolute sparse overlay into
+ * `manual_stat_player_match.extra.statOverrides` (read-modify-write, preserving `rolePlayed`; penalty columns
+ * untouched) + exactly ONE `commish_audit` row in one transaction → the SAME synchronous re-score with the
+ * FROZEN-period `allowFrozen` override + `restate_pending` post-commit-throw handling that Thread 2 uses.
+ *
+ * ENGINE byte-untouched: the write only lands the overlay the adapter already reads. The audit `delta` is the
+ * raw field-change list (e.g. "goals feed→2 · assists 1→feed"), NOT a points total.
+ */
+export async function handleCommishStatCorrection(
+  deps: CommishStatDeps,
+  body: StatBody,
+): Promise<HandlerResult> {
+  const g = gate(await deps.resolveManager());
+  if (!g.ok) return g.result;
+
+  const { matchId, playerId } = body;
+  if (!matchId || !playerId) return err(400, "bad_request");
+  if (body.reason.trim() === "") return err(400, "reason_required");
+  if (typeof body.overrides !== "object" || body.overrides === null) return err(400, "bad_request");
+  const v = validateStatOverrides(body.overrides);
+  if (!v.ok) return err(400, v.error); // unknown_stat_key (typo/phantom) | bad_request (non-Int / negative)
+
+  const t = await resolveTarget(deps, g.managerId, matchId, playerId);
+  if (!t.ok) return t.result;
+
+  const reason = body.reason.trim();
+  const targetRef: CommishAuditTargetRef = { matchId, playerId };
+  // The prior overlay drives the field-change delta only (cosmetic/audit). The write itself is absolute + does
+  // its own in-tx read-modify-write, so a benign race on this read never affects the persisted state or points.
+  const prior = await deps.store.getStatOverrides(matchId, playerId);
+  const { delta, summary } = formatStatOverrideDelta(prior, v.overrides);
+
+  const { auditId } = await deps.store.applyStatCorrection({
+    write: { matchId, playerId, overrides: v.overrides, reason, enteredByUserId: g.userId },
+    audit: {
+      leagueId: t.leagueId,
+      actorUserId: g.userId,
+      actionType: "stat_correction",
+      summary,
+      detail: t.ctx.periodFrozen ? FROZEN_NOTE : null,
+      reason,
+      targetRef,
+      delta,
+      reversible: true,
+    },
+  });
+
+  // The write + audit have committed. Fire the sync re-score; a throw here becomes restate-pending, never a 500.
+  const { scored, restatePending } = await fireRescore(deps.rescore, matchId, playerId);
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      overrides: v.overrides,
+      delta,
       frozenOverride: t.ctx.periodFrozen,
       scored,
       ...outcomeFields(scored, restatePending),

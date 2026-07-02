@@ -17,10 +17,16 @@
  *    It calls only PUBLIC `@app/recompute` orchestration functions; no pipeline internals are touched, and no
  *    file in packages/scoring or packages/recompute changes (the ENGINE-byte-untouched constraint).
  */
-import { prisma as defaultPrisma, type PrismaClient } from "@app/db";
-import { recomputePlayerMatch, recomputeManagerPeriod, recomputeStanding } from "@app/recompute";
+import { prisma as defaultPrisma, Prisma, type PrismaClient } from "@app/db";
+import {
+  recomputePlayerMatch,
+  recomputeManagerPeriod,
+  recomputeStanding,
+  parseStatOverrides,
+} from "@app/recompute";
 import { createPrismaStore } from "@app/recompute/prisma";
 import { recordCommishAudit } from "./recordCommishAudit";
+import { mergeStatOverridesIntoExtra } from "./statOverrideExtra";
 import type { CommishStatStore } from "./handleStatCorrection";
 
 export function createCommishStatStore(prisma: PrismaClient = defaultPrisma): CommishStatStore {
@@ -125,6 +131,56 @@ export function createCommishStatStore(prisma: PrismaClient = defaultPrisma): Co
             update: { rating: write.rating, dirty: true },
           });
         }
+        const row = await recordCommishAudit(audit, (data) =>
+          tx.commishAudit.create({ data, select: { id: true } }),
+        );
+        return { auditId: row.id };
+      });
+    },
+
+    async getStatOverrides(matchId, playerId) {
+      // The CURRENT overlay for the field-change delta only. parseStatOverrides is the SAME bounded parse the
+      // recompute adapter uses, so "prior" here matches exactly what scoring reads.
+      const row = await prisma.manualStatPlayerMatch.findUnique({
+        where: { matchId_playerId: { matchId, playerId } },
+        select: { extra: true },
+      });
+      return parseStatOverrides(row?.extra) ?? {};
+    },
+
+    async applyStatCorrection({ write, audit }) {
+      // 2b general stat-line overlay. Read-modify-write of `extra`: merge the absolute overlay into
+      // `extra.statOverrides` while PRESERVING every other key (notably `rolePlayed`). An empty overlay drops
+      // the sub-key (clear-all); an empty resulting object → SQL NULL via Prisma.DbNull. `dirty:true` enqueues
+      // the recompute; the penalty columns are NEVER in the update payload, so Thread 2's entries are untouched
+      // (and default to 0 on create). Audit shares the tx → effect + ledger row are all-or-nothing.
+      return prisma.$transaction(async (tx) => {
+        const existing = await tx.manualStatPlayerMatch.findUnique({
+          where: { matchId_playerId: { matchId: write.matchId, playerId: write.playerId } },
+          select: { extra: true },
+        });
+        const nextExtra = mergeStatOverridesIntoExtra(existing?.extra, write.overrides);
+        const extraValue: Prisma.InputJsonValue | typeof Prisma.DbNull =
+          nextExtra === null ? Prisma.DbNull : (nextExtra as Prisma.InputJsonValue);
+        await tx.manualStatPlayerMatch.upsert({
+          where: { matchId_playerId: { matchId: write.matchId, playerId: write.playerId } },
+          create: {
+            matchId: write.matchId,
+            playerId: write.playerId,
+            // penaltyWon / penaltyCommitted intentionally omitted → the schema @default(0) applies on create.
+            extra: extraValue,
+            reason: write.reason,
+            enteredByUserId: write.enteredByUserId,
+            dirty: true,
+          },
+          update: {
+            // penalty columns intentionally NOT set here → a stat correction never disturbs a prior penalty entry.
+            extra: extraValue,
+            reason: write.reason,
+            enteredByUserId: write.enteredByUserId,
+            dirty: true,
+          },
+        });
         const row = await recordCommishAudit(audit, (data) =>
           tx.commishAudit.create({ data, select: { id: true } }),
         );
