@@ -22,7 +22,8 @@ function parseLineup(raw: unknown): LineupRepairBody | null {
   const b = raw as Record<string, unknown>;
   if (typeof b.managerId !== "string" || typeof b.periodId !== "string") return null;
   if (typeof b.reason !== "string" || typeof b.apply !== "boolean") return null;
-  if (!Array.isArray(b.starterIds) || !b.starterIds.every((x) => typeof x === "string")) return null;
+  if (!Array.isArray(b.starterIds) || !b.starterIds.every((x) => typeof x === "string"))
+    return null;
   return {
     managerId: b.managerId,
     periodId: b.periodId,

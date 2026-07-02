@@ -340,7 +340,9 @@ describe.skipIf(!SAFE)("Thread-3a repair surface — real Postgres (GUC-free)", 
     await seedSquadWithSlots();
     const lockedSlotId = await seedOpenR32WithLockedD1();
     await db.league.update({ where: { id: LG }, data: { status: "playoff" } });
-    await db.playoffEntry.create({ data: { leagueId: LG, managerId: MGR, seed: 1, status: "alive" } });
+    await db.playoffEntry.create({
+      data: { leagueId: LG, managerId: MGR, seed: 1, status: "alive" },
+    });
 
     const r = await handleCommishRosterRepair(deps(), {
       kind: "trim",
@@ -365,7 +367,9 @@ describe.skipIf(!SAFE)("Thread-3a repair surface — real Postgres (GUC-free)", 
     await seedSquadWithSlots(); // 15 owned, cap 9
     const lockedSlotId = await seedOpenR32WithLockedD1(); // d1 locked in R32 but NOT in the drop set
     await db.league.update({ where: { id: LG }, data: { status: "playoff" } });
-    await db.playoffEntry.create({ data: { leagueId: LG, managerId: MGR, seed: 1, status: "alive" } });
+    await db.playoffEntry.create({
+      data: { leagueId: LG, managerId: MGR, seed: 1, status: "alive" },
+    });
 
     const r = await handleCommishRosterRepair(deps(), {
       kind: "trim",

@@ -293,10 +293,17 @@ type RepairApplied = {
 };
 
 /** Shared outcome → message mapping for the three repair forms (loud on partial success). */
-function repairMsg(res: Response, body: RepairApplied, planText: (b: RepairApplied) => string): FormMsg {
+function repairMsg(
+  res: Response,
+  body: RepairApplied,
+  planText: (b: RepairApplied) => string,
+): FormMsg {
   if (!res.ok) return { ok: false, text: errorText(res.status, body) };
   if (body.status === "planned") {
-    return { ok: true, text: `Dry-run OK — ${planText(body)} Nothing applied; hit Apply to execute.` };
+    return {
+      ok: true,
+      text: `Dry-run OK — ${planText(body)} Nothing applied; hit Apply to execute.`,
+    };
   }
   if (body.status === "skipped") {
     return { ok: true, text: `Skipped — ${body.reason ?? "already in the desired end state"}.` };
@@ -349,8 +356,8 @@ function RepairPanel({
       </div>
       <div className="adm-card-b">
         <p className="adm-hint">
-          SAFE repairs only: the kickoff guard and the lock-on-play latch stay armed. A post-kickoff add
-          or any move of a locked-by-play slot is refused here by design (CLI-only, deferred).
+          SAFE repairs only: the kickoff guard and the lock-on-play latch stay armed. A post-kickoff
+          add or any move of a locked-by-play slot is refused here by design (CLI-only, deferred).
         </p>
         <div className="adm-field">
           <label className="t-label" htmlFor="rp-manager">
@@ -376,7 +383,12 @@ function RepairPanel({
           <>
             <RosterAddForm key={`add:${selKey}`} view={view} onDone={refresh} />
             <TrimForm key={`trim:${selKey}`} view={view} onDone={refresh} />
-            <LineupRepairForm key={`xi:${selKey}`} view={view} onPeriod={goPeriod} onDone={refresh} />
+            <LineupRepairForm
+              key={`xi:${selKey}`}
+              view={view}
+              onPeriod={goPeriod}
+              onDone={refresh}
+            />
           </>
         ) : (
           <p className="adm-hint">Pick a manager to repair their roster or lineup.</p>
@@ -421,10 +433,22 @@ function RosterAddForm({ view, onDone }: { view: CommishRepairView; onDone: () =
         }),
       });
       const body = (await res.json().catch(() => ({}))) as RepairApplied & {
-        plan?: { add?: string; drop?: string | null; addMatch?: { label: string; kickoffAt: string } | null };
+        plan?: {
+          add?: string;
+          drop?: string | null;
+          addMatch?: { label: string; kickoffAt: string } | null;
+        };
       };
       const m = repairMsg(res, body, (b) => {
-        const plan = (b as { plan?: { add?: string; drop?: string | null; addMatch?: { label: string; kickoffAt: string } | null } }).plan;
+        const plan = (
+          b as {
+            plan?: {
+              add?: string;
+              drop?: string | null;
+              addMatch?: { label: string; kickoffAt: string } | null;
+            };
+          }
+        ).plan;
         return `+${plan?.add ?? "?"}${plan?.drop ? ` / −${plan.drop}` : " (open slot)"}${
           plan?.addMatch ? ` · ${plan.addMatch.label} @ ${plan.addMatch.kickoffAt}` : ""
         }.`;
@@ -556,7 +580,8 @@ function TrimForm({ view, onDone }: { view: CommishRepairView; onDone: () => voi
     });
 
   async function submit(apply: boolean) {
-    if (dropIds.size === 0) return setMsg({ ok: false, text: "Pick at least one player to release." });
+    if (dropIds.size === 0)
+      return setMsg({ ok: false, text: "Pick at least one player to release." });
     if (reason.trim() === "") return setMsg({ ok: false, text: "A reason is required." });
     setPending(true);
     setMsg(null);
@@ -564,13 +589,35 @@ function TrimForm({ view, onDone }: { view: CommishRepairView; onDone: () => voi
       const res = await fetch("/api/commish/roster", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "trim", managerId, dropPlayerIds: [...dropIds], reason, apply }),
+        body: JSON.stringify({
+          kind: "trim",
+          managerId,
+          dropPlayerIds: [...dropIds],
+          reason,
+          apply,
+        }),
       });
       const body = (await res.json().catch(() => ({}))) as RepairApplied & {
-        plan?: { before?: number; after?: number; rosterCap?: number; dropNames?: string[]; unfillable?: boolean };
+        plan?: {
+          before?: number;
+          after?: number;
+          rosterCap?: number;
+          dropNames?: string[];
+          unfillable?: boolean;
+        };
       };
       const m = repairMsg(res, body, (b) => {
-        const plan = (b as { plan?: { before?: number; after?: number; rosterCap?: number; dropNames?: string[]; unfillable?: boolean } }).plan;
+        const plan = (
+          b as {
+            plan?: {
+              before?: number;
+              after?: number;
+              rosterCap?: number;
+              dropNames?: string[];
+              unfillable?: boolean;
+            };
+          }
+        ).plan;
         return `${plan?.before ?? "?"} → ${plan?.after ?? "?"} (cap ${plan?.rosterCap ?? "?"}): −${(plan?.dropNames ?? []).join(", −")}.${
           plan?.unfillable ? " ⚠ the remaining squad cannot field a legal playoff XI." : ""
         }`;

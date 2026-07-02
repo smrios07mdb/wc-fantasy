@@ -112,7 +112,8 @@ const DEFERRED_NOTE =
   "performs it.";
 
 /** Runner refusal codes that mean "the lock-on-play / played-state latch stopped you" — the 3a boundary. */
-const LOCK_CLASS = /^(release-locked|forfeit-requires-confirm|played-player-started|voided-player-started)/;
+const LOCK_CLASS =
+  /^(release-locked|forfeit-requires-confirm|played-player-started|voided-player-started)/;
 
 const AUDIT_PENDING_MESSAGE =
   "Repair applied, but the audit-ledger write failed — the complete audit payload is attached; " +
@@ -156,7 +157,9 @@ async function settleAppliedResponse(args: {
       ...(restatePending
         ? {
             restatePending: true,
-            ...(auditPending ? {} : { warning: "restate_pending", message: RESTATE_PENDING_MESSAGE }),
+            ...(auditPending
+              ? {}
+              : { warning: "restate_pending", message: RESTATE_PENDING_MESSAGE }),
           }
         : {}),
     },
@@ -245,12 +248,16 @@ export async function handleCommishRosterRepair(
       case "planned":
         return { status: 200, body: { ok: true, status: "planned", plan: res.plan } };
       case "skipped":
-        return { status: 200, body: { ok: true, status: "skipped", reason: res.reason, plan: res.plan } };
+        return {
+          status: 200,
+          body: { ok: true, status: "skipped", reason: res.reason, plan: res.plan },
+        };
       case "applied": {
         const delta = dropName ? `+${addName} / ${MINUS}${dropName}` : `+${addName}`;
         const targetRef: CommishAuditTargetRef = { managerId: body.managerId };
         const notClosed = await deps.store.getNotClosedPeriodIds(managerRef.leagueId);
-        const restateIds = pinned && !notClosed.includes(pinned.id) ? [...notClosed, pinned.id] : notClosed;
+        const restateIds =
+          pinned && !notClosed.includes(pinned.id) ? [...notClosed, pinned.id] : notClosed;
         return settleAppliedResponse({
           deps,
           managerId: body.managerId,
@@ -389,7 +396,10 @@ export async function handleCommishLineupRepair(
     case "planned":
       return { status: 200, body: { ok: true, status: "planned", plan: res.plan } };
     case "skipped":
-      return { status: 200, body: { ok: true, status: "skipped", reason: res.reason, plan: res.plan } };
+      return {
+        status: 200,
+        body: { ok: true, status: "skipped", reason: res.reason, plan: res.plan },
+      };
     case "applied": {
       const beforeSet = new Set(res.plan.before);
       const afterSet = new Set(res.plan.after);
