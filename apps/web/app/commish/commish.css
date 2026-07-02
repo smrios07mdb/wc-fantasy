@@ -712,6 +712,25 @@
   opacity: 0.55;
 }
 
+/* ── roster / lineup repair (Thread 3a) ───────────────────────────────────────────────────────── */
+.adm-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+.adm-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.adm-check input {
+  accent-color: var(--accent);
+}
+
 /* ── responsive ───────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .adm-body {

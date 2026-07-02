@@ -21,6 +21,8 @@ import {
   type CommishConsoleView,
   type CommishManagerInspector,
   type CommishManagerOption,
+  type CommishRepairView,
+  type CommishRosterPlayer,
   type CommishStatCorrectionsView,
   type CommishStatCurrent,
   type CommishSystemStatus,
@@ -36,6 +38,11 @@ const TABS = [
     id: "stats",
     label: "Stat corrections",
     copy: "Correct a player's match stat line; the change re-scores through the engine and records an audit entry.",
+  },
+  {
+    id: "repair",
+    label: "Roster & lineup",
+    copy: "SAFE roster/lineup repairs: add, add/drop, trim of unlocked players, and past-window lineup edits.",
   },
   {
     id: "ops",
@@ -98,6 +105,8 @@ export function CommishConsole({
             <div className="adm-main">
               {tab === "stats" ? (
                 <StatCorrectionsPanel view={view.statCorrections} />
+              ) : tab === "repair" ? (
+                <RepairPanel view={view.repair} managers={view.managers} />
               ) : (
                 <TaskPlaceholder title={activeTab.label} copy={activeTab.copy} />
               )}
@@ -136,7 +145,9 @@ function TaskPlaceholder({ title, copy }: { title: string; copy: string }) {
 }
 
 // ── stat corrections (Thread 2): penalty entry + rating override ────────────────────────────────
-function errorText(status: number, body: { error?: string }): string {
+function errorText(status: number, body: { error?: string; message?: string }): string {
+  // Repair rejections carry the runner's own reason (409-class) — surface it verbatim.
+  if (body.message) return body.message;
   const map: Record<string, string> = {
     reason_required: "A reason is required.",
     rating_out_of_range: "Rating must be between 0 and 10.",
@@ -146,6 +157,9 @@ function errorText(status: number, body: { error?: string }): string {
     forbidden: "Not permitted.",
     no_session: "Your session expired — sign in again.",
     no_league: "Could not resolve your league.",
+    unknown_manager: "That manager isn't in your league.",
+    invalid_player: "Unknown player.",
+    invalid_period: "Unknown period.",
   };
   return map[body.error ?? ""] ?? `Request failed (${status}).`;
 }
@@ -257,6 +271,526 @@ function StatCorrectionsPanel({ view }: { view: CommishStatCorrectionsView }) {
         )}
       </div>
     </section>
+  );
+}
+
+// ── roster / lineup repair (Thread 3a): SAFE repairs only ────────────────────────────────────────
+/**
+ * The SAFE repair surface. By design there are NO dangerous-bypass controls here (not even disabled):
+ * post-kickoff adds and locked-slot moves are the deferred 3b capabilities (CLI-only). Every form is
+ * dry-run-first (Preview = the runner's `planned` status), requires a reason, and reports the
+ * audit_pending / restate_pending partial-success outcomes loudly.
+ */
+type RepairApplied = {
+  ok?: boolean;
+  status?: string;
+  reason?: string;
+  auditPending?: boolean;
+  restatePending?: boolean;
+  audit?: unknown;
+  error?: string;
+  message?: string;
+};
+
+/** Shared outcome → message mapping for the three repair forms (loud on partial success). */
+function repairMsg(res: Response, body: RepairApplied, planText: (b: RepairApplied) => string): FormMsg {
+  if (!res.ok) return { ok: false, text: errorText(res.status, body) };
+  if (body.status === "planned") {
+    return { ok: true, text: `Dry-run OK — ${planText(body)} Nothing applied; hit Apply to execute.` };
+  }
+  if (body.status === "skipped") {
+    return { ok: true, text: `Skipped — ${body.reason ?? "already in the desired end state"}.` };
+  }
+  if (body.auditPending) {
+    return {
+      ok: false,
+      text:
+        "APPLIED, but the audit write FAILED (audit_pending). Recover the ledger row manually with this payload: " +
+        JSON.stringify(body.audit),
+    };
+  }
+  if (body.restatePending) {
+    return {
+      ok: false,
+      text:
+        "Applied + logged, but the automatic restate FAILED (restate_pending) — re-submit the identical " +
+        "repair (it skips idempotently) or run the recompute job.",
+    };
+  }
+  return { ok: true, text: "Applied, logged, and restated." };
+}
+
+function RepairPanel({
+  view,
+  managers,
+}: {
+  view: CommishRepairView;
+  managers: CommishManagerOption[];
+}) {
+  const router = useRouter();
+  const goManager = (id: string) =>
+    router.push(id ? `/commish?tab=repair&rmanager=${id}` : "/commish?tab=repair");
+  const goPeriod = (pid: string) => {
+    if (!view.selectedManagerId) return;
+    const base = `/commish?tab=repair&rmanager=${view.selectedManagerId}`;
+    router.push(pid ? `${base}&rperiod=${pid}` : base);
+  };
+  const refresh = () => router.refresh();
+  const selKey = `${view.selectedManagerId ?? "-"}:${view.selectedPeriodId ?? "-"}`;
+
+  return (
+    <section className="adm-card">
+      <div className="adm-card-h">
+        <div className="adm-card-ht">
+          <h3 className="adm-card-title">Roster &amp; lineup repair</h3>
+          <span className="adm-card-sub">Add · add/drop · trim · past-window lineup</span>
+        </div>
+        <span className="adm-badge adm-badge-sm">SAFE only · logged</span>
+      </div>
+      <div className="adm-card-b">
+        <p className="adm-hint">
+          SAFE repairs only: the kickoff guard and the lock-on-play latch stay armed. A post-kickoff add
+          or any move of a locked-by-play slot is refused here by design (CLI-only, deferred).
+        </p>
+        <div className="adm-field">
+          <label className="t-label" htmlFor="rp-manager">
+            Manager
+          </label>
+          <select
+            id="rp-manager"
+            className="adm-select"
+            value={view.selectedManagerId ?? ""}
+            onChange={(e) => goManager(e.target.value)}
+          >
+            <option value="">Select a manager…</option>
+            {managers.map((m) => (
+              <option key={m.managerId} value={m.managerId}>
+                {m.displayName}
+                {m.isCommissioner ? " (commissioner)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {view.selectedManagerId ? (
+          <>
+            <RosterAddForm key={`add:${selKey}`} view={view} onDone={refresh} />
+            <TrimForm key={`trim:${selKey}`} view={view} onDone={refresh} />
+            <LineupRepairForm key={`xi:${selKey}`} view={view} onPeriod={goPeriod} onDone={refresh} />
+          </>
+        ) : (
+          <p className="adm-hint">Pick a manager to repair their roster or lineup.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RosterAddForm({ view, onDone }: { view: CommishRepairView; onDone: () => void }) {
+  const managerId = view.selectedManagerId!;
+  const [search, setSearch] = useState("");
+  const [addId, setAddId] = useState("");
+  const [dropId, setDropId] = useState("");
+  const [periodId, setPeriodId] = useState("");
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  const q = search.trim().toLowerCase();
+  const matchesQ = (p: { name: string; teamName: string | null }) =>
+    q === "" || p.name.toLowerCase().includes(q) || (p.teamName ?? "").toLowerCase().includes(q);
+  const shown = view.pool.filter((p) => p.playerId === addId || matchesQ(p)).slice(0, 40);
+
+  async function submit(apply: boolean) {
+    if (!addId) return setMsg({ ok: false, text: "Pick a player to add." });
+    if (reason.trim() === "") return setMsg({ ok: false, text: "A reason is required." });
+    setPending(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/commish/roster", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "add",
+          managerId,
+          addPlayerId: addId,
+          dropPlayerId: dropId || null,
+          periodId: periodId || null,
+          reason,
+          apply,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as RepairApplied & {
+        plan?: { add?: string; drop?: string | null; addMatch?: { label: string; kickoffAt: string } | null };
+      };
+      const m = repairMsg(res, body, (b) => {
+        const plan = (b as { plan?: { add?: string; drop?: string | null; addMatch?: { label: string; kickoffAt: string } | null } }).plan;
+        return `+${plan?.add ?? "?"}${plan?.drop ? ` / −${plan.drop}` : " (open slot)"}${
+          plan?.addMatch ? ` · ${plan.addMatch.label} @ ${plan.addMatch.kickoffAt}` : ""
+        }.`;
+      });
+      setMsg(m);
+      if (res.ok && body.status === "applied") {
+        setReason("");
+        onDone();
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(true);
+      }}
+    >
+      <div className="adm-form-h">
+        Roster add / add-drop{" "}
+        <span className="adm-form-sub">window + eligibility bypass · cap and ownership kept</span>
+      </div>
+      <div className="adm-field">
+        <label className="t-label" htmlFor="rp-add-search">
+          Add (live-unowned pool)
+        </label>
+        <input
+          id="rp-add-search"
+          className="adm-input"
+          placeholder="Search the free-agent pool…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className="adm-select"
+          value={addId}
+          onChange={(e) => setAddId(e.target.value)}
+          size={Math.min(8, Math.max(3, shown.length))}
+        >
+          {shown.map((p) => (
+            <option key={p.playerId} value={p.playerId}>
+              {p.name} · {p.position}
+              {p.teamName ? ` · ${p.teamName}` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="adm-field">
+        <label className="t-label" htmlFor="rp-drop">
+          Drop (unlocked only — a locked-by-play drop is refused)
+        </label>
+        <select
+          id="rp-drop"
+          className="adm-select"
+          value={dropId}
+          onChange={(e) => setDropId(e.target.value)}
+        >
+          <option value="">(none — open slot)</option>
+          {view.roster.map((p) => (
+            <option key={p.playerId} value={p.playerId}>
+              {p.name} · {p.position}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="adm-field">
+        <label className="t-label" htmlFor="rp-pin">
+          Period pin (optional — scopes the snapshot + kickoff guard)
+        </label>
+        <select
+          id="rp-pin"
+          className="adm-select"
+          value={periodId}
+          onChange={(e) => setPeriodId(e.target.value)}
+        >
+          <option value="">(none — the add&rsquo;s next fixture)</option>
+          {view.periods.map((p) => (
+            <option key={p.periodId} value={p.periodId}>
+              {p.label}
+              {p.frozen ? " ❄ frozen" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      <input
+        className="adm-input"
+        placeholder="Reason (required — recorded to the audit log)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="adm-form-actions">
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={pending}
+          onClick={() => void submit(false)}
+        >
+          Preview (dry-run)
+        </button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
+          Apply
+        </button>
+        {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+      </div>
+    </form>
+  );
+}
+
+function TrimForm({ view, onDone }: { view: CommishRepairView; onDone: () => void }) {
+  const managerId = view.selectedManagerId!;
+  const [dropIds, setDropIds] = useState<Set<string>>(new Set());
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  const after = view.roster.length - dropIds.size;
+  const toggle = (id: string) =>
+    setDropIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  async function submit(apply: boolean) {
+    if (dropIds.size === 0) return setMsg({ ok: false, text: "Pick at least one player to release." });
+    if (reason.trim() === "") return setMsg({ ok: false, text: "A reason is required." });
+    setPending(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/commish/roster", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "trim", managerId, dropPlayerIds: [...dropIds], reason, apply }),
+      });
+      const body = (await res.json().catch(() => ({}))) as RepairApplied & {
+        plan?: { before?: number; after?: number; rosterCap?: number; dropNames?: string[]; unfillable?: boolean };
+      };
+      const m = repairMsg(res, body, (b) => {
+        const plan = (b as { plan?: { before?: number; after?: number; rosterCap?: number; dropNames?: string[]; unfillable?: boolean } }).plan;
+        return `${plan?.before ?? "?"} → ${plan?.after ?? "?"} (cap ${plan?.rosterCap ?? "?"}): −${(plan?.dropNames ?? []).join(", −")}.${
+          plan?.unfillable ? " ⚠ the remaining squad cannot field a legal playoff XI." : ""
+        }`;
+      });
+      setMsg(m);
+      if (res.ok && body.status === "applied") {
+        setDropIds(new Set());
+        setReason("");
+        onDone();
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(true);
+      }}
+    >
+      <div className="adm-form-h">
+        Trim / multi-drop{" "}
+        <span className="adm-form-sub">
+          playoff phase only · unlocked players only · {view.roster.length} → {after} (cap{" "}
+          {view.rosterCap})
+        </span>
+      </div>
+      {!view.playoffPhase && (
+        <p className="adm-hint">The league is not in its playoff phase — a trim will be refused.</p>
+      )}
+      <div className="adm-checklist" role="group" aria-label="Players to release">
+        {view.roster.map((p) => (
+          <label key={p.playerId} className="adm-check">
+            <input
+              type="checkbox"
+              checked={dropIds.has(p.playerId)}
+              onChange={() => toggle(p.playerId)}
+            />
+            <span>
+              {p.name} · {p.position}
+            </span>
+          </label>
+        ))}
+      </div>
+      <input
+        className="adm-input"
+        placeholder="Reason (required — recorded to the audit log)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <div className="adm-form-actions">
+        <button
+          type="button"
+          className="btn btn-sm"
+          disabled={pending}
+          onClick={() => void submit(false)}
+        >
+          Preview (dry-run)
+        </button>
+        <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
+          Apply trim
+        </button>
+        {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+      </div>
+    </form>
+  );
+}
+
+function LineupRepairForm({
+  view,
+  onPeriod,
+  onDone,
+}: {
+  view: CommishRepairView;
+  onPeriod: (periodId: string) => void;
+  onDone: () => void;
+}) {
+  const managerId = view.selectedManagerId!;
+  const [starters, setStarters] = useState<Set<string>>(new Set(view.currentStarterIds));
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  const period = view.periods.find((p) => p.periodId === view.selectedPeriodId) ?? null;
+  const xiSize = period?.kind === "knockout_round" ? 7 : 11;
+  const toggle = (id: string) =>
+    setStarters((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  async function submit(apply: boolean) {
+    if (!view.selectedPeriodId) return setMsg({ ok: false, text: "Pick a period first." });
+    if (reason.trim() === "") return setMsg({ ok: false, text: "A reason is required." });
+    setPending(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/commish/lineup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          managerId,
+          periodId: view.selectedPeriodId,
+          starterIds: [...starters],
+          reason,
+          apply,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as RepairApplied & {
+        plan?: { before?: string[]; after?: string[] };
+      };
+      const m = repairMsg(res, body, (b) => {
+        const plan = (b as { plan?: { before?: string[]; after?: string[] } }).plan;
+        return `XI set for ${period?.label ?? "?"} (${plan?.after?.length ?? starters.size} starters).`;
+      });
+      setMsg(m);
+      if (res.ok && body.status === "applied") {
+        setReason("");
+        onDone();
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error." });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const byPosition = new Map<string, CommishRosterPlayer[]>();
+  for (const p of view.roster) {
+    const list = byPosition.get(p.position) ?? [];
+    list.push(p);
+    byPosition.set(p.position, list);
+  }
+
+  return (
+    <form
+      className="adm-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit(true);
+      }}
+    >
+      <div className="adm-form-h">
+        Lineup repair{" "}
+        <span className="adm-form-sub">
+          edit-window bypass · formation/XI kept · locked-by-play slots never moved
+        </span>
+      </div>
+      <div className="adm-field">
+        <label className="t-label" htmlFor="rp-period">
+          Period
+        </label>
+        <select
+          id="rp-period"
+          className="adm-select"
+          value={view.selectedPeriodId ?? ""}
+          onChange={(e) => onPeriod(e.target.value)}
+        >
+          <option value="">Select a period…</option>
+          {view.periods.map((p) => (
+            <option key={p.periodId} value={p.periodId}>
+              {p.label} · {p.status}
+              {p.frozen ? " ❄ frozen" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      {view.selectedPeriodId ? (
+        <>
+          <p className="adm-hint">
+            Starters: {starters.size} / {xiSize} required.
+          </p>
+          {[...byPosition.entries()].map(([pos, list]) => (
+            <div key={pos} className="adm-checklist" role="group" aria-label={`${pos} starters`}>
+              {list.map((p) => (
+                <label key={p.playerId} className="adm-check">
+                  <input
+                    type="checkbox"
+                    checked={starters.has(p.playerId)}
+                    onChange={() => toggle(p.playerId)}
+                  />
+                  <span>
+                    {p.name} · {p.position}
+                  </span>
+                </label>
+              ))}
+            </div>
+          ))}
+          <input
+            className="adm-input"
+            placeholder="Reason (required — recorded to the audit log)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="adm-form-actions">
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={pending}
+              onClick={() => void submit(false)}
+            >
+              Preview (dry-run)
+            </button>
+            <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
+              Apply lineup
+            </button>
+            {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+          </div>
+        </>
+      ) : (
+        <p className="adm-hint">Pick a period to edit that matchday&rsquo;s XI.</p>
+      )}
+    </form>
   );
 }
 

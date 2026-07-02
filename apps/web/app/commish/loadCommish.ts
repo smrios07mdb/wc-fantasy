@@ -9,7 +9,7 @@
  * OWN league — an out-of-league managerId simply yields no inspector.
  */
 import { prisma } from "@app/db";
-import { POSITIONS, type Position, type RatingSource } from "@app/shared";
+import { POSITIONS, rosterCapForPlayoffPhase, type Position, type RatingSource } from "@app/shared";
 import {
   pickRating,
   parseStatOverrides,
@@ -22,6 +22,7 @@ import {
   toInspector,
   type CommishConsoleView,
   type CommishManagerOption,
+  type CommishRepairView,
   type CommishRosterPlayer,
   type CommishStatCorrectionsView,
   type CommishStatPlayerOption,
@@ -39,10 +40,23 @@ const EMPTY_STAT_CORRECTIONS: CommishStatCorrectionsView = {
   current: null,
 };
 
+/** An empty Repair view (used while inspecting a manager via `?as=`, where the tabs are hidden). */
+const EMPTY_REPAIR: CommishRepairView = {
+  selectedManagerId: null,
+  roster: [],
+  periods: [],
+  pool: [],
+  selectedPeriodId: null,
+  currentStarterIds: [],
+  playoffPhase: false,
+  rosterCap: 15,
+};
+
 export async function loadCommish(
   commishManagerId: string,
   selectedManagerId?: string | null,
   statSel?: { matchId?: string | null; playerId?: string | null },
+  repairSel?: { managerId?: string | null; periodId?: string | null },
   now: Date = new Date(),
 ): Promise<CommishConsoleView | null> {
   const me = await prisma.manager.findUnique({
@@ -95,10 +109,18 @@ export async function loadCommish(
     ? await buildInspector(commishManagerId, selectedManagerId, managers, managerRows)
     : null;
 
-  // Stat-corrections tab data is built only when NOT inspecting a manager (the `?as=` view hides the tabs).
+  // Stat-corrections + Repair tab data are built only when NOT inspecting a manager (`?as=` hides the tabs).
   const statCorrections = selectedManagerId
     ? EMPTY_STAT_CORRECTIONS
     : await buildStatCorrections(statSel?.matchId ?? null, statSel?.playerId ?? null);
+  const repair = selectedManagerId
+    ? EMPTY_REPAIR
+    : await buildRepair(
+        leagueId,
+        managers,
+        repairSel?.managerId ?? null,
+        repairSel?.periodId ?? null,
+      );
 
   return {
     leagueId,
@@ -114,6 +136,118 @@ export async function loadCommish(
     managers,
     inspector,
     statCorrections,
+    repair,
+  };
+}
+
+/**
+ * Assemble the Roster/Lineup-repair tab (Thread 3a): the league periods, and — once a manager is picked
+ * (`?rmanager=`) — their active roster, the live-unowned add pool, and (with `?rperiod=`) the current
+ * starter set for the XI editor. Same-league only (an out-of-league id yields the empty selection). All
+ * reads are owner-bypass and READ-ONLY; the writes go through POST /api/commish/roster · /lineup.
+ */
+async function buildRepair(
+  leagueId: string,
+  managers: CommishManagerOption[],
+  repairManagerId: string | null,
+  repairPeriodId: string | null,
+): Promise<CommishRepairView> {
+  const [periodRows, playoffEntryCount] = await Promise.all([
+    prisma.period.findMany({
+      where: { leagueId },
+      select: { id: true, label: true, status: true, kind: true, frozenAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.playoffEntry.count({ where: { leagueId } }),
+  ]);
+  const periods = periodRows.map((p) => ({
+    periodId: p.id,
+    label: p.label,
+    status: p.status,
+    kind: p.kind as "group_md" | "knockout_round",
+    frozen: p.frozenAt != null,
+  }));
+  const playoffPhase = playoffEntryCount > 0;
+  const base: CommishRepairView = {
+    selectedManagerId: null,
+    roster: [],
+    periods,
+    pool: [],
+    selectedPeriodId: null,
+    currentStarterIds: [],
+    playoffPhase,
+    rosterCap: rosterCapForPlayoffPhase(playoffPhase),
+  };
+
+  // Same-league guard (mirrors the inspector): an unknown/out-of-league id → no selection.
+  if (!repairManagerId || !managers.some((m) => m.managerId === repairManagerId)) return base;
+
+  const [rosterRows, ownedRows] = await Promise.all([
+    prisma.rosterPlayer.findMany({
+      where: { managerId: repairManagerId, droppedAt: null },
+      select: {
+        player: {
+          select: {
+            id: true,
+            displayName: true,
+            position: true,
+            country: true,
+            team: { select: { name: true } },
+          },
+        },
+      },
+    }),
+    // Live-unowned pool = every player NOT holding an active roster row in this league right now — the
+    // same predicate claimFreeAgent re-checks. Eliminated-team players stay listed (the repair runner
+    // passes allowEliminated, the deliberate commissioner bypass).
+    prisma.rosterPlayer.findMany({
+      where: { leagueId, droppedAt: null },
+      distinct: ["playerId"],
+      select: { playerId: true },
+    }),
+  ]);
+  const ownedIds = new Set(ownedRows.map((r) => r.playerId));
+  const poolRows = await prisma.player.findMany({
+    where: { id: { notIn: [...ownedIds] } },
+    select: { id: true, displayName: true, position: true, team: { select: { name: true } } },
+    orderBy: { displayName: "asc" },
+  });
+
+  const byPos = (a: { position: Position }, b: { position: Position }) =>
+    POSITIONS.indexOf(a.position) - POSITIONS.indexOf(b.position);
+  const roster: CommishRosterPlayer[] = rosterRows
+    .map((r) => ({
+      playerId: r.player.id,
+      name: r.player.displayName,
+      position: r.player.position as Position,
+      country: r.player.country,
+      teamName: r.player.team?.name ?? null,
+    }))
+    .sort((a, b) => byPos(a, b) || a.name.localeCompare(b.name));
+
+  const selectedPeriodId =
+    repairPeriodId && periods.some((p) => p.periodId === repairPeriodId) ? repairPeriodId : null;
+  const currentStarterIds = selectedPeriodId
+    ? (
+        await prisma.lineupSlot.findMany({
+          where: { managerId: repairManagerId, periodId: selectedPeriodId, isStarter: true },
+          select: { playerId: true },
+        })
+      ).map((s) => s.playerId)
+    : [];
+
+  return {
+    ...base,
+    selectedManagerId: repairManagerId,
+    roster,
+    pool: poolRows.map((p) => ({
+      playerId: p.id,
+      name: p.displayName,
+      position: p.position as Position,
+      teamName: p.team?.name ?? null,
+    })),
+    selectedPeriodId,
+    currentStarterIds,
   };
 }
 

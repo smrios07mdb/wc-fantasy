@@ -151,6 +151,41 @@ export interface CommishStatCorrectionsView {
   current: CommishStatCurrent | null;
 }
 
+/** A period option for the repair tab (lineup period select + the roster-add period pin). */
+export interface CommishRepairPeriodOption {
+  periodId: string;
+  label: string;
+  status: string;
+  kind: "group_md" | "knockout_round";
+  frozen: boolean;
+}
+
+/** A live-unowned player the roster-repair add picker offers (the commissioner FA pool). */
+export interface CommishRepairPoolPlayer {
+  playerId: string;
+  name: string;
+  position: Position;
+  teamName: string | null;
+}
+
+/** The Thread-3a Roster/Lineup-repair tab data. Selection is URL-driven (`?rmanager=&rperiod=`) like the
+ *  Stat-corrections tab; the SAFE forms POST to /api/commish/roster · /api/commish/lineup + refresh. */
+export interface CommishRepairView {
+  selectedManagerId: string | null;
+  /** The selected manager's active roster (drop / trim / XI pickers). */
+  roster: CommishRosterPlayer[];
+  /** The league's periods (labels for the pin + the lineup period select). */
+  periods: CommishRepairPeriodOption[];
+  /** Live-unowned players (the add picker's pool). Empty until a manager is selected. */
+  pool: CommishRepairPoolPlayer[];
+  selectedPeriodId: string | null;
+  /** The selected (manager, period)'s CURRENT starter ids — the XI editor's initial checked set. */
+  currentStarterIds: string[];
+  /** Playoff phase (playoff_entry existence) + the phase squad cap (15 group / 9 playoff). */
+  playoffPhase: boolean;
+  rosterCap: number;
+}
+
 export interface CommishConsoleView {
   leagueId: string;
   leagueName: string;
@@ -163,6 +198,8 @@ export interface CommishConsoleView {
   inspector: CommishManagerInspector | null;
   /** Thread 2 Stat-corrections tab data (matches empty while inspecting a manager via `?as=`). */
   statCorrections: CommishStatCorrectionsView;
+  /** Thread 3a Roster/Lineup-repair tab data (empty while inspecting a manager via `?as=`). */
+  repair: CommishRepairView;
 }
 
 // ── pure shapers ──────────────────────────────────────────────────────────────────────────────────
