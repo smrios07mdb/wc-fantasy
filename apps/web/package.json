@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@app/auth": "workspace:*",
+    "@app/commish-core": "workspace:*",
     "@app/db": "workspace:*",
     "@app/draft": "workspace:*",
     "@app/faab": "workspace:*",

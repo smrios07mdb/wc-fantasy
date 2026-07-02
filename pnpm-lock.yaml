@@ -47,6 +47,9 @@ importers:
       '@app/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@app/commish-core':
+        specifier: workspace:*
+        version: link:../../packages/commish-core
       '@app/db':
         specifier: workspace:*
         version: link:../../packages/db

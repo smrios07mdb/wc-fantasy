@@ -174,13 +174,21 @@ function outcomeFields(scored: boolean, restatePending: boolean): Record<string,
   return scored ? {} : { warning: "no_match_participation" };
 }
 
-/** A commissioner or a rejection. Shared by both handlers, run BEFORE any body read/validation. */
-type GatePass = { ok: true; managerId: string; userId: string | null };
-function gate(outcome: SessionManagerOutcome): GatePass | { ok: false; result: HandlerResult } {
+/** A commissioner or a rejection. Shared by both handlers, run BEFORE any body read/validation.
+ *  Exported for the Thread-3a repair handlers (handleRosterRepair.ts) — one gate, one ordering. */
+export type GatePass = { ok: true; managerId: string; userId: string | null; email: string | null };
+export function gate(
+  outcome: SessionManagerOutcome,
+): GatePass | { ok: false; result: HandlerResult } {
   if (outcome.kind === "no-session") return { ok: false, result: err(401, "no_session") };
   if (outcome.kind !== "ok") return { ok: false, result: err(403, "forbidden") };
   if (!outcome.isCommissioner) return { ok: false, result: err(403, "forbidden") };
-  return { ok: true, managerId: outcome.manager.id, userId: outcome.manager.userId };
+  return {
+    ok: true,
+    managerId: outcome.manager.id,
+    userId: outcome.manager.userId,
+    email: outcome.manager.email,
+  };
 }
 
 /** The player's team must be one of the match's two teams — the "bad (match, player)" guard (mirrors the
