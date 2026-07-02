@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@app/commish-core": "workspace:*",
     "@app/db": "workspace:*",
     "@app/draft": "workspace:*",
     "@app/faab": "workspace:*",

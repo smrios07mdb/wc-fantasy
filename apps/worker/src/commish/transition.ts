@@ -28,7 +28,7 @@ import {
 } from "@app/recompute";
 import { effectiveBatchAt, type PeriodCadenceView } from "@app/faab";
 import { PLAYOFF_ROSTER, type LeagueStatus } from "@app/shared";
-import { isCommissionerActor } from "./core";
+import { isCommissionerActor } from "@app/commish-core";
 
 // ── the snapshot the store loads (the inputs the pure plan needs) ─────────────────────
 export interface TransitionManager {

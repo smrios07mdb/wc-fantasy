@@ -20,7 +20,7 @@
  */
 import { resolveRoundCut, type RoundCutResolution } from "@app/recompute";
 import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
-import { formatAudit, isCommissionerActor } from "./core";
+import { formatAudit, isCommissionerActor } from "@app/commish-core";
 import type { PlayoffAdvanceStore } from "./advanceStore";
 
 const FINAL_ROUND = KNOCKOUT_ROUNDS[KNOCKOUT_ROUNDS.length - 1];

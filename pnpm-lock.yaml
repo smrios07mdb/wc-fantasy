@@ -132,6 +132,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@app/commish-core':
+        specifier: workspace:*
+        version: link:../../packages/commish-core
       '@app/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -174,6 +177,22 @@ importers:
         version: 4.22.4
 
   packages/auth:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+
+  packages/commish-core:
+    dependencies:
+      '@app/faab':
+        specifier: workspace:*
+        version: link:../faab
+      '@app/lineup':
+        specifier: workspace:*
+        version: link:../lineup
+      '@app/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.10.5
