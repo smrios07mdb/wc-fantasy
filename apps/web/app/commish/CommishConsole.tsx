@@ -15,8 +15,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Position } from "@app/shared";
 import "./commish.css";
+import type { AdvancePlan } from "@app/commish-core";
 import {
   STAT_FIELD_META,
+  type CommishAdvancePreview,
+  type CommishAdvanceView,
   type CommishAuditView,
   type CommishConsoleView,
   type CommishFreezePeriodView,
@@ -33,8 +36,8 @@ import {
 const TABS = [
   {
     id: "field",
-    label: "Playoff field",
-    copy: "Set the playoff field size and per-round cut schedule, then lock the bracket. Locking is irreversible.",
+    label: "Playoff cuts",
+    copy: "Review the knockout cut ladder and apply each round's guillotine cut. Applying a cut is irreversible.",
   },
   {
     id: "stats",
@@ -111,6 +114,8 @@ export function CommishConsole({
                 <RepairPanel view={view.repair} managers={view.managers} />
               ) : tab === "ops" ? (
                 <OpsPanel view={view.ops} />
+              ) : tab === "field" ? (
+                <AdvancePanel view={view.advance} />
               ) : (
                 <TaskPlaceholder title={activeTab.label} copy={activeTab.copy} />
               )}
@@ -449,6 +454,430 @@ function UnfreezeConfirm({
           onClick={() => void submit()}
         >
           {pending ? "Unfreezing…" : "Unfreeze"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── playoff cuts (Thread 5): the guillotine ladder + per-round cut application ──────────────────
+//
+// The SSR dry-run (loadCommish → runRoundAdvance apply:false over the VERBATIM store) renders the
+// plan; every write goes through POST /api/commish/advance, which re-runs the SAME orchestrator
+// guards. `allowIncomplete` never rides this surface (pinned false server-side). A residual boundary
+// tie is NEVER auto-cut: the picker requires exactly `cutsRemaining` choices, then a breakTie DRY-RUN
+// names the full eliminated set before the type-to-confirm apply.
+
+const CUT_CONFIRM_WORD = "CUT";
+
+type AdvanceResolution = NonNullable<AdvancePlan["resolution"]>;
+
+/** The pre-confirm irreversibility copy — MUST name the eliminated managers + counts (thread spec). */
+function advanceConfirmCopy(plan: AdvancePlan, eliminatedNames: string[], champion: string | null) {
+  return (
+    `Applying the ${plan.round} cut permanently eliminates ${eliminatedNames.length} manager` +
+    `${eliminatedNames.length === 1 ? "" : "s"}: ${eliminatedNames.join(", ")}.` +
+    (champion ? ` ${champion} becomes the champion.` : "") +
+    " This cannot be undone."
+  );
+}
+
+function AdvancePanel({ view }: { view: CommishAdvanceView }) {
+  const router = useRouter();
+  const [msg, setMsg] = useState<FormMsg>(null);
+
+  if (!view.seeded) {
+    return (
+      <section className="adm-card">
+        <div className="adm-card-h">
+          <div className="adm-card-ht">
+            <h3 className="adm-card-title">Playoff cuts</h3>
+            <span className="adm-card-sub">Guillotine ladder — one cut per knockout round</span>
+          </div>
+        </div>
+        <div className="adm-card-b">
+          <p className="adm-hint">
+            The playoff field isn&apos;t seeded yet — the group → playoff transition
+            (commish:transition) locks the field and seeds each round&apos;s cut count first.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <div className="adm-adv">
+      <section className="adm-card">
+        <div className="adm-card-h">
+          <div className="adm-card-ht">
+            <h3 className="adm-card-title">Playoff cuts</h3>
+            <span className="adm-card-sub">Guillotine ladder — one cut per knockout round</span>
+          </div>
+          <span className="adm-badge adm-badge-sm">Irreversible · logged</span>
+        </div>
+        <div className="adm-card-b">
+          {view.championName && (
+            <p className="adm-adv-champion">
+              🏆 <b>{view.championName}</b> is the champion — the ladder is complete.
+            </p>
+          )}
+          <div className="adm-adv-rounds">
+            {view.rounds.map((r) => (
+              <div
+                key={r.periodId}
+                className={
+                  "adm-adv-round" + (r.alreadyCut ? " is-cut" : r.isNext ? " is-next" : "")
+                }
+              >
+                <span className="adm-adv-round-label">{r.label}</span>
+                <span className="adm-adv-round-bar mono">
+                  {r.enters}{" "}
+                  <span className="adm-adv-round-cutn">
+                    −{r.alreadyCut ? r.enters - r.survives : (r.cutCount ?? "?")} cut
+                  </span>{" "}
+                  → {r.survives}{" "}
+                  {r.label === "Final" ? (r.survives === 1 ? "champion" : "survive") : "survive"}
+                </span>
+                {r.alreadyCut ? (
+                  <span className="adm-adv-chip is-done">cut ✓</span>
+                ) : (
+                  <>
+                    {r.isNext && <span className="adm-adv-chip is-next">next up</span>}
+                    <span className={r.frozen ? "adm-adv-chip is-frozen" : "adm-adv-chip"}>
+                      {r.frozen ? "frozen ✓" : "not frozen"}
+                    </span>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="adm-hint">
+            {view.aliveCount} of {view.fieldSize} managers alive. Cut counts were seeded at the
+            group → playoff transition; a round can be cut once its results are frozen.
+          </p>
+        </div>
+      </section>
+
+      {view.nextRoundLabel && view.preview && (
+        <AdvanceCutCard
+          roundLabel={view.nextRoundLabel}
+          preview={view.preview}
+          onResult={(m) => {
+            setMsg(m);
+            if (m.ok) router.refresh();
+          }}
+        />
+      )}
+      {msg && <span className={msg.ok ? "adm-msg is-ok" : "adm-msg is-err"}>{msg.text}</span>}
+    </div>
+  );
+}
+
+/** The next round's cut plan: the sorted alive field with the cut zone marked, the refusal banner,
+ *  the tie picker (exactly `cutsRemaining` selections), and the type-to-confirm apply. */
+function AdvanceCutCard({
+  roundLabel,
+  preview,
+  onResult,
+}: {
+  roundLabel: string;
+  preview: CommishAdvancePreview;
+  onResult: (m: NonNullable<FormMsg>) => void;
+}) {
+  const [plan, setPlan] = useState<AdvancePlan | null>(preview.plan);
+  const [blocked, setBlocked] = useState<string | null>(
+    preview.status === "planned" ? null : preview.reason,
+  );
+  const [chosenTie, setChosenTie] = useState<string[]>([]);
+  const [pending, setPending] = useState(false);
+
+  const resolution: AdvanceResolution | null = plan?.resolution ?? null;
+  const nameOf = new Map((plan?.field ?? []).map((f) => [f.managerId, f.name] as const));
+  const label = (id: string): string => nameOf.get(id) ?? id;
+
+  async function post(body: Record<string, unknown>): Promise<{
+    status: number;
+    body: {
+      status?: string;
+      reason?: string;
+      error?: string;
+      plan?: AdvancePlan;
+      auditId?: string;
+    };
+  }> {
+    const res = await fetch("/api/commish/advance", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const out = (await res.json().catch(() => ({}))) as {
+      status?: string;
+      reason?: string;
+      error?: string;
+      plan?: AdvancePlan;
+      auditId?: string;
+    };
+    return { status: res.status, body: out };
+  }
+
+  /** Tie chosen → re-DRY-RUN with breakTie so the SERVER names the full eliminated set. */
+  async function previewTieCut() {
+    setPending(true);
+    setBlocked(null);
+    try {
+      const { status, body } = await post({ roundLabel, apply: false, breakTie: chosenTie });
+      if (status === 200 && body.plan) {
+        setPlan(body.plan);
+      } else {
+        setBlocked(body.reason ?? body.error ?? `Request failed (${status}).`);
+      }
+    } catch {
+      setBlocked("Network error.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <section className="adm-card">
+      <div className="adm-card-h">
+        <div className="adm-card-ht">
+          <h3 className="adm-card-title">Next cut: {roundLabel}</h3>
+          <span className="adm-card-sub">
+            {plan ? `Cut ${plan.cutCount ?? "?"} of ${plan.field.length} alive` : "Cut plan"} ·
+            lowest round score is eliminated
+          </span>
+        </div>
+        {plan && (
+          <span className={plan.frozen ? "adm-adv-chip is-frozen" : "adm-adv-chip"}>
+            {plan.frozen ? "frozen ✓" : "not frozen"}
+          </span>
+        )}
+      </div>
+      <div className="adm-card-b">
+        {blocked && (
+          <div className="adm-adv-blocked" role="alert">
+            <b>Blocked:</b> {blocked}
+          </div>
+        )}
+
+        {plan && <AdvanceFieldTable plan={plan} resolution={resolution} chosenTie={chosenTie} />}
+
+        {resolution?.kind === "needsCommissioner" && (
+          <div className="adm-adv-tie">
+            <p className="adm-adv-tie-copy">
+              Boundary tie — select exactly <b>{resolution.cutsRemaining}</b> of the tied managers
+              to cut, then preview.
+            </p>
+            <div className="adm-adv-tie-chips">
+              {resolution.tied.map((id) => {
+                const on = chosenTie.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={on ? "adm-adv-tiechip is-on" : "adm-adv-tiechip"}
+                    aria-pressed={on}
+                    onClick={() =>
+                      setChosenTie((c) =>
+                        on
+                          ? c.filter((x) => x !== id)
+                          : c.length < resolution.cutsRemaining
+                            ? [...c, id]
+                            : c,
+                      )
+                    }
+                  >
+                    {label(id)}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="adm-form-actions">
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={chosenTie.length !== resolution.cutsRemaining || pending}
+                onClick={() => void previewTieCut()}
+              >
+                {pending ? "Previewing…" : "Preview this cut"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {resolution?.kind === "determined" && plan && (
+          <AdvanceApplyConfirm
+            plan={plan}
+            eliminated={resolution.eliminated}
+            champion={resolution.champion}
+            breakTie={chosenTie.length > 0 ? chosenTie : null}
+            label={label}
+            post={post}
+            onBlocked={setBlocked}
+            onResult={onResult}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** The alive field, highest score first, with the cut zone (or the tied set) marked. */
+function AdvanceFieldTable({
+  plan,
+  resolution,
+  chosenTie,
+}: {
+  plan: AdvancePlan;
+  resolution: AdvanceResolution | null;
+  chosenTie: string[];
+}) {
+  const cutSet = new Set(resolution?.kind === "determined" ? resolution.eliminated : []);
+  const tiedSet = new Set(resolution?.kind !== "determined" ? (resolution?.tied ?? []) : []);
+  const rows = [...plan.field].reverse(); // field arrives ascending; render leaderboard-style
+  const firstCutIdx = rows.findIndex((r) => cutSet.has(r.managerId));
+  return (
+    <div className="adm-adv-field">
+      <div className="adm-adv-fieldhead">
+        <span>Manager</span>
+        <span className="mono">{plan.round} pts</span>
+        <span className="mono">Total</span>
+        <span />
+      </div>
+      {rows.map((f, i) => {
+        const cls = cutSet.has(f.managerId)
+          ? "adm-adv-row is-cut"
+          : tiedSet.has(f.managerId)
+            ? "adm-adv-row is-tied"
+            : "adm-adv-row";
+        return (
+          <div key={f.managerId}>
+            {i === firstCutIdx && firstCutIdx > 0 && (
+              <div className="adm-adv-cutline" aria-hidden="true">
+                <span>cut line</span>
+              </div>
+            )}
+            <div className={cls}>
+              <span className="adm-adv-row-name">{f.name}</span>
+              <span className="mono">{f.roundPoints}</span>
+              <span className="mono adm-adv-row-total">{f.cumulativeTotal}</span>
+              <span>
+                {cutSet.has(f.managerId) && <span className="adm-adv-chip is-elim">CUT</span>}
+                {tiedSet.has(f.managerId) && (
+                  <span
+                    className={
+                      chosenTie.includes(f.managerId)
+                        ? "adm-adv-chip is-elim"
+                        : "adm-adv-chip is-tie"
+                    }
+                  >
+                    {chosenTie.includes(f.managerId) ? "CUT (your pick)" : "TIED"}
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Type-to-confirm apply (the design's confirmWord pattern): names the eliminated + counts first. */
+function AdvanceApplyConfirm({
+  plan,
+  eliminated,
+  champion,
+  breakTie,
+  label,
+  post,
+  onBlocked,
+  onResult,
+}: {
+  plan: AdvancePlan;
+  eliminated: string[];
+  champion: string | null;
+  breakTie: string[] | null;
+  label: (id: string) => string;
+  post: (body: Record<string, unknown>) => Promise<{
+    status: number;
+    body: { status?: string; reason?: string; error?: string; auditId?: string };
+  }>;
+  onBlocked: (reason: string) => void;
+  onResult: (m: NonNullable<FormMsg>) => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const armed = typed.trim() === CUT_CONFIRM_WORD && reason.trim() !== "";
+  const eliminatedNames = eliminated.map(label);
+  const championName = champion ? label(champion) : null;
+
+  async function submit() {
+    setPending(true);
+    try {
+      const { status, body } = await post({
+        roundLabel: plan.round,
+        reason: reason.trim(),
+        apply: true,
+        breakTie,
+      });
+      if (status === 200 && body.status === "applied") {
+        onResult({
+          ok: true,
+          text:
+            `${plan.round} cut applied — ${eliminatedNames.length} eliminated` +
+            (championName ? `, ${championName} crowned champion.` : "."),
+        });
+      } else {
+        onBlocked(body.reason ?? body.error ?? `Request failed (${status}).`);
+      }
+    } catch {
+      onBlocked("Network error.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="adm-freeze-confirm">
+      <p className="adm-freeze-confirm-copy">
+        {advanceConfirmCopy(plan, eliminatedNames, championName)}
+      </p>
+      <div className="adm-field">
+        <label className="t-label" htmlFor="adv-word">
+          Type <b>{CUT_CONFIRM_WORD}</b> to confirm
+        </label>
+        <input
+          id="adv-word"
+          className="adm-input"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder={CUT_CONFIRM_WORD}
+          autoComplete="off"
+        />
+      </div>
+      <div className="adm-field">
+        <label className="t-label" htmlFor="adv-reason">
+          Reason (required, logged)
+        </label>
+        <input
+          id="adv-reason"
+          className="adm-input"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={`e.g. ${plan.round} results frozen — applying the scheduled cut`}
+        />
+      </div>
+      <div className="adm-form-actions">
+        <button
+          type="button"
+          className="btn btn-sm btn-danger"
+          disabled={!armed || pending}
+          onClick={() => void submit()}
+        >
+          {pending ? "Applying…" : `Apply ${plan.round} cut`}
         </button>
       </div>
     </div>
@@ -1646,6 +2075,7 @@ const ACTION_META: Record<string, { label: string; tone: "info" | "warn" | "dang
   lineup_repair: { label: "Lineup repair", tone: "info" },
   period_freeze: { label: "Period freeze", tone: "warn" },
   period_unfreeze: { label: "Period unfrozen", tone: "info" },
+  round_advance: { label: "Round cut applied", tone: "danger" },
   field_locked: { label: "Field locked", tone: "danger" },
   playoff_config: { label: "Playoff config", tone: "info" },
   lock_fallback_changed: { label: "Lock fallback", tone: "warn" },

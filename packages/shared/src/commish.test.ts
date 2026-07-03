@@ -37,6 +37,7 @@ describe("COMMISH_ACTION_TYPES", () => {
     const sample: CommishActionType[] = [
       "stat_correction",
       "period_freeze",
+      "round_advance",
       "field_locked",
       "action_reversed",
     ];

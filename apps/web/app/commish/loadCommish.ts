@@ -16,10 +16,14 @@ import {
   OVERRIDABLE_STAT_KEYS,
   type OverridableStatKey,
 } from "@app/recompute";
+import { runRoundAdvance } from "@app/commish-core";
+import { createPrismaPlayoffAdvanceStore } from "@app/commish-core/advanceStore";
 import { loadStandings } from "@/app/standings/loadStandings";
 import {
+  buildAdvanceLadder,
   toAuditView,
   toInspector,
+  type CommishAdvanceView,
   type CommishConsoleView,
   type CommishManagerOption,
   type CommishOpsView,
@@ -28,6 +32,7 @@ import {
   type CommishStatCorrectionsView,
   type CommishStatPlayerOption,
 } from "@/src/commish/commishView";
+import { ADVANCE_PREVIEW_REASON } from "@/src/commish/handleAdvance";
 import { periodFreezable, periodLive } from "@/src/commish/handleFreeze";
 
 /** How many recent audit rows the console renders (empty until later write slices populate the ledger). */
@@ -44,6 +49,17 @@ const EMPTY_STAT_CORRECTIONS: CommishStatCorrectionsView = {
 
 /** An empty Ops view (used while inspecting a manager via `?as=`, where the tabs are hidden). */
 const EMPTY_OPS: CommishOpsView = { periods: [] };
+
+/** An empty Advance view (used while inspecting a manager via `?as=`, where the tabs are hidden). */
+const EMPTY_ADVANCE: CommishAdvanceView = {
+  seeded: false,
+  fieldSize: 0,
+  aliveCount: 0,
+  championName: null,
+  rounds: [],
+  nextRoundLabel: null,
+  preview: null,
+};
 
 /** An empty Repair view (used while inspecting a manager via `?as=`, where the tabs are hidden). */
 const EMPTY_REPAIR: CommishRepairView = {
@@ -127,6 +143,7 @@ export async function loadCommish(
         repairSel?.periodId ?? null,
       );
   const ops = selectedManagerId ? EMPTY_OPS : await buildOps(leagueId);
+  const advance = selectedManagerId ? EMPTY_ADVANCE : await buildAdvance(leagueId, managers, now);
 
   return {
     leagueId,
@@ -144,6 +161,76 @@ export async function loadCommish(
     statCorrections,
     repair,
     ops,
+    advance,
+  };
+}
+
+/**
+ * Assemble the Playoff-cuts tab (Thread 5): the knockout cut ladder (pure `buildAdvanceLadder` over the
+ * knockout periods + playoff entries), plus an SSR DRY-RUN of the next uncut round through the relocated
+ * orchestrator over its VERBATIM Prisma store — `apply: false` mutates nothing, and reusing the real
+ * guards means the panel's refusal banner and the write route's refusal can never disagree. READ-ONLY;
+ * the write goes through POST /api/commish/advance.
+ */
+async function buildAdvance(
+  leagueId: string,
+  managers: CommishManagerOption[],
+  now: Date,
+): Promise<CommishAdvanceView> {
+  const [periodRows, entryRows] = await Promise.all([
+    prisma.period.findMany({
+      where: { leagueId, kind: "knockout_round" },
+      select: { id: true, label: true, cutCount: true, frozenAt: true },
+    }),
+    prisma.playoffEntry.findMany({
+      where: { leagueId },
+      select: { managerId: true, status: true, eliminatedRound: true },
+    }),
+  ]);
+
+  const ladder = buildAdvanceLadder(
+    periodRows.map((p) => ({
+      periodId: p.id,
+      label: p.label,
+      cutCount: p.cutCount,
+      frozen: p.frozenAt != null,
+    })),
+    entryRows,
+  );
+
+  const nameOf: Record<string, string> = {};
+  for (const m of managers) nameOf[m.managerId] = m.displayName;
+  const championId = entryRows.find((e) => e.status === "champion")?.managerId ?? null;
+  const championName = championId ? (nameOf[championId] ?? championId) : null;
+
+  const base: CommishAdvanceView = { ...ladder, championName, preview: null };
+  if (!ladder.seeded || ladder.nextRoundLabel === null) return base;
+
+  const res = await runRoundAdvance(
+    { now, store: createPrismaPlayoffAdvanceStore(prisma), log: () => {} },
+    {
+      // The page gate (resolveCommishAccess) already proved the viewer is the commissioner.
+      actor: { email: null, isCommissioner: true },
+      leagueId,
+      roundLabel: ladder.nextRoundLabel,
+      reason: ADVANCE_PREVIEW_REASON,
+      breakTie: null,
+      allowIncomplete: false,
+      apply: false,
+      nameOf,
+      timestamp: now.toISOString(),
+    },
+  );
+  // A dry-run can only be planned / refused / skipped (apply-only statuses are unreachable).
+  const status =
+    res.status === "planned" ? "planned" : res.status === "skipped" ? "skipped" : "refused";
+  return {
+    ...base,
+    preview: {
+      status,
+      reason: "reason" in res ? res.reason : null,
+      plan: res.plan ?? null,
+    },
   };
 }
 

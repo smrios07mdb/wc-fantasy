@@ -830,10 +830,194 @@
   color: var(--text-secondary);
 }
 
+/* ── playoff cuts (Thread 5): the guillotine ladder + round-cut panel ─────────────────────────── */
+.adm-adv {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.adm-adv-champion {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--win) 45%, var(--border));
+  border-radius: var(--r-md, 8px);
+  background: color-mix(in srgb, var(--win) 10%, var(--surface-2, var(--surface)));
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.adm-adv-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.adm-adv-round {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-2, var(--surface));
+}
+.adm-adv-round.is-cut {
+  opacity: 0.72;
+}
+.adm-adv-round.is-next {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.adm-adv-round-label {
+  min-width: 44px;
+  font-weight: 800;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.adm-adv-round-bar {
+  margin-right: auto;
+  font-size: var(--fs-xs, 12px);
+  color: var(--text-secondary);
+}
+.adm-adv-round-cutn {
+  color: var(--elim);
+  font-weight: 700;
+}
+.adm-adv-chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  background: var(--surface-2, var(--surface));
+}
+.adm-adv-chip.is-done {
+  color: var(--win);
+  border-color: color-mix(in srgb, var(--win) 45%, var(--border));
+}
+.adm-adv-chip.is-next {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+.adm-adv-chip.is-frozen {
+  color: var(--locked);
+  border-color: color-mix(in srgb, var(--locked) 55%, var(--border));
+}
+.adm-adv-chip.is-elim {
+  color: var(--elim);
+  border-color: color-mix(in srgb, var(--elim) 55%, var(--border));
+  background: color-mix(in srgb, var(--elim) 10%, var(--surface-2, var(--surface)));
+}
+.adm-adv-chip.is-tie {
+  color: var(--ytp);
+  border-color: color-mix(in srgb, var(--ytp) 55%, var(--border));
+}
+.adm-adv-blocked {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--ytp) 55%, var(--border));
+  border-radius: var(--r-md, 8px);
+  background: color-mix(in srgb, var(--ytp) 10%, var(--surface-2, var(--surface)));
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.adm-adv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.adm-adv-fieldhead,
+.adm-adv-row {
+  display: grid;
+  grid-template-columns: 1fr 72px 72px 110px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+.adm-adv-fieldhead {
+  font-size: var(--fs-xs, 12px);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  padding-bottom: 2px;
+}
+.adm-adv-row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-2, var(--surface));
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+.adm-adv-row.is-cut {
+  border-color: color-mix(in srgb, var(--elim) 45%, var(--border));
+  background: color-mix(in srgb, var(--elim) 8%, var(--surface-2, var(--surface)));
+}
+.adm-adv-row.is-tied {
+  border-color: color-mix(in srgb, var(--ytp) 45%, var(--border));
+}
+.adm-adv-row-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-adv-row-total {
+  color: var(--text-tertiary);
+}
+.adm-adv-cutline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--elim);
+  font-size: var(--fs-xs, 12px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.adm-adv-cutline::before,
+.adm-adv-cutline::after {
+  content: "";
+  flex: 1;
+  border-top: 2px dashed var(--elim);
+}
+.adm-adv-tie {
+  margin-bottom: 12px;
+}
+.adm-adv-tie-copy {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.adm-adv-tie-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.adm-adv-tiechip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.adm-adv-tiechip.is-on {
+  border-color: color-mix(in srgb, var(--elim) 60%, var(--border));
+  background: color-mix(in srgb, var(--elim) 12%, var(--surface-2, var(--surface)));
+}
+
 /* ── responsive ───────────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 760px) {
   .adm-body {
     grid-template-columns: 1fr;
+  }
+  .adm-adv-fieldhead,
+  .adm-adv-row {
+    grid-template-columns: 1fr 52px 52px 92px;
   }
   .adm-mgrview-tiles {
     grid-template-columns: repeat(2, 1fr);

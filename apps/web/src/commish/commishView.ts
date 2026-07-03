@@ -4,8 +4,9 @@
  * mapping is unit-testable without a database. Presentation (colors/glyphs) lives in the components; this
  * file is data only.
  */
-import type { Position } from "@app/shared";
+import { KNOCKOUT_ROUNDS, type KnockoutRound, type Position } from "@app/shared";
 import type { OverridableStatKey } from "@app/recompute";
+import type { AdvancePlan } from "@app/commish-core";
 
 /** One audit-log row, shaped for the AuditLog component. `whenLabel` is computed SERVER-side from a threaded
  *  `now` so the server and client render the identical relative string (no hydration mismatch). */
@@ -206,6 +207,100 @@ export interface CommishOpsView {
   periods: CommishFreezePeriodView[];
 }
 
+/** One knockout round on the Thread-5 cut ladder. `enters`/`survives` use the ACTUAL eliminated count
+ *  for an already-cut round and the seeded `cut_count` projection for an uncut one, so the ladder stays
+ *  honest if a tie adjudication ever cut a different count than planned. */
+export interface CommishAdvanceRoundView {
+  periodId: string;
+  label: string;
+  cutCount: number | null;
+  frozen: boolean;
+  alreadyCut: boolean;
+  enters: number;
+  survives: number;
+  /** The first uncut round in ladder order — the round the cut panel targets. */
+  isNext: boolean;
+}
+
+/** The Playoff-cuts tab data (Thread 5). `preview` is the SSR dry-run of the next round through the
+ *  relocated orchestrator — the SAME guards the write route enforces, so a refusal banner and the
+ *  server-side refusal can never disagree. */
+export interface CommishAdvanceView {
+  /** commish:transition has run: knockout periods + playoff entries exist. */
+  seeded: boolean;
+  fieldSize: number;
+  aliveCount: number;
+  championName: string | null;
+  rounds: CommishAdvanceRoundView[];
+  nextRoundLabel: string | null;
+  preview: CommishAdvancePreview | null;
+}
+
+/** A dry-run can only be planned / refused / skipped (applied and needs-commissioner are apply-only). */
+export interface CommishAdvancePreview {
+  status: "planned" | "refused" | "skipped";
+  reason: string | null;
+  plan: AdvancePlan | null;
+}
+
+/**
+ * Pure ladder shaper: knockout periods (+ seeded cut counts / freeze marks) × playoff entries →
+ * the cut ladder. Rounds order by the canonical KNOCKOUT_ROUNDS index; a round is `alreadyCut` when
+ * ≥1 entry is stamped with its label (the same migration-free signal the orchestrator's store reads).
+ */
+export function buildAdvanceLadder(
+  periods: { periodId: string; label: string; cutCount: number | null; frozen: boolean }[],
+  entries: { status: string; eliminatedRound: string | null }[],
+): {
+  seeded: boolean;
+  fieldSize: number;
+  aliveCount: number;
+  rounds: CommishAdvanceRoundView[];
+  nextRoundLabel: string | null;
+} {
+  const ordered = [...periods].sort(
+    (a, b) =>
+      KNOCKOUT_ROUNDS.indexOf(a.label as KnockoutRound) -
+      KNOCKOUT_ROUNDS.indexOf(b.label as KnockoutRound),
+  );
+  const cutByRound = new Map<string, number>();
+  for (const e of entries) {
+    if (e.eliminatedRound !== null) {
+      cutByRound.set(e.eliminatedRound, (cutByRound.get(e.eliminatedRound) ?? 0) + 1);
+    }
+  }
+  const fieldSize = entries.length;
+  const aliveCount = entries.filter((e) => e.status === "alive").length;
+  let enters = fieldSize;
+  let nextRoundLabel: string | null = null;
+  const rounds: CommishAdvanceRoundView[] = ordered.map((p) => {
+    const actualCut = cutByRound.get(p.label) ?? 0;
+    const alreadyCut = actualCut > 0;
+    const cut = alreadyCut ? actualCut : (p.cutCount ?? 0);
+    const isNext = !alreadyCut && nextRoundLabel === null;
+    if (isNext) nextRoundLabel = p.label;
+    const row: CommishAdvanceRoundView = {
+      periodId: p.periodId,
+      label: p.label,
+      cutCount: p.cutCount,
+      frozen: p.frozen,
+      alreadyCut,
+      enters,
+      survives: Math.max(0, enters - cut),
+      isNext,
+    };
+    enters = row.survives;
+    return row;
+  });
+  return {
+    seeded: ordered.length > 0 && fieldSize > 0,
+    fieldSize,
+    aliveCount,
+    rounds,
+    nextRoundLabel,
+  };
+}
+
 export interface CommishConsoleView {
   leagueId: string;
   leagueName: string;
@@ -222,6 +317,8 @@ export interface CommishConsoleView {
   repair: CommishRepairView;
   /** Thread 4 Game-operations tab data (empty while inspecting a manager via `?as=`). */
   ops: CommishOpsView;
+  /** Thread 5 Playoff-cuts tab data (empty while inspecting a manager via `?as=`). */
+  advance: CommishAdvanceView;
 }
 
 // ── pure shapers ──────────────────────────────────────────────────────────────────────────────────

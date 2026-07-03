@@ -46,6 +46,7 @@ export const COMMISH_ACTION_TYPES = [
   "lineup_repair",
   "period_freeze",
   "period_unfreeze",
+  "round_advance",
   "field_locked",
   "playoff_config",
   "lock_fallback_changed",
