@@ -33,6 +33,7 @@ import {
   type CommishStatPlayerOption,
 } from "@/src/commish/commishView";
 import { ADVANCE_PREVIEW_REASON } from "@/src/commish/handleAdvance";
+import { mapAdvanceRefusal } from "@/src/commish/advanceRefusalCopy";
 import { periodFreezable, periodLive } from "@/src/commish/handleFreeze";
 
 /** How many recent audit rows the console renders (empty until later write slices populate the ledger). */
@@ -228,7 +229,7 @@ async function buildAdvance(
     ...base,
     preview: {
       status,
-      reason: "reason" in res ? res.reason : null,
+      reason: "reason" in res ? mapAdvanceRefusal(res.reason) : null,
       plan: res.plan ?? null,
     },
   };

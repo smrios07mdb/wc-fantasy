@@ -8,11 +8,15 @@ import type { ReactNode } from "react";
 import "./ds.css";
 import "./draft.css";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
-export default function DraftLayout({ children }: { children: ReactNode }) {
+export default async function DraftLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div className="dr-app" data-theme="dark" data-accent="cobalt" data-density="compact">
-      <AppShell active="draft">{children}</AppShell>
+      <AppShell active="draft" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

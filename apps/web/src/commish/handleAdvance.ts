@@ -32,6 +32,7 @@ import { runRoundAdvance, type AdvanceResult } from "@app/commish-core";
 import type { ApplyRoundCut, PlayoffAdvanceStore } from "@app/commish-core/advanceStore";
 import type { RecordCommishAuditInput } from "./recordCommishAudit";
 import { gate, type HandlerResult } from "./handleStatCorrection";
+import { mapAdvanceRefusal } from "./advanceRefusalCopy";
 
 // ── ports ──────────────────────────────────────────────────────────────────────────────────────────
 
@@ -136,14 +137,24 @@ function toHttp(result: AdvanceResult, auditId: string | null): HandlerResult {
     case "applied":
       return { status: 200, body: { status: "applied", plan: result.plan, auditId } };
     case "skipped":
-      return { status: 409, body: { status: "skipped", reason: result.reason, plan: result.plan } };
+      return {
+        status: 409,
+        body: { status: "skipped", reason: mapAdvanceRefusal(result.reason), plan: result.plan },
+      };
     case "needs-commissioner":
       return {
         status: 409,
-        body: { status: "needs-commissioner", reason: result.reason, plan: result.plan },
+        body: {
+          status: "needs-commissioner",
+          reason: mapAdvanceRefusal(result.reason),
+          plan: result.plan,
+        },
       };
     case "refused":
-      return { status: 409, body: { status: "refused", reason: result.reason, plan: result.plan } };
+      return {
+        status: 409,
+        body: { status: "refused", reason: mapAdvanceRefusal(result.reason), plan: result.plan },
+      };
   }
 }
 

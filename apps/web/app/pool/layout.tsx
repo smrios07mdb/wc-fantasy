@@ -11,15 +11,19 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
 // User-facing page title (Prompt 45 copy rename): the browser tab reads "XI · Quiniela" (root template).
 // Display copy only — the route path, NavId key, and identifiers are unchanged.
 export const metadata: Metadata = { title: "Quiniela" };
 
-export default function PoolLayout({ children }: { children: ReactNode }) {
+export default async function PoolLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="pool">{children}</AppShell>
+      <AppShell active="pool" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

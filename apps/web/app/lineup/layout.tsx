@@ -8,11 +8,15 @@ import type { ReactNode } from "react";
 import "./ds.css";
 import "./lineup.css";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
-export default function LineupLayout({ children }: { children: ReactNode }) {
+export default async function LineupLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div className="sl-app" data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="lineup">{children}</AppShell>
+      <AppShell active="lineup" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

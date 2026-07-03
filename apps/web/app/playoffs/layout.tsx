@@ -10,13 +10,17 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
 export const metadata: Metadata = { title: "Guillotine" };
 
-export default function PlayoffsLayout({ children }: { children: ReactNode }) {
+export default async function PlayoffsLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="playoffs">{children}</AppShell>
+      <AppShell active="playoffs" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

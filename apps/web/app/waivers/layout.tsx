@@ -5,11 +5,15 @@
  */
 import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
-export default function WaiversLayout({ children }: { children: ReactNode }) {
+export default async function WaiversLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="waivers">{children}</AppShell>
+      <AppShell active="waivers" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

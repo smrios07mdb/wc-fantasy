@@ -12,11 +12,15 @@ import "./vsfield.css";
 // Shared box-score modal styles — the drill-in opens <PlayerScoreSheet> (info-only) on this route.
 import "@/components/PlayerScoreSheet.css";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
-export default function VsFieldLayout({ children }: { children: ReactNode }) {
+export default async function VsFieldLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="vsfield">{children}</AppShell>
+      <AppShell active="vsfield" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

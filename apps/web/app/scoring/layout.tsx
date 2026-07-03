@@ -5,11 +5,15 @@
  */
 import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
-export default function ScoringLayout({ children }: { children: ReactNode }) {
+export default async function ScoringLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="scoring">{children}</AppShell>
+      <AppShell active="scoring" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

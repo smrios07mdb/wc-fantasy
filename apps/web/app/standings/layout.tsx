@@ -11,13 +11,17 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
 export const metadata: Metadata = { title: "Standings" };
 
-export default function StandingsLayout({ children }: { children: ReactNode }) {
+export default async function StandingsLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     <div data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="standings">{children}</AppShell>
+      <AppShell active="standings" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

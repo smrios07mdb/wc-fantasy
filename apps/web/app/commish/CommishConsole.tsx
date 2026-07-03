@@ -5,10 +5,11 @@
  * privileges" treatment rides `--adm-edge` (commish.css); cobalt (`--accent`) is reserved for the tab
  * selection + the view-as action, warning is `--ytp` orange, never gold.
  *
- * SCOPE (Thread 1): read-only. The four task tabs render as INERT placeholders ("coming in a later thread").
- * The two live read-only pieces are the Audit-log panel (real rows, empty until later slices populate) and
- * the View-as inspector (a read-only manager inspector, NOT session impersonation — the switcher navigates
- * to `?as=<id>` and the server loads that manager's public-ish state). No write action is wired.
+ * Four live tabs (Playoff cuts / Stat corrections / Roster & lineup / Game operations) are wired panels;
+ * the Audit-log rail and the View-as inspector (a read-only manager inspector, NOT session impersonation
+ * — the switcher navigates to `?as=<id>` and the server loads that manager's public-ish state) round out
+ * the console. The Draft-setup tab (a control that could only ever run once, pre-tournament) was retired
+ * in Thread 6 — the historical draft room at `/draft` is unaffected.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -54,11 +55,6 @@ const TABS = [
     label: "Game operations",
     copy: "Scoring source, lock-on-play fallback, and per-period freeze / unfreeze controls.",
   },
-  {
-    id: "draft",
-    label: "Draft setup",
-    copy: "Draft date, order, pick clock, and autopick configuration.",
-  },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -72,7 +68,6 @@ export function CommishConsole({
   // The initial tab is URL-derived (Stat-corrections deep-links via ?tab=stats&match=…); default to the field tab.
   const [tab, setTab] = useState<TabId>(TABS.find((t) => t.id === initialTab)?.id ?? "field");
   const inspector = view.inspector;
-  const activeTab = TABS.find((t) => t.id === tab)!;
 
   return (
     <div className="adm-console">
@@ -114,10 +109,8 @@ export function CommishConsole({
                 <RepairPanel view={view.repair} managers={view.managers} />
               ) : tab === "ops" ? (
                 <OpsPanel view={view.ops} />
-              ) : tab === "field" ? (
-                <AdvancePanel view={view.advance} />
               ) : (
-                <TaskPlaceholder title={activeTab.label} copy={activeTab.copy} />
+                <AdvancePanel view={view.advance} />
               )}
             </div>
             <div className="adm-rail">
@@ -128,28 +121,6 @@ export function CommishConsole({
         </>
       )}
     </div>
-  );
-}
-
-// ── inert task placeholder ──────────────────────────────────────────────────────────────────────
-function TaskPlaceholder({ title, copy }: { title: string; copy: string }) {
-  return (
-    <section className="adm-card">
-      <div className="adm-card-h">
-        <div className="adm-card-ht">
-          <h3 className="adm-card-title">{title}</h3>
-          <span className="adm-card-sub">Commissioner task</span>
-        </div>
-        <span className="adm-badge adm-badge-sm">Read-only</span>
-      </div>
-      <div className="adm-card-b">
-        <div className="adm-placeholder">
-          <span className="adm-placeholder-title">{title}</span>
-          <span className="adm-placeholder-copy">{copy}</span>
-          <span className="adm-placeholder-tag">Coming in a later thread</span>
-        </div>
-      </div>
-    </section>
   );
 }
 

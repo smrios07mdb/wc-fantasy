@@ -323,40 +323,6 @@
   font-size: var(--fs-sm);
 }
 
-/* ── inert task-panel placeholder (the four write tabs — later threads) ────────────────────────── */
-.adm-placeholder {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  text-align: center;
-  padding: 34px 22px;
-  color: var(--text-tertiary);
-}
-.adm-placeholder-title {
-  font-size: var(--fs-body);
-  font-weight: 800;
-  color: var(--text-secondary);
-  font-family: var(--font-display);
-}
-.adm-placeholder-copy {
-  font-size: var(--fs-sm);
-  max-width: 44ch;
-  line-height: 1.5;
-}
-.adm-placeholder-tag {
-  margin-top: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--adm-edge);
-  border: 1px solid color-mix(in srgb, var(--adm-edge) 30%, transparent);
-  background: color-mix(in srgb, var(--adm-edge) 10%, transparent);
-  padding: 3px 8px;
-  border-radius: var(--r-pill);
-}
-
 /* ── view-as switcher ─────────────────────────────────────────────────────────────────────────── */
 .adm-viewas {
   position: relative;

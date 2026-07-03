@@ -12,10 +12,12 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "../../shell/AppShell";
 import "@/components/PlayerScoreSheet.css";
+import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
 export const metadata: Metadata = { title: "Match" };
 
-export default function GameDetailLayout({ children }: { children: ReactNode }) {
+export default async function GameDetailLayout({ children }: { children: ReactNode }) {
+  const isCommissioner = await getViewerIsCommissioner();
   return (
     // `gd-host` is the ONE structural hook for the mobile-lineups pitch height chain: it lets
     // games.css re-establish a DEFINITE height from the viewport down (`:has(.gd-host)` → html/body/
@@ -24,7 +26,9 @@ export default function GameDetailLayout({ children }: { children: ReactNode }) 
     // resolves against a zero-height container and the pitch renders empty on a real phone. Scoped to
     // this route only — see games.css §"MOBILE PITCH = FORMATION GRID". No other route is affected.
     <div className="gd-host" data-theme="dark" data-accent="cobalt" data-density="comfortable">
-      <AppShell active="pool">{children}</AppShell>
+      <AppShell active="pool" isCommissioner={isCommissioner}>
+        {children}
+      </AppShell>
     </div>
   );
 }

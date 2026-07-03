@@ -110,6 +110,39 @@ describe("AppShell mounting — wraps the authenticated screens ONLY", () => {
   });
 });
 
+describe("Commissioner nav entry — threaded on every feature layout (Thread 6)", () => {
+  // Item 2: the cheaper of the two recorded options — memoize getSessionManager() (React cache(), one
+  // Supabase+Prisma round-trip per request) and source isCommissioner from it in the shared shell,
+  // rather than re-deriving it ad hoc per layout. /commish/layout.tsx hardcodes `true` (the page gate
+  // already guarantees commissioner identity there) and is intentionally excluded.
+  const wiredLayouts: Record<string, string> = {
+    "/draft": read("draft/layout.tsx"),
+    "/lineup": read("lineup/layout.tsx"),
+    "/vsfield": read("vsfield/layout.tsx"),
+    "/waivers": read("waivers/layout.tsx"),
+    "/pool": read("pool/layout.tsx"),
+    "/standings": read("standings/layout.tsx"),
+    "/playoffs": read("playoffs/layout.tsx"),
+    "/scoring": read("scoring/layout.tsx"),
+    "/settings": read("settings/layout.tsx"),
+    "/games/[matchId]": read("games/[matchId]/layout.tsx"),
+  };
+  for (const [route, src] of Object.entries(wiredLayouts)) {
+    it(`${route} layout resolves getViewerIsCommissioner and passes it into AppShell`, () => {
+      expect(src, "must import the memoized helper").toMatch(
+        /import\s*\{\s*getViewerIsCommissioner\s*\}\s*from\s*"@\/lib\/auth\/manager"/,
+      );
+      expect(src, "must be an async layout").toMatch(/export default async function/);
+      expect(src, "must resolve it before render").toContain(
+        "const isCommissioner = await getViewerIsCommissioner();",
+      );
+      expect(src, "must thread the resolved value into AppShell").toMatch(
+        /<AppShell[^>]*isCommissioner=\{isCommissioner\}/,
+      );
+    });
+  }
+});
+
 describe("global surface — collision A resolved (Prompt 20, mandatory)", () => {
   const layout = read("layout.tsx");
 
