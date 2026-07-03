@@ -3,7 +3,7 @@ import {
   MemoryPlayoffAdvanceStore,
   type MemoryAdvanceSeed,
   type ApplyRoundCut,
-} from "./advanceStore";
+} from "@app/commish-core/advanceStore";
 
 /**
  * The in-memory {@link MemoryPlayoffAdvanceStore} is the double the orchestrator tests run against, so we

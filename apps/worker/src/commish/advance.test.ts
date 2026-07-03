@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { runRoundAdvance, type AdvanceDeps, type AdvanceInput } from "./advance";
-import { MemoryPlayoffAdvanceStore, type MemoryAdvanceSeed } from "./advanceStore";
+import { runRoundAdvance, type AdvanceDeps, type AdvanceInput } from "@app/commish-core";
+import { MemoryPlayoffAdvanceStore, type MemoryAdvanceSeed } from "@app/commish-core/advanceStore";
 
 /**
  * The `commish:advance` orchestrator (Theme C). It runs against the in-memory {@link

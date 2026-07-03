@@ -38,11 +38,12 @@ import {
   runTrimReport,
   type TrimResult,
   type TrimReportResult,
+  runRoundAdvance,
+  type AdvanceResult,
 } from "@app/commish-core";
+import { createPrismaPlayoffAdvanceStore } from "@app/commish-core/advanceStore";
 import { runPlayoffTransition, type TransitionResult } from "./transition";
 import { createPrismaPlayoffTransitionStore } from "./transitionStore";
-import { runRoundAdvance, type AdvanceResult } from "./advance";
-import { createPrismaPlayoffAdvanceStore } from "./advanceStore";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolvePath(here, "../../../..");

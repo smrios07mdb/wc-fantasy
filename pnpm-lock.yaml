@@ -187,12 +187,18 @@ importers:
 
   packages/commish-core:
     dependencies:
+      '@app/db':
+        specifier: workspace:*
+        version: link:../db
       '@app/faab':
         specifier: workspace:*
         version: link:../faab
       '@app/lineup':
         specifier: workspace:*
         version: link:../lineup
+      '@app/recompute':
+        specifier: workspace:*
+        version: link:../recompute
       '@app/shared':
         specifier: workspace:*
         version: link:../shared

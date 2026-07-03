@@ -9,3 +9,7 @@ export * from "./core";
 export * from "./roster";
 export * from "./lineup";
 export * from "./trim";
+// Thread 5: the playoff round-cut orchestrator, relocated verbatim from apps/worker/src/commish/.
+// Its Prisma store adapter + memory double live behind the `@app/commish-core/advanceStore` subpath
+// (NOT re-exported here) so this root export stays free of the `@app/db` runtime import graph.
+export * from "./advance";

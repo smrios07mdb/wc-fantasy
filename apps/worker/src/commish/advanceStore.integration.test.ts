@@ -21,7 +21,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@app/db";
-import { createPrismaPlayoffAdvanceStore } from "./advanceStore";
+import { createPrismaPlayoffAdvanceStore } from "@app/commish-core/advanceStore";
 
 const TEST_URL = process.env.PLAYOFF_PG_TEST_URL;
 

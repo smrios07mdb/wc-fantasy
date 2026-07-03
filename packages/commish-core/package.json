@@ -9,14 +9,20 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./advanceStore": {
+      "types": "./src/advanceStore.ts",
+      "default": "./src/advanceStore.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@app/db": "workspace:*",
     "@app/faab": "workspace:*",
     "@app/lineup": "workspace:*",
+    "@app/recompute": "workspace:*",
     "@app/shared": "workspace:*"
   },
   "devDependencies": {
