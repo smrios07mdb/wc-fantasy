@@ -1599,3 +1599,46 @@ Suggested first PR wave (max value, min risk): **T15-1 + T15-3 + T15-5** are all
 - **Known pre-existing bug re-confirmed:** the `.po-col .po-col-future` selector bleed (playoffs.css:1346) is real but desktop-ladder-only — invisible at phone widths (F-P3-K1). The 1-char child-combinator fix belongs to T15-8 or any contained pass.
 - **Methodology note:** cluster K (playoffs) failed twice under schema-forced output in the workflow (structured-output retry cap) and was recovered via a plain-text auditor pass; its findings are fully integrated above. Two cross-surface defects (timezone triple-render, missing boundaries) were caught only by the critic's gap lanes — worth repeating that pattern in future audits.
 - **Deliberately unaudited:** API route handlers' logic (only their UI-facing shapes), the worker/cron lanes, desktop-only geometry (except where it is the only implementation, e.g. the vsfield Season table), and anything behind `packages/` engines — those have their own audit lanes (see `audit/AUDIT_2026-06_p0_integrity.md`, `audit/AUDIT_2026-06_p1_ingestion.md`).
+
+---
+
+## 6. Live-walkthrough reconciliation (2026-07-03)
+
+Reconciles the static audit above against the executed live walkthrough (`audit/T15_WALKTHROUGH_RESULTS.md` — two iPhone-Mirroring sessions plus a ~6 pm ET live-match pass, with on-device operator confirmation where noted). §1's tallies remain the static-pass snapshot; this section is the authoritative post-walkthrough delta.
+
+### 6a. Confirmed FAILs (8)
+
+| Step | Surface | Confirms | Live evidence |
+|---|---|---|---|
+| 6 | 404 | F-P1-ERR1 | `/zzz` → stock white Next.js 404: unbranded, no nav or in-app way back, not dark-scheme-aware |
+| 13 | /standings | F-P2-B3 | "PROVISIONAL CUT · … fixed at the group→playoff transition" still renders with R32 knockouts live |
+| 27 | /waivers | F-P1-I1 (**escalated**, see 6c) | instant-pickup composer's drop-picker + confirm control sit behind the fixed bottom nav; no amount of scrolling reveals them — the available acquisition flow is effectively unusable at ~390px |
+| 38 | /games | F-P2-E3 | in-play match (Argentina–Cape Verde) renders a bare "● Live" pill + score, no running minute or HT state anywhere |
+| 39 | /games | F-P1-E1 | drawn knockouts (NED 1–1 MAR, GER 1–1 PAR) render "1–1 · Full-time" with no AET / pens / who-advanced indicator |
+| 52 | /settings + /draft | F-P1-I2 | focusing a text input zooms the whole viewport and it STAYS zoomed after blur — and, on /draft, after reload; corroborated on two independent inputs |
+| 58 | /games vs /pool vs /lineup | F-P2-TZ1 (+ F-P1-TZ1 family) | same kickoff = "19:00" (UTC, no zone label) on /games vs "3:00 PM ET" on /pool; /lineup alone is correct ("EDT"); re-confirmed live ("22:00" = the 6 pm ET kickoff) |
+| 65 | /vsfield | F-P2-K3 | resume-from-background: "● LIVE" pill sat over a ~24-min-stale "Updated" stamp for ~20 s with no reconnecting/delayed cue, then silently self-healed |
+
+### 6b. New finding registered — F-P0-A1
+
+**F-P0-A1 · Bottom-nav taps unreliably registered (primary navigation) — P0, hardware-confirmed.** Walkthrough N1. Any authenticated route, Safari + PWA: taps on the bottom tabs frequently do not register at all (no navigation, no active-highlight move); the operator confirms on real hardware unprompted — bottom icons "highly unresponsive most of the time". Whole-app primary navigation intermittently dead is P0 by definition. Distinct from the tap-target-*size* findings (steps 19/34/64): this is responsiveness/hit-testing. Candidate causes to rule out at fix time: scrim/z-index tap-swallowing (cf. F-P1-I1), misaligned hit areas, blocked handlers. Fix lane: **T15-2** (shell stacking/hit-testing); **T15-CUT** rebuilds the knockout-phase tab set on the same bar and must not regress it.
+
+### 6c. Severity moves
+
+- **Step-27 composer occlusion escalated to P0-grade within F-P1-I1** (ID unchanged): the z-inversion is not cosmetic — it fully blocks the only available acquisition flow's action row behind the nav.
+- **P0 demotions — F-P0-B1, F-P0-E1, F-P0-F1 → 360-conditional:** none reproduced at native ~390px (standings PTS column fully visible, right-aligned; all five /games tabs fit with ~14px to spare; /vsfield Season "Power record" table fits cleanly). They remain plausible at a true 360px (SE/mini-class) viewport, which the mirror cannot render — fixes stay planned (T15-1) but lose first-wave urgency.
+
+### 6d. New-finding routing
+
+- **N2 + N6** (raw-email team-name fallback across /waivers, /vsfield, /pool, /playoffs ladder, draft board — PII, MEDIUM) + **N3** ("vs Team 288" raw internal ID in FA fixture copy) + **N4** ("balldontlie" provider string in user-facing score copy) → proposed mini-thread **T15-13 · Identity & copy truth** (display-name fallback chain, unresolved-opponent placeholder mapping, provider-string purge).
+- **N5** (draft "Your squad" over-cap position tile styled as satisfied) → folded into **T15-9g** (/draft per-screen pass).
+- **Step-64** (/playoffs Board/Ladder toggle tucks under the iOS status-bar tap zone when scrolled) → owned by **T15-CUT** — the unified knockout screen replaces that toggle's placement outright.
+
+### 6e. Still open — no data point captured
+
+- **F-P1-C2 (save-rejection surface):** never exercised — no lineup edit was staged on live production (SaveBar never summoned), so no verdict either way. Still needs-live-verify.
+- Micro-state-gated remainders: live lock-flip at a kickoff holding the viewer's player; step 63 eliminated-viewer band (needs a finalized cut); FA-window flip; a penalty-decided knockout; plus the operator on-device queue listed in the walkthrough file.
+
+### 6f. Revised fix-thread order (supersedes §4's suggested wave)
+
+**T15-CUT** (unified knockout re-skin — absorbs T15-4's IA decision + all of T15-8; **IN PROGRESS**, `feat/the-cut-reskin`) → **T15-2** (shell stacking — now also carries F-P0-A1 and the step-27 P0 escalation) → **T15-3** → **T15-1** (demoted, 360-conditional) → **T15-5** → **T15-7**. **T15-6 (time truth) is flagged for promotion** — step 58 is now a live-confirmed FAIL on the most-viewed surfaces. New **T15-13** (identity/copy truth) proposed above; **T15-9g** inherits N5.
