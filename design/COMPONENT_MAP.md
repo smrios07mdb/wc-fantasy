@@ -123,7 +123,7 @@ Build **one** of each. "Defined in" = the design reference file Code should port
 | 6 | Player Box Score | `Player Box Score.html` · `boxscore/` | selected player (`?p=`), lead/breakdown layout | ScorePill total contract, period vs season columns |
 | 7 | Standings | `Standings.html` · `standings/` | sim minute (md3 live → reorders), playoff field size, expanded row | StandingsTable/StandRow/RowDetail, FormStrip, Seed, Move, `cutContext` |
 | 8 | Free Agents | `Free Agents.html` · `fa/` | search/filter/sort, include-rostered, cutoff clock, bid preview | FaKit, CutoffTag, FaFixture, Acquire, FaBidPreview |
-| 9 | Waivers / FAAB | `Waivers.html` · `waivers/` | pending claims (add/drop/$/priority), batch results, void+refund, playoff reset | FaabBar, WaiverOrderRail, BidComposer, ClaimRow, ResultsBatch |
+| 9 | Waivers / FAAB | `Waivers.html` · `waivers/` | pending claims (add/drop/$/priority), batch results, void+refund, carry-forward budget (the prototype's "playoff reset" demo is STALE — FAAB never resets, per DECISIONS) | FaabBar, WaiverOrderRail, BidComposer, ClaimRow, ResultsBatch |
 | 10 | Guillotine Playoffs | `Guillotine Playoffs.html` · `playoffs/` | round nav, live cut line, field size, cut schedule, board↔ladder, reduced shape | GuillotineCutLine, SurvivorRow, RoundColumn, MyReducedPitch, ReinforceModule, ShapeChip |
 | 11 | Commissioner | `Commissioner.html` · `admin/` | tabbed tasks, field lock (type-to-confirm), stat corrections, ops overrides, audit, view-as | AdmCard/AdminRibbon, ConfirmModal, AuditLog, ViewAsSwitcher, Stepper/SegRow |
 | 12 | Join / Auth | `Join.html` · `auth/` | auth state machine, email validity, allowlist gate, invite mode | AuthFlow + views, RosterAvatars, InviteBanner, PrivateTag |

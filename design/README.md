@@ -30,8 +30,9 @@ must preserve, is making them **instantly legible**. When a visual flourish and 
 3. **Guillotine playoffs** — lowest scorer(s) eliminated each knockout round on a *reduced roster*;
    survivors persist and reinforce via FAAB.
 4. **FAAB blind-bid waivers** — $100 budget, **sealed** bids, rolling waiver order breaks ties,
-   **void + refund** if you bid on a player whose match already kicked off, $100 **resets** at the
-   playoff transition.
+   **void + refund** if you bid on a player whose match already kicked off. The $100 is **one-time
+   for the entire tournament — never reset at the playoff transition** (group-stage spend carries
+   forward; DECISIONS is authoritative — some older prototypes still demo a stale "reset").
 5. **Acquisition cutoff** — you can't pick up a player once *his* match kicks off.
 6. **Roster** = 15 (2 GK / 5 DEF / 5 MID / 3 FWD), unique ownership league-wide. **Lineup** = XI
    (1 GK + 10 outfield) within formation bounds, + 4 bench. **Playoff** reduced lineup = 7 + 2.

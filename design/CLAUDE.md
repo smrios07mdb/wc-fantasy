@@ -261,7 +261,8 @@ live: roster→box-score (`?p=`), dashboard nav→every screen, roster/dashboard
         sits on an already-started match). **Batch results** (`HISTORY`) reveal sealed winning amounts post-
         processing, "beat N bids", drops, won/lost/**void+refund** outcomes; mine accented. Results layout
         timeline↔table = Tweak. **Playoff FAAB reset** = a `⚔ Playoff reset` sim toggle → budgets return to a
-        fresh $100 + banner (group→playoff transition). Next-batch countdown labeled illustrative cadence.
+        fresh $100 + banner (group→playoff transition). **[STALE — superseded: FAAB is one-time $100, NEVER
+        reset (DECISIONS); this prototype toggle/banner was never ported.]** Next-batch countdown labeled illustrative cadence.
       • **Tweaks**: results layout (timeline/table), theme. Accent LOCKED cobalt, density LOCKED comfortable.
         Reusable: `FaabBar`, `WaiverOrderRail`, `ClaimRow`/`MClaim`, `BidComposer`, `ResultItem`/`ResultsBatch`,
         `faabState`/`claimStatus`/`claimableFAs`/`droppableSquad` — carry into commissioner overrides.
@@ -294,7 +295,8 @@ live: roster→box-score (`?p=`), dashboard nav→every screen, roster/dashboard
         (`evalSquadPlayer`) + flag kits (`JERSEY_BG`, no `background-size:cover`). Per-survivor `ShapeChip` ("7+2 ·
         1 GK · 6 out", with a node-shape mini) toggled by the **reduced-shape Tweak**.
       • **FAAB reinforcement**: `ReinforceModule` = "Reinforce your survivors" with `FAAB reset to $100` tag + meter +
-        **CTA → Waivers.html**, in the rail; mobile has a compact version.
+        **CTA → Waivers.html**, in the rail; mobile has a compact version. **[STALE tag — FAAB is one-time $100,
+        NEVER reset (DECISIONS); the shipped module reads carry-forward copy.]**
       • **Two layouts (Tweak)**: `board` (default — current-round leaderboard + guillotine + your-survival hero +
         reduced-lineup/reinforce rail + round-nav to inspect any round) ↔ `ladder` (rounds as columns L→R; R1 settled
         w/ eliminated struck, R2 live w/ cut line, R3+ projected). **Tweaks**: field 8↔10 (provisional, reflows the
