@@ -8,7 +8,8 @@
  *   - scope 1: rounds render as STACKED vertical sections, top-to-bottom R32 → R16 → QF → SF → Final.
  *   - scope 2: a resolved R32 match is pickable (HOME/AWAY buttons); a `Team {id}` placeholder match is
  *     TBD with NO pick buttons (and the raw placeholder name never reaches the DOM).
- *   - scope 3: NO group matchday / Completed / unscheduled sections render in playoff.
+ *   - scope 3: NO group matchday / unscheduled sections render in playoff — but the Completed archive
+ *     drawer DOES (it now spans group + knockout, so an archived R32 shows there, not in the R32 round).
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, within } from "@testing-library/react";
@@ -105,14 +106,26 @@ function playoffView(): PoolView {
         },
       ],
       unscheduled: [],
+      // The Completed archive now spans BOTH phases (group + knockout). The selector has already moved a
+      // long-finished group match AND an archived R32 knockout match here; the Picks tab shows this drawer
+      // in playoff. Names are distinct from the hidden MD3 matchday (Spain/Italy) and the live R32
+      // (Brazil/Japan) so the render placement is unambiguous.
       completed: [
         fx({
-          matchId: "c",
+          matchId: "cg",
           periodKind: "group_md",
           periodLabel: "MD1",
           status: "completed",
-          home: { name: "Spain", code: "ES" },
-          away: { name: "Italy", code: "IT" },
+          home: { name: "Chile", code: "CL" },
+          away: { name: "Uruguay", code: "UY" },
+        }),
+        fx({
+          matchId: "cr32",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          home: { name: "Ghana", code: "GH" },
+          away: { name: "Egypt", code: "EG" },
         }),
       ],
     },
@@ -169,13 +182,39 @@ describe("/pool knockout — TBD / non-pickable undecided matches (scope 2)", ()
   });
 });
 
-describe("/pool knockout — group phase hidden in playoff (scope 3)", () => {
-  it("renders NO group matchday / Completed / unscheduled sections even though that data exists in view.picks", () => {
+describe("/pool knockout — group hidden but Completed archive shown in playoff (scope 3)", () => {
+  it("hides the group matchday + unscheduled sections yet SHOWS the Completed archive drawer in playoff", () => {
     const { container } = render(<PoolClient view={playoffView()} />);
-    // group matchdays, the unscheduled section, and the Completed <details> ALL use the `.pl-md` class.
-    expect(container.querySelectorAll(".pl-md")).toHaveLength(0);
-    // the group data is KEPT in view.picks (for the leaderboard drill-in) but must not render on the Picks tab
+    // The Completed drawer (`.pl-md .pl-completed`) is now rendered in playoff, exactly as in group phase.
+    const completed = container.querySelector(".pl-completed");
+    expect(completed).not.toBeNull();
+    // The ONLY `.pl-md` left is that Completed <details> — the group matchday (MD3) + unscheduled lists
+    // (which also use `.pl-md`) stay hidden in playoff.
+    const mds = [...container.querySelectorAll(".pl-md")];
+    expect(mds).toHaveLength(1);
+    expect(mds[0]!.classList.contains("pl-completed")).toBe(true);
+    // The hidden MD3 matchday's teams (Spain/Italy) must not reach the DOM…
     expect(container.textContent).not.toMatch(/Spain|Italy/);
+    // …while the live bracket rounds still render.
     expect(container.querySelectorAll(".pl-round").length).toBeGreaterThan(0);
+  });
+
+  it("renders an archived R32 match inside the Completed drawer, NOT in the R32 round section", () => {
+    const { container } = render(<PoolClient view={playoffView()} />);
+    const completed = container.querySelector(".pl-completed") as HTMLElement;
+    // The archived R32 (Ghana/Egypt) appears in the Completed drawer (name in both TeamLabel + pick button).
+    expect(within(completed).getAllByText("Ghana").length).toBeGreaterThan(0);
+    expect(within(completed).getAllByText("Egypt").length).toBeGreaterThan(0);
+    // …and the still-live R32 round section shows Brazil/Japan, never the archived Ghana/Egypt.
+    const r32 = container.querySelectorAll(".pl-round")[0] as HTMLElement;
+    expect(within(r32).getAllByText("Brazil").length).toBeGreaterThan(0);
+    expect(r32.textContent).not.toMatch(/Ghana|Egypt/);
+  });
+
+  it("keeps a still-visible R16 round rendering alongside the Completed drawer (archiving R32 didn't collapse it)", () => {
+    const { container } = render(<PoolClient view={playoffView()} />);
+    const r16 = container.querySelectorAll(".pl-round")[1] as HTMLElement;
+    expect(within(r16).getByText("Round of 16")).toBeTruthy();
+    expect(within(r16).getByText("Teams to be decided")).toBeTruthy();
   });
 });

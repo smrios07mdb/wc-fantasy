@@ -182,14 +182,17 @@ export function PoolClient({ view }: { view: PoolView }) {
   );
 
   const { matchdays, bracket, unscheduled, completed } = view.picks;
-  // Scope 3: once playoff_entry exists the Picks tab shows ONLY the knockout rounds — the group matchday
-  // lists, the Completed archive, and the unscheduled bucket are hidden HERE (render layer), while the pure
-  // `view.picks` keeps the full history for the leaderboard drill-in (selectManagerPicks). The bracket
-  // skeleton always counts as content (every round present, even all-TBD), so the empty-state never
-  // co-renders with it.
+  // Scope 3: once playoff_entry exists the Picks tab shows the knockout rounds PLUS the Completed archive
+  // drawer — the group matchday lists and the unscheduled bucket are hidden HERE (render layer), while the
+  // pure `view.picks` keeps the full history for the leaderboard drill-in (selectManagerPicks). The Completed
+  // drawer stays visible in both phases (finished R32 matches archive there rather than stacking atop the
+  // rounds). The bracket skeleton always counts as content (every round present, even all-TBD), so the
+  // empty-state never co-renders with it.
   const showGroup = !view.playoffActive;
   const hasAnyFixture =
-    bracket.length > 0 || (showGroup && (matchdays.length > 0 || unscheduled.length > 0));
+    bracket.length > 0 ||
+    completed.length > 0 ||
+    (showGroup && (matchdays.length > 0 || unscheduled.length > 0));
 
   return (
     <div className="pl-app">
@@ -291,7 +294,10 @@ export function PoolClient({ view }: { view: PoolView }) {
             </section>
           )}
 
-          {showGroup && completed.length > 0 && (
+          {/* The Completed archive drawer shows in BOTH phases (unlike the group matchday + unscheduled
+              lists, which stay `showGroup`-gated). It now spans group + knockout: once playoff_entry exists,
+              the finished R32 matches archive here instead of stacking atop the vertical round layout. */}
+          {completed.length > 0 && (
             <details className="pl-md pl-completed">
               <summary className="pl-md-head">
                 <span className="t-label">Completed</span>

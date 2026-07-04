@@ -542,6 +542,235 @@ describe("selectPoolPicksView — Completed archive", () => {
   });
 });
 
+// ─── selectPoolPicksView — Completed archive extends to the knockout rounds ─────────────────
+// The ≥24h archive (originally group-only; the bracket was left a "fixed frame") now ALSO partitions the
+// knockout rounds — the SAME `status === "completed" && now − kickoff ≥ ARCHIVE_AFTER_MS` cut. A completed
+// KO match ≥24h past kickoff leaves its .pl-round and joins the SAME `completed` bucket (kickoff-desc); a
+// round emptied by archiving is dropped (no bare header), mirroring the emptied-matchday drop. Motivation:
+// in the live R16 phase the 16 finished R32 matches otherwise stack atop the vertical round layout and push
+// the live/upcoming rounds down. SAFETY PIN: only `completed`-status matches archive — a scheduled or
+// in_progress KO NEVER leaves its round regardless of clock, so no pickable (still-unlocked) match is hidden.
+describe("selectPoolPicksView — knockout Completed archive", () => {
+  const archNow = new Date("2026-06-22T18:00:00.000Z");
+  const h = (n: number) => 60 * 60 * 1000 * n;
+  const at = (msBeforeNow: number) => new Date(archNow.getTime() - msBeforeNow).toISOString();
+  const koLabels = (v: ReturnType<typeof selectPoolPicksView>) => v.bracket.map((r) => r.label);
+
+  it("moves a completed knockout match ≥24h past kickoff into `completed`, out of its round", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "r32old",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }),
+        fx({
+          matchId: "r16live",
+          periodKind: "knockout_round",
+          periodLabel: "R16",
+          status: "scheduled",
+          kickoffAt: at(-h(2)), // future kickoff → not archived, stays in R16
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    expect(view.completed.map((f) => f.matchId)).toEqual(["r32old"]);
+    // R32 emptied by archiving is DROPPED; R16 (live) + the never-seeded QF/SF/Final skeletons remain.
+    expect(koLabels(view)).toEqual(["R16", "QF", "SF", "Final"]);
+    expect(view.bracket.find((r) => r.label === "R16")?.fixtures.map((f) => f.matchId)).toEqual([
+      "r16live",
+    ]);
+  });
+
+  it("keeps a completed knockout match <24h past kickoff in its round (not yet archived)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "recent",
+          periodKind: "knockout_round",
+          periodLabel: "R16",
+          status: "completed",
+          kickoffAt: at(h(12)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    expect(view.completed).toEqual([]);
+    expect(view.bracket.find((r) => r.label === "R16")?.fixtures.map((f) => f.matchId)).toEqual([
+      "recent",
+    ]);
+  });
+
+  it("archives a completed knockout match at exactly the ≥24h boundary (inclusive), mirroring group", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "edge",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          kickoffAt: at(h(24)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    expect(view.completed.map((f) => f.matchId)).toEqual(["edge"]);
+    expect(koLabels(view)).not.toContain("R32"); // the only fixture archived → round dropped
+  });
+
+  it("drops a knockout round entirely when all its fixtures archive (no bare TBD header)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "a",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }),
+        fx({
+          matchId: "b",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          kickoffAt: at(h(30)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    // R32 emptied by archiving is dropped — NOT rendered as a present-but-empty TBD skeleton.
+    expect(koLabels(view)).not.toContain("R32");
+    // The never-seeded canonical rounds still render as honest empty skeletons.
+    expect(koLabels(view)).toEqual(["R16", "QF", "SF", "Final"]);
+    expect(view.completed.map((f) => f.matchId).sort()).toEqual(["a", "b"]);
+  });
+
+  it("keeps a never-seeded canonical round as an empty TBD skeleton (only archiving drops a round)", () => {
+    // A round that NEVER carried a fixture must stay in the frame as TBD — the drop keys on
+    // `had-fixtures && all-archived`, not merely `no-visible-fixtures`.
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "r16live",
+          periodKind: "knockout_round",
+          periodLabel: "R16",
+          status: "scheduled",
+          kickoffAt: at(-h(2)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    // R32 never seeded → present-but-empty skeleton; R16 has its live match; later rounds empty skeletons.
+    expect(koLabels(view)).toEqual([...KNOCKOUT_ROUND_ORDER]);
+    expect(view.bracket.find((r) => r.label === "R32")?.fixtures).toEqual([]);
+  });
+
+  it("SAFETY PIN: never archives a non-completed knockout match, however old — scheduled/in_progress stay in-round & pickable", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "sched",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "scheduled",
+          kickoffAt: at(h(72)),
+          home: { name: "Brazil", code: "BR" },
+          away: { name: "Japan", code: "JP" },
+        }),
+        fx({
+          matchId: "live",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "in_progress",
+          kickoffAt: at(h(72)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    expect(view.completed).toEqual([]);
+    expect(
+      view.bracket
+        .find((r) => r.label === "R32")
+        ?.fixtures.map((f) => f.matchId)
+        .sort(),
+    ).toEqual(["live", "sched"]);
+    // The load-bearing invariant on a live competitive surface: an unlocked, still-pickable KO match is
+    // NEVER hidden by the archive (archived ⟹ completed ⟹ already locked, so no pickable match can vanish).
+    expect(
+      isKnockoutFixturePickable({
+        home: { name: "Brazil", code: "BR" },
+        away: { name: "Japan", code: "JP" },
+      }),
+    ).toBe(true);
+  });
+
+  it("collects archived group AND knockout matches in ONE `completed` bucket, kickoff-desc", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "gOld",
+          periodKind: "group_md",
+          periodLabel: "MD1",
+          status: "completed",
+          kickoffAt: at(h(72)),
+        }),
+        fx({
+          matchId: "koMid",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }),
+        fx({
+          matchId: "koNew",
+          periodKind: "knockout_round",
+          periodLabel: "R32",
+          status: "completed",
+          kickoffAt: at(h(30)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    // Group + knockout intermixed, most-recent-first — the leaderboard drill-in still sees full history.
+    expect(view.completed.map((f) => f.matchId)).toEqual(["koNew", "koMid", "gOld"]);
+  });
+
+  it("archives an all-finished non-canonical round too (e.g. a completed 3rd-place play-off)", () => {
+    const view = selectPoolPicksView(
+      [
+        fx({
+          matchId: "tpOld",
+          periodKind: "knockout_round",
+          periodLabel: "3P",
+          status: "completed",
+          kickoffAt: at(h(48)),
+        }),
+      ],
+      "playoff",
+      archNow,
+      true,
+    );
+    expect(view.completed.map((f) => f.matchId)).toEqual(["tpOld"]);
+    expect(koLabels(view)).not.toContain("3P"); // finished 3P sinks to Completed, not a bare header
+  });
+});
+
 // ─── buildPoolLeaderboardView ───────────────────────────────────────────────────────────────
 
 describe("buildPoolLeaderboardView", () => {

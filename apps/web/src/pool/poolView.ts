@@ -101,15 +101,17 @@ export function selectPoolPicksView(
   now: Date,
   playoffActive: boolean,
 ): PoolPicksView {
-  // Completed group matches ≥24h old leave their matchday and collect in one bottom archive, so the
-  // Picks tab stops accumulating a scroll-tail of finished group fixtures as the tournament advances.
+  // Completed matches ≥24h old leave their section and collect in one bottom archive, so the Picks tab
+  // stops accumulating a scroll-tail of finished fixtures as the tournament advances. The archive spans
+  // BOTH phases: a completed group match leaves its matchday AND a completed knockout match leaves its
+  // round (in the live R16 phase the 16 finished R32 matches otherwise stack atop the vertical round layout
+  // and push the live rounds down). Only `completed`-status matches archive — see `isArchived`.
   const allGroupFixtures = fixtures.filter((f) => f.periodKind === "group_md");
   const groupFixtures = allGroupFixtures.filter((f) => !isArchived(f, now));
-  const completed = allGroupFixtures
-    .filter((f) => isArchived(f, now))
-    .slice()
-    .sort(byKickoffDesc);
   const knockoutFixtures = fixtures.filter((f) => f.periodKind === "knockout_round");
+  const completed = [...allGroupFixtures, ...knockoutFixtures]
+    .filter((f) => isArchived(f, now))
+    .sort(byKickoffDesc);
   const unscheduled = fixtures
     .filter((f) => f.periodKind === null)
     .slice()
@@ -146,16 +148,26 @@ export function selectPoolPicksView(
       list.push(f);
       koByLabel.set(label, list);
     }
-    // The canonical frame — every round present (empty rounds render TBD; never a fabricated matchup).
-    bracket = KNOCKOUT_ROUND_ORDER.map((label) => ({
-      label,
-      fixtures: (koByLabel.get(label) ?? []).slice().sort(byKickoff),
-    }));
+    // Build one round's section from its NON-archived fixtures. A round whose every fixture has been
+    // archived is DROPPED (returns null) — mirroring the emptied-matchday drop above — so the finished R32
+    // stack no longer sits atop the live rounds. A round that never carried a fixture stays as an honest
+    // empty TBD skeleton, so the drop keys on `had-a-fixture && none-visible`, not merely `none-visible`.
+    const roundFor = (label: string): PoolBracketRound | null => {
+      const all = koByLabel.get(label) ?? [];
+      const visible = all.filter((f) => !isArchived(f, now)).sort(byKickoff);
+      if (all.length > 0 && visible.length === 0) return null;
+      return { label, fixtures: visible };
+    };
+    // The canonical frame — every round present (empty rounds render TBD; never a fabricated matchup),
+    // minus any round emptied by archiving.
+    bracket = KNOCKOUT_ROUND_ORDER.map(roundFor).filter((r): r is PoolBracketRound => r !== null);
     koByLabel.delete("—");
-    // Defensive: surface any knockout round whose label is outside the canonical set rather than drop it.
+    // Defensive: surface any knockout round whose label is outside the canonical set rather than drop it
+    // (still subject to the archive drop — an all-finished non-canonical round, e.g. a completed "3P", sinks too).
     for (const label of [...koByLabel.keys()].sort(cmpStr)) {
       if (!(KNOCKOUT_ROUND_ORDER as readonly string[]).includes(label)) {
-        bracket.push({ label, fixtures: koByLabel.get(label)!.slice().sort(byKickoff) });
+        const round = roundFor(label);
+        if (round) bracket.push(round);
       }
     }
   }
