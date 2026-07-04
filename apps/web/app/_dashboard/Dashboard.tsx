@@ -730,6 +730,20 @@ function renderModule(
   }
 }
 
+/** Entry point into the read-only /players browser (PLAYERS-1). Static — needs no loader data, so it
+ *  keeps `loadDashboard` untouched. Shown in the active phases (group + playoff) where a live pool is
+ *  worth browsing; the other entry point is the "Browse all players" link on /waivers. */
+function PlayerPoolModule() {
+  return (
+    <Module title="Player pool" cta={{ label: "Browse all players", href: "/players" }}>
+      <p className="t-sm text-tertiary" style={{ margin: 0, lineHeight: 1.5 }}>
+        Search and filter every player in the tournament — rostered or free agent — and open any
+        player’s card. Free agents link straight to a waiver bid.
+      </p>
+    </Module>
+  );
+}
+
 // ─── main export ─────────────────────────────────────────────────────────────────────────
 
 export function Dashboard({ data }: { data: DashboardData }) {
@@ -794,6 +808,16 @@ export function Dashboard({ data }: { data: DashboardData }) {
               {mod}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* PLAYERS-1: the browse-all entry point — a static tile in the active phases (group + playoff),
+          below the phase modules. No loader data, so loadDashboard stays untouched. */}
+      {(phase === "group" || phase === "playoff") && (
+        <div className="db-grid">
+          <div className="db-grid-cell">
+            <PlayerPoolModule />
+          </div>
         </div>
       )}
     </div>

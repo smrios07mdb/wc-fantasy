@@ -164,7 +164,11 @@ export async function AppShell({
   isCommissioner,
   children,
 }: {
-  active: NavId;
+  /** The active nav id, or null for shell-wrapped screens that are NOT nav destinations (e.g.
+   *  /players, PLAYERS-1) — null highlights nothing. Type-only widening: every downstream consumer
+   *  (`selectMobileNavPartition`, `MoreSheet`, the `item.id === active` comparisons) already accepts
+   *  null. T15-2 (nav) rebases onto this one-line change. */
+  active: NavId | null;
   signedInAs?: string;
   /** When true, the gated Commissioner console entry (COMMISH_NAV_ITEM) is rendered. Threaded by the
    *  callers that already know the viewer's commissioner status (the hub page, the /commish layout); other

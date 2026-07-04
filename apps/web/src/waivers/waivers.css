@@ -165,6 +165,20 @@
   line-height: 1.5;
   padding: 2px;
 }
+/* PLAYERS-1: quiet link into the read-only /players browser (accent = a primary way in, per the
+   accent-marks-actions rule). Min tap target held at 44px for the mobile hard-rule. */
+.wv-browse-all {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 2px;
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+.wv-browse-all:hover {
+  text-decoration: underline;
+}
 .wv-empty {
   display: flex;
   flex-direction: column;

@@ -164,6 +164,35 @@ export function buildBatchWindowView(input: {
   }
 }
 
+/**
+ * Resolve the `/waivers?bid=<playerId>` deep-link (PLAYERS-1 — the /players browser's ONLY
+ * acquisition affordance, a hand-off; acquisition itself stays single-sourced on /waivers). PURE +
+ * mount-once by contract: the caller evaluates it exactly once from the server snapshot.
+ *
+ * A deep-link PRESELECTS (never submits) iff, at mount:
+ *   • the acquisition window is OPEN (`sealed-bid` → the composer opens preselected;
+ *     `free-agency` → the FA panel's row selection is seeded) — `locked`/no-window → null;
+ *   • the viewer may act (D4: playoff non-participants get no acquisition surface at all);
+ *   • the player is STILL CLAIMABLE per the same {@link claimableFreeAgents} rule the pickers
+ *     enforce (live-unowned pool, cutoff not passed, not already named in a pending claim).
+ * Anything else — unknown id, owned since, kicked off, already claimed — resolves null and the
+ * screen renders exactly as if the param were absent (graceful no-op, never a throw).
+ */
+export function resolveBidDeepLink(input: {
+  playerId: string | null;
+  phase: AcquisitionWindow | null;
+  canAct: boolean;
+  freeAgents: readonly WvPlayer[];
+  claims: readonly WvClaim[];
+  now: Date;
+}): { mode: "sealed-bid" | "free-agency"; player: WvPlayer } | null {
+  const { playerId, phase, canAct, freeAgents, claims, now } = input;
+  if (!playerId || !canAct) return null;
+  if (phase !== "sealed-bid" && phase !== "free-agency") return null;
+  const player = claimableFreeAgents(freeAgents, claims, now).find((p) => p.id === playerId);
+  return player ? { mode: phase, player } : null;
+}
+
 /** Droppable roster players: owned, NOT locked by play. Sorted by season points asc (weakest first). */
 export function droppableRoster(
   roster: readonly WvPlayer[],

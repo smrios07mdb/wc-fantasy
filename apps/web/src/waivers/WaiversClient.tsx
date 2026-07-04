@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WaiversView, WvClaim, WvPlayer } from "./types";
-import { computeBudget, isClaimVoid, sortClaims } from "./waiversLogic";
+import { computeBudget, isClaimVoid, resolveBidDeepLink, sortClaims } from "./waiversLogic";
 import {
   BatchBar,
   ClaimRow,
@@ -63,12 +63,46 @@ const ERROR_MESSAGES: Record<string, string> = {
   bad_request: "Something was off with that request — try again.",
 };
 
-type ComposerState = { open: boolean; editClaim: WvClaim | null };
+type ComposerState = {
+  open: boolean;
+  editClaim: WvClaim | null;
+  /** PLAYERS-1: the deep-link-seeded FA selection — set ONLY when the composer was opened by the
+   *  /waivers?bid= hand-off, so a manual "+ New claim" never inherits it. */
+  seededPlayer?: WvPlayer | null;
+};
 
-export function WaiversClient({ view }: { view: WaiversView }) {
+export function WaiversClient({
+  view,
+  deepLinkBidPlayerId = null,
+}: {
+  view: WaiversView;
+  /** PLAYERS-1: a `?bid=<playerId>` param handed off from the read-only /players browser — its ONLY
+   *  acquisition affordance (acquisition itself stays single-sourced on this screen). Preselects an
+   *  open, still-claimable free agent; anything else (window closed, owned, kicked off, unknown) is a
+   *  silent no-op. Preselection ONLY — no auto-submit, engine/composer untouched. */
+  deepLinkBidPlayerId?: string | null;
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<"claims" | "results">("claims");
-  const [composer, setComposer] = useState<ComposerState>({ open: false, editClaim: null });
+  // Resolve the /players hand-off ONCE from the initial server snapshot — a lazy initializer, never an
+  // effect, so it can't re-fire when the user later closes the composer. Non-null only when the window
+  // is open AND the player is still claimable (the pure `resolveBidDeepLink` mirrors the picker rule).
+  const deepLink = useState(() =>
+    resolveBidDeepLink({
+      playerId: deepLinkBidPlayerId,
+      phase: view.batchWindow?.phase ?? null,
+      canAct: !view.isPlayoffPhase || view.isParticipant,
+      freeAgents: view.freeAgents,
+      claims: view.claims,
+      now: new Date(view.nowIso),
+    }),
+  )[0];
+  // A sealed-bid deep-link opens the composer preselected at mount; free-agency seeds the FA row below.
+  const [composer, setComposer] = useState<ComposerState>(() =>
+    deepLink?.mode === "sealed-bid"
+      ? { open: true, editClaim: null, seededPlayer: deepLink.player }
+      : { open: false, editClaim: null },
+  );
   // The view-only player card (Prompt 56): opened from a picker row's dedicated info control. Purely
   // informational — separate from the composer's acquisition selection, which it never touches. It is
   // always the period-less FaPlayerCardSheet: the FA pool / claims / player cards are live/global by design
@@ -332,6 +366,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
             {canAct && faMode && (
               <FreeAgentPanel
                 enabled={phase === "free-agency"}
+                initialSelected={deepLink?.mode === "free-agency" ? deepLink.player : null}
                 rosterCap={view.rosterCap}
                 freeAgents={view.freeAgents}
                 claims={view.claims}
@@ -404,6 +439,11 @@ export function WaiversClient({ view }: { view: WaiversView }) {
               Higher claims process first — once a claim wins, its FAAB is spent before the next is
               evaluated.
             </div>
+            {/* PLAYERS-1: the one link into the read-only full-tournament browser. Acquisition stays
+                here — /players hands a free agent back via ?bid= (see WaiversClient deep-link). */}
+            <a className="wv-browse-all t-sm" href="/players">
+              Browse all players →
+            </a>
           </div>
 
           <aside className="wv-rail">
@@ -452,6 +492,7 @@ export function WaiversClient({ view }: { view: WaiversView }) {
         <BidComposer
           key={composer.editClaim?.bidId ?? "new"}
           editClaim={composer.editClaim}
+          initialSelected={composer.seededPlayer ?? null}
           rosterCap={view.rosterCap}
           now={now}
           freeAgents={view.freeAgents}

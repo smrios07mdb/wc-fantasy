@@ -41,6 +41,7 @@ export interface BidPayload {
 
 export function BidComposer({
   editClaim,
+  initialSelected = null,
   rosterCap,
   now,
   freeAgents,
@@ -57,6 +58,10 @@ export function BidComposer({
   onToggleStar,
 }: {
   editClaim: WvClaim | null;
+  /** Seed the FA picker's selection (PLAYERS-1 `/waivers?bid=` deep-link) — the SAME `setSelected`
+   *  path a row tap drives, just seeded at mount. Ignored on edit (the add target is fixed). The
+   *  parent passes a player it has ALREADY resolved as claimable (`resolveBidDeepLink`). */
+  initialSelected?: WvPlayer | null;
   /** The league's CURRENT-PHASE squad cap (15 group / 9 playoff), threaded from the server loader — the
    *  drop-required gate keys on it, parity with {@link FreeAgentPanel}. The composer previously ALWAYS
    *  required a drop (a hidden "full 15" assumption); a below-cap playoff squad must NOT be forced into
@@ -79,7 +84,9 @@ export function BidComposer({
   /** Toggle a player's private star (a sibling control — never selects to bid). */
   onToggleStar: (player: WvPlayer) => void;
 }) {
-  const [selected, setSelected] = useState<WvPlayer | null>(editClaim ? editClaim.add : null);
+  const [selected, setSelected] = useState<WvPlayer | null>(
+    editClaim ? editClaim.add : initialSelected,
+  );
   const [amount, setAmount] = useState<number>(editClaim ? editClaim.amount : 1);
   const [dropId, setDropId] = useState<string | null>(editClaim?.drop?.id ?? null);
   const [query, setQuery] = useState("");

@@ -38,6 +38,7 @@ export interface FaGrantPayload {
 
 export function FreeAgentPanel({
   enabled,
+  initialSelected = null,
   rosterCap,
   freeAgents,
   claims,
@@ -53,6 +54,10 @@ export function FreeAgentPanel({
 }: {
   /** false in the locked phase → browse only, "Add" disabled. */
   enabled: boolean;
+  /** Seed the row selection (PLAYERS-1 `/waivers?bid=` deep-link, free-agency phase) — the SAME
+   *  `setSelected` path a row tap drives, just seeded at mount. The parent passes a player it has
+   *  ALREADY resolved as claimable (`resolveBidDeepLink`). */
+  initialSelected?: WvPlayer | null;
   /** The league's CURRENT-PHASE squad cap (15 group / 9 playoff), threaded from the server loader via
    *  `rosterCapForPlayoffPhase` so the "squad full" gate matches the cap the engine enforces. A 9-man
    *  playoff squad must read FULL here (it was hardcoded `SQUAD_SIZE = 15`, the 2026-06-28 R32 409 bug). */
@@ -72,7 +77,7 @@ export function FreeAgentPanel({
   /** Toggle a player's private star (a sibling control — never selects for acquisition). */
   onToggleStar: (player: WvPlayer) => void;
 }) {
-  const [selected, setSelected] = useState<WvPlayer | null>(null);
+  const [selected, setSelected] = useState<WvPlayer | null>(initialSelected);
   const [dropId, setDropId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [position, setPosition] = useState<"ALL" | Position>("ALL");

@@ -25,18 +25,26 @@ import { PlayerStatsTab, usePlayerTournamentStats } from "@/components/PlayerSta
 export function FaPlayerCardSheet({
   player,
   now,
-  watched,
+  watched = false,
   onClose,
   onToggleStar,
+  footNote = "View only · acquire from the Free Agents panel.",
 }: {
   player: WvPlayer;
   /** The client's live clock — drives the Acquisition `CutoffTag` (no separate ticker). */
   now: Date;
-  /** Whether the viewer has starred this player (T2 — private watchlist). */
-  watched: boolean;
+  /** Whether the viewer has starred this player (T2 — private watchlist). Ignored without
+   *  `onToggleStar`. */
+  watched?: boolean;
   onClose: () => void;
-  /** Toggle the private star from the card header. */
-  onToggleStar: (player: WvPlayer) => void;
+  /** Toggle the private star from the card header. OPTIONAL (PLAYERS-1): the read-only /players
+   *  browser consumes this same card with NO star — the watchlist toggle is a write, and /players
+   *  ships zero write paths. Omitted ⇒ the star button is not rendered; /waivers passes it exactly
+   *  as before, so its card is unchanged. */
+  onToggleStar?: (player: WvPlayer) => void;
+  /** The Points-tab foot line. Defaults to the /waivers copy verbatim; /players overrides it with
+   *  its own hand-off copy. */
+  footNote?: string;
 }) {
   const [tab, setTab] = useState<"points" | "stats">("points");
   // Eager on mount — the Stats tab is hot the instant it's selected; a failure degrades quietly.
@@ -71,16 +79,18 @@ export function FaPlayerCardSheet({
               <small>pts</small>
             </span>
           )}
-          <button
-            type="button"
-            className={"pc-star" + (watched ? " is-on" : "")}
-            onClick={() => onToggleStar(player)}
-            aria-pressed={watched}
-            aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
-            title={watched ? "Remove from watchlist" : "Add to watchlist"}
-          >
-            <IconStar filled={watched} />
-          </button>
+          {onToggleStar && (
+            <button
+              type="button"
+              className={"pc-star" + (watched ? " is-on" : "")}
+              onClick={() => onToggleStar(player)}
+              aria-pressed={watched}
+              aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+              title={watched ? "Remove from watchlist" : "Add to watchlist"}
+            >
+              <IconStar filled={watched} />
+            </button>
+          )}
         </div>
 
         {/* ─── Tab strip: Points | Stats (default Points, per the shared card) ──── */}
@@ -128,9 +138,7 @@ export function FaPlayerCardSheet({
           )}
         </div>
 
-        {tab === "points" && (
-          <div className="pc-foot">View only · acquire from the Free Agents panel.</div>
-        )}
+        {tab === "points" && <div className="pc-foot">{footNote}</div>}
       </div>
     </div>
   );

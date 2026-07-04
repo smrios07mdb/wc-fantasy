@@ -1,0 +1,583 @@
+/**
+ * Route-scoped styles for the /players browser (PLAYERS-1). Ported from the design reference's `.pl-*`
+ * vocabulary onto the CANONICAL global ds.css tokens — no forked tokens, no gold (BRAND §1). The
+ * mobile stat-table (`mt-*`) and stat-header tooltips from the reference are intentionally DROPPED
+ * (G1 — rich stats live only in the shared card's Stats tab); the row uses the design's own simpler
+ * `.pl-row` vocabulary (reference frame 6).
+ *
+ * Mobile hard-rules (T15 audit, non-negotiable): tap targets ≥44px; overlays layer ABOVE the fixed
+ * 64px bottom tab bar; the card sheet owns dvh height + a sticky ✕ + scroll containment (it is the
+ * shared FaPlayerCardSheet). Desktop widens the toolbar inline (reference frame 7).
+ */
+
+.pl-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* ── sticky toolbar block ─────────────────────────────────────────────────────── */
+.pl-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--hairline);
+}
+.pl-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text-tertiary);
+}
+.pl-search svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.pl-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+}
+.pl-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+.pl-seg {
+  display: flex;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  padding: 3px;
+  gap: 2px;
+}
+.pl-seg button {
+  flex: 1;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 7px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.pl-seg button.on {
+  background: var(--surface-4);
+  color: var(--text-primary);
+  box-shadow: var(--e1);
+}
+.pl-chiprow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pl-fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pl-fchip.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+  color: var(--accent);
+}
+.pl-filterrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pl-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 6px 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pl-sw {
+  width: 34px;
+  height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--surface-4);
+  position: relative;
+  flex: none;
+  transition: background var(--dur-base);
+}
+.pl-sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--dur-base);
+}
+.pl-toggle.on .pl-sw {
+  background: var(--accent);
+}
+.pl-toggle.on .pl-sw::after {
+  transform: translateX(14px);
+}
+
+/* ── list-meta + status ───────────────────────────────────────────────────────── */
+.pl-listmeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px 6px;
+}
+.pl-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.pl-count b {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.pl-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pl-sort svg {
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+}
+.pl-sort-dir {
+  color: var(--accent);
+  font-weight: 800;
+}
+.pl-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.pl-status .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* ── the list + row (reference frame 6 `.pl-row`) ─────────────────────────────── */
+.pl-list {
+  display: flex;
+  flex-direction: column;
+}
+.pl-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+}
+.pl-row.mine {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 60%);
+}
+.pl-row.mine::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+/* the whole row (minus the bid trailer) is the card-opening control */
+.pl-row-tap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 16px;
+  min-height: 62px;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  color: inherit;
+}
+.pl-row-tap:hover {
+  background: var(--surface-1);
+}
+.pl-pos {
+  width: 34px;
+  flex: none;
+  text-align: center;
+}
+.pl-kit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  flex: none;
+  padding: 0 5px;
+  border-radius: 7px;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-4);
+  color: var(--text-secondary);
+  font: var(--fw-bold) 10px/1 var(--font-mono);
+  letter-spacing: 0.03em;
+}
+.pl-kit.pos-GK {
+  box-shadow: inset 2px 0 0 var(--pos-gk);
+}
+.pl-kit.pos-DEF {
+  box-shadow: inset 2px 0 0 var(--pos-def);
+}
+.pl-kit.pos-MID {
+  box-shadow: inset 2px 0 0 var(--pos-mid);
+}
+.pl-kit.pos-FWD {
+  box-shadow: inset 2px 0 0 var(--pos-fwd);
+}
+.pl-idc {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pl-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.pl-flagname {
+  color: var(--text-secondary);
+}
+.pl-elimtag {
+  color: var(--elim);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.pl-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.pl-own {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  max-width: 92px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-own-fa {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pl-own-mgr {
+  background: var(--surface-3);
+  color: var(--text-tertiary);
+}
+.pl-own-me {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.pl-pts {
+  text-align: right;
+  min-width: 40px;
+}
+.pl-pts b {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.pl-pts span {
+  display: block;
+  font-size: 9.5px;
+  color: var(--text-disabled);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+.pl-row.is-elim {
+  opacity: 0.62;
+}
+.pl-row.is-elim .pl-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--elim);
+  color: var(--text-secondary);
+}
+.pl-row.is-elim .pl-kit {
+  filter: grayscale(0.7) brightness(0.7);
+}
+/* the bid trailer — a SIBLING <a> (never nested in the tap button); ≥44px tap target */
+.pl-bid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 44px;
+  margin: 0 12px;
+  align-self: center;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  flex: none;
+}
+.pl-bid svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ── pager (paged reveal) ─────────────────────────────────────────────────────── */
+.pl-pager {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 16px 28px;
+}
+.pl-loadmore {
+  width: 100%;
+  max-width: 280px;
+  min-height: 44px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pl-loadmore:hover {
+  background: var(--surface-3);
+}
+.pl-pager small {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ── empty state (reference frame 5) ──────────────────────────────────────────── */
+.pl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 30px;
+  text-align: center;
+}
+.pl-empty .glyph {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+.pl-empty .glyph svg {
+  width: 28px;
+  height: 28px;
+}
+.pl-empty h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.pl-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  max-width: 260px;
+}
+.pl-empty .clr {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* ── shared collapsible NationFilter (nf-*) — route-scoped styling per the shared component's
+   contract; ported from waivers.css's port of the draft pool look (global .chip tokens). ──────── */
+.nf-filter {
+  margin: 0;
+}
+.nf-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 44px;
+}
+.nf-toggle {
+  min-height: 44px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: none;
+}
+.nf-toggle:hover {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+.nf-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+  width: 100%;
+}
+.nf-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.nf-clear:hover {
+  background: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  color: var(--text-primary);
+}
+
+/* ── mobile hard-rule: the shared player card must layer ABOVE the fixed bottom tab bar (z-100) and
+   its More sheet (z-102). Route-scoped lift of the shared .pc-scrim (leaves the ds.css token intact,
+   same technique as waivers' .wv-app override — but higher, clearing the bar per the T15 rule). ── */
+.pl-app .pc-scrim {
+  z-index: 120;
+}
+
+/* ── desktop: widen the toolbar inline + cap the list width (reference frame 7) ──────────── */
+@media (min-width: 760px) {
+  .pl-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 24px;
+  }
+  .pl-search {
+    flex: 1 1 240px;
+    min-width: 220px;
+  }
+  .pl-filterrow {
+    flex: 1 1 100%;
+  }
+  .pl-listmeta,
+  .pl-status {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .pl-row-tap {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}

@@ -14,10 +14,20 @@ import { WaiversClient } from "@/src/waivers/WaiversClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function WaiversPage() {
+export default async function WaiversPage({
+  searchParams,
+}: {
+  // PLAYERS-1: the /players browser hands off a free-agent bid via `?bid=<playerId>`. Read it here
+  // (this page is already force-dynamic) and thread it to the client, which preselects it iff the
+  // window is open AND the player is still claimable. A bare, single string is all we accept.
+  searchParams: Promise<{ bid?: string | string[] }>;
+}) {
   const outcome = await getSessionManager();
   if (outcome.kind === "no-session") redirect("/sign-in");
   if (outcome.kind !== "ok") redirect("/auth/denied");
+
+  const { bid } = await searchParams;
+  const deepLinkBidPlayerId = typeof bid === "string" ? bid : null;
 
   const view = await loadWaivers(outcome.manager.id);
   if (!view) {
@@ -33,5 +43,5 @@ export default async function WaiversPage() {
     );
   }
 
-  return <WaiversClient view={view} />;
+  return <WaiversClient view={view} deepLinkBidPlayerId={deepLinkBidPlayerId} />;
 }
