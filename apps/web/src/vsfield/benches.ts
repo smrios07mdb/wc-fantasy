@@ -14,6 +14,7 @@
 import type { Position } from "@app/shared";
 import type { StarterState, VsFieldView } from "@app/vsfield";
 import type { SelectablePeriod } from "@/src/period/selectablePeriods";
+import type { KnockoutContext } from "./knockout";
 
 /** One bench player (a current-period `lineup_slot` with `is_starter = false`) — display-only. */
 export interface BenchPlayerView {
@@ -54,4 +55,10 @@ export type VsFieldViewWithBenches = VsFieldView & {
   selectablePeriods: SelectablePeriod[];
   /** True when the displayed period is the live wave (drives the live subscription; false for a prior). */
   isLivePeriod: boolean;
+  /**
+   * The knockout ("The Cut") projection — T15-CUT. Present ONLY when the displayed period is the live
+   * knockout wave (or the champion endgame on the default view); ALWAYS undefined during the group
+   * phase and on a selected prior matchday. A display sibling like `benches` — @app/vsfield untouched.
+   */
+  ko?: KnockoutContext;
 };

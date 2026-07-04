@@ -12,7 +12,16 @@
  */
 import { prisma } from "@app/db";
 import { loadEliminatedManagerIds } from "@app/faab/prisma";
-import { selectCurrentPeriod, isLockedNow, type Position } from "@app/shared";
+import { buildPlayoffsView } from "@app/recompute";
+import { loadCumulativeTournamentTotals } from "@app/recompute/prisma";
+import {
+  selectCurrentPeriod,
+  isLockedNow,
+  KNOCKOUT_ROUNDS,
+  type KnockoutRound,
+  type Position,
+} from "@app/shared";
+import { buildKnockoutContext, type KnockoutContext } from "@/src/vsfield/knockout";
 import {
   resolveDisplayedPeriodId,
   selectableStartedPeriods,
@@ -151,7 +160,8 @@ export async function loadVsField(
   const leagueId = viewer.leagueId;
   const now = new Date();
 
-  const [managerRows, periodRows, standingRows, eliminatedManagerIds] = await Promise.all([
+  const [managerRows, periodRows, standingRows, eliminatedManagerIds, playoffEntryRows] =
+    await Promise.all([
     // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
     // no current-period score_manager_period row (and no XI) MUST still appear, so buildVsField pads
     // him to 0 points + empty XI and he is a free win for everyone strictly above (Prompt 04 line 42 /
@@ -168,6 +178,9 @@ export async function loadVsField(
         label: true,
         kind: true,
         status: true,
+        // cutCount feeds the knockout ("The Cut") projection only — the per-round commissioner-set
+        // cut (T15-CUT); an additive column on the SAME read, no new query.
+        cutCount: true,
         // status is selected alongside kickoffAt so the T11 started-set predicate (isPickLocked on the
         // first fixture) can run on these rows without a second read.
         matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
@@ -193,6 +206,14 @@ export async function loadVsField(
     // 'eliminated', the case the old status='eliminated' read silently missed) AND managers guillotined
     // mid-playoffs (status='eliminated'). Survivors (status='alive') are the only ones kept on the field.
     loadEliminatedManagerIds(prisma, leagueId),
+    // The seeded knockout field (T15-CUT) — same read shape as loadPlayoffs. EMPTY during the group
+    // phase (the transition writes the rows), which is the ko gate below: no entries → NO ko sibling,
+    // group-phase output byte-identical. One cheap indexed query; playoff participation stays a
+    // data-existence contract (CONTRACT-P2/P3), never league.status.
+    prisma.playoffEntry.findMany({
+      where: { leagueId },
+      select: { managerId: true, seed: true, status: true, eliminatedRound: true },
+    }),
   ]);
 
   // Current period: the open wave (if any), else the earliest period whose last match has not yet
@@ -246,7 +267,23 @@ export async function loadVsField(
     ? Array.from(new Set([currentPeriod.id, ...groupMdPeriodIds]))
     : groupMdPeriodIds;
 
-  const [scoreRows, lineupRows, matchRows, playerScoreRows] = await Promise.all([
+  // ── T15-CUT: the knockout ("The Cut") projection inputs — the SAME reads loadPlayoffs makes,
+  // composed additively here so /vsfield can carry the guillotine framing. Gated on the seeded field
+  // existing (playoff_entry rows — the data-existence phase contract): during the group phase both
+  // extra reads are skipped entirely and `ko` stays undefined (rider E).
+  const knockoutPhaseActive = playoffEntryRows.length > 0;
+  const koRoundIdx = (label: string): number => {
+    const i = KNOCKOUT_ROUNDS.indexOf(label as KnockoutRound);
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const orderedKnockoutPeriods = periodRows
+    .filter((p) => p.kind === "knockout_round")
+    .sort((a, b) => koRoundIdx(a.label) - koRoundIdx(b.label));
+  const knockoutPeriodIds = orderedKnockoutPeriods.map((p) => p.id);
+  const participantIds = playoffEntryRows.map((e) => e.managerId);
+
+  const [scoreRows, lineupRows, matchRows, playerScoreRows, knockoutScoreRows, cumulativeTotals] =
+    await Promise.all([
     scorePeriodIds.length
       ? prisma.scoreManagerPeriod.findMany({
           where: { periodId: { in: scorePeriodIds } },
@@ -302,6 +339,19 @@ export async function loadVsField(
           select: { playerId: true, points: true },
         })
       : Promise.resolve([]),
+    // T15-CUT: each knockout round's per-manager score (fallen pts-at-cut + the authoritative round
+    // ranking) — skipped entirely pre-transition. Same shape as loadPlayoffs' knockoutScores read.
+    knockoutPhaseActive && knockoutPeriodIds.length
+      ? prisma.scoreManagerPeriod.findMany({
+          where: { periodId: { in: knockoutPeriodIds }, managerId: { in: participantIds } },
+          select: { periodId: true, managerId: true, points: true },
+        })
+      : Promise.resolve([]),
+    // T15-CUT: the cumulative tournament totals — the SAME canonical helper the /playoffs loader and
+    // the commish apply path share, so the displayed blade and the eventual cut cannot drift.
+    knockoutPhaseActive
+      ? loadCumulativeTournamentTotals(prisma, leagueId, participantIds)
+      : Promise.resolve(new Map<string, number>()),
   ]);
   // Default a starter with no scored row (yet-to-play, or live-but-not-yet-appeared) to 0 points.
   const pointsForPlayer = playerPointsLookup(playerScoreRows);
@@ -399,5 +449,51 @@ export async function loadVsField(
   const view = buildVsField(input);
   const field = filterEliminatedFromField(view.field, eliminatedManagerIds, isLivePeriod);
 
-  return { ...view, field, benches, selectablePeriods, isLivePeriod };
+  // ── T15-CUT: the knockout ("The Cut") sibling — a PURE projection of buildPlayoffsView (the
+  // authoritative ladder: provisional zone via the SAME resolveRoundCut the commish apply path calls)
+  // over the PRE-filter field identities (fallen names come from the unfiltered engine output; the
+  // §27 filter above stays byte-identical for the alive ladder). Composed ONLY when:
+  //   (a) the displayed period IS the live knockout wave (live / pend arms), or
+  //   (b) the tournament is complete and the caller is on the DEFAULT view (champion arm — there may
+  //       be no live period at all post-Final; an explicitly selected prior stays a plain T11 view).
+  // Group phase: no playoff_entry rows → `ko` is undefined and no extra read ran (rider E).
+  let ko: KnockoutContext | undefined;
+  if (knockoutPhaseActive && orderedKnockoutPeriods.length > 0) {
+    const labelByPeriodId = new Map(orderedKnockoutPeriods.map((p) => [p.id, p.label] as const));
+    const roundScores: Record<string, Record<string, number>> = {};
+    for (const s of knockoutScoreRows) {
+      const label = labelByPeriodId.get(s.periodId);
+      if (!label) continue;
+      (roundScores[label] ??= {})[s.managerId] = s.points;
+    }
+    const core = buildPlayoffsView({
+      viewerManagerId,
+      rounds: orderedKnockoutPeriods.map((p) => ({ label: p.label, cutCount: p.cutCount })),
+      entries: playoffEntryRows.map((e) => ({
+        managerId: e.managerId,
+        seed: e.seed,
+        status: e.status,
+        eliminatedRound: e.eliminatedRound,
+      })),
+      roundScores,
+      cumulativeTotals,
+      groupPeriods: perPeriodScores,
+    });
+    const koCtx = buildKnockoutContext({
+      core,
+      viewerManagerId,
+      field: view.field.map((e) => ({
+        managerId: e.managerId,
+        displayName: e.displayName,
+        isMe: e.isMe,
+        stillToCome: e.counts.yetToPlay + e.counts.noMatch,
+      })),
+      allMatchesCompleted: matchRows.length > 0 && matchRows.every((m) => m.status === "completed"),
+    });
+    const displayedIsLiveKnockout = isLivePeriod && currentPeriodRow?.kind === "knockout_round";
+    const onDefaultView = displayedId === (livePeriodRow?.id ?? null);
+    if (koCtx && (displayedIsLiveKnockout || (koCtx.complete && onDefaultView))) ko = koCtx;
+  }
+
+  return { ...view, field, benches, selectablePeriods, isLivePeriod, ko };
 }
