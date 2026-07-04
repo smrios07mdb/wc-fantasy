@@ -8,12 +8,14 @@ import {
   faabBatchStore,
   faabCadenceStore,
   periodStatusStore,
+  teamEliminationStore,
   autoFireStore,
   makeAutoFireAdvanceStore,
 } from "./wiring";
 import { dispatchPlayersNotStarting, dispatchMatchStarting } from "./notify/triggers";
 import { dispatchFaabBatches } from "./faab/dispatch";
 import { dispatchPeriodStatusAdvance } from "./period/dispatch";
+import { dispatchTeamElimination } from "./elimination/dispatch";
 import { dispatchAutoFireCut } from "./autofire/dispatch";
 import { runRecomputeSweep } from "./recompute";
 import {
@@ -280,6 +282,23 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
         }
       } catch (err) {
         log.error("period.status.advance.error", { message: (err as Error).message });
+      }
+
+      // WC national-team ELIMINATION auto-derivation (feat/auto-team-elimination; DECISIONS.md "auto-derived
+      // team elimination"). Reads the FREEZE-GATED completed knockout results, derives the union of losers via
+      // the pure `selectEliminatedTeamIds`, and flags them `eliminated = true` through a guarded, set-only,
+      // GLOBAL write. Runs AFTER the settle/ingest steps so it reads current results; order relative to the
+      // status-advance above does NOT matter (disjoint tables — fifa_team vs period). TICK-ONLY, no cron, no
+      // dual-writer: unlike the status-open SPOF (a CLOSING FA window), a missed flag is SELF-HEALING — this
+      // idempotent tick re-derives it and the guarded `WHERE eliminated = false` no-ops once a team is flagged.
+      // Its OWN try/catch so a failure never starves ingestion/recompute/notify (the isolation precedent).
+      try {
+        const { flagged } = await dispatchTeamElimination(teamEliminationStore);
+        if (flagged.length > 0) {
+          log.info("team.elimination.flagged", { count: flagged.length, teamIds: flagged });
+        }
+      } catch (err) {
+        log.error("team.elimination.error", { message: (err as Error).message });
       }
 
       // Playoff round AUTO-FIRE (feat/autofire-round-cut) — the HIGHEST-RISK step: an UNATTENDED, IRREVERSIBLE

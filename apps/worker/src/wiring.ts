@@ -19,6 +19,8 @@ import { createPrismaFaabCadenceStore } from "./faab/prismaStore";
 import type { FaabCadenceStore } from "./faab/store";
 import { createPrismaPeriodStatusStore } from "./period/prismaStore";
 import type { PeriodStatusStore } from "./period/store";
+import { createPrismaTeamEliminationStore } from "./elimination/prismaStore";
+import type { TeamEliminationStore } from "./elimination/store";
 import { createPrismaAutoFireStore } from "./autofire/prismaStore";
 import type { AutoFireStore } from "./autofire/store";
 import {
@@ -54,6 +56,12 @@ export const faabCadenceStore: FaabCadenceStore = createPrismaFaabCadenceStore(p
 // it through the same guarded `updateMany` as the `wc-fantasy-period-close` cron — a SECOND writer that
 // removes the silent status-open SPOF. The cron stays the primary writer (UNCHANGED).
 export const periodStatusStore: PeriodStatusStore = createPrismaPeriodStatusStore(prisma);
+
+// WC national-team ELIMINATION auto-derivation (feat/auto-team-elimination; DECISIONS.md "auto-derived team
+// elimination"). The store carries the FREEZE-GATED read of completed knockout results + the guarded,
+// set-only, GLOBAL write of `fifa_team.eliminated`; the DECISION (who lost) stays in the pure
+// `selectEliminatedTeamIds`. TICK-ONLY, no cron: a missed flag is self-healing (the idempotent tick re-runs).
+export const teamEliminationStore: TeamEliminationStore = createPrismaTeamEliminationStore(prisma);
 
 // Playoff round auto-fire (feat/autofire-round-cut). The auto-fire store carries the worker-local reads
 // (knockout-round facts + commissioner recipients + round data-completeness). The advance store is built

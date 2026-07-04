@@ -291,7 +291,8 @@ only the cadence and the acquisition cutoff moved.
   cutoff / the commish `--period` pin) is a SEPARATE gate. The 1-cycle waiver hold was removed earlier.
 - **Eliminated-team add gate (`feat/faab-exclude-eliminated`, Jun 28 2026; reverses the Theme-D "natural
   filtering" note).** A SECOND, ORTHOGONAL eligibility dimension to live-unowned: a player whose WC team is
-  **eliminated** (the commissioner-set, raw-SQL-only additive `fifa_team.eliminated`) **cannot be ADDED**.
+  **eliminated** (the additive `fifa_team.eliminated` flag — since `feat/auto-team-elimination` **AUTO-DERIVED
+  on the worker tick**, not raw SQL; see "Team-elimination auto-derivation" below) **cannot be ADDED**.
   One pure predicate `isAddTeamEliminated(teamEliminated)` (co-located in `faEligibility.ts`, kept SEPARATE
   from `liveOwnedWhere` so neither absorbs the other; a no-team player ⇒ eligible) is applied by the IO
   adapter at all five add sites — the pool (`listFaIneligiblePlayerIds` unions in eliminated ids), the
@@ -304,6 +305,27 @@ only the cadence and the acquisition cutoff moved.
   after elimination. **ADD-SIDE ONLY:** the drop path (`release.ts`) + `@app/lineup` are byte-untouched.
   **D2:** `claimFreeAgent` takes `allowEliminated` (default false); `commish:roster` passes `true` to repair
   a deliberate manual add. Purity intact (the predicate is pure; the `fifa_team` read is in the adapter).
+- **Team-elimination auto-derivation — the WRITER for the gate above (`feat/auto-team-elimination`, Jul 4
+  2026; reverses the "manual by design" note, DECISIONS §D).** The five readers above only CONSUME
+  `fifa_team.eliminated`; this is the automated writer that SETS it (was manual raw SQL). On the resident 60s
+  tick — after settle/ingest, alongside the period status-advance (disjoint tables, so order does not matter)
+  — `dispatchTeamElimination` (`apps/worker/src/elimination/`) reads the **freeze-gated** completed knockout
+  results, derives the union of **losers** via the pure `selectEliminatedTeamIds` (`deriveKnockoutLoserTeamId`
+  = the non-advancer via FT → ET → pens, a co-located mirror of `@app/pool`'s advancer — DUPLICATED, not
+  imported, to avoid a worker→pool coupling; its unit test mirrors pool's advancer cases), and flags them
+  through a **guarded, set-only, GLOBAL** `UPDATE fifa_team SET eliminated = true WHERE id IN (…) AND
+  eliminated = false`. **Freeze gate:** the store read is `status='completed'` AND
+  `period.kind='knockout_round'` AND `period.frozen_at IS NOT NULL`, so a round's losers flag only once the
+  period-close cron freezes it (~`result_freeze_hours` after the round's last FT — a stalled cron delays,
+  never breaks, elimination); the period-less 3rd-place match (`period_id` NULL) is excluded by the join (its
+  two teams are already-flagged SF losers). **NEVER auto-reverts** — `eliminated = false` stays a
+  commissioner action (`commish:roster --allow-eliminated` / manual SQL). **TICK-ONLY, no cron, no
+  dual-writer:** a missed flag is self-healing (the idempotent tick re-derives it; the guarded write no-ops
+  once flagged), so unlike the P1a status-open SPOF there is no closing window to miss. Logs
+  `team.elimination.flagged` ({ count, teamIds }) / `team.elimination.error`. No migration
+  (`fifa_team.eliminated` already exists); `@app/faab`, `resolve.ts`, `@app/scoring`, `@app/recompute`,
+  `@app/lineup`, `release.ts`, the status-advance path, and ingest are byte-untouched. Group→R32 advancement
+  (a `group_standing` derivation, moot this tournament) stays manual — a post-WC2026 follow-up.
 - **Schema.** `period.waiver_batch_at` + `period.batch_cleared_at` (migration
   `20260610150000_period_faab_cadence`; additive columns, `period` carries no RLS). The FA grant needs
   **no new schema** (history-derived eligibility + the existing active-ownership unique).

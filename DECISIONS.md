@@ -763,6 +763,43 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   passes `true`, bypassing the belt for a deliberate manual add exactly as it already neutralizes the window
   + live-unowned eligibility. Additive migration only (no backfill — the default back-fills existing rows).
   See ARCHITECTURE §3 "Eliminated-team add gate". SCORING.md untouched.
+- **AMENDMENT — team elimination is now AUTO-DERIVED from frozen knockout results, not manual raw SQL
+  (`feat/auto-team-elimination`, Jul 4 2026).** This **reverses** the "Sourcing is MANUAL … there is no
+  worker / derivation / standings logic that writes it" clause of the amendment directly above:
+  `fifa_team.eliminated` is now set **automatically** on the resident worker tick, replacing the manual
+  commissioner raw-SQL step. **Mechanism:** a national team is eliminated the moment it **loses a knockout
+  match** — the loser is the **non-advancer** under the SAME full-time → extra-time → penalties semantics as
+  `@app/pool`'s `knockoutAdvancer` / `derivePoolResult`. A **co-located pure** `deriveKnockoutLoserTeamId`
+  (`apps/worker/src/elimination/selectEliminatedTeams.ts`) DUPLICATES those ~6 lines rather than importing
+  `@app/pool` (avoids a worker→pool coupling for two comparisons); its unit test MIRRORS pool's advancer
+  cases (home / away / ET / pens) so drift is caught, and it returns **null — skip, never guess** on any
+  undecidable / not-completed / null-team-FK match. `selectEliminatedTeamIds` = the deduped union of losers.
+  **FREEZE-GATED read:** the store returns only `fifa_match` rows WHERE `status='completed'` AND joined
+  `period.kind='knockout_round'` AND `period.frozen_at IS NOT NULL` — so a round's losers flag only once that
+  round is **final** (freeze is stamped by the `wc-fantasy-period-close` cron ~`result_freeze_hours` after
+  the round's last FT; a stalled cron **delays, never breaks**, elimination — consistent with freeze being
+  cron-only). The period-less **3rd-place** match (`period_id` NULL) is naturally excluded by the knockout
+  join — its two teams are already-flagged SF losers, no special-casing. **The write:** `UPDATE fifa_team SET
+  eliminated = true WHERE id IN (<losers>) AND eliminated = false` — **set-only**, **guarded** (steady state
+  ⇒ 0 rows ⇒ a byte-quiet no-op), **GLOBAL** (`fifa_team` is league-agnostic reference data — no league
+  scope). It **NEVER sets `eliminated = false`**: a post-freeze result correction that "un-loses" a team
+  stays a **commissioner** action (`commish:roster --allow-eliminated` / manual SQL), never an auto-revive.
+  **TICK-ONLY, NO cron, NO dual-writer** (contrast the P1a status-open second writer): unlike a **closing**
+  FA window whose missed `pending → open` is a permanent SPOF, a missed elimination flag is **self-healing**
+  — the idempotent 60s tick re-derives it and the guarded write no-ops once flagged, so there is no window to
+  miss. Runs after the settle/ingest steps; order vs `dispatchPeriodStatusAdvance` does not matter (disjoint
+  tables — `fifa_team` vs `period`). Structured logs `team.elimination.flagged` ({ count, teamIds }) on a
+  real change / `team.elimination.error` on isolation. **BYTE-UNTOUCHED:** every `eliminated` READER
+  (`listFaIneligiblePlayerIds`, `getFaTargetFacts`, `claimFreeAgent`, `validateBidSubmission`,
+  `resolveFaabBatch`) already consumes the flag — this thread only WRITES it; `@app/faab`, `resolve.ts`,
+  `@app/scoring`, `@app/recompute`, `@app/lineup`, `release.ts`, the status-advance path, and ingest are all
+  unchanged; **NO migration** (`eliminated` already exists — `20260628120000_fifa_team_eliminated`). No
+  feature flag: unlike the auto-fire cut (a dramatic roster action, default-OFF behind `AUTOFIRE_CUTS_ENABLED`),
+  this write is low-stakes (a mild FA restriction), guarded, idempotent, and freeze-gated, and is a pure
+  no-op through the entire group stage (no frozen knockout period exists yet). **Group→R32 advancement**
+  (a `group_standing`-based derivation, a different mechanism — moot this tournament, already flagged
+  manually) stays OUT of scope, a post-WC2026 follow-up. See ARCHITECTURE §3 "Eliminated-team add gate" (now
+  with an automated writer). SCORING.md untouched.
 - **Fixed (`fix/faab-sealed-bid-latch-boundary`) — the sealed→free-agency boundary is the LATCH, not first
   kickoff.** Prompts 47/48 left bid submission gated ONLY on the period's first kickoff
   (`acquisitionCutoffAt`), so the sealed-bid phase did not actually END at batch-clear. **The MD1 strand

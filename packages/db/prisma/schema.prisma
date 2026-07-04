@@ -289,13 +289,16 @@ model FifaTeam {
   abbreviation  String?
   country       String?
   groupId       String?  @map("group_id")
-  /// COMMISSIONER-set: the national team has been knocked OUT of the World Cup. Add-side FA gate only
-  /// (DECISIONS §D "eliminated-team add gate"): a player on an eliminated team is removed from the FAAB
-  /// pool and cannot be added — bid (`add-team-eliminated`), $0 grant (`faNotEligible`), the grant tx
-  /// race belt (`FaConflict`), and the batch resolver (void+refund, like a kicked-off add). DROPS are
-  /// unaffected, and a fielded player keeps scoring. Sourced manually (raw SQL); NO derivation/worker
-  /// logic. Additive, default-false: it back-fills existing rows and is NEVER written by the ingest team
-  /// upsert (which writes `name` only), so a daily roster sync can't reset it.
+  /// The national team has been knocked OUT of the World Cup. Add-side FA gate only (DECISIONS §D
+  /// "eliminated-team add gate"): a player on an eliminated team is removed from the FAAB pool and cannot
+  /// be added — bid (`add-team-eliminated`), $0 grant (`faNotEligible`), the grant tx race belt
+  /// (`FaConflict`), and the batch resolver (void+refund, like a kicked-off add). DROPS are unaffected, and
+  /// a fielded player keeps scoring. AUTO-DERIVED (feat/auto-team-elimination; REVERSES the earlier "manual
+  /// by design" note): the worker tick flags the LOSER of every FROZEN, completed knockout match (FT → ET →
+  /// pens, mirroring @app/pool's advancer) via a guarded, set-only, GLOBAL write. SET-ONLY — never
+  /// auto-reverted; a post-freeze "un-loss" stays a commissioner action (`commish:roster --allow-eliminated`
+  /// / manual SQL). Additive, default-false; NEVER written by the ingest team upsert (which writes `name`
+  /// only), so a daily roster sync can't reset it.
   eliminated    Boolean  @default(false)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
