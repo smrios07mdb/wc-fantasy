@@ -14,6 +14,7 @@
     "test:layout": "node apps/web/scripts/verify-pitch-layout.mjs",
     "test:playoffs-hero": "node apps/web/scripts/verify-playoffs-hero.mjs",
     "test:the-cut": "node apps/web/scripts/verify-the-cut.mjs",
+    "test:players": "node apps/web/scripts/verify-players.mjs",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,cjs,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,cjs,json,md,yaml,yml}\"",

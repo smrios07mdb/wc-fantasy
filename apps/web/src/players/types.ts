@@ -11,10 +11,38 @@ import type { AcquisitionWindow } from "@app/faab";
 import type { Position } from "@app/shared";
 
 /**
+ * The per-player tournament STATLINE shown in the row's stat columns (PLAYERS-1 remediation — reverses
+ * the G1 drop). Every count is a real aggregate of the PROMOTED `stat_player_match` columns over the
+ * player's APPEARANCES (matches with minutes > 0); `min` is total minutes. `shots` sources the promoted
+ * `shots_on_target` (there is no raw "shots" column — the `buildPlayerTournamentStats` convention).
+ *
+ * `yellowCards` is REAL — a display-only count of the player's tournament card events from `event_match`
+ * (via the shared `classifyCard`; see loadPlayers). `cleanSheets` stays null — it is engine-derived and
+ * has no per-row source, so it is the ONE remaining gap. The UI renders null (and a genuine 0) as "—"; a
+ * value is NEVER fabricated.
+ */
+export interface PlStatline {
+  /** Appearances = matches played (minutes > 0). */
+  readonly pld: number;
+  /** Total minutes across appearances. */
+  readonly min: number;
+  readonly goals: number;
+  readonly assists: number;
+  /** Shots on target (the promoted column — matches the shared card's "Shots"; no total-shots column). */
+  readonly shots: number;
+  readonly keyPasses: number;
+  readonly tackles: number;
+  /** Yellow cards — REAL count from `event_match` (display-only); a 0 renders "—". */
+  readonly yellowCards: number | null;
+  /** Clean sheets — null (engine-derived, no per-row source; renders "—"). The one remaining gap. */
+  readonly cleanSheets: number | null;
+}
+
+/**
  * One player as the full-tournament browser needs him. A structural SUPERSET of the waivers
  * `WvPlayer` (id / name / shortName / position / nation / teamName / kickoffAt / seasonPoints), so the
  * SHARED view-only `FaPlayerCardSheet` consumes a `PlPlayer` directly — plus the browser-only
- * `owner` + `nationAlive`. Every value is REAL (see loadPlayers); nothing is fabricated.
+ * `owner` + `nationAlive` + the row `stats`. Every value is REAL (see loadPlayers); nothing is fabricated.
  */
 export interface PlPlayer {
   readonly id: string;
@@ -47,6 +75,8 @@ export interface PlPlayer {
    * precedent) — the browser never reads manager rows itself.
    */
   readonly owner: { readonly managerId: string; readonly name: string } | null;
+  /** The tournament statline shown in the row's stat columns (real aggregates; YC/CS null → "—"). */
+  readonly stats: PlStatline;
 }
 
 /** Everything the /players client needs, assembled server-side. READ-ONLY page-load snapshot. */

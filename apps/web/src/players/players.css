@@ -1,13 +1,13 @@
 /**
- * Route-scoped styles for the /players browser (PLAYERS-1). Ported from the design reference's `.pl-*`
- * vocabulary onto the CANONICAL global ds.css tokens — no forked tokens, no gold (BRAND §1). The
- * mobile stat-table (`mt-*`) and stat-header tooltips from the reference are intentionally DROPPED
- * (G1 — rich stats live only in the shared card's Stats tab); the row uses the design's own simpler
- * `.pl-row` vocabulary (reference frame 6).
+ * Route-scoped styles for the /players browser (PLAYERS-1 + remediation). Ported from the design
+ * reference onto the CANONICAL global ds.css tokens — no forked tokens, no gold (BRAND §1). The
+ * remediation REVERSES the G1 drop: the row is the design's `.mt-*` STAT TABLE — one
+ * horizontally-scrollable grid, Player pinned left + Pts pinned right (image 4's "← swipe stats"),
+ * widening to a desktop wide-list (image 2) at ≥760px. The KIT cell is the shared flag-kit (`kitOf`).
  *
- * Mobile hard-rules (T15 audit, non-negotiable): tap targets ≥44px; overlays layer ABOVE the fixed
- * 64px bottom tab bar; the card sheet owns dvh height + a sticky ✕ + scroll containment (it is the
- * shared FaPlayerCardSheet). Desktop widens the toolbar inline (reference frame 7).
+ * Mobile hard-rules (T15 audit, non-negotiable): tap targets ≥44px; the table swipe is contained
+ * (`overscroll-behavior-x`) so it never chains to the page; overlays layer ABOVE the fixed 64px bottom
+ * tab bar (the card scrim is route-lifted to z120); the shared card sheet owns dvh + a sticky ✕.
  */
 
 .pl-app {
@@ -215,129 +215,234 @@
   flex: none;
 }
 
-/* ── the list + row (reference frame 6 `.pl-row`) ─────────────────────────────── */
-.pl-list {
-  display: flex;
-  flex-direction: column;
+/* ── the stat table (design `.mt-*`, frames 1/6) — one horizontally-scrollable grid: Player pinned
+   left, Pts pinned right, stat columns swipe (image 4); widens to a desktop wide-list (image 2). ─── */
+.mt-scroll {
+  display: block;
 }
-.pl-row {
-  display: flex;
-  align-items: stretch;
+/* the horizontal scroll box. overscroll-behavior-x:contain keeps the swipe from chaining to the page
+   (T15 hard-rule); height is unconstrained so rows flow with the page (vertical = page scroll). */
+.mt-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.mt-cols {
+  display: grid;
+  grid-template-columns: minmax(
+      170px,
+      1.4fr
+    ) 58px 40px 48px 32px 32px 34px 34px 32px 38px 34px minmax(56px, 0.7fr);
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+}
+.mt-head {
+  height: 36px;
+  background: var(--surface-1);
   border-bottom: 1px solid var(--hairline);
-  position: relative;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
 }
-.pl-row.mine {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 60%);
+.mt-head > div {
+  text-align: right;
+  padding-right: 8px;
 }
-.pl-row.mine::before {
-  content: "";
-  position: absolute;
+.mt-head .mt-idc {
+  position: sticky;
   left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--accent);
-}
-/* the whole row (minus the bid trailer) is the card-opening control */
-.pl-row-tap {
-  flex: 1;
-  min-width: 0;
+  z-index: 3;
+  background: var(--surface-1);
+  text-align: left;
+  padding-left: 16px;
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 16px;
-  min-height: 62px;
-  box-sizing: border-box;
+}
+.mt-head .mt-end {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--surface-1);
+  text-align: right;
+  padding-right: 16px;
+  box-shadow: -9px 0 9px -7px rgba(0, 0, 0, 0.5);
+}
+.mt-head .mt-owner-h {
+  text-align: left;
+  padding-left: 2px;
+}
+.mt-row {
+  min-height: 58px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-0);
+}
+/* the Player cell — pinned left, and the card-opening button (≥44px tap height via the row min-height) */
+.mt-row .mt-idc {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface-0);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px 8px 16px;
+  min-height: 58px;
   border: 0;
-  background: transparent;
   cursor: pointer;
   text-align: left;
   font-family: var(--font-sans);
   color: inherit;
+  box-shadow: 9px 0 9px -7px rgba(0, 0, 0, 0.4);
 }
-.pl-row-tap:hover {
+.mt-row .mt-idc:hover {
   background: var(--surface-1);
 }
-.pl-pos {
-  width: 34px;
-  flex: none;
-  text-align: center;
+.mt-row.mine .mt-idc {
+  background: linear-gradient(90deg, var(--accent-soft), var(--surface-0));
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    9px 0 9px -7px rgba(0, 0, 0, 0.4);
 }
-.pl-kit {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 30px;
-  height: 30px;
-  flex: none;
-  padding: 0 5px;
-  border-radius: 7px;
-  border: 1px solid var(--hairline-strong);
-  background: var(--surface-4);
-  color: var(--text-secondary);
-  font: var(--fw-bold) 10px/1 var(--font-mono);
-  letter-spacing: 0.03em;
-}
-.pl-kit.pos-GK {
-  box-shadow: inset 2px 0 0 var(--pos-gk);
-}
-.pl-kit.pos-DEF {
-  box-shadow: inset 2px 0 0 var(--pos-def);
-}
-.pl-kit.pos-MID {
-  box-shadow: inset 2px 0 0 var(--pos-mid);
-}
-.pl-kit.pos-FWD {
-  box-shadow: inset 2px 0 0 var(--pos-fwd);
-}
-.pl-idc {
+.mt-idc .nm {
   min-width: 0;
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
-.pl-name {
-  font-size: 14.5px;
+.mt-idc .nm b {
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 120px;
 }
-.pl-sub {
+.mt-idc .nm small {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.mt-out {
+  color: var(--elim);
+  font-weight: 700;
+}
+.mt-owner {
+  padding-left: 2px;
+  min-width: 0;
+}
+.mt-stat {
+  text-align: right;
+  padding-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.mt-stat.zero {
+  color: var(--text-disabled);
+}
+/* the Pts cell — pinned right, holds the season total + the bid trailer */
+.mt-end {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--surface-0);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 12px 0 8px;
+  box-shadow: -9px 0 9px -7px rgba(0, 0, 0, 0.45);
+}
+.mt-row.mine .mt-end {
+  background: var(--surface-0);
+}
+.mt-end .p {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+/* the bid trailer — a SIBLING <a> (never nested in the Player button); ≥44px tap target */
+.mt-bid {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.mt-bid svg {
+  width: 16px;
+  height: 16px;
+}
+.mt-row.is-elim {
+  opacity: 0.62;
+}
+.mt-row.is-elim .nm b {
+  text-decoration: line-through;
+  text-decoration-color: var(--elim);
+}
+.mt-row.is-elim .pl-kit {
+  filter: grayscale(0.7) brightness(0.7);
+}
+/* the one-line swipe hint */
+.mt-scrollhint {
+  padding: 6px 16px 8px;
+  font-size: 11px;
+  color: var(--text-disabled);
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--text-tertiary);
 }
-.pl-flagname {
-  color: var(--text-secondary);
-}
-.pl-elimtag {
-  color: var(--elim);
-  font-weight: 700;
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-.pl-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+
+/* ── the FLAG-KIT jersey square (shared kitOf primitive; NEVER background-size:cover) ──────────── */
+.pl-kit {
+  position: relative;
+  width: 30px;
+  height: 30px;
   flex: none;
+  border-radius: 7px;
+  border: 1px solid var(--hairline-strong);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: flex-end;
 }
+/* a small emoji flag anchored in the corner so every nation carries a flag signal (kitOf falls back to
+   a neutral surface for nations outside its library) */
+.pl-kit-flag {
+  line-height: 0;
+  transform: scale(0.72);
+  transform-origin: bottom right;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+}
+.pl-kit-flag .flag-emoji {
+  font-size: 13px;
+}
+
+/* ── ownership chip (compact for the table cell) ──────────────────────────────── */
 .pl-own {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 8px;
+  height: 20px;
+  padding: 0 7px;
   border-radius: var(--r-pill);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  max-width: 92px;
+  max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -354,61 +459,8 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-.pl-pts {
-  text-align: right;
-  min-width: 40px;
-}
-.pl-pts b {
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 16px;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-.pl-pts span {
-  display: block;
-  font-size: 9.5px;
-  color: var(--text-disabled);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-top: 1px;
-}
-.pl-row.is-elim {
-  opacity: 0.62;
-}
-.pl-row.is-elim .pl-name {
-  text-decoration: line-through;
-  text-decoration-color: var(--elim);
-  color: var(--text-secondary);
-}
-.pl-row.is-elim .pl-kit {
-  filter: grayscale(0.7) brightness(0.7);
-}
-/* the bid trailer — a SIBLING <a> (never nested in the tap button); ≥44px tap target */
-.pl-bid {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 44px;
-  min-width: 44px;
-  margin: 0 12px;
-  align-self: center;
-  padding: 0 12px;
-  border-radius: var(--r-md);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-ring);
-  color: var(--accent);
-  font-size: 12.5px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-decoration: none;
-  cursor: pointer;
+.pl-pos {
   flex: none;
-}
-.pl-bid svg {
-  width: 15px;
-  height: 15px;
 }
 
 /* ── pager (paged reveal) ─────────────────────────────────────────────────────── */
@@ -555,7 +607,9 @@
   z-index: 120;
 }
 
-/* ── desktop: widen the toolbar inline + cap the list width (reference frame 7) ──────────── */
+/* ── desktop: widen the toolbar inline + the stat table becomes a wide-list (design image 2) ────
+   The grid's fr columns (Player + Pts) soak up the extra width so it fits 1180px with NO horizontal
+   scroll; the pinned columns are harmless when nothing overflows. Only the mobile <760px width swipes. */
 @media (min-width: 760px) {
   .pl-toolbar {
     flex-direction: row;
@@ -572,12 +626,40 @@
     flex: 1 1 100%;
   }
   .pl-listmeta,
-  .pl-status {
+  .pl-status,
+  .mt-scrollhint {
     padding-left: 24px;
     padding-right: 24px;
   }
-  .pl-row-tap {
+  /* the swipe hint is only meaningful on mobile — hide it when the table fits */
+  .mt-scrollhint {
+    display: none;
+  }
+  .mt-cols {
+    grid-template-columns: minmax(
+        240px,
+        2.2fr
+      ) 90px 46px 52px 34px 34px 36px 36px 34px 40px 36px minmax(70px, 1fr);
+  }
+  .mt-head .mt-idc,
+  .mt-row .mt-idc {
     padding-left: 24px;
+  }
+  .mt-head .mt-end,
+  .mt-end {
     padding-right: 24px;
+  }
+  /* no cross-column shadows needed when the table doesn't scroll */
+  .mt-row .mt-idc,
+  .mt-head .mt-idc,
+  .mt-row.mine .mt-idc {
+    box-shadow: none;
+  }
+  .mt-row.mine .mt-idc {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .mt-head .mt-end,
+  .mt-row .mt-end {
+    box-shadow: none;
   }
 }

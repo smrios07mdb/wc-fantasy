@@ -43,6 +43,53 @@ describe("loadPlayers — data-discipline contract", () => {
     expect(loader).toContain("nameById.get(r.managerId)");
   });
 
+  it("builds the row STATLINE from a stat_player_match groupBy over appearances (minutes > 0)", () => {
+    expect(loader).toContain("prisma.statPlayerMatch.groupBy(");
+    expect(loader).toContain("where: { minutesPlayed: { gt: 0 } }");
+    expect(loader).toContain("_count: true"); // PLD = appearances
+    // Real promoted columns only — SH sources the promoted shots_on_target (no raw-shots column).
+    for (const col of [
+      "minutesPlayed",
+      "goals",
+      "assists",
+      "shotsOnTarget",
+      "keyPasses",
+      "tacklesWon",
+    ]) {
+      expect(loader).toContain(`${col}: true`);
+    }
+  });
+
+  it("YC is a REAL display-only count from event_match via the SHARED classifyCard (single source)", () => {
+    // reuse the shared classifier (@app/recompute) so a booking is counted like the game-detail Events
+    // surface — importing an EXISTING pure export is not an engine change.
+    expect(loader).toContain('from "@app/recompute"');
+    expect(loader).toContain("classifyCard");
+    expect(loader).toContain("prisma.eventMatch.findMany");
+    expect(loader).toContain('incidentType: { equals: "card"');
+    expect(loader).toContain("e.rescinded"); // rescinded rows excluded (mirrors buildGameDetail)
+    expect(loader).toContain('classifyCard(e) === "yellow"');
+    expect(loader).toContain("ycByPlayer.get(playerId) ?? 0");
+  });
+
+  it("the event_match read is READ-ONLY (no write/create/update) and there is NO migration/engine run", () => {
+    for (const forbidden of [
+      "eventMatch.create",
+      "eventMatch.update",
+      "eventMatch.delete",
+      "eventMatch.upsert",
+    ]) {
+      expect(loader).not.toContain(forbidden);
+    }
+    // recompute is reused by IMPORT only — the loader must not re-run scoring/recompute.
+    expect(loader).not.toContain("scorePlayerMatch(");
+    expect(loader).not.toContain("recompute(");
+  });
+
+  it("CS stays the ONE remaining gap (null) — never fabricated/derived", () => {
+    expect(loader).toContain("cleanSheets: null");
+  });
+
   it("R3: seasonPoints uses the SAME groupBy aggregation shape as loadWaivers (single source)", () => {
     const line = 'prisma.scorePlayerMatch.groupBy({ by: ["playerId"], _sum: { points: true } })';
     const waivers = read("../waivers/loadWaivers.ts");

@@ -165,13 +165,20 @@
   line-height: 1.5;
   padding: 2px;
 }
-/* PLAYERS-1: quiet link into the read-only /players browser (accent = a primary way in, per the
-   accent-marks-actions rule). Min tap target held at 44px for the mobile hard-rule. */
+/* PLAYERS-1: link into the read-only /players browser (accent = a primary way in, per the
+   accent-marks-actions rule). Min tap target held at 44px for the mobile hard-rule. Remediation:
+   rendered in a persistent footer OUTSIDE the tabs so it shows in every phase (incl. a closed window). */
+.wv-browse-foot {
+  display: flex;
+  justify-content: center;
+  padding: 4px 16px 10px;
+  border-top: 1px solid var(--hairline);
+}
 .wv-browse-all {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 2px;
+  padding: 2px 8px;
   color: var(--accent);
   font-weight: var(--fw-semibold);
   text-decoration: none;

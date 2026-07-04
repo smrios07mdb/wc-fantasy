@@ -82,6 +82,12 @@ export function MoreSheet({
                 {item.label}
               </a>
             ))}
+            {/* PLAYERS-1 remediation: the mobile reachability entry for the read-only /players browser.
+                A standalone additive item (NOT a NavId, so /players stays out of the nav model — a
+                first-class Players tab is T15-2's to add); the More sheet is the mobile nav surface. */}
+            <a href="/players" className="sh-more-item" onClick={close}>
+              Browse players
+            </a>
             {/* Gated Commissioner console entry — appended only for commissioners (IA §3 slate entry). */}
             {isCommissioner && (
               <a

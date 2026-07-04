@@ -811,9 +811,11 @@ export function Dashboard({ data }: { data: DashboardData }) {
         </div>
       )}
 
-      {/* PLAYERS-1: the browse-all entry point — a static tile in the active phases (group + playoff),
-          below the phase modules. No loader data, so loadDashboard stays untouched. */}
-      {(phase === "group" || phase === "playoff") && (
+      {/* PLAYERS-1: the browse-all entry point — a static tile in every live phase (group · playoff ·
+          complete), below the phase modules. No loader data, so loadDashboard stays untouched.
+          Remediation: widened to include `complete` so the tile is present whenever a pool exists;
+          R16 resolves to `playoff` (or `group` pre-first-knockout-kickoff), both covered. */}
+      {(phase === "group" || phase === "playoff" || phase === "complete") && (
         <div className="db-grid">
           <div className="db-grid-cell">
             <PlayerPoolModule />

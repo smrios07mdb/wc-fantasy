@@ -13,7 +13,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 import { PlayersClient } from "./PlayersClient";
-import type { PlayersView, PlPlayer } from "./types";
+import type { PlayersView, PlPlayer, PlStatline } from "./types";
 import type { AcquisitionWindow } from "@app/faab";
 
 afterEach(() => {
@@ -22,6 +22,18 @@ afterEach(() => {
 });
 
 const ME = "mgr-me";
+
+const EMPTY_STATS: PlStatline = {
+  pld: 0,
+  min: 0,
+  goals: 0,
+  assists: 0,
+  shots: 0,
+  keyPasses: 0,
+  tackles: 0,
+  yellowCards: null,
+  cleanSheets: null,
+};
 
 function plPlayer(id: string, over: Partial<PlPlayer> = {}): PlPlayer {
   return {
@@ -35,6 +47,7 @@ function plPlayer(id: string, over: Partial<PlPlayer> = {}): PlPlayer {
     seasonPoints: over.seasonPoints ?? null,
     nationAlive: over.nationAlive ?? true,
     owner: over.owner ?? null,
+    stats: over.stats ?? EMPTY_STATS,
   };
 }
 
@@ -65,6 +78,43 @@ describe("PlayersClient — list + sort", () => {
     );
     const names = rowButtons().map((b) => within(b).getByText(/High|Low|Nil/).textContent);
     expect(names).toEqual(["High", "Low", "Nil"]);
+  });
+});
+
+describe("PlayersClient — statline (real columns incl. YC; CS the '—' gap)", () => {
+  it("renders the real stat numbers incl. a REAL YC count, and '—' for CS (no source) + genuine zeros", () => {
+    render(
+      <PlayersClient
+        view={view([
+          plPlayer("p", {
+            name: "Statful",
+            seasonPoints: 55,
+            stats: {
+              pld: 5,
+              min: 438,
+              goals: 4,
+              assists: 3,
+              shots: 9,
+              keyPasses: 7,
+              tackles: 2,
+              yellowCards: 2, // REAL (from event_match) → renders the count
+              cleanSheets: null, // the one gap → "—"
+            },
+          }),
+        ])}
+      />,
+    );
+    const row = rowButtons()[0]!.closest(".mt-row") as HTMLElement;
+    const cells = Array.from(row.querySelectorAll(".mt-stat")).map((c) => c.textContent);
+    // Column order: Pld Min G A Sh KP CS Tkl YC — CS "—", YC "2" (real)
+    expect(cells).toEqual(["5", "438", "4", "3", "9", "7", "—", "2", "2"]);
+  });
+
+  it("a never-played player shows '—' across the counting columns (0 → muted dash)", () => {
+    render(<PlayersClient view={view([plPlayer("bench", { name: "Benched" })])} />);
+    const row = rowButtons()[0]!.closest(".mt-row") as HTMLElement;
+    const cells = Array.from(row.querySelectorAll(".mt-stat")).map((c) => c.textContent);
+    expect(cells).toEqual(["—", "—", "—", "—", "—", "—", "—", "—", "—"]);
   });
 });
 

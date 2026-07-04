@@ -1,19 +1,23 @@
 "use client";
 /**
  * Presentational pieces for the /players browser — ported from `design/design_reference/players/
- * Players.html` (the `.pl-*` row vocabulary, frame 6) into the codebase's conventions (typed props,
- * ds.css classes). No IO, no data fetching; `PlayersClient` owns all state.
+ * Players.html` into the codebase's conventions (typed props, ds.css classes). No IO, no data fetching;
+ * `PlayersClient` owns all state.
  *
- * ATOMS ARE LOCAL BY DESIGN: `PlPos` renders the GLOBAL `.pos` badge (ds.css) and `PlKit` renders the
- * route-scoped `.pl-kit` code-on-tint chip (players.css) — neither depends on any waivers CSS, so
- * /players imports EXACTLY ONE thing from /waivers: the shared view-only card (`FaPlayerCardSheet`).
- * That keeps the cross-module coupling to the single documented seam. (The design's flag-gradient KIT
- * library was never ported into the app — the code-on-pos-tint chip matches the shipped /waivers look
- * we hand off to.)
+ * PLAYERS-1 remediation (reverses the G1 drop): the row is the design's `.mt-*` STAT TABLE — a single
+ * horizontally-scrollable grid with the Player cell pinned left and the Pts cell pinned right (design
+ * image 4's "← swipe stats"), widening to a desktop wide-list (image 2) at ≥760px. Real statline columns
+ * (Pld·Min·G·A·Sh·KP·Tkl); CS + YC render "—" (no in-scope source — see PlStatline). The KIT cell reuses
+ * the shared FLAG-KIT primitive `kitOf` (T13/T16 — the same jersey the pitch surfaces use), NOT the
+ * waivers text-abbrev chip. Atoms `PlPos`/`OwnerChip` stay local; /players still imports EXACTLY ONE
+ * thing from /waivers (the shared card).
  */
 import type { Position } from "@app/shared";
 import type { AcquisitionWindow } from "@app/faab";
-import type { PlPlayer } from "./types";
+import { kitOf } from "@/src/kit/kitOf";
+import { Flag } from "@/app/draft/Flag";
+import { toIso2 } from "@/src/draft/flag";
+import type { PlPlayer, PlStatline } from "./types";
 import type { Availability, PosFilter, SortDir } from "./playersLogic";
 import { shouldShowBidTrailer } from "./playersLogic";
 
@@ -55,23 +59,31 @@ export function PlPos({ p }: { p: Position }) {
   return <span className={`pos pos-${p}`}>{p}</span>;
 }
 
-/** Nation code on a position-tinted chip (the no-image kit fallback, route-scoped `.pl-kit`). */
+/**
+ * The FLAG-KIT jersey square (design's KIT column, images 2/4 render real flags). Reuses the shared
+ * `kitOf` primitive (apps/web/src/kit — T13 lineup jerseys / T16 game-detail), so /players uses the
+ * SAME flag-kit the pitch surfaces do. GOTCHA (kitOf contract): NEVER set `background-size: cover` —
+ * the multi-layer flag backgrounds would collapse. A small emoji `<Flag>` overlays so the cell always
+ * carries a flag signal even for a nation outside the kit library (kitOf → neutral surface).
+ */
 export function PlKit({ player }: { player: PlPlayer }) {
-  const code = (player.nation ?? "—").slice(0, 3).toUpperCase();
   return (
     <span
-      className={`pl-kit pos-${player.position}`}
+      className="pl-kit"
+      style={{ background: kitOf(player.nation) }}
       title={player.nation ?? undefined}
       aria-hidden="true"
     >
-      {code}
+      <span className="pl-kit-flag">
+        <Flag code={toIso2(player.nation ?? "")} label="" />
+      </span>
     </span>
   );
 }
 
 /**
- * Ownership chip: Free agent = accent (cobalt); a manager = muted; YOU = accent + "· you". Accent
- * marks *you* + the FA (a primary way in), never a functional state — per BRAND/design.
+ * Ownership chip: Free agent = accent (cobalt); a manager = muted; YOU = accent. Accent marks *you* +
+ * the FA (a primary way in), never a functional state — per BRAND/design. Compact for the table cell.
  */
 export function OwnerChip({
   player,
@@ -80,21 +92,57 @@ export function OwnerChip({
   player: PlPlayer;
   viewerManagerId: string;
 }) {
-  if (player.owner === null) return <span className="pl-own pl-own-fa">Free agent</span>;
+  if (player.owner === null) return <span className="pl-own pl-own-fa">FA</span>;
   if (player.owner.managerId === viewerManagerId)
-    return <span className="pl-own pl-own-me">{player.owner.name} · you</span>;
-  return <span className="pl-own pl-own-mgr">{player.owner.name}</span>;
+    return <span className="pl-own pl-own-me">You</span>;
+  return (
+    <span className="pl-own pl-own-mgr" title={player.owner.name}>
+      {player.owner.name}
+    </span>
+  );
 }
 
-// ── the row (design frame 6 `.pl-row`) ───────────────────────────────────────────────────────────
+// ── the stat table (design frame 1/6 `.mt-*`) ────────────────────────────────────────────────────
+/** The stat columns, in the design's order. `key` indexes `PlStatline`; a null value renders "—". */
+const STAT_COLUMNS: readonly { key: keyof PlStatline; label: string }[] = [
+  { key: "pld", label: "Pld" },
+  { key: "min", label: "Min" },
+  { key: "goals", label: "G" },
+  { key: "assists", label: "A" },
+  { key: "shots", label: "Sh" },
+  { key: "keyPasses", label: "KP" },
+  { key: "cleanSheets", label: "CS" },
+  { key: "tackles", label: "Tkl" },
+  { key: "yellowCards", label: "YC" },
+];
+
+/** A stat cell — a genuine 0 and a null (no source) both read as a muted "—" (the design convention);
+ *  a positive count renders the number. Pure, so the render-proof + unit tests can pin it. */
+export function statCellText(value: number | null): string {
+  return value == null || value === 0 ? "—" : String(value);
+}
+
+/** The table header (Player · Own · 9 stat columns · Pts). */
+export function StatHeader() {
+  return (
+    <div className="mt-head mt-cols" role="row">
+      <div className="mt-idc">Player</div>
+      <div className="mt-owner-h">Own</div>
+      {STAT_COLUMNS.map((c) => (
+        <div key={c.key}>{c.label}</div>
+      ))}
+      <div className="mt-end">Pts</div>
+    </div>
+  );
+}
+
 /**
- * One player row. The whole row (minus the trailer) is a BUTTON that opens the shared view-only card;
- * the bid trailer is a SIBLING `<a>` (never nested in the button — valid HTML + the FaPickRow
- * sibling-control precedent), so tapping it navigates to /waivers?bid= without also opening the card.
- * The trailer only appears for a claimable free agent while the window is open — and it only HANDS
- * OFF; acquisition itself is single-sourced on /waivers.
+ * One player row in the stat table. The Player cell (pinned left) is the card-opening button; the bid
+ * trailer is a SIBLING control inside the pinned-right Pts cell (never nested in the button). The
+ * trailer appears only for a claimable free agent while the window is open — and only HANDS OFF to
+ * /waivers?bid=; acquisition stays single-sourced on /waivers.
  */
-export function PlayerRow({
+export function PlayerStatRow({
   player,
   viewerManagerId,
   windowPhase,
@@ -111,41 +159,54 @@ export function PlayerRow({
   const elim = !player.nationAlive;
   const showTrailer = shouldShowBidTrailer(player, windowPhase, now);
   return (
-    <div className={"pl-row" + (mine ? " mine" : "") + (elim ? " is-elim" : "")}>
+    <div className={"mt-row mt-cols" + (mine ? " mine" : "") + (elim ? " is-elim" : "")} role="row">
       <button
-        className="pl-row-tap"
+        className="mt-idc"
         onClick={() => onOpen(player)}
         aria-label={`View ${player.name}’s player card`}
       >
-        <span className="pl-pos">
-          <PlPos p={player.position} />
-        </span>
+        <PlPos p={player.position} />
         <PlKit player={player} />
-        <span className="pl-idc">
-          <span className="pl-name">{player.name}</span>
-          <span className="pl-sub">
-            <span className="pl-flagname">{player.nation ?? "—"}</span>
-            {elim && <span className="pl-elimtag">Eliminated</span>}
-          </span>
-        </span>
-        <span className="pl-right">
-          <OwnerChip player={player} viewerManagerId={viewerManagerId} />
-          <span className="pl-pts">
-            <b>{player.seasonPoints ?? "—"}</b>
-            <span>PTS</span>
-          </span>
+        <span className="nm">
+          <b>{player.name}</b>
+          <small>
+            {player.nation ?? "—"}
+            {elim && <span className="mt-out"> · out</span>}
+          </small>
         </span>
       </button>
-      {showTrailer && (
-        <a
-          className="pl-bid"
-          href={`/waivers?bid=${player.id}`}
-          aria-label={`Place a bid on ${player.name}`}
-        >
-          <IconBid />
-          <span>Bid</span>
-        </a>
-      )}
+      <div className="mt-owner">
+        <OwnerChip player={player} viewerManagerId={viewerManagerId} />
+      </div>
+      {STAT_COLUMNS.map((c) => {
+        const text = statCellText(player.stats[c.key]);
+        return (
+          <div key={c.key} className={"mt-stat" + (text === "—" ? " zero" : "")}>
+            {text}
+          </div>
+        );
+      })}
+      <div className="mt-end">
+        <span className="p">{player.seasonPoints ?? "—"}</span>
+        {showTrailer && (
+          <a
+            className="mt-bid"
+            href={`/waivers?bid=${player.id}`}
+            aria-label={`Place a bid on ${player.name}`}
+          >
+            <IconBid />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The one-line swipe hint above the table (design image 4). Decorative — the table works without it. */
+export function SwipeHint() {
+  return (
+    <div className="mt-scrollhint" aria-hidden="true">
+      ← swipe stats · tap a player to open the card
     </div>
   );
 }

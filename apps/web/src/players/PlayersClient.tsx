@@ -32,10 +32,12 @@ import {
   EmptyState,
   ListMeta,
   Pager,
-  PlayerRow,
+  PlayerStatRow,
   PositionSegmented,
   SearchField,
+  StatHeader,
   StatusLine,
+  SwipeHint,
 } from "./components";
 
 export function PlayersClient({ view }: { view: PlayersView }) {
@@ -118,32 +120,38 @@ export function PlayersClient({ view }: { view: PlayersView }) {
         )}
       </StatusLine>
 
-      <div className="pl-list">
-        {visible.length === 0 ? (
-          <EmptyState
-            filterLabels={activeFilterLabels(filter)}
-            onClear={() => setFilter(DEFAULT_PLAYERS_FILTER)}
-          />
-        ) : (
-          visible.map((p) => (
-            <PlayerRow
-              key={p.id}
-              player={p}
-              viewerManagerId={view.viewerManagerId}
-              windowPhase={view.windowPhase}
-              now={now}
-              onOpen={setCardPlayer}
-            />
-          ))
-        )}
-      </div>
-
-      {visible.length > 0 && (
-        <Pager
-          remaining={sorted.length - visible.length}
-          total={filtered.length}
-          onMore={() => setPage((p) => p + 1)}
+      {visible.length === 0 ? (
+        <EmptyState
+          filterLabels={activeFilterLabels(filter)}
+          onClear={() => setFilter(DEFAULT_PLAYERS_FILTER)}
         />
+      ) : (
+        <>
+          <SwipeHint />
+          {/* One horizontally-scrollable stat table: Player pinned left, Pts pinned right, the stat
+              columns swipe (design image 4). Scroll containment (overscroll-behavior) keeps the swipe
+              off the page; it widens to a desktop wide-list (image 2) at ≥760px — see players.css. */}
+          <div className="mt-scroll" role="table" aria-label="Players">
+            <div className="mt-wrap">
+              <StatHeader />
+              {visible.map((p) => (
+                <PlayerStatRow
+                  key={p.id}
+                  player={p}
+                  viewerManagerId={view.viewerManagerId}
+                  windowPhase={view.windowPhase}
+                  now={now}
+                  onOpen={setCardPlayer}
+                />
+              ))}
+            </div>
+          </div>
+          <Pager
+            remaining={sorted.length - visible.length}
+            total={filtered.length}
+            onMore={() => setPage((p) => p + 1)}
+          />
+        </>
       )}
 
       {/* Row tap → the SHARED view-only card. No star (read-only), and its foot points to /waivers —

@@ -439,11 +439,6 @@ export function WaiversClient({
               Higher claims process first — once a claim wins, its FAAB is spent before the next is
               evaluated.
             </div>
-            {/* PLAYERS-1: the one link into the read-only full-tournament browser. Acquisition stays
-                here — /players hands a free agent back via ?bid= (see WaiversClient deep-link). */}
-            <a className="wv-browse-all t-sm" href="/players">
-              Browse all players →
-            </a>
           </div>
 
           <aside className="wv-rail">
@@ -487,6 +482,16 @@ export function WaiversClient({
           </div>
         </div>
       )}
+
+      {/* PLAYERS-1 remediation: the one link into the read-only full-tournament browser. Rendered
+          UNCONDITIONALLY (outside the claims/results tabs) so it is reachable in EVERY phase — incl.
+          a closed (locked) window, when the claims tab shows no composer. Acquisition stays here:
+          /players hands a free agent back via ?bid= (see the WaiversClient deep-link). */}
+      <div className="wv-browse-foot">
+        <a className="wv-browse-all t-sm" href="/players">
+          Browse all players →
+        </a>
+      </div>
 
       {composer.open && (
         <BidComposer

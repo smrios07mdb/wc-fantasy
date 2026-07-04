@@ -4,7 +4,7 @@
  * clauses), and the empty-state labels. No DB, no React — deterministic over injected `now`.
  */
 import { describe, it, expect } from "vitest";
-import type { PlPlayer } from "./types";
+import type { PlPlayer, PlStatline } from "./types";
 import {
   DEFAULT_PLAYERS_FILTER,
   activeFilterLabels,
@@ -26,6 +26,18 @@ import {
 const ME = "mgr-me";
 const RIVAL = "mgr-rival";
 
+const EMPTY_STATS: PlStatline = {
+  pld: 0,
+  min: 0,
+  goals: 0,
+  assists: 0,
+  shots: 0,
+  keyPasses: 0,
+  tackles: 0,
+  yellowCards: null,
+  cleanSheets: null,
+};
+
 function plPlayer(id: string, over: Partial<PlPlayer> = {}): PlPlayer {
   return {
     id,
@@ -38,6 +50,7 @@ function plPlayer(id: string, over: Partial<PlPlayer> = {}): PlPlayer {
     seasonPoints: over.seasonPoints ?? null,
     nationAlive: over.nationAlive ?? true,
     owner: over.owner ?? null,
+    stats: over.stats ?? EMPTY_STATS,
   };
 }
 
