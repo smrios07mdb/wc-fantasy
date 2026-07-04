@@ -31,8 +31,9 @@
 /* eslint-disable no-undef */
 import { chromium } from "@playwright/test";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(__dir, "..");
@@ -306,12 +307,85 @@ function report(label, fails) {
   results.push({ label, fails });
 }
 
+// ── PLAYERS-DATA-scope · participant-scope INVARIANT (DB-backed) ──────────────────────────────
+// Proves the guard against LIVE data: the /players pool is scoped to the fifa_match schedule
+// participant set (home ∪ away FKs). Asserts the TRUE invariant — the pool is a SUBSET of the
+// participant set (0 pooled players on a non-scheduled team) and ≤ 63 distinct teams back it — and
+// REPORTS N + the distinct pool-team count as evidence the guard is a NO-OP on today's data (every
+// player already sits on a scheduled team; the 49 non-WC nations the roster feed also carries hold 0
+// players). @app/db is TypeScript, so we register tsx's ESM loader (resolved from packages/db — the
+// only workspace that depends on it) and import prisma by absolute path. Skips cleanly (never fails)
+// when tsx / the client / DATABASE_URL are unavailable, so a plain-node render-only run still passes.
+async function checkParticipantScopeInvariant() {
+  const dbPkgDir = resolve(appDir, "../../packages/db");
+  let prisma;
+  try {
+    const dbRequire = createRequire(pathToFileURL(resolve(dbPkgDir, "package.json")));
+    const { register } = await import(pathToFileURL(dbRequire.resolve("tsx/esm/api")).href);
+    register(); // lets the TS @app/db import below resolve under plain `node`
+    const { config } = await import(pathToFileURL(dbRequire.resolve("dotenv")).href);
+    config({ path: resolve(appDir, "../../.env") }); // repo-root .env; no-op if env already set
+    if (!process.env.DATABASE_URL) {
+      console.log("  ⚠ SKIP participant-scope invariant (no DATABASE_URL)");
+      return;
+    }
+    ({ prisma } = await import(pathToFileURL(resolve(dbPkgDir, "src/index.ts")).href));
+  } catch (e) {
+    console.log(
+      `  ⚠ SKIP participant-scope invariant (DB harness unavailable: ${e.message.split("\n")[0]})`,
+    );
+    return;
+  }
+  try {
+    const [players, matches] = await Promise.all([
+      prisma.player.findMany({ select: { teamId: true } }),
+      prisma.fifaMatch.findMany({ select: { homeTeamId: true, awayTeamId: true } }),
+    ]);
+    // The loader's predicate, mirrored EXACTLY: participants = schedule home∪away; pool = team ∈ set.
+    const participants = new Set();
+    for (const m of matches) {
+      if (m.homeTeamId) participants.add(m.homeTeamId);
+      if (m.awayTeamId) participants.add(m.awayTeamId);
+    }
+    const scoped = players.filter((p) => p.teamId !== null && participants.has(p.teamId));
+    const poolTeams = new Set(scoped.map((p) => p.teamId));
+    const N = scoped.length;
+    const offSchedule = players.length - N;
+    console.log(
+      `  · N = ${N} player(s) in the scoped pool · ${poolTeams.size} distinct teams back it · ` +
+        `${participants.size} schedule-participant teams · ${offSchedule} off-schedule ` +
+        `(guard is a no-op on today's data)`,
+    );
+    report("participant-scope invariant · pool ⊆ fifa_match participants · ≤63 backing teams", [
+      // TRUE invariant #1 — the pool is a SUBSET of the schedule-participant set.
+      ...(offSchedule === 0
+        ? []
+        : [`pool NOT ⊆ participants: ${offSchedule} pooled player(s) on a non-scheduled team`]),
+      // TRUE invariant #2 — no more distinct teams back the pool than the schedule carries, and the
+      // participant set itself stays ≤ 63 (drift past that means re-confirm the predicate).
+      ...(poolTeams.size <= participants.size
+        ? []
+        : [`pool spans ${poolTeams.size} teams > ${participants.size} participants`]),
+      ...(participants.size <= 63
+        ? []
+        : [`participant set ${participants.size} > 63 — schedule drift, re-confirm the predicate`]),
+    ]);
+  } finally {
+    await prisma.$disconnect().catch(() => {});
+  }
+}
+
+// Run the DB-backed invariant FIRST — it is independent of Chromium, so it still runs (and can fail
+// the script) even when the render proof is skipped for want of a browser binary.
+await checkParticipantScopeInvariant();
+
 let browser;
 try {
   browser = await chromium.launch();
 } catch (e) {
-  console.log(`SKIP (no Chromium): ${e.message.split("\n")[0]}`);
-  process.exit(0);
+  console.log(`SKIP render proof (no Chromium): ${e.message.split("\n")[0]}`);
+  const failCount = results.filter((r) => r.fails.length).length;
+  process.exit(failCount === 0 ? 0 : 1);
 }
 mkdirSync(screenshotsDir, { recursive: true });
 

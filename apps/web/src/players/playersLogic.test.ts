@@ -17,7 +17,9 @@ import {
   matchesPosition,
   matchesSearch,
   pageSlice,
+  participantTeamIds,
   playersNations,
+  scopeToParticipants,
   shouldShowBidTrailer,
   sortPlayers,
   type PlayersFilter,
@@ -112,6 +114,47 @@ describe("single filters (each alone)", () => {
     expect(matchesActiveTeams(out, false)).toBe(true); // eliminated visible by default
     expect(matchesActiveTeams(alive, true)).toBe(true);
     expect(matchesActiveTeams(out, true)).toBe(false); // collapsed when on
+  });
+});
+
+describe("participant scoping (PLAYERS-DATA-scope)", () => {
+  it("participantTeamIds = fifa_match home ∪ away, nulls skipped, deduped", () => {
+    const matches = [
+      { homeTeamId: "t-fra", awayTeamId: "t-bra" },
+      { homeTeamId: "t-fra", awayTeamId: null }, // dupe home + null away
+      { homeTeamId: null, awayTeamId: "t-arg" }, // null home
+      { homeTeamId: null, awayTeamId: null }, // both null → contributes nothing
+    ];
+    expect([...participantTeamIds(matches)].sort()).toEqual(["t-arg", "t-bra", "t-fra"]);
+  });
+
+  it("scopeToParticipants keeps ONLY players on a scheduled team (non-WC + null-team excluded)", () => {
+    const participants = new Set(["t-fra", "t-bra"]);
+    const rows = [
+      { id: "in-fra", teamId: "t-fra" }, // participant → in
+      { id: "in-bra", teamId: "t-bra" }, // participant → in
+      { id: "out-nonwc", teamId: "t-nonwc" }, // team never in the schedule → excluded
+      { id: "out-null", teamId: null }, // no linked team → excluded
+    ];
+    expect(scopeToParticipants(rows, participants).map((r) => r.id)).toEqual(["in-fra", "in-bra"]);
+  });
+
+  it("Active-teams toggle over the SCOPED pool ⇒ alive = non-eliminated PARTICIPANT", () => {
+    // Mirror the loader end-to-end: derive participants from the schedule, scope the rows, then map
+    // nationAlive = !eliminated (which now only ever applies to participants) and apply the toggle.
+    const schedule = [{ homeTeamId: "t-alive", awayTeamId: "t-elim" }];
+    const participants = participantTeamIds(schedule);
+    const teamRows = [
+      { id: "p-alive", teamId: "t-alive", eliminated: false }, // participant, alive
+      { id: "p-elim", teamId: "t-elim", eliminated: true }, // participant, eliminated
+      { id: "p-nonwc", teamId: "t-nonwc", eliminated: false }, // non-WC — would look "alive" if kept
+    ];
+    const pool = scopeToParticipants(teamRows, participants).map((r) =>
+      plPlayer(r.id, { nationAlive: !r.eliminated }),
+    );
+    // The non-WC row never entered the pool; of the participants, only the non-eliminated stays alive.
+    expect(pool.map((p) => p.id)).toEqual(["p-alive", "p-elim"]);
+    expect(pool.filter((p) => matchesActiveTeams(p, true)).map((p) => p.id)).toEqual(["p-alive"]);
   });
 });
 

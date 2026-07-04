@@ -121,6 +121,26 @@ describe("loadPlayers — data-discipline contract", () => {
     }
   });
 
+  it("PLAYERS-DATA-scope: scopes the pool to the fifa_match home∪away participant set", () => {
+    // Derives the participant set + filters the pool via the unit-pinned pure helpers (playersLogic).
+    expect(loader).toContain("participantTeamIds(scheduleTeamRows)");
+    expect(loader).toContain("scopeToParticipants(playerRows, participants)");
+    // Rows are built from the SCOPED pool, never the raw playerRows.
+    expect(loader).toContain("scopedPlayerRows.map");
+    expect(loader).not.toContain("playerRows.map");
+  });
+
+  it("PLAYERS-DATA-scope: the participant read is the fifa_match team FKs — NOT group_id, NOT a list", () => {
+    // A dedicated two-column schedule read (home/away FKs) backs the predicate.
+    expect(loader).toContain(
+      "prisma.fifaMatch.findMany({ select: { homeTeamId: true, awayTeamId: true } })",
+    );
+    // group_id is never READ as the participant signal (it is NULL for every team) — assert the
+    // Prisma field form (camelCase `groupId`), so the DECISIONS rationale may still name `group_id`
+    // in prose. No hardcoded country/team allow-list either: the set is derived purely from the FKs.
+    expect(loader).not.toContain("groupId");
+  });
+
   it("does NOT touch migration/schema/RLS/Realtime (page-load snapshot only)", () => {
     // No Realtime channel / publication wiring, no RLS GUC juggling in a read-only browser loader.
     expect(loader).not.toContain(".channel(");

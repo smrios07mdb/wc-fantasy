@@ -39,6 +39,38 @@ export const DEFAULT_PLAYERS_FILTER: PlayersFilter = {
 /** The paged-reveal page size (design: "Load 25 more", never the full ~1,200-row wall). */
 export const PLAYERS_PAGE_SIZE = 25;
 
+// ── participant scoping (PLAYERS-DATA-scope) ──────────────────────────────────────────────────
+// The /players pool is scoped to WC PARTICIPANTS. The ONLY reliable participant signal is the
+// fifa_match SCHEDULE: a team is in the tournament IFF it appears as home OR away in a fixture.
+// `group_id` is NULL for every fifa_team row, and `eliminated` only marks knocked-out teams — so
+// "not eliminated" wrongly reads as "in the tournament" for the non-WC nations the roster feed also
+// carries. See loadPlayers / DECISIONS. These two pure helpers are the loader's scoping seam; they
+// are unit-pinned (a synthetic non-participant player is excluded) so the code path is proven even
+// though — on today's data — every player already sits on a scheduled team (the guard is a no-op).
+
+/** The WC-participant team-id set: every team that appears as a home OR away FK in the fifa_match
+ *  schedule (nulls skipped, deduped). The predicate reads schedule FKs, NOT group_id or eliminated. */
+export function participantTeamIds(
+  matches: readonly { homeTeamId: string | null; awayTeamId: string | null }[],
+): Set<string> {
+  const set = new Set<string>();
+  for (const m of matches) {
+    if (m.homeTeamId) set.add(m.homeTeamId);
+    if (m.awayTeamId) set.add(m.awayTeamId);
+  }
+  return set;
+}
+
+/** Scope a player list to tournament participants: keep only players whose team is in the schedule
+ *  participant set. A player with NO team, or a team absent from the schedule, is EXCLUDED. Pure +
+ *  non-mutating; generic over the loader's row shape (only `teamId` is read). */
+export function scopeToParticipants<T extends { teamId: string | null }>(
+  players: readonly T[],
+  participants: ReadonlySet<string>,
+): T[] {
+  return players.filter((p) => p.teamId !== null && participants.has(p.teamId));
+}
+
 // ── single-filter predicates (each pinned alone) ──────────────────────────────────────────────
 
 /** Case-insensitive substring match on the full display name (empty query ⇒ always true). */

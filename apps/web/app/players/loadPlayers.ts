@@ -30,6 +30,10 @@ import { acquisitionWindowState } from "@app/faab";
 // `packages/recompute` is byte-unchanged and this loader only READS `event_match` (no write, no score run).
 import { classifyCard } from "@app/recompute";
 import { selectCurrentPeriod, type Position } from "@app/shared";
+// PLAYERS-DATA-scope: the pure participant-scoping seam (unit-pinned in playersLogic.test). Importing
+// EXISTING pure helpers is not a logic touch — the loader just derives the WC-participant set from the
+// fifa_match schedule and filters the pool to it (see the read below + DECISIONS).
+import { participantTeamIds, scopeToParticipants } from "@/src/players/playersLogic";
 import type { PlayersView, PlPlayer, PlStatline } from "@/src/players/types";
 
 /** First initial + surname, else surname, else display name (mirrors loadWaivers' `shortNameOf`). */
@@ -81,11 +85,14 @@ export async function loadPlayers(viewerManagerId: string): Promise<PlayersView 
     seasonScores,
     statlineRows,
     cardRows,
+    scheduleTeamRows,
     upcomingMatches,
     periodRows,
   ] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { timezone: true } }),
-    // Every tournament player. nation + nationAlive ride the team join; NO `country` read.
+    // Every ingested player. nation + nationAlive ride the team join; NO `country` read. The pool is
+    // SCOPED to WC participants below (PLAYERS-DATA-scope) — a player whose team never appears in the
+    // fifa_match schedule is a non-WC nation the roster feed also carried, and is dropped entirely.
     prisma.player.findMany({ select: PLAYER_SELECT, orderBy: { displayName: "asc" } }),
     // Active ownership rows (league-scoped, `dropped_at IS NULL`) — the byte-identical
     // `liveOwnedWhere(leagueId)` predicate. FA = no row here. playerId → managerId only.
@@ -128,6 +135,14 @@ export async function loadPlayers(viewerManagerId: string): Promise<PlayersView 
       where: { incidentType: { equals: "card", mode: "insensitive" }, playerId: { not: null } },
       select: { playerId: true, incidentType: true, incidentClass: true, rescinded: true },
     }),
+    // PLAYERS-DATA-scope: the WC-PARTICIPANT team set = every team that appears as home OR away in the
+    // fifa_match schedule. Read over the FULL schedule (NO status filter): an eliminated team has only
+    // completed matches, but its players are still WC participants and must stay in the pool (greyed
+    // "out"), so filtering by status would wrongly drop them. This is a SEPARATE read from the
+    // status-filtered kickoff-cutoff read below — that one answers "what's still acquirable", this one
+    // answers "who is in the tournament". Two team-id columns only; the ONLY reliable signal (group_id
+    // is NULL for every team; `eliminated` marks knockouts, not tournament membership — see DECISIONS).
+    prisma.fifaMatch.findMany({ select: { homeTeamId: true, awayTeamId: true } }),
     // The cutoff clock: every still-acquirable fixture, earliest first → per-team next kickoff.
     prisma.fifaMatch.findMany({
       where: { status: { in: ["scheduled", "in_progress"] } },
@@ -209,7 +224,15 @@ export async function loadPlayers(viewerManagerId: string): Promise<PlayersView 
     });
   }
 
-  const players: PlPlayer[] = playerRows.map((p: PlayerRow) => {
+  // PLAYERS-DATA-scope: scope the pool to WC participants BEFORE building rows. The participant set is
+  // derived from the fifa_match schedule (home ∪ away FKs); a player whose team never appears there is
+  // a non-WC nation the roster feed also carried and is EXCLUDED. On today's data every player already
+  // sits on a scheduled team, so this removes 0 rows — a defensive invariant, not a live cut. With the
+  // pool now participant-only, `nationAlive = !eliminated` (below) can only ever mark PARTICIPANTS.
+  const participants = participantTeamIds(scheduleTeamRows);
+  const scopedPlayerRows = scopeToParticipants(playerRows, participants);
+
+  const players: PlPlayer[] = scopedPlayerRows.map((p: PlayerRow) => {
     const ko = p.teamId ? kickoffByTeam.get(p.teamId) : undefined;
     return {
       id: p.id,
