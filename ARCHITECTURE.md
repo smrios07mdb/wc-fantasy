@@ -715,10 +715,18 @@ Minimal, for a private league of friends.
     as a **vertical, round-sequential stack** of `.pl-round` sections R32 → R16 → QF → SF → Final
     (mobile-first; reuses the matchday section styling; replaced the old horizontal `.pl-bcol` scroller —
     2026-06-28). When `playoffActive` (now on `PoolView`) the Picks tab **hides the group phase** at the
-    RENDER layer — PoolClient gates the group matchday lists / Completed archive / unscheduled on
-    `view.playoffActive`, while the pure `selectPoolPicksView` keeps the FULL buckets so the leaderboard
+    RENDER layer — PoolClient gates the group matchday lists / `unscheduled` on
+    `view.playoffActive` (the Completed archive drawer is NOT gated — it shows in both phases; see below),
+    while the pure `selectPoolPicksView` keeps the FULL buckets so the leaderboard
     drill-in modal (`selectManagerPicks`) retains every manager's settled history (a selector-side strip
-    would silently empty that modal — caught in adversarial review). A knockout match is
+    would silently empty that modal — caught in adversarial review). **The ≥24h Completed archive now spans
+    the knockout rounds too** (`feat/pool-archive-knockout`, main@8bfd3ee): a completed knockout match ≥24h
+    past kickoff leaves its `.pl-round` and joins the same `completed` bucket (a round emptied by archiving
+    is dropped; a never-seeded round stays a TBD skeleton), and the unified `completed` `<details>` drawer
+    is **re-shown in the playoff phase** (no longer `showGroup`-gated) so the finished R32 matches archive
+    into it rather than stacking atop the vertical round layout. Only `completed`-status matches archive, so
+    no pickable (unlocked) match is ever hidden; the selector only buckets (`bracket`→`completed`), never
+    drops. See DECISIONS → Quiniela archive. A knockout match is
     **pickable only when BOTH sides are resolved real teams**; undecided slots — feed placeholders named
     `Team {balldontlie_team_id}`, detected by `/^Team \d+$/` since `fifa_team.country`/`.abbreviation` are
     NULL for ALL teams — render as **TBD with NO pick buttons** (`poolView.ts`: `isTeamResolved` /

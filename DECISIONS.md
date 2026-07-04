@@ -2223,6 +2223,24 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   matchdays are dropped (no bare MD header). The bucket sorts kickoff-desc and renders as a collapsed
   native `<details>` (no client JS). The archive `now` is the **same server instant** `loadPool` feeds
   the reveal read, so a match can't be 'revealed but un-archived' from a split clock.
+- **The archive now extends to the KNOCKOUT rounds — the "fixed frame" scoping above is SUPERSEDED**
+  (`feat/pool-archive-knockout`, main@8bfd3ee). In the live R16 phase the 16 completed R32 matches (all
+  >24h) stacked at the top of the vertical round layout and pushed the live/upcoming rounds down. The
+  SAME `status === "completed" && now − kickoffAt ≥ ARCHIVE_AFTER_MS` cut now partitions `bracket`
+  fixtures exactly as it does the `group_md` lists: an archived knockout match leaves its `.pl-round`
+  and joins the **same** `completed` bucket (group + knockout intermixed, kickoff-desc), and a round
+  **emptied by archiving is dropped** — mirroring the emptied-matchday drop — while a *never-seeded*
+  round stays an honest empty TBD skeleton (the drop keys on `had-a-fixture && none-visible`, not merely
+  `none-visible`). Non-canonical rounds (e.g. a finished `3P`) sink too. No second constant, no second
+  clock (the same server `now` is threaded). **Load-bearing safety invariant:** only `completed`-status
+  matches archive, so a `scheduled`/`in_progress` knockout match NEVER leaves its round regardless of the
+  clock — archived ⟹ completed ⟹ already locked, so no pickable match can ever be hidden (pinned in
+  `poolView.test.ts`). Companion render change: the unified `completed` `<details>` drawer, previously
+  `showGroup`-gated (playoff-hidden), is now **re-shown in the playoff phase** at the bottom of the Picks
+  tab; the `group_md` matchday lists and `unscheduled` section stay playoff-hidden. The pure selector
+  still only **buckets** (`bracket`→`completed`), never drops — the drill-in (`selectManagerPicks` reads
+  `...picks.completed`) and the leaderboard (built from the full `leaderboardMatches`, independent of the
+  partition) keep full group+knockout history. Display-only: no schema/RLS/API/scoring/CSS change.
 
 ## Notifications — Web Push transport + preference model (Prompt 41a; 41b wires triggers)
 
