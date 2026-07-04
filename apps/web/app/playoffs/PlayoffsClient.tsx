@@ -26,6 +26,7 @@ import {
   type ConnState,
   type HeroDrop,
 } from "./components";
+import { decideCeremonyLatch, hasSeenCut, recordCutSeen } from "@/src/playoffs/seenCeremony";
 import "./playoffs.css";
 
 // The blade choreography timing (client-side; the loader is clockless). wind = "Chocoyo raises the
@@ -33,7 +34,14 @@ import "./playoffs.css";
 const BLADE_WIND_MS = 850;
 const BLADE_SETTLE_MS = 1950;
 
-export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
+export function PlayoffsClient({
+  initialView,
+  leagueId,
+}: {
+  initialView: PlayoffsView;
+  /** League scope for the per-device cut-ceremony seen-latch (shared with /vsfield "The Cut"). */
+  leagueId: string;
+}) {
   const [view, setView] = useState<PlayoffsView>(initialView);
   const [conn, setConn] = useState<ConnState>("loading");
 
@@ -92,6 +100,9 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
       return;
     }
 
+    // A live watcher just witnessed this cut — record it so the FIRST-OPEN latch below never replays
+    // it on this device's next open (and neither does /vsfield's "The Cut", which shares the key).
+    recordCutSeen(leagueId, view.rounds[flipped]!.round);
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
     setDrop({ focusIdx: flipped, phase: "wind" });
@@ -105,7 +116,37 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
         BLADE_SETTLE_MS,
       ),
     );
-  }, [view]);
+  }, [view, leagueId]);
+
+  // ── the FIRST-OPEN blade latch (this thread) — CLIENT-ONLY (useEffect, never SSR/render → no
+  // hydration mismatch), mount-once. The live→past latch above only fires for a client actively
+  // WATCHING a round cut; a manager who opens AFTER the cut misses it. So on mount: diff the PAST cut
+  // rounds the snapshot already exposes against the shared per-device seen-set and, if the most-recent
+  // cut is UNSEEN, play its one-time blade (focus the CHOP on that round, then settle onto the live
+  // round). Record ALL past rounds (a fresh device seeds its whole past → older cuts never replay).
+  // Reduced-motion / champion-complete skip the swing but STILL record — the settled hero (past round
+  // shows the dropped blade at rest; complete shows the persistent trophy) is the static aftermath.
+  useEffect(() => {
+    const pastCuts = initialView.rounds
+      .map((r, i) => ({ roundLabel: r.round, roundIdx: i, status: r.status }))
+      .filter((r) => r.status === "past")
+      .map(({ roundLabel, roundIdx }) => ({ roundLabel, roundIdx }));
+    const decision = decideCeremonyLatch(pastCuts, (l) => hasSeenCut(leagueId, l));
+    for (const label of decision.record) recordCutSeen(leagueId, label);
+    if (!decision.fire || reducedMotionRef.current || initialView.complete) return;
+    const focusIdx = decision.fire.roundIdx;
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    setDrop({ focusIdx, phase: "wind" });
+    timersRef.current.push(setTimeout(() => setDrop({ focusIdx, phase: "drop" }), BLADE_WIND_MS));
+    timersRef.current.push(
+      setTimeout(
+        () => setDrop({ focusIdx: currentIdxRef.current, phase: "rest" }),
+        BLADE_SETTLE_MS,
+      ),
+    );
+    // Mount-once: the live latch owns every later refetch; the snapshot at open is what we diff.
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();

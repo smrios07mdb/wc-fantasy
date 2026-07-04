@@ -10,6 +10,7 @@
  * the pre-playoff state; otherwise the live client. Mirrors `loadVsField` / `loadPool`.
  */
 import { redirect } from "next/navigation";
+import { prisma } from "@app/db";
 import { getSessionManager } from "@/lib/auth/manager";
 import { loadPlayoffs } from "./loadPlayoffs";
 import { PlayoffsClient } from "./PlayoffsClient";
@@ -21,7 +22,17 @@ export default async function PlayoffsPage() {
   if (outcome.kind === "no-session") redirect("/sign-in");
   if (outcome.kind !== "ok") redirect("/auth/denied");
 
-  const view = await loadPlayoffs(outcome.manager.id);
+  // The playoff view is CLOCKLESS/league-scoped and does not carry `leagueId` (loadPlayoffs is the
+  // fenced STOP seam), so the per-device cut-ceremony seen-latch's league scope is read here in
+  // PARALLEL — one indexed lookup, no added latency. It keys the first-open ceremony (PlayoffsClient →
+  // seenCeremony.ts), shared with /vsfield's "The Cut".
+  const [view, mgr] = await Promise.all([
+    loadPlayoffs(outcome.manager.id),
+    prisma.manager.findUnique({
+      where: { id: outcome.manager.id },
+      select: { leagueId: true },
+    }),
+  ]);
   if (!view) {
     return (
       <div style={{ display: "grid", placeItems: "center", minHeight: "60vh", padding: 24 }}>
@@ -37,5 +48,5 @@ export default async function PlayoffsPage() {
     );
   }
 
-  return <PlayoffsClient initialView={view} />;
+  return <PlayoffsClient initialView={view} leagueId={mgr?.leagueId ?? ""} />;
 }

@@ -362,6 +362,132 @@ async function main() {
     await page.close();
   }
 
+  // ───────────────────── first-open blade latch proof (real-browser) ─────────────────────
+  // feat/cut-ceremony-first-open. A jsdom smoke can't prove localStorage-gated behavior in a REAL
+  // browser, so this drives sequential same-origin loads with a faithful in-page latch using the EXACT
+  // key scheme `xi:seenCut:<leagueId>:<roundLabel>` (pinned by seenCeremony.test.ts). The one-shot
+  // contract: FIRST open FIRES the blade (CHOP) + writes the key; SECOND open SETTLES (raised hero, no
+  // CHOP); the SHARED key suppresses /vsfield's "The Cut" takeover (cross-surface); reduced-motion
+  // shows the STATIC dropped blade (no swing animation) and STILL records. Desktop + mobile.
+  {
+    const KEY = "xi:seenCut:lg1:R32";
+    const latchScript = `<script>
+(function(){
+  try {
+    var key = ${JSON.stringify(KEY)};
+    var seen; try { seen = localStorage.getItem(key) !== null; } catch (e) { seen = true; }
+    var node = document.querySelector("[data-oneshot]");
+    if (seen) { if (node) node.remove(); document.documentElement.setAttribute("data-latch","settled"); }
+    else { try { localStorage.setItem(key,"1"); } catch (e) {} document.documentElement.setAttribute("data-latch","fired"); }
+  } catch (e) { document.documentElement.setAttribute("data-latch","error"); }
+})();
+</script>`;
+    const bladePage = (surface) => {
+      const hero = surface === "desktop" ? desktopHero : mobileHero;
+      // A settled (raised) hero always remains; the one-shot dropped/CHOP hero is removed once seen.
+      return buildHTML(hero("") + `<div data-oneshot>${hero("is-drop")}</div>` + latchScript);
+    };
+    // A minimal /vsfield "The Cut" takeover node gated by the SAME key (cross-surface proof).
+    const cutTakeoverPage = () =>
+      buildHTML(
+        `<div data-oneshot class="koc" style="width:220px;height:90px">CHOP!</div>` + latchScript,
+      );
+    const LATCH_PROBE = (key) => {
+      let stored = null;
+      try {
+        stored = localStorage.getItem(key);
+      } catch {
+        stored = "(throws)";
+      }
+      const one = document.querySelector("[data-oneshot]");
+      const blade = document.querySelector("[data-oneshot] .po-act-blade");
+      return {
+        latch: document.documentElement.getAttribute("data-latch"),
+        hasFire: !!one,
+        fireText: one ? (one.textContent || "").trim() : null,
+        stored,
+        bladeAnim: blade ? getComputedStyle(blade).animationName : null,
+      };
+    };
+    const latchCheck = (label, fails) => {
+      if (fails.length) {
+        failures.push(`FAIL [${label}]`);
+        for (const f of fails) failures.push(`    ${f}`);
+      } else {
+        console.log(`  ✓ [${label}]`);
+      }
+    };
+
+    for (const [surface, w] of [
+      ["mobile", 402],
+      ["desktop", 1120],
+    ]) {
+      const page = await context.newPage();
+      await page.emulateMedia({ reducedMotion: "no-preference" });
+      await page.setViewportSize({ width: w, height: 900 });
+      await page.goto("http://pw.local/");
+      await page.evaluate(() => {
+        try {
+          localStorage.clear();
+        } catch {
+          /* ignore */
+        }
+      });
+
+      currentHtml = bladePage(surface);
+      await page.goto("http://pw.local/");
+      let d = await page.evaluate(LATCH_PROBE, KEY);
+      latchCheck(`latch first open FIRES blade + writes key · ${surface}`, [
+        ...(d.hasFire && /CHOP!/.test(d.fireText ?? "")
+          ? []
+          : ["blade CHOP missing on first open"]),
+        ...(d.latch === "fired" ? [] : [`latch=${d.latch}, expected fired`]),
+        ...(d.stored === "1" ? [] : [`seen key not written (stored=${d.stored})`]),
+      ]);
+
+      currentHtml = bladePage(surface);
+      await page.goto("http://pw.local/");
+      d = await page.evaluate(LATCH_PROBE, KEY);
+      latchCheck(`latch second open SETTLES (no replay) · ${surface}`, [
+        ...(!d.hasFire ? [] : ["blade CHOP REPLAYED on second open"]),
+        ...(d.latch === "settled" ? [] : [`latch=${d.latch}, expected settled`]),
+      ]);
+
+      currentHtml = cutTakeoverPage();
+      await page.goto("http://pw.local/");
+      d = await page.evaluate(LATCH_PROBE, KEY);
+      latchCheck(`latch cross-surface The Cut no-replay (shared key) · ${surface}`, [
+        ...(!d.hasFire ? [] : ["The Cut takeover REPLAYED — the shared key was not honored"]),
+      ]);
+
+      await page.close();
+    }
+
+    // reduced-motion: fresh store → the static dropped blade shows + records, with no swing animation.
+    const rpage = await context.newPage();
+    await rpage.emulateMedia({ reducedMotion: "reduce" });
+    await rpage.setViewportSize({ width: 402, height: 900 });
+    await rpage.goto("http://pw.local/");
+    await rpage.evaluate(() => {
+      try {
+        localStorage.clear();
+      } catch {
+        /* ignore */
+      }
+    });
+    currentHtml = bladePage("mobile");
+    await rpage.goto("http://pw.local/");
+    const dr = await rpage.evaluate(LATCH_PROBE, KEY);
+    latchCheck(`latch reduced-motion static blade + records`, [
+      ...(dr.hasFire ? [] : ["static dropped blade missing under reduced motion"]),
+      ...(dr.stored === "1" ? [] : ["seen key not written under reduced motion"]),
+      ...(!dr.bladeAnim || dr.bladeAnim === "none"
+        ? []
+        : [`blade animates under reduced motion (${dr.bladeAnim})`]),
+    ]);
+    await rpage.close();
+  }
+
   await browser.close();
 
   console.log("");

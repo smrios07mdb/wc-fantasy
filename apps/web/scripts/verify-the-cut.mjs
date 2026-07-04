@@ -660,6 +660,130 @@ for (const motion of ["reduce", "no-preference"]) {
   await page.close();
 }
 
+// ─────────────────────── first-open cut-ceremony latch proof (real-browser) ───────────────────────
+// feat/cut-ceremony-first-open. A jsdom smoke can't prove localStorage-gated behavior in a REAL
+// browser, so this drives sequential same-origin loads with a faithful in-page latch that uses the
+// EXACT key scheme `xi:seenCut:<leagueId>:<roundLabel>` (pinned by seenCeremony.test.ts, so this
+// hardcoded string can't drift from the module). It proves the one-shot contract:
+//   1. FIRST open (empty store)   → the ceremony takeover PAINTS and the seen key is WRITTEN.
+//   2. SECOND open (key persists) → SETTLES: no takeover replays.
+//   3. cross-surface              → the SHARED key suppresses the /playoffs Theater blade (no replay).
+//   4. reduced-motion             → the STATIC aftermath shows (no animation) and STILL records.
+// Desktop + mobile.
+{
+  const LEAGUE = "lg1";
+  const ROUND = "R32";
+  const KEY = `xi:seenCut:${LEAGUE}:${ROUND}`;
+  // Faithful mirror of seenCeremony.ts: read the shared key, remove the one-shot node when already
+  // seen, else write the key. (fail-toward-seen on a throwing store — no replay spam.)
+  const latchScript = `<script>
+(function(){
+  try {
+    var key = ${JSON.stringify(KEY)};
+    var seen; try { seen = localStorage.getItem(key) !== null; } catch (e) { seen = true; }
+    var node = document.querySelector("[data-oneshot]");
+    if (seen) { if (node) node.remove(); document.documentElement.setAttribute("data-latch","settled"); }
+    else { try { localStorage.setItem(key,"1"); } catch (e) {} document.documentElement.setAttribute("data-latch","fired"); }
+  } catch (e) { document.documentElement.setAttribute("data-latch","error"); }
+})();
+</script>`;
+  const cutPage = () =>
+    buildHTML(
+      mobileScreen(marquee({ loom: false }), { withNav: true }) +
+        `<div data-oneshot>${ceremony("aftermath")}</div>` +
+        latchScript,
+    );
+  // A minimal Theater blade one-shot node, gated by the SAME key (cross-surface proof).
+  const theaterPage = () =>
+    buildHTML(
+      `<div data-oneshot class="po-hero is-drop" style="width:220px;height:90px">CHOP!</div>` +
+        latchScript,
+    );
+  const LATCH_PROBE = (key) => {
+    let stored = null;
+    try {
+      stored = localStorage.getItem(key);
+    } catch {
+      stored = "(throws)";
+    }
+    const mach = document.querySelector(".koc .ko-mach");
+    return {
+      latch: document.documentElement.getAttribute("data-latch"),
+      hasKoc: !!document.querySelector(".koc"),
+      hasBlade: !!document.querySelector("[data-oneshot].po-hero"),
+      stored,
+      machAnim: mach ? getComputedStyle(mach).animationName : null,
+    };
+  };
+
+  for (const [surface, w] of [
+    ["mobile", 390],
+    ["desktop", 1180],
+  ]) {
+    const page = await context.newPage();
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.setViewportSize({ width: w, height: 840 });
+    await page.goto("http://pw.local/");
+    await page.evaluate(() => {
+      try {
+        localStorage.clear();
+      } catch {
+        /* ignore */
+      }
+    });
+
+    currentHtml = cutPage();
+    await page.goto("http://pw.local/");
+    let d = await page.evaluate(LATCH_PROBE, KEY);
+    report(`latch · first open FIRES + writes key · ${surface}`, [
+      ...(d.hasKoc ? [] : ["ceremony takeover missing on first open"]),
+      ...(d.latch === "fired" ? [] : [`latch=${d.latch}, expected fired`]),
+      ...(d.stored === "1" ? [] : [`seen key not written (stored=${d.stored})`]),
+    ]);
+
+    currentHtml = cutPage();
+    await page.goto("http://pw.local/");
+    d = await page.evaluate(LATCH_PROBE, KEY);
+    report(`latch · second open SETTLES (no replay) · ${surface}`, [
+      ...(!d.hasKoc ? [] : ["ceremony takeover REPLAYED on second open"]),
+      ...(d.latch === "settled" ? [] : [`latch=${d.latch}, expected settled`]),
+    ]);
+
+    currentHtml = theaterPage();
+    await page.goto("http://pw.local/");
+    d = await page.evaluate(LATCH_PROBE, KEY);
+    report(`latch · cross-surface Theater no-replay (shared key) · ${surface}`, [
+      ...(!d.hasBlade ? [] : ["Theater blade REPLAYED — the shared key was not honored"]),
+    ]);
+
+    await page.close();
+  }
+
+  // reduced-motion: fresh store → static aftermath paints AND records, with no running animation.
+  const rpage = await context.newPage();
+  await rpage.emulateMedia({ reducedMotion: "reduce" });
+  await rpage.setViewportSize({ width: 390, height: 840 });
+  await rpage.goto("http://pw.local/");
+  await rpage.evaluate(() => {
+    try {
+      localStorage.clear();
+    } catch {
+      /* ignore */
+    }
+  });
+  currentHtml = cutPage();
+  await rpage.goto("http://pw.local/");
+  const dr = await rpage.evaluate(LATCH_PROBE, KEY);
+  report(`latch · reduced-motion static aftermath + records`, [
+    ...(dr.hasKoc ? [] : ["static aftermath takeover missing under reduced motion"]),
+    ...(dr.stored === "1" ? [] : ["seen key not written under reduced motion"]),
+    ...(!dr.machAnim || dr.machAnim === "none"
+      ? []
+      : [`machete animates under reduced motion (${dr.machAnim})`]),
+  ]);
+  await rpage.close();
+}
+
 await browser.close();
 
 const summaryPath = resolve(TMP, "the-cut-verify.json");

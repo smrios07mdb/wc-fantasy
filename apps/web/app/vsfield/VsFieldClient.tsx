@@ -45,6 +45,35 @@ import {
   KoLadder,
   ordinal,
 } from "./KnockoutUI";
+import type { KnockoutContext } from "@/src/vsfield/knockout";
+import {
+  decideCeremonyLatch,
+  hasSeenCut,
+  recordCutSeen,
+  type CutRoundRef,
+} from "@/src/playoffs/seenCeremony";
+
+/**
+ * The PAST cut rounds `ko` already exposes, as `{roundLabel, roundIdx}` — the seen-latch input.
+ * Every past cut round surfaces as `fallen` rows (the PRE-filter field carries every victim, so a
+ * per-idx label map is complete); `settled` (the most-recent past round) is unioned defensively in
+ * case the field contract ever narrows. No view-model change — this reads only exposed fields.
+ */
+function pastCutsFromKo(ko: KnockoutContext): CutRoundRef[] {
+  const byIdx = new Map<number, string>();
+  for (const f of ko.fallen) {
+    if (f.roundIdx >= 0 && f.roundLabel) byIdx.set(f.roundIdx, f.roundLabel);
+  }
+  const cuts: CutRoundRef[] = [...byIdx].map(([roundIdx, roundLabel]) => ({
+    roundIdx,
+    roundLabel,
+  }));
+  if (ko.settled && !cuts.some((c) => c.roundLabel === ko.settled!.roundLabel)) {
+    const maxIdx = cuts.reduce((m, c) => Math.max(m, c.roundIdx), -1);
+    cuts.push({ roundLabel: ko.settled.roundLabel, roundIdx: maxIdx + 1 });
+  }
+  return cuts;
+}
 
 const VIEW_TABS: ["period" | "season", string][] = [
   ["period", "This period"],
@@ -198,9 +227,15 @@ export function VsFieldClient({
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // The cutting-ceremony transition latch (the shipped Chocoyo pattern): fires ONE-TIME when a round
-  // the client was watching flips live→past between refetches — never on mount, never in a loop.
-  // KOCeremony itself honors prefers-reduced-motion (static aftermath — the verdict is information).
+  // The cutting-ceremony latch. TWO ways in, ONE fire per round per device (whichever comes first):
+  //   (1) the LIVE→past latch (the shipped Chocoyo pattern): a round the client was WATCHING flips
+  //       live→past between refetches — real-time, never on mount, never in a loop.
+  //   (2) the FIRST-OPEN latch (this thread): on mount, if the most-recent past cut is UNSEEN on this
+  //       device, fire it once — so a manager who opens AFTER the cut still gets the reveal.
+  // Both record into the shared per-device seen-set (seenCeremony.ts, key-shared with /playoffs), so a
+  // fire on either path — or on the other surface — suppresses every later replay. The champion/complete
+  // endgame is a PERSISTENT resting state (KOChampion), OUT of this one-shot latch. KOCeremony itself
+  // honors prefers-reduced-motion (static aftermath — the verdict is information; it still records).
   const [ceremonyOpen, setCeremonyOpen] = useState(false);
   const prevRoundStatuses = useRef<readonly string[] | null>(null);
   useEffect(() => {
@@ -209,8 +244,26 @@ export function VsFieldClient({
     prevRoundStatuses.current = cur;
     if (!cur || !prev || prev.length !== cur.length) return;
     const flipped = cur.findIndex((s, i) => prev[i] === "live" && s === "past");
-    if (flipped !== -1 && ko?.settled) setCeremonyOpen(true);
-  }, [view, ko]);
+    // The just-flipped round is now the most-recent past = ko.settled; record THAT label so a live
+    // watcher never re-sees it on their next open.
+    if (flipped !== -1 && ko?.settled && !ko.complete) {
+      setCeremonyOpen(true);
+      recordCutSeen(leagueId, ko.settled.roundLabel);
+    }
+  }, [view, ko, leagueId]);
+
+  // (2) The FIRST-OPEN latch — CLIENT-ONLY (useEffect, never during SSR/render → no hydration
+  // mismatch), mount-once. Diff the past cut rounds `ko` already exposes against the seen-set and fire
+  // the most-recent UNSEEN cut; record ALL past rounds (a fresh device seeds its whole past so older
+  // cuts never replay). Skipped in the champion/complete phase (persistent trophy, not a one-shot).
+  useEffect(() => {
+    if (!ko || ko.complete) return;
+    const decision = decideCeremonyLatch(pastCutsFromKo(ko), (l) => hasSeenCut(leagueId, l));
+    for (const label of decision.record) recordCutSeen(leagueId, label);
+    if (decision.fire && ko.settled) setCeremonyOpen(true);
+    // Mount-once: the live latch above owns every subsequent refetch. `ko`/`leagueId` are stable for a
+    // given mounted screen (a phase change remounts via the loader), so an empty dep-set is correct.
+  }, []);
 
   // The mobile drill-in opens as a bottom sheet pushing the EXISTING validated `?manager=` param via
   // native history (Next App Router shallow support), so the hardware back-gesture closes it. Desktop
