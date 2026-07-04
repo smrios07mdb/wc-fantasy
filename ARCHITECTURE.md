@@ -2225,3 +2225,40 @@ Built to the committed design reference (`design/design_reference/players/`, lan
 - **Mobile hard-rules.** ≥44px tap targets; the shared sheet owns `dvh` height + a sticky ✕ + scroll
   containment; the card scrim is route-lifted to **z120** — ABOVE the z100 bottom tab bar and its z102
   More sheet (the T15 "overlays above the bar" rule; leaves the global ds.css token intact).
+
+### §29.1 — `/players` remediation: real statline · flag-KIT · mobile swipe · reachable entry points (`feat/players-remediation`)
+
+Reverses PLAYERS-1's G1 drop and fixes the entry points (merge HELD for review). All additive to §29; the READ-ONLY / single-sourced-acquisition / no-migration invariants hold.
+
+- **Row = the design `.mt-*` STAT TABLE (reverses G1).** `loadPlayers` gained ONE display-only
+  `stat_player_match.groupBy({ by:["playerId"], where:{ minutesPlayed:{ gt:0 } }, _count:true, _sum:{…} })`
+  → a `PlStatline` per player: **Pld**=`_count`, **Min**, **G**, **A**, **Sh**(=promoted `shots_on_target`,
+  confirmed to MATCH the shared card's "Shots"), **KP**, **Tkl** — all REAL from PROMOTED columns.
+  **YC is REAL** — a display-only count from a second READ: `prisma.eventMatch.findMany({ incidentType:"card" })`,
+  folded per player via the SHARED `classifyCard` (`@app/recompute`, T-CARD1 — non-rescinded `yellow` events,
+  the SAME predicate the game-detail Events timeline + scoring use; cards tournament-global). **CS stays null →
+  "—"** (engine-derived, no per-row source — the one remaining gap). All READ-ONLY reuse: `packages/recompute`/
+  `scoring`/`ingest` byte-untouched (empty `packages/` diff), no write/migration/score-run (contract-pinned).
+  The client renders the design's `.mt-*` grid (`StatHeader` + `PlayerStatRow`): one horizontally-scrollable
+  table, the Player cell `position:sticky;left:0` (pinned) as the card-opening button, the Pts cell pinned
+  right holding the season total + the bid trailer (a ≥44px `.mt-bid` sibling `<a>` → `/waivers?bid=`).
+- **KIT = shared flag-kit `kitOf`.** The KIT cell reuses `apps/web/src/kit/kitOf` (the T13 lineup / T16
+  game-detail flag-kit jersey primitive) — `style={{ background: kitOf(nation) }}`, never
+  `background-size:cover` (the multi-layer contract) — with a small emoji `<Flag>` overlay for coverage.
+  NOT the /waivers text-abbrev `KitChip`. /players still imports exactly one thing from /waivers (the card).
+- **Mobile "← swipe stats" (design image 4).** The `.mt-wrap` scrolls horizontally with
+  `overscroll-behavior-x:contain` (no scroll-chaining to the page — T15 hard-rule); vertical flows with the
+  page (unconstrained height, so the pinned columns work without an inner vertical scroller). Widens to a
+  desktop wide-list (image 2) at ≥760px; the swipe hint hides. Proven by `verify-players.mjs`.
+- **Entry points (now reachable).** (1) The `/waivers` "Browse all players" link moved OUT of the
+  `tab === "claims"` branch into a persistent `.wv-browse-foot` — renders in every phase incl. a locked
+  window (the diagnosed root cause: it was tab-gated, not claims-open-gated). (2) A standalone "Browse
+  players" `<a href="/players">` was added to the `MoreSheet` (the mobile nav surface) — additive, NOT a
+  `NavId`, so /players stays out of the nav model. (3) The dashboard "Player pool" `Module` tile (already a
+  real `<a>` cta) had its phase gate widened to group·playoff·complete. **A first-class Players bottom-nav
+  tab is T15-2's to add** (it owns the tab bar).
+- **Render proof.** `apps/web/scripts/verify-players.mjs` (`pnpm test:players`) — a real-browser replica
+  (same class markers, REAL ds.css/players.css/waivers.css/shell.css/dashboard.css) asserting by paint
+  geometry across desktop 1180 + phone 360/390: statline + flag-kit + full pool count + tappable tile +
+  closed-window waivers link + MoreSheet entry. Pinned to source by `playersRenderProof.test.ts` (the
+  `theCutSkin.test.ts` tripwire pattern) so the replica can't drift.
