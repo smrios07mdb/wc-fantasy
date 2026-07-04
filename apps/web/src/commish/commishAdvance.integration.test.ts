@@ -47,6 +47,7 @@ const FIELD = [
 ] as const;
 const R32 = "period_adv_r32";
 const FINAL = "period_adv_final";
+const TEAM = "team_adv";
 
 const OUTCOME: SessionManagerOutcome = {
   kind: "ok",
@@ -102,6 +103,7 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
     for (const m of FIELD) {
       await db.manager.create({ data: { id: m.id, leagueId: LG, displayName: m.name } });
     }
+    await db.fifaTeam.create({ data: { id: TEAM, balldontlieId: 9100, name: "Advance FC" } });
     // R32: frozen, cut 2 — the canonical cuttable round (no prior rounds to order-guard).
     await db.period.create({
       data: {
@@ -144,8 +146,45 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
     await seedScores(R32, { mgr_adv_1: 1, mgr_adv_2: 2, mgr_adv_3: 5, mgr_adv_4: 9 });
   }
 
-  it("APPLY flips exactly cut_count entries + ONE round_advance audit row", async () => {
+  /** Seed a player + an ACTIVE roster row for `managerId`; optionally an R32 lineup slot (born unlocked, as
+   *  the trigger requires — locked via a follow-up UPDATE). Returns the playerId. */
+  async function seedRoster(
+    managerId: string,
+    playerId: string,
+    bdl: number,
+    slot: "none" | "unlocked" | "locked" = "none",
+  ) {
+    await db.player.create({
+      data: {
+        id: playerId,
+        balldontlieId: bdl,
+        displayName: playerId,
+        position: "MID",
+        teamId: TEAM,
+      },
+    });
+    await db.rosterPlayer.create({ data: { leagueId: LG, managerId, playerId } });
+    if (slot !== "none") {
+      const s = await db.lineupSlot.create({
+        data: { managerId, periodId: R32, playerId, role: "MID", isStarter: true },
+      });
+      if (slot === "locked")
+        await db.lineupSlot.update({ where: { id: s.id }, data: { lockedAt: new Date() } });
+    }
+    return playerId;
+  }
+  const activeRoster = (managerId: string) =>
+    db.rosterPlayer.count({ where: { managerId, droppedAt: null } });
+  const slotCount = (managerId: string) =>
+    db.lineupSlot.count({ where: { managerId, periodId: R32 } });
+
+  it("APPLY flips exactly cut_count entries + RELEASES their rosters + ONE round_advance audit row — atomically", async () => {
     await seedDeterminedR32();
+    // Cut managers carry rosters (one with an R32 slot); a survivor carries one that must NOT be touched.
+    await seedRoster("mgr_adv_1", "p_a1", 1001, "unlocked");
+    await seedRoster("mgr_adv_1", "p_a2", 1002);
+    await seedRoster("mgr_adv_2", "p_b1", 1003, "unlocked");
+    await seedRoster("mgr_adv_3", "p_c1", 1004, "unlocked"); // survivor — untouched
 
     const res = await handleAdvance(webDeps(), {
       roundLabel: "R32",
@@ -164,6 +203,15 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
     expect(byId.get("mgr_adv_3")).toMatchObject({ status: "alive", eliminatedRound: null });
     expect(byId.get("mgr_adv_4")).toMatchObject({ status: "alive", eliminatedRound: null });
 
+    // RELEASE: the cut managers' entire rosters are dropped to the wire + their slots released; the
+    // survivor's roster + slot are untouched.
+    expect(await activeRoster("mgr_adv_1")).toBe(0);
+    expect(await activeRoster("mgr_adv_2")).toBe(0);
+    expect(await slotCount("mgr_adv_1")).toBe(0);
+    expect(await slotCount("mgr_adv_2")).toBe(0);
+    expect(await activeRoster("mgr_adv_3")).toBe(1);
+    expect(await slotCount("mgr_adv_3")).toBe(1);
+
     const audits = await db.commishAudit.findMany({});
     expect(audits).toHaveLength(1);
     expect(audits[0]).toMatchObject({
@@ -175,15 +223,26 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
     });
     expect(audits[0]!.summary).toContain("Alpha FC");
     expect(audits[0]!.summary).toContain("Bravo XI");
-    expect(audits[0]!.targetRef).toMatchObject({
-      roundLabel: "R32",
-      eliminated: ["mgr_adv_1", "mgr_adv_2"],
-      champion: null,
-    });
+    expect(audits[0]!.summary).toContain("released 3"); // p_a1, p_a2, p_b1
+    // The released ids per cut manager ride the JSON target_ref (no migration).
+    const ref = audits[0]!.targetRef as {
+      roundLabel: string;
+      eliminated: string[];
+      champion: string | null;
+      released: Record<string, string[]>;
+      releasedCount: number;
+    };
+    expect(ref.roundLabel).toBe("R32");
+    expect(ref.eliminated).toEqual(["mgr_adv_1", "mgr_adv_2"]);
+    expect(ref.champion).toBeNull();
+    expect(ref.released.mgr_adv_1?.slice().sort()).toEqual(["p_a1", "p_a2"]);
+    expect(ref.released.mgr_adv_2).toEqual(["p_b1"]);
+    expect(ref.releasedCount).toBe(3);
   });
 
-  it("a SECOND apply → 409 skipped with ZERO new audit rows", async () => {
+  it("a SECOND apply → 409 skipped with ZERO new audit rows and ZERO new drops", async () => {
     await seedDeterminedR32();
+    await seedRoster("mgr_adv_1", "p_a1", 3001, "unlocked");
     const deps = webDeps();
 
     const first = await handleAdvance(deps, {
@@ -193,6 +252,7 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
       apply: true,
     });
     expect(first.status).toBe(200);
+    expect(await activeRoster("mgr_adv_1")).toBe(0); // released once
 
     const second = await handleAdvance(deps, {
       roundLabel: "R32",
@@ -203,12 +263,44 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
     expect(second.status).toBe(409);
     expect((second.body as { status: string }).status).toBe("skipped");
 
+    // The idempotency gate fronts the release: no new audit row, no new drop, no double-cut.
     expect(await db.commishAudit.count()).toBe(1);
     expect(await db.playoffEntry.count({ where: { status: "eliminated" } })).toBe(2);
+    expect(await db.rosterPlayer.count({ where: { droppedAt: { not: null } } })).toBe(1);
   });
 
-  it("ATOMICITY: a failing audit insert (FK-violating leagueId) rolls the entry flips back", async () => {
+  it("locked-slot RELEASE succeeds under the GUC; a still-locked SURVIVOR is never touched", async () => {
     await seedDeterminedR32();
+    // A cut manager (mgr_adv_1) whose R32 slot is LOCKED (played) — releasable only under the commissioner
+    // GUC; without it the lock-on-play DELETE trigger would reject. A survivor (mgr_adv_3) with an equally
+    // locked slot that must remain intact (never a cut manager, never enumerated).
+    await seedRoster("mgr_adv_1", "p_a_locked", 4001, "locked");
+    await seedRoster("mgr_adv_3", "p_c_locked", 4002, "locked");
+
+    const res = await handleAdvance(webDeps(), {
+      roundLabel: "R32",
+      reason: "R32 cut — releasing the fallen",
+      breakTie: null,
+      apply: true,
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as { status: string }).status).toBe("applied");
+
+    // The cut manager's LOCKED slot was released under the GUC; their roster is dropped.
+    expect(await activeRoster("mgr_adv_1")).toBe(0);
+    expect(await slotCount("mgr_adv_1")).toBe(0);
+    // The SURVIVOR's locked slot + roster are untouched.
+    expect(await activeRoster("mgr_adv_3")).toBe(1);
+    expect(
+      await db.lineupSlot.count({ where: { managerId: "mgr_adv_3", lockedAt: { not: null } } }),
+    ).toBe(1);
+  });
+
+  it("ATOMICITY: a failing audit insert rolls back BOTH the entry flips AND the roster release — no partial state", async () => {
+    await seedDeterminedR32();
+    await seedRoster("mgr_adv_1", "p_a1", 2001, "unlocked");
+    await seedRoster("mgr_adv_1", "p_a2", 2002);
+    await seedRoster("mgr_adv_2", "p_b1", 2003, "unlocked");
     const store = createCommishAdvanceStore(db);
     const { store: advStore } = store.forAdvance(() => ({
       leagueId: "lg_does_not_exist", // FK violation on commish_audit.league_id
@@ -223,16 +315,21 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
       advStore.applyRoundCut({
         leagueId: LG,
         roundLabel: "R32",
+        roundPeriodId: R32,
         eliminated: ["mgr_adv_1", "mgr_adv_2"],
         champion: null,
         at: new Date(),
       }),
     ).rejects.toThrow();
 
-    // The flips did NOT survive the failed audit insert — no unaudited cut exists.
+    // Neither the cut NOR the release survived the failed audit insert — no partial state.
     expect(await db.playoffEntry.count({ where: { status: "eliminated" } })).toBe(0);
     expect(await db.playoffEntry.count({ where: { status: "alive" } })).toBe(4);
     expect(await db.commishAudit.count()).toBe(0);
+    expect(await activeRoster("mgr_adv_1")).toBe(2); // rosters NOT dropped
+    expect(await activeRoster("mgr_adv_2")).toBe(1);
+    expect(await slotCount("mgr_adv_1")).toBe(1); // the slot NOT released
+    expect(await slotCount("mgr_adv_2")).toBe(1);
   });
 
   it("boundary tie: apply → 409 needs-commissioner (nothing written), then breakTie resolves end-to-end", async () => {
@@ -333,6 +430,10 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
       },
     });
     await seedScores(FINAL, { mgr_adv_1: 3, mgr_adv_2: 9 });
+    // Rosters: the Final loser (released), the champion (kept), and a manager cut in an earlier round (kept).
+    await seedRoster("mgr_adv_1", "p_loser", 6001);
+    await seedRoster("mgr_adv_2", "p_champ", 6002);
+    await seedRoster("mgr_adv_3", "p_prior", 6003);
 
     const res = await handleAdvance(webDeps(), {
       roundLabel: "Final",
@@ -348,14 +449,26 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
     expect(byId.get("mgr_adv_1")).toBe("eliminated");
     expect(byId.get("mgr_adv_2")).toBe("champion");
 
+    // ONLY the Final loser is released; the champion and the previously-eliminated manager keep their rosters.
+    expect(await activeRoster("mgr_adv_1")).toBe(0);
+    expect(await activeRoster("mgr_adv_2")).toBe(1); // champion untouched
+    expect(await activeRoster("mgr_adv_3")).toBe(1); // previously-eliminated untouched
+
     const audits = await db.commishAudit.findMany({});
     expect(audits).toHaveLength(1);
     expect(audits[0]!.detail).toContain("Bravo XI is the champion");
-    expect(audits[0]!.targetRef).toMatchObject({ champion: "mgr_adv_2" });
+    expect(audits[0]!.targetRef).toMatchObject({
+      champion: "mgr_adv_2",
+      released: { mgr_adv_1: ["p_loser"] },
+      releasedCount: 1,
+    });
   });
 
-  it("a DRY-RUN (apply:false) writes nothing — no entry flip, no audit row", async () => {
+  it("a DRY-RUN (apply:false) enumerates the releases but writes nothing", async () => {
     await seedDeterminedR32();
+    await seedRoster("mgr_adv_1", "p_a1", 5001, "unlocked");
+    await seedRoster("mgr_adv_1", "p_a2", 5002);
+    await seedRoster("mgr_adv_2", "p_b1", 5003);
 
     const res = await handleAdvance(webDeps(), {
       roundLabel: "R32",
@@ -364,11 +477,26 @@ describe.skipIf(!SAFE)("Thread-5 round-cut surface — real Postgres", () => {
       apply: false,
     });
     expect(res.status).toBe(200);
-    const out = res.body as { status: string; plan: { resolution: { kind: string } } };
+    const out = res.body as {
+      status: string;
+      plan: {
+        resolution: { kind: string };
+        releasePreview: Record<string, { playerId: string; name: string }[]>;
+      };
+    };
     expect(out.status).toBe("planned");
     expect(out.plan.resolution.kind).toBe("determined");
+    // The plan enumerates the players each cut manager WILL lose (the blast radius, before type-to-confirm).
+    expect(out.plan.releasePreview.mgr_adv_1?.map((p) => p.playerId).sort()).toEqual([
+      "p_a1",
+      "p_a2",
+    ]);
+    expect(out.plan.releasePreview.mgr_adv_2).toEqual([{ playerId: "p_b1", name: "p_b1" }]);
 
+    // …and nothing was written: no flip, no audit row, no drop, no slot release.
     expect(await db.playoffEntry.count({ where: { status: "eliminated" } })).toBe(0);
     expect(await db.commishAudit.count()).toBe(0);
+    expect(await activeRoster("mgr_adv_1")).toBe(2);
+    expect(await slotCount("mgr_adv_1")).toBe(1);
   });
 });

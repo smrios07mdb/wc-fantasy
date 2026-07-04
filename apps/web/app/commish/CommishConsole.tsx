@@ -443,13 +443,52 @@ const CUT_CONFIRM_WORD = "CUT";
 
 type AdvanceResolution = NonNullable<AdvancePlan["resolution"]>;
 
-/** The pre-confirm irreversibility copy — MUST name the eliminated managers + counts (thread spec). */
+/** The pre-confirm irreversibility copy — MUST name the eliminated managers + counts, and now the roster
+ *  players released to the wire (thread spec: the full blast radius before type-to-confirm). */
 function advanceConfirmCopy(plan: AdvancePlan, eliminatedNames: string[], champion: string | null) {
+  const releasedCount = Object.values(plan.releasePreview).reduce((n, ps) => n + ps.length, 0);
   return (
     `Applying the ${plan.round} cut permanently eliminates ${eliminatedNames.length} manager` +
-    `${eliminatedNames.length === 1 ? "" : "s"}: ${eliminatedNames.join(", ")}.` +
+    `${eliminatedNames.length === 1 ? "" : "s"}: ${eliminatedNames.join(", ")}` +
+    `, and releases their ${releasedCount} roster player${releasedCount === 1 ? "" : "s"} to the free-agent wire.` +
     (champion ? ` ${champion} becomes the champion.` : "") +
     " This cannot be undone."
+  );
+}
+
+/** The release blast radius: each cut manager's roster shed to the wire on apply (the dry-run preview). */
+function AdvanceReleasePreview({
+  eliminated,
+  releasePreview,
+  label,
+}: {
+  eliminated: string[];
+  releasePreview: AdvancePlan["releasePreview"];
+  label: (id: string) => string;
+}) {
+  const total = eliminated.reduce((n, id) => n + (releasePreview[id]?.length ?? 0), 0);
+  return (
+    <div className="adm-adv-release">
+      <p className="adm-adv-release-h">
+        Releasing <b>{total}</b> roster player{total === 1 ? "" : "s"} to the free-agent wire:
+      </p>
+      <ul className="adm-adv-release-list">
+        {eliminated.map((id) => {
+          const players = releasePreview[id] ?? [];
+          return (
+            <li key={id}>
+              <b>{label(id)}</b> — {players.length}
+              {players.length > 0 && (
+                <span className="adm-adv-release-players">
+                  {" "}
+                  ({players.map((p) => p.name).join(", ")})
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -675,6 +714,14 @@ function AdvanceCutCard({
               </button>
             </div>
           </div>
+        )}
+
+        {resolution?.kind === "determined" && plan && (
+          <AdvanceReleasePreview
+            eliminated={resolution.eliminated}
+            releasePreview={plan.releasePreview}
+            label={label}
+          />
         )}
 
         {resolution?.kind === "determined" && plan && (

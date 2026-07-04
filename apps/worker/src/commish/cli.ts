@@ -540,6 +540,17 @@ function reportAdvance(res: AdvanceResult, apply: boolean): void {
     if (r?.kind === "determined") {
       console.log(`  cut:      ${r.eliminated.map(label).join(", ")}`);
       if (r.champion) console.log(`  champion: ${label(r.champion)} 🏆`);
+      // Release blast radius: the players each cut manager loses to the wire on --apply.
+      const totalReleased = r.eliminated.reduce(
+        (n, id) => n + (p.releasePreview[id]?.length ?? 0),
+        0,
+      );
+      console.log(`  release to wire (${totalReleased}):`);
+      for (const id of r.eliminated) {
+        const players = p.releasePreview[id] ?? [];
+        const names = players.map((pl) => pl.name).join(", ") || "(none)";
+        console.log(`     ${label(id)} — ${players.length}: ${names}`);
+      }
     } else if (r?.kind === "needsCommissioner") {
       console.log(`  ⚠ TIE — cut ${r.cutsRemaining} of: ${r.tied.map(label).join(", ")}`);
       console.log(`     re-run --apply --break-tie "<labels>" naming exactly ${r.cutsRemaining}`);

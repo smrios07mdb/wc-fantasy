@@ -43,7 +43,9 @@ export interface CommishAdvanceStore {
   getManagerLeagueId(managerId: string): Promise<string | null>;
   /** managerId → display name for every league manager (the orchestrator's `nameOf` + audit labels). */
   getLeagueManagerNames(leagueId: string): Promise<Record<string, string>>;
-  forAdvance(buildAudit: (cut: ApplyRoundCut) => RecordCommishAuditInput): {
+  forAdvance(
+    buildAudit: (cut: ApplyRoundCut, released: Record<string, string[]>) => RecordCommishAuditInput,
+  ): {
     store: PlayoffAdvanceStore;
     auditId: () => string | null;
   };
@@ -95,7 +97,9 @@ const err = (status: number, error: string): HandlerResult => ({ status, body: {
  *  apply:false, so no operator prose is demanded; the REAL reason is enforced on apply:true. */
 export const ADVANCE_PREVIEW_REASON = "(dry-run preview — nothing persisted)";
 
-/** Build the single `round_advance` ledger row for an applied cut. Exported for the store's tests. */
+/** Build the single `round_advance` ledger row for an applied cut. `released` is the per-manager roster
+ *  shed to the wire (`managerId → playerId[]`), recorded in the `target_ref` JSON (no migration — the
+ *  column is JSONB). Exported for the store's tests. */
 export function buildAdvanceAudit(
   cut: ApplyRoundCut,
   ctx: {
@@ -104,18 +108,21 @@ export function buildAdvanceAudit(
     reason: string;
     nameOf: Readonly<Record<string, string>>;
     tieAdjudicated: boolean;
+    released: Record<string, string[]>;
   },
 ): RecordCommishAuditInput {
   const name = (id: string): string => ctx.nameOf[id] ?? id;
   const names = cut.eliminated.map(name);
   const champion = cut.champion ? name(cut.champion) : null;
+  const releasedCount = Object.values(ctx.released).reduce((n, ids) => n + ids.length, 0);
   return {
     leagueId: ctx.leagueId,
     actorUserId: ctx.actorUserId,
     actionType: "round_advance",
-    summary: `Round cut applied: ${cut.roundLabel} — eliminated ${names.length} (${names.join(", ")})`,
+    summary: `Round cut applied: ${cut.roundLabel} — eliminated ${names.length} (${names.join(", ")}), released ${releasedCount} to the wire`,
     detail:
       `Irreversible — playoff_entry flipped alive → eliminated for ${names.join(", ")}.` +
+      ` ${releasedCount} roster player${releasedCount === 1 ? "" : "s"} released to the free-agent wire.` +
       (champion ? ` ${champion} is the champion.` : "") +
       (ctx.tieAdjudicated ? " Boundary tie adjudicated by the commissioner." : ""),
     reason: ctx.reason,
@@ -123,8 +130,11 @@ export function buildAdvanceAudit(
       roundLabel: cut.roundLabel,
       eliminated: [...cut.eliminated],
       champion: cut.champion,
+      // The released roster ids per just-cut manager + the total (the release trail, no migration).
+      released: ctx.released,
+      releasedCount,
     },
-    delta: `−${names.length} alive`,
+    delta: `−${names.length} alive, −${releasedCount} owned`,
     reversible: false,
   };
 }
@@ -178,13 +188,14 @@ export async function handleAdvance(
 
   const now = deps.now();
   const effectiveReason = body.apply ? reason : reason || ADVANCE_PREVIEW_REASON;
-  const { store, auditId } = deps.store.forAdvance((cut) =>
+  const { store, auditId } = deps.store.forAdvance((cut, released) =>
     buildAdvanceAudit(cut, {
       leagueId,
       actorUserId: g.userId,
       reason: effectiveReason,
       nameOf,
       tieAdjudicated: (body.breakTie?.length ?? 0) > 0,
+      released,
     }),
   );
 

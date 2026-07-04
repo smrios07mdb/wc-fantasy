@@ -886,6 +886,29 @@
   font-size: var(--fs-sm);
   color: var(--text-primary);
 }
+.adm-adv-release {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface-2, var(--surface));
+  font-size: var(--fs-sm);
+}
+.adm-adv-release-h {
+  margin: 0 0 6px;
+  color: var(--text-primary);
+}
+.adm-adv-release-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary, var(--text-primary));
+}
+.adm-adv-release-list li {
+  margin: 2px 0;
+}
+.adm-adv-release-players {
+  color: var(--text-muted, var(--text-secondary, var(--text-primary)));
+}
 .adm-adv-field {
   display: flex;
   flex-direction: column;

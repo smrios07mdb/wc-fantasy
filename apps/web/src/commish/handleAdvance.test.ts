@@ -78,10 +78,11 @@ function fakeStore(seed: MemoryAdvanceSeed) {
       let id: string | null = null;
       const advStore: PlayoffAdvanceStore = {
         loadRoundContext: (leagueId, roundLabel) => mem.loadRoundContext(leagueId, roundLabel),
+        loadActiveRosters: (leagueId, managerIds) => mem.loadActiveRosters(leagueId, managerIds),
         async applyRoundCut(cut) {
           const outcome = await mem.applyRoundCut(cut);
-          if (outcome === "applied") {
-            auditCalls.push(buildAudit(cut));
+          if (outcome.outcome === "applied") {
+            auditCalls.push(buildAudit(cut, outcome.released));
             id = "audit_row_1";
           }
           return outcome;
@@ -120,6 +121,8 @@ function determinedSeed(): MemoryAdvanceSeed {
     rounds: [{ label: "R32", cutCount: 2, frozenAt: FROZEN }],
     entries: [{ managerId: "a" }, { managerId: "b" }, { managerId: "c" }, { managerId: "d" }],
     roundScores: { R32: { a: 1, b: 2, c: 5, d: 9 } },
+    // a & b are the bottom two (cut); their rosters are shed to the wire on apply.
+    rosters: { a: ["a1", "a2"], b: ["b1"], c: ["c1"], d: ["d1"] },
   };
 }
 
@@ -210,14 +213,28 @@ describe("handleAdvance — gate ordering", () => {
 
 describe("handleAdvance — dry-run (apply:false)", () => {
   it("renders the plan with a 200 'planned' and requires NO reason (preview reason synthesized)", async () => {
-    const { store, auditCalls } = fakeStore(determinedSeed());
+    const { store, auditCalls, mem } = fakeStore(determinedSeed());
     const res = await handleAdvance(deps(store), body({ reason: "" }));
     expect(res.status).toBe(200);
-    const out = res.body as { status: string; plan: { round: string; field: unknown[] } };
+    const out = res.body as {
+      status: string;
+      plan: {
+        round: string;
+        field: unknown[];
+        releasePreview: Record<string, { playerId: string; name: string }[]>;
+      };
+    };
     expect(out.status).toBe("planned");
     expect(out.plan.round).toBe("R32");
     expect(out.plan.field).toHaveLength(4);
+    // The dry-run plan enumerates the players each cut manager WILL lose (the blast radius).
+    expect(out.plan.releasePreview.a).toEqual([
+      { playerId: "a1", name: "a1" },
+      { playerId: "a2", name: "a2" },
+    ]);
+    expect(out.plan.releasePreview.b).toEqual([{ playerId: "b1", name: "b1" }]);
     expect(auditCalls).toHaveLength(0); // nothing persisted on a dry-run
+    expect(mem.rosters.a).toEqual(["a1", "a2"]); // …and nothing released
   });
 
   it("the synthesized preview reason is a fixed constant (never user input)", () => {
@@ -373,11 +390,16 @@ describe("handleAdvance — audit payload shape", () => {
     expect(audit.summary).toContain("2");
     expect(audit.summary).toContain("Alice FC");
     expect(audit.summary).toContain("Bravo XI");
+    expect(audit.summary).toContain("released 3"); // a(2) + b(1) shed to the wire
+    // The released roster ids per cut manager + the total ride the JSON target_ref (no migration).
     expect(audit.targetRef).toEqual({
       roundLabel: "R32",
       eliminated: ["a", "b"],
       champion: null,
+      released: { a: ["a1", "a2"], b: ["b1"] },
+      releasedCount: 3,
     });
+    expect(audit.delta).toContain("−3 owned");
   });
 
   it("the Final's audit carries the champion by display name", async () => {

@@ -18,6 +18,7 @@
  */
 import type { PrismaClient } from "@app/db";
 import { loadCumulativeTournamentTotals } from "@app/recompute/prisma";
+import { releaseEliminatedRosters } from "@app/faab/prisma";
 import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
 
 /** One alive manager's inputs for the round resolution. */
@@ -52,6 +53,9 @@ export interface RoundContext {
 export interface ApplyRoundCut {
   leagueId: string;
   roundLabel: string;
+  /** The `period.id` of the round being cut — scopes the just-cut managers' locked-slot release to exactly
+   *  this round (the round they just played). */
+  roundPeriodId: string;
   /** Managers to flip `alive → eliminated` this round. NON-EMPTY — every round cuts ≥ 1. */
   eliminated: string[];
   /** The lone survivor to flip `alive → champion` (final round), or null. */
@@ -60,12 +64,34 @@ export interface ApplyRoundCut {
   at: Date;
 }
 
+/** One player that WILL be / WAS released from a cut manager's roster — the dry-run blast-radius preview
+ *  (`loadActiveRosters`) and the confirm copy read this. The apply-side audit records the ids only. */
+export interface ReleasePreviewPlayer {
+  playerId: string;
+  name: string;
+}
+
+/** The outcome of an applied cut. `applied` carries the released roster ids per eliminated manager (the
+ *  audit trail); `already-cut` is the idempotent no-op (a prior run cut this round) — it releases nothing
+ *  and mints no audit row. */
+export type AdvanceApplyOutcome =
+  | { outcome: "applied"; released: Record<string, string[]> }
+  | { outcome: "already-cut" };
+
 export interface PlayoffAdvanceStore {
   /** Assemble the round inputs, or null if no knockout round carries `roundLabel`. */
   loadRoundContext(leagueId: string, roundLabel: string): Promise<RoundContext | null>;
-  /** Apply the resolved cut in ONE transaction. Returns "already-cut" when the conditional
-   *  `alive → eliminated` claim matches 0 rows (a prior run already cut this round). */
-  applyRoundCut(input: ApplyRoundCut): Promise<"applied" | "already-cut">;
+  /** The active roster of each named manager (id + display name), for the dry-run RELEASE preview — the
+   *  blast radius the plan shows before the type-to-confirm apply. A manager with no active roster maps to
+   *  an empty list. */
+  loadActiveRosters(
+    leagueId: string,
+    managerIds: readonly string[],
+  ): Promise<Record<string, ReleasePreviewPlayer[]>>;
+  /** Apply the resolved cut AND release the just-cut managers' entire rosters to the wire in ONE
+   *  transaction. `already-cut` when the conditional `alive → eliminated` claim matches 0 rows (a prior run
+   *  already cut this round) — nothing is released. `applied` carries the released roster ids per manager. */
+  applyRoundCut(input: ApplyRoundCut): Promise<AdvanceApplyOutcome>;
 }
 
 // ── Prisma adapter ──────────────────────────────────────────────────────────────────────
@@ -128,21 +154,37 @@ export function createPrismaPlayoffAdvanceStore(prisma: PrismaClient): PlayoffAd
       };
     },
 
+    async loadActiveRosters(leagueId, managerIds): Promise<Record<string, ReleasePreviewPlayer[]>> {
+      const out: Record<string, ReleasePreviewPlayer[]> = {};
+      for (const id of managerIds) out[id] = [];
+      if (managerIds.length === 0) return out;
+      const rows = await prisma.rosterPlayer.findMany({
+        where: { leagueId, managerId: { in: [...managerIds] }, droppedAt: null },
+        select: { managerId: true, player: { select: { id: true, displayName: true } } },
+      });
+      for (const r of rows) {
+        (out[r.managerId] ??= []).push({ playerId: r.player.id, name: r.player.displayName });
+      }
+      return out;
+    },
+
     async applyRoundCut({
       leagueId,
       roundLabel,
+      roundPeriodId,
       eliminated,
       champion,
       at,
-    }): Promise<"applied" | "already-cut"> {
+    }): Promise<AdvanceApplyOutcome> {
       return prisma.$transaction(async (tx) => {
         // Idempotent entry gate: flip only the still-ALIVE eliminated managers. 0 rows ⇒ a prior run
         // already cut this round (they are already `eliminated`) → no-op (mirrors the transition claim).
+        // This gate ALSO fronts the release: a no-op cut releases nothing.
         const claim = await tx.playoffEntry.updateMany({
           where: { leagueId, status: "alive", managerId: { in: eliminated } },
           data: { status: "eliminated", eliminatedRound: roundLabel, eliminatedAt: at },
         });
-        if (claim.count === 0) return "already-cut" as const;
+        if (claim.count === 0) return { outcome: "already-cut" as const };
 
         // Last survivor → champion (final round only; the orchestrator passes null otherwise).
         if (champion) {
@@ -151,7 +193,17 @@ export function createPrismaPlayoffAdvanceStore(prisma: PrismaClient): PlayoffAd
             data: { status: "champion" },
           });
         }
-        return "applied" as const;
+
+        // Release the just-cut managers' ENTIRE active roster to the wire, ENLISTED in THIS transaction so
+        // the cut + the release commit atomically. Reuses the shared `@app/faab` release primitive (locked
+        // slots released under the `app.commish_override` GUC, scoped to the round just played).
+        const released = await releaseEliminatedRosters(tx, {
+          leagueId,
+          managerIds: eliminated,
+          roundPeriodId,
+          at,
+        });
+        return { outcome: "applied" as const, released };
       });
     },
   };
@@ -179,6 +231,8 @@ export interface MemoryAdvanceSeed {
   roundScores?: Record<string, Record<string, number>>;
   /** cumulativeTotals[managerId] = Σ tournament points to date (default 0). */
   cumulativeTotals?: Record<string, number>;
+  /** rosters[managerId] = active roster player ids (default none) — what a cut manager's release sheds. */
+  rosters?: Record<string, string[]>;
 }
 
 /** A faithful in-memory {@link PlayoffAdvanceStore} mirroring the Prisma adapter's semantics. */
@@ -190,6 +244,7 @@ export class MemoryPlayoffAdvanceStore implements PlayoffAdvanceStore {
   readonly entries = new Map<string, MemEntry>();
   readonly roundScores: Record<string, Record<string, number>>;
   readonly cumulativeTotals: Record<string, number>;
+  readonly rosters: Record<string, string[]>;
   applyCount = 0;
 
   constructor(seed: MemoryAdvanceSeed) {
@@ -203,6 +258,20 @@ export class MemoryPlayoffAdvanceStore implements PlayoffAdvanceStore {
       });
     this.roundScores = seed.roundScores ?? {};
     this.cumulativeTotals = seed.cumulativeTotals ?? {};
+    this.rosters = Object.fromEntries(
+      Object.entries(seed.rosters ?? {}).map(([id, ids]) => [id, [...ids]]),
+    );
+  }
+
+  async loadActiveRosters(
+    _leagueId: string,
+    managerIds: readonly string[],
+  ): Promise<Record<string, ReleasePreviewPlayer[]>> {
+    const out: Record<string, ReleasePreviewPlayer[]> = {};
+    for (const id of managerIds) {
+      out[id] = (this.rosters[id] ?? []).map((playerId) => ({ playerId, name: playerId }));
+    }
+    return out;
   }
 
   async loadRoundContext(leagueId: string, roundLabel: string): Promise<RoundContext | null> {
@@ -243,11 +312,11 @@ export class MemoryPlayoffAdvanceStore implements PlayoffAdvanceStore {
     eliminated,
     champion,
     at,
-  }: ApplyRoundCut): Promise<"applied" | "already-cut"> {
+  }: ApplyRoundCut): Promise<AdvanceApplyOutcome> {
     // Conditional claim: only still-alive eliminated managers (mirrors the Prisma `updateMany WHERE
-    // status='alive'`). 0 rows ⇒ a prior run already cut this round → no-op.
+    // status='alive'`). 0 rows ⇒ a prior run already cut this round → no-op (releases nothing).
     const toFlip = eliminated.filter((id) => this.entries.get(id)?.status === "alive");
-    if (toFlip.length === 0) return "already-cut";
+    if (toFlip.length === 0) return { outcome: "already-cut" };
     for (const id of toFlip) {
       const e = this.entries.get(id)!;
       e.status = "eliminated";
@@ -258,7 +327,14 @@ export class MemoryPlayoffAdvanceStore implements PlayoffAdvanceStore {
       const c = this.entries.get(champion);
       if (c && c.status === "alive") c.status = "champion";
     }
+    // Model the whole-roster release: capture each cut manager's active roster, then clear it (dropped to
+    // the wire). Mirrors the Prisma adapter's in-tx `releaseEliminatedRosters` (which returns the same map).
+    const released: Record<string, string[]> = {};
+    for (const id of eliminated) {
+      released[id] = [...(this.rosters[id] ?? [])];
+      this.rosters[id] = [];
+    }
     this.applyCount += 1;
-    return "applied";
+    return { outcome: "applied", released };
   }
 }

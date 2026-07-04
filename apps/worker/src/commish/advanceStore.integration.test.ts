@@ -44,12 +44,17 @@ describe.skipIf(!TEST_URL)("playoff advance adapter — real Postgres", () => {
     await db?.$disconnect();
   });
 
-  // Wipe the FK chain this suite owns, child-first.
+  // Wipe the FK chain this suite owns, child-first. lineup_slot is TRUNCATEd (statement-level, bypasses the
+  // per-row lock-on-play DELETE trigger) so a locked slot left by the release test can be cleared.
   beforeEach(async () => {
+    await db.$executeRawUnsafe("TRUNCATE TABLE lineup_slot");
+    await db.rosterPlayer.deleteMany({});
     await db.scoreManagerPeriod.deleteMany({});
     await db.playoffEntry.deleteMany({});
+    await db.player.deleteMany({});
     await db.period.deleteMany({});
     await db.manager.deleteMany({});
+    await db.fifaTeam.deleteMany({});
     await db.league.deleteMany({});
 
     await db.league.create({
@@ -60,6 +65,7 @@ describe.skipIf(!TEST_URL)("playoff advance adapter — real Postgres", () => {
         data: { id: `m${i}`, leagueId: LEAGUE, displayName: `Team ${i}` },
       });
     }
+    await db.fifaTeam.create({ data: { id: "adv-team", balldontlieId: 9001, name: "Advance FC" } });
     // A frozen group period — its scores feed the cumulative tournament total.
     await db.period.create({
       data: { id: MD1, leagueId: LEAGUE, kind: "group_md", label: "MD1", frozenAt: FROZEN },
@@ -132,11 +138,12 @@ describe.skipIf(!TEST_URL)("playoff advance adapter — real Postgres", () => {
       await store.applyRoundCut({
         leagueId: LEAGUE,
         roundLabel: "R32",
+        roundPeriodId: R32,
         eliminated: ["m1", "m2"],
         champion: null,
         at: AT,
       }),
-    ).toBe("applied");
+    ).toMatchObject({ outcome: "applied" });
 
     const m1 = await entry("m1");
     expect(m1!.status).toBe("eliminated");
@@ -151,12 +158,91 @@ describe.skipIf(!TEST_URL)("playoff advance adapter — real Postgres", () => {
       await store.applyRoundCut({
         leagueId: LEAGUE,
         roundLabel: "R32",
+        roundPeriodId: R32,
         eliminated: ["m1", "m2"],
         champion: null,
         at: new Date(),
       }),
-    ).toBe("already-cut");
+    ).toEqual({ outcome: "already-cut" });
     expect((await entry("m1"))!.eliminatedAt?.toISOString()).toBe(AT.toISOString()); // unchanged
+  });
+
+  it("applyRoundCut RELEASES the just-cut managers' rosters (dropped + slots incl. locked via the GUC); survivors untouched", async () => {
+    // R32 just frozen, still 'open' (the close cron hasn't flipped it yet) — the realistic cut window.
+    await db.period.create({
+      data: {
+        id: R32,
+        leagueId: LEAGUE,
+        kind: "knockout_round",
+        label: "R32",
+        status: "open",
+        cutCount: 2,
+        frozenAt: FROZEN,
+      },
+    });
+    for (const i of [1, 2, 3, 4]) await alive(`m${i}`, i);
+
+    // Seed rosters + lineup slots (born unlocked; lock via a follow-up UPDATE, as the trigger requires).
+    async function rp(managerId: string, playerId: string, bdl: number) {
+      await db.player.create({
+        data: {
+          id: playerId,
+          balldontlieId: bdl,
+          displayName: playerId,
+          position: "MID",
+          teamId: "adv-team",
+        },
+      });
+      await db.rosterPlayer.create({ data: { leagueId: LEAGUE, managerId, playerId } });
+    }
+    async function slot(managerId: string, playerId: string, locked: boolean) {
+      const s = await db.lineupSlot.create({
+        data: { managerId, periodId: R32, playerId, role: "MID", isStarter: true },
+      });
+      if (locked)
+        await db.lineupSlot.update({ where: { id: s.id }, data: { lockedAt: new Date() } });
+    }
+    // m1 (cut): an unlocked slot + a LOCKED (played) slot — both release under allowLocked/GUC.
+    await rp("m1", "m1-unlocked", 1001);
+    await slot("m1", "m1-unlocked", false);
+    await rp("m1", "m1-locked", 1002);
+    await slot("m1", "m1-locked", true);
+    // m2 (cut): one unlocked slot.
+    await rp("m2", "m2-p", 1003);
+    await slot("m2", "m2-p", false);
+    // m3 (SURVIVOR): a LOCKED slot that must remain intact (never a cut manager, never touched).
+    await rp("m3", "m3-locked", 1004);
+    await slot("m3", "m3-locked", true);
+
+    const store = createPrismaPlayoffAdvanceStore(db);
+    const out = await store.applyRoundCut({
+      leagueId: LEAGUE,
+      roundLabel: "R32",
+      roundPeriodId: R32,
+      eliminated: ["m1", "m2"],
+      champion: null,
+      at: AT,
+    });
+
+    // The released map names each cut manager's shed roster ids (the audit trail).
+    expect(out).toMatchObject({ outcome: "applied" });
+    if (out.outcome === "applied") {
+      expect(Object.keys(out.released).sort()).toEqual(["m1", "m2"]);
+      expect(out.released.m1?.slice().sort()).toEqual(["m1-locked", "m1-unlocked"]);
+      expect(out.released.m2).toEqual(["m2-p"]);
+    }
+    // Cut managers' roster rows are dropped (unowned → free agents); their slots (incl. locked) released.
+    const activeOf = (managerId: string) =>
+      db.rosterPlayer.count({ where: { managerId, droppedAt: null } });
+    expect(await activeOf("m1")).toBe(0);
+    expect(await activeOf("m2")).toBe(0);
+    expect(await db.lineupSlot.count({ where: { managerId: "m1" } })).toBe(0);
+    expect(await db.lineupSlot.count({ where: { managerId: "m2" } })).toBe(0);
+    // The SURVIVOR (m3) is never touched: roster still active, the locked slot intact.
+    expect(await activeOf("m3")).toBe(1);
+    expect(await db.lineupSlot.count({ where: { managerId: "m3", lockedAt: { not: null } } })).toBe(
+      1,
+    );
   });
 
   it("applyRoundCut flips the lone survivor alive → champion on the final round", async () => {
@@ -178,11 +264,12 @@ describe.skipIf(!TEST_URL)("playoff advance adapter — real Postgres", () => {
       await store.applyRoundCut({
         leagueId: LEAGUE,
         roundLabel: "Final",
+        roundPeriodId: FINAL,
         eliminated: ["m1"],
         champion: "m2",
         at: AT,
       }),
-    ).toBe("applied");
+    ).toMatchObject({ outcome: "applied" });
 
     expect((await entry("m1"))!.status).toBe("eliminated");
     const champ = await entry("m2");

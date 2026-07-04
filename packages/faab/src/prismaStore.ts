@@ -17,7 +17,7 @@
  * Like @app/draft / @app/lineup's adapters this has no unit test (it needs a live DB); it is covered by
  * `tsc --noEmit` plus the Memory doubles' tests, which exercise the same controller against the ports.
  */
-import type { PrismaClient } from "@app/db";
+import type { PrismaClient, Prisma } from "@app/db";
 import { releaseDroppedPlayerSlots, findLockedSlotPlayerIds } from "@app/lineup/prisma";
 import { rosterCapForPlayoffPhase, type Position } from "@app/shared";
 import { liveOwnedWhere, isAddTeamEliminated } from "./faEligibility";
@@ -773,6 +773,96 @@ export class ReleaseStaleLockError extends Error {
   }
 }
 
+/**
+ * The drop-only release BODY, factored out so BOTH `releaseRoster` (self-opened tx OR enlisted in a
+ * caller's tx) and `releaseEliminatedRosters` (the round-cut path, always enlisted) run the IDENTICAL
+ * writes — ONE source of truth for the drop + slot-release + `app.commish_override` GUC + fail-loud rules.
+ * Runs entirely within the passed transaction client. Callers guarantee `drops` is non-empty + deduped.
+ */
+async function runReleaseInTx(
+  tx: Prisma.TransactionClient,
+  managerId: string,
+  drops: string[],
+  { now, periodId, allowLocked }: { now: Date; periodId: string | null; allowLocked: boolean },
+): Promise<{ releasedSlots: number }> {
+  // Commissioner carve-out: a TRANSACTION-LOCAL GUC the lock-on-play DELETE trigger reads + exempts.
+  // Set ONLY for an --allow-locked-slot release; the manager path never sets it, so the latch holds.
+  if (allowLocked) await tx.$executeRawUnsafe("SET LOCAL app.commish_override = 'on'");
+
+  const manager = await tx.manager.findUnique({
+    where: { id: managerId },
+    select: { leagueId: true },
+  });
+  if (!manager) throw new Error(`releaseRoster: unknown manager ${managerId}`);
+  const { leagueId } = manager;
+
+  // (1) Drop the named players (active rows only — a re-run finds 0 and is a no-op).
+  await tx.rosterPlayer.updateMany({
+    where: { leagueId, managerId, playerId: { in: drops }, droppedAt: null },
+    data: { droppedAt: now },
+  });
+
+  // (2) Release each drop's lineup slots so a dropped starter stops scoring.
+  let releasedSlots = 0;
+  for (const playerId of drops) {
+    // Always release the UNLOCKED slots (the @app/lineup boundary — faab never touches lineup_slot).
+    releasedSlots += await releaseDroppedPlayerSlots(tx, { leagueId, managerId, playerId });
+    if (allowLocked) {
+      // Commissioner: also release the player's CURRENTLY-locked slot (a played starter). Scoped to the
+      // pinned period when known, else any still-open period — never the historical (closed-period) locked
+      // slots scoring still reads (a bare pinned id, however, targets exactly that period). GUC exempts the trigger.
+      const periodFilter =
+        periodId != null ? { id: periodId } : { leagueId, status: { not: "closed" as const } };
+      const { count } = await tx.lineupSlot.deleteMany({
+        where: { managerId, playerId, lockedAt: { not: null }, period: periodFilter },
+      });
+      releasedSlots += count;
+    }
+  }
+
+  // (3) FAIL-LOUD slot-coverage guard (manager path): the released-slot set must cover every slotted
+  //     drop. If any drop is still locked in an open period, the injected lock set was stale (TOCTOU)
+  //     — abort rather than silently leave a locked starter attached to a dropped player.
+  if (!allowLocked) {
+    const stillLocked = await findLockedSlotPlayerIds(tx, { managerId, playerIds: drops });
+    if (stillLocked.size > 0) throw new ReleaseStaleLockError([...stillLocked]);
+  }
+
+  return { releasedSlots };
+}
+
+/**
+ * Round-cut RELEASE (`commish:advance`): release the ENTIRE active roster of each just-cut manager to the
+ * free-agent wire, ENLISTED in the caller's round-cut `$transaction` (so the cut + the release commit
+ * atomically — never a cut with un-released rosters, never a release without the cut). It reuses the exact
+ * {@link runReleaseInTx} primitive `releaseRoster` uses: `allowLocked` under the `app.commish_override`
+ * GUC (a just-cut manager's slots are locked from the round they just played), scoped to the round being
+ * cut (`roundPeriodId`). Returns the released player ids per manager — the audit trail. A manager whose
+ * active roster is empty contributes an empty list (a no-op). Pass ONLY the eliminated managers: a
+ * survivor's roster (and their still-locked slots) is never enumerated or touched here.
+ */
+export async function releaseEliminatedRosters(
+  tx: Prisma.TransactionClient,
+  input: { leagueId: string; managerIds: readonly string[]; roundPeriodId: string; at: Date },
+): Promise<Record<string, string[]>> {
+  const released: Record<string, string[]> = {};
+  for (const managerId of input.managerIds) {
+    const rows = await tx.rosterPlayer.findMany({
+      where: { leagueId: input.leagueId, managerId, droppedAt: null },
+      select: { playerId: true },
+    });
+    const ids = rows.map((r) => r.playerId);
+    released[managerId] = ids;
+    if (ids.length === 0) continue;
+    await runReleaseInTx(tx, managerId, ids, {
+      now: input.at,
+      periodId: input.roundPeriodId,
+      allowLocked: true,
+    });
+  }
+  return released;
+}
+
 export function createPrismaFaabReleaseStore(prisma: Db): FaabReleaseStore {
   return {
     async loadReleaseContext(managerId): Promise<ReleaseContext | null> {
@@ -827,58 +917,35 @@ export function createPrismaFaabReleaseStore(prisma: Db): FaabReleaseStore {
       };
     },
 
-    async releaseRoster(managerId, dropIds, { now, periodId, allowLocked }) {
+    async releaseRoster(
+      managerId: string,
+      dropIds: readonly string[],
+      {
+        now,
+        periodId,
+        allowLocked,
+        tx,
+      }: {
+        now: Date;
+        periodId: string | null;
+        allowLocked: boolean;
+        /** When present, ENLIST in this outer transaction instead of opening a fresh `$transaction`, so the
+         *  release can commit ATOMICALLY with the caller's other writes. This param is NOT on the pure
+         *  {@link FaabReleaseStore} port (it would drag `@app/db` into the IO-free surface); it rides the
+         *  concrete adapter only. Omitted ⇒ self-opened tx (the manager route + commish:trim, unchanged). */
+        tx?: Prisma.TransactionClient;
+      },
+    ): Promise<{ releasedSlots: number }> {
       const drops = [...new Set(dropIds)];
       if (drops.length === 0) return { releasedSlots: 0 };
 
-      return prisma.$transaction(async (tx) => {
-        // Commissioner carve-out: a TRANSACTION-LOCAL GUC the lock-on-play DELETE trigger reads + exempts.
-        // Set ONLY for an --allow-locked-slot release; the manager path never sets it, so the latch holds.
-        if (allowLocked) await tx.$executeRawUnsafe("SET LOCAL app.commish_override = 'on'");
-
-        const manager = await tx.manager.findUnique({
-          where: { id: managerId },
-          select: { leagueId: true },
-        });
-        if (!manager) throw new Error(`releaseRoster: unknown manager ${managerId}`);
-        const { leagueId } = manager;
-
-        // (1) Drop the named players (active rows only — a re-run finds 0 and is a no-op).
-        await tx.rosterPlayer.updateMany({
-          where: { leagueId, managerId, playerId: { in: drops }, droppedAt: null },
-          data: { droppedAt: now },
-        });
-
-        // (2) Release each drop's lineup slots so a dropped starter stops scoring.
-        let releasedSlots = 0;
-        for (const playerId of drops) {
-          // Always release the UNLOCKED slots (the @app/lineup boundary — faab never touches lineup_slot).
-          releasedSlots += await releaseDroppedPlayerSlots(tx, { leagueId, managerId, playerId });
-          if (allowLocked) {
-            // Commissioner: also release the player's CURRENTLY-locked slot (a played starter) in the
-            // trim window. Scoped to the pinned period when known, else any still-open period — never the
-            // historical (closed-period) locked slots scoring still reads. The GUC exempts the trigger.
-            const periodFilter =
-              periodId != null
-                ? { id: periodId }
-                : { leagueId, status: { not: "closed" as const } };
-            const { count } = await tx.lineupSlot.deleteMany({
-              where: { managerId, playerId, lockedAt: { not: null }, period: periodFilter },
-            });
-            releasedSlots += count;
-          }
-        }
-
-        // (3) FAIL-LOUD slot-coverage guard (manager path): the released-slot set must cover every slotted
-        //     drop. If any drop is still locked in an open period, the injected lock set was stale (TOCTOU)
-        //     — abort rather than silently leave a locked starter attached to a dropped player.
-        if (!allowLocked) {
-          const stillLocked = await findLockedSlotPlayerIds(tx, { managerId, playerIds: drops });
-          if (stillLocked.size > 0) throw new ReleaseStaleLockError([...stillLocked]);
-        }
-
-        return { releasedSlots };
-      });
+      const opts = { now, periodId, allowLocked };
+      // `tx` present ⇒ ENLIST in the caller's outer transaction (the round-cut apply) instead of opening a
+      // fresh one, so the release commits atomically with the caller's writes. Omitted (the manager route
+      // + commish:trim) ⇒ the store opens its own `$transaction` — behavior-identical to before.
+      return tx
+        ? runReleaseInTx(tx, managerId, drops, opts)
+        : prisma.$transaction((t) => runReleaseInTx(t, managerId, drops, opts));
     },
 
     async listOverCapPlayoffSurvivors(leagueId): Promise<OverCapSurvivor[]> {

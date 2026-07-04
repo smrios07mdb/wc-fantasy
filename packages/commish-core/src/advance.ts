@@ -14,14 +14,17 @@
  * no-op), and a structured audit line per applied cut. A residual boundary tie is NEVER auto-cut — it is
  * surfaced for `--break-tie` adjudication. Injected deps → testable against a memory store.
  *
- * OUT OF SCOPE (per the thread spec): no roster trim, no FAAB write (the D4 gate auto-excludes `eliminated`
- * holders), no score recompute (it READS `score_manager_period`), and no `league.status` flip — the
- * `playoff → complete` transition is left to the next thread.
+ * RELEASE (this thread): the apply is now ONE atomic action that BOTH flips the round's cut AND releases
+ * the just-cut managers' ENTIRE active roster to the free-agent wire (`dropped_at` + slot release under the
+ * `app.commish_override` GUC), inside the SAME `$transaction` as the cut. The store's `applyRoundCut` owns
+ * that atomicity; the idempotency gate (0-row alive→eliminated claim) fronts the release too, so a re-run
+ * releases nothing. Champion + previously-eliminated managers are never released. STILL out of scope: score
+ * recompute (it READS `score_manager_period`) and the `league.status` flip.
  */
 import { resolveRoundCut, type RoundCutResolution } from "@app/recompute";
 import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
 import { formatAudit, isCommissionerActor } from "@app/commish-core";
-import type { PlayoffAdvanceStore } from "./advanceStore";
+import type { PlayoffAdvanceStore, ReleasePreviewPlayer } from "./advanceStore";
 
 const FINAL_ROUND = KNOCKOUT_ROUNDS[KNOCKOUT_ROUNDS.length - 1];
 
@@ -65,6 +68,10 @@ export interface AdvancePlan {
   field: AdvanceFieldRow[];
   /** The pure resolution, or null when refused before resolving (e.g. not frozen / out of order). */
   resolution: RoundCutResolution | null;
+  /** The players that WILL be released to the wire per cut manager on apply — the dry-run blast radius,
+   *  visible before the type-to-confirm. Empty unless the resolution is `determined` (a tie / invalid
+   *  tiebreak names no cut yet). Keyed by managerId. */
+  releasePreview: Record<string, ReleasePreviewPlayer[]>;
 }
 
 export type AdvanceResult =
@@ -111,7 +118,10 @@ export async function runRoundAdvance(
       roundPoints: a.roundPoints,
       cumulativeTotal: a.cumulativeTotal,
     }));
-  const plan = (resolution: RoundCutResolution | null): AdvancePlan => ({
+  const plan = (
+    resolution: RoundCutResolution | null,
+    releasePreview: Record<string, ReleasePreviewPlayer[]> = {},
+  ): AdvancePlan => ({
     leagueId: input.leagueId,
     round: ctx.round.label,
     cutCount: ctx.round.cutCount,
@@ -120,6 +130,7 @@ export async function runRoundAdvance(
     alreadyCut: ctx.alreadyCut,
     field,
     resolution,
+    releasePreview,
   });
 
   // (1) Idempotency: a round already cut is a no-op skip, not an error.
@@ -165,7 +176,14 @@ export async function runRoundAdvance(
     cutCount: ctx.round.cutCount,
     breakTie: input.breakTie ?? undefined,
   });
-  const p = plan(resolution);
+  // The dry-run RELEASE preview — the players each cut manager loses to the wire on apply, so the full
+  // blast radius is visible before the type-to-confirm. Enumerated ONLY for a concrete `determined` cut
+  // (a tie / invalid tiebreak names no one yet); a pure read that mutates nothing.
+  const releasePreview =
+    resolution.kind === "determined"
+      ? await deps.store.loadActiveRosters(input.leagueId, resolution.eliminated)
+      : {};
+  const p = plan(resolution, releasePreview);
 
   if (resolution.kind === "invalid-tiebreak") {
     return { status: "refused", reason: resolution.reason, plan: p };
@@ -208,17 +226,21 @@ export async function runRoundAdvance(
   // (7) Dry-run by default — change nothing.
   if (!input.apply) return { status: "planned", plan: p };
 
-  // (8) Apply transactionally. The store's conditional alive→eliminated claim is the idempotency gate.
+  // (8) Apply transactionally — cut AND release, ONE atomic action. The store's conditional
+  //     alive→eliminated claim is the idempotency gate that fronts BOTH; `released` is the per-manager
+  //     roster shed to the wire (the audit trail).
   const outcome = await deps.store.applyRoundCut({
     leagueId: input.leagueId,
     roundLabel: ctx.round.label,
+    roundPeriodId: ctx.round.id,
     eliminated: resolution.eliminated,
     champion: resolution.champion,
     at: deps.now,
   });
-  if (outcome === "already-cut") {
+  if (outcome.outcome === "already-cut") {
     return { status: "skipped", reason: "another run already cut this round", plan: p };
   }
+  const released = outcome.released;
 
   // (9) Audit: one line per eliminated manager + one for the champion flip.
   const commissioner = input.actor.email ?? "(is_commissioner flag)";
@@ -232,6 +254,8 @@ export async function runRoundAdvance(
       action: "eliminated",
       round: ctx.round.label,
       tieAdjudicated,
+      // The player ids shed to the wire for this manager (the release trail — mirrors trim's `released`).
+      released: released[managerId] ?? [],
       reason: input.reason,
       kickoffBypassed: false,
       timestamp: input.timestamp,
@@ -254,9 +278,12 @@ export async function runRoundAdvance(
     );
   }
   for (const line of audits) deps.log(line);
+  const releasedCount = Object.values(released).reduce((n, ids) => n + ids.length, 0);
   deps.log(
     `✓ ${ctx.round.label} cut APPLIED — eliminated ${resolution.eliminated.length}` +
-      `${resolution.champion ? `, champion ${name(resolution.champion)}` : ""}; by ${commissioner} — reason: ${input.reason}`,
+      `${resolution.champion ? `, champion ${name(resolution.champion)}` : ""}` +
+      `, released ${releasedCount} player${releasedCount === 1 ? "" : "s"} to the wire` +
+      `; by ${commissioner} — reason: ${input.reason}`,
   );
   return { status: "applied", plan: p, audits };
 }

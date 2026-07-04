@@ -34,13 +34,15 @@ const input = (over: Partial<AdvanceInput> = {}): AdvanceInput => ({
   ...over,
 });
 
-/** R32, cut 2, frozen; 4 alive with a clean (no-tie) ordering: m1 & m2 are the bottom two. */
+/** R32, cut 2, frozen; 4 alive with a clean (no-tie) ordering: m1 & m2 are the bottom two. Each carries a
+ *  roster so the cut+release path (and the dry-run release preview) is exercised. */
 function cleanR32(over: Partial<MemoryAdvanceSeed> = {}): MemoryPlayoffAdvanceStore {
   return new MemoryPlayoffAdvanceStore({
     rounds: [{ label: "R32", cutCount: 2, frozenAt: FROZEN }],
     entries: [{ managerId: "m1" }, { managerId: "m2" }, { managerId: "m3" }, { managerId: "m4" }],
     roundScores: { R32: { m1: 5, m2: 9, m3: 20, m4: 30 } },
     cumulativeTotals: { m1: 100, m2: 90, m3: 200, m4: 300 },
+    rosters: { m1: ["m1-p1", "m1-p2"], m2: ["m2-p1"], m3: ["m3-p1"], m4: ["m4-p1"] },
     ...over,
   });
 }
@@ -55,9 +57,18 @@ describe("runRoundAdvance — dry-run & apply", () => {
     if (res.status === "planned") {
       expect(res.plan.resolution).toMatchObject({ kind: "determined", eliminated: ["m1", "m2"] });
       expect(res.plan.frozen).toBe(true);
+      // The dry-run plan enumerates the players each cut manager WILL lose to the wire (blast radius).
+      expect(res.plan.releasePreview).toEqual({
+        m1: [
+          { playerId: "m1-p1", name: "m1-p1" },
+          { playerId: "m1-p2", name: "m1-p2" },
+        ],
+        m2: [{ playerId: "m2-p1", name: "m2-p1" }],
+      });
     }
     expect(s.applyCount).toBe(0);
     expect(s.entries.get("m1")!.status).toBe("alive");
+    expect(s.rosters.m1).toEqual(["m1-p1", "m1-p2"]); // dry-run released nothing
   });
 
   it("--apply flips the cut managers alive → eliminated and writes one audit line per cut", async () => {
@@ -78,8 +89,14 @@ describe("runRoundAdvance — dry-run & apply", () => {
         action: "eliminated",
         round: "R32",
         tieAdjudicated: false,
+        managerId: "m1",
+        released: ["m1-p1", "m1-p2"], // the player ids shed to the wire (audit trail)
       });
     }
+    // The cut ALSO released the eliminated managers' rosters (one atomic action); survivors untouched.
+    expect(s.rosters.m1).toEqual([]);
+    expect(s.rosters.m2).toEqual([]);
+    expect(s.rosters.m3).toEqual(["m3-p1"]);
   });
 
   it("is idempotent — a round already cut is a no-op skip", async () => {
