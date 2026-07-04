@@ -2,7 +2,8 @@
 
 Branch: `feat/shell-stacking` (off `origin/main` @ f4beefb). Scope per SEQUENCE_T15_LAUNCH →
 T15-2. This file records the **F-P0-A1 diagnosis (written before any fix)**, the measured
-z-map, and the fix plan. Merge: **HOLD** (global chrome, clearance required).
+z-map, and the fix plan. Merge: **MERGED `--ff-only` 2026-07-04 after clearance** (was HOLD);
+F-P0-A1 remains *mitigated, on-device verdict pending* (§6).
 
 ---
 
@@ -173,3 +174,66 @@ scrim covering it at higher z).
 
 Verification: `verify-shell-stacking.mjs` (pw.local replica harness, house style) — see script
 header for the assertion list; plus the unmodified T15-CUT/Theater harnesses.
+
+---
+
+## 5. Outcome (post-implementation)
+
+All of §4 executed as planned, plus one discovery: **the bid composer rendered 780px wide at
+phone widths** (`.wv-composer { width:780px; max-width:100% }` — the percentage max-width
+resolves against the auto grid track the fixed width itself sized, inside the grid-centered
+`.wv-scrim`), pushing the ✕ AND the Place-bid row off-screen right. Caught by the new harness,
+fixed with the sibling `.pl-modal` pattern (`width: min(780px, 100%)`). The modal composer also
+gained `.wv-comp-body` internal scroll at ≤768px (the dvh-capped `overflow:hidden` composer had
+no scroll surface for the stacked 1-col panels — the actions row was stranded).
+
+Proof: `verify-shell-stacking.mjs` **33/33** (360/390/430 + desktop; screenshots
+`apps/web/screenshots/shellstack-*.png`); `verify-the-cut.mjs` **43/43** + `verify-playoffs-hero.mjs`
+green **UNMODIFIED**; `verify-players.mjs` 14/14; `verify-mobile-nav.mjs` + `verify-page-fit.mjs`
+green. Vitest: **3277 passed / 104 skipped** (+`shellStacking.contract` 17 · `moreSheetChrome.dom` 6
+· `useSheetChrome.dom` 3). Full DoD gate green. Merge **HELD** for Sergio.
+
+Residuals handed forward: MPA navigation latency (C1's root — prefetch/progress affordance =
+routing behavior, own clearance); C5 input-zoom → T15-3; More-button pre-hydration deadness
+(bounded, recorded); group-phase "Vs the field" label may ellipsize on phones (accepted — the
+live phase is knockout and the label set is fenced config).
+
+## 6. F-P0-A1 status — MITIGATED, on-device verdict PENDING (not fixed/closed)
+
+Recorded explicitly (2026-07-04, post-gate): this thread's fix set addresses every in-scope
+contributor (C1 feedback, C2 geometry) and the z-inversion failure mode, but the finding is
+**not closed**. The latency theory (C1) does not fully explain N1's "navigation didn't fire
+across multiple attempts" unless those attempts under-waited the TTFB — a plausible but
+unproven reading. What the fix set DOES guarantee is that the two outcomes are now
+**distinguishable on hardware**: the `:active` pressed state fires on touch-down, so
+- pressed-state flashes + navigation eventually lands ⇒ C1 confirmed (feedback/latency);
+- pressed-state flashes + nav still dies ⇒ a residual cause survives this fix set (C3/C5 or
+  something unmodeled) — reopen with that new evidence;
+- no pressed-state at all on a tap ⇒ the touch never reached the bar (hit-testing/viewport
+  offset lane).
+
+**Sergio's live pass is the closing evidence either way.** Until then the BACKLOG carries
+F-P0-A1 as *mitigated, verdict pending*.
+
+**Residual as its own thread:** the MPA navigation latency itself (no prefetch, zero
+`loading.tsx` — cross-ref walkthrough step 7's tab-switch freeze, an F-P2) is **proposed as a
+separate clearance-gated micro-thread** (options: `next/link` prefetch on the nav surfaces, or
+a navigation progress affordance). Routing behavior, deliberately NOT on this branch.
+
+## 7. Measured label-truncation facts (probe, real browser, both phase label sets)
+
+The §1-C2 "accepted trade-off" is narrower than first estimated — measured with the production
+ds.css+shell.css at the three target widths (`.sh-btnav-item > span` scrollWidth vs clientWidth):
+
+| Width | knockout set (Dashboard·Set lineup·The Cut(+dot)·Quiniela·Players·More) | group set (… Vs the field …) |
+|---|---|---|
+| 390px | **all labels fit** | **all labels fit** |
+| 430px | **all labels fit** | **all labels fit** |
+| 360px | Dashboard +7px · Set lineup +3px · The Cut +1px ellipsized | Dashboard +2px · Vs the field +3px ellipsized |
+
+So on Sergio's ~390px hardware nothing truncates in either phase. At 360px only, the widest
+labels lose their last 1–2 glyphs to an ellipsis; on the knockout set the live dot sits inside
+the label span, so during a live round at 360px the dot can be clipped with the overflow
+(1px over — borderline; the `is-active` accent color still marks the tab). Accepted: equal
+≥44px slots at every width beat 1–7px of label at the narrowest class of device, and the label
+set itself is fenced product config (T15-4's).
