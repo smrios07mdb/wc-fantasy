@@ -19,6 +19,13 @@ import { createPrismaFaabCadenceStore } from "./faab/prismaStore";
 import type { FaabCadenceStore } from "./faab/store";
 import { createPrismaPeriodStatusStore } from "./period/prismaStore";
 import type { PeriodStatusStore } from "./period/store";
+import { createPrismaAutoFireStore } from "./autofire/prismaStore";
+import type { AutoFireStore } from "./autofire/store";
+import {
+  createPrismaAutoFireAdvanceStore,
+  type AutoFireAuditContext,
+} from "./autofire/advanceStore";
+import type { PlayoffAdvanceStore } from "@app/commish-core/advanceStore";
 import { config } from "./config";
 
 export const feed: FeedClient = createBalldontlieClient({
@@ -47,5 +54,15 @@ export const faabCadenceStore: FaabCadenceStore = createPrismaFaabCadenceStore(p
 // it through the same guarded `updateMany` as the `wc-fantasy-period-close` cron — a SECOND writer that
 // removes the silent status-open SPOF. The cron stays the primary writer (UNCHANGED).
 export const periodStatusStore: PeriodStatusStore = createPrismaPeriodStatusStore(prisma);
+
+// Playoff round auto-fire (feat/autofire-round-cut). The auto-fire store carries the worker-local reads
+// (knockout-round facts + commissioner recipients + round data-completeness). The advance store is built
+// PER-RUN via `makeAutoFireAdvanceStore` so a determined apply writes the durable `auto_advance` audit row
+// (FIX 2) atomically inside the cut+release tx; its reads delegate to the SAME `createPrismaPlayoffAdvanceStore`
+// the CLI uses (INVOKES the untouched `runRoundAdvance` — no cut/release/resolution logic re-implemented).
+// The notify store (above) carries the tie-hold commissioner alert. All default-OFF behind `AUTOFIRE_CUTS_ENABLED`.
+export const autoFireStore: AutoFireStore = createPrismaAutoFireStore(prisma);
+export const makeAutoFireAdvanceStore = (audit: AutoFireAuditContext): PlayoffAdvanceStore =>
+  createPrismaAutoFireAdvanceStore(prisma, audit);
 
 export { prisma };

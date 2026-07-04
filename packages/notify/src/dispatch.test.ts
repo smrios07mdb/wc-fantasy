@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dispatchToManager } from "./dispatch";
+import { dispatchToManager, dispatchCommissionerAlert } from "./dispatch";
 import { MemoryNotifyStore } from "./memoryStore";
 import { buildPushPayload } from "./payload";
 
@@ -113,5 +113,115 @@ describe("dispatchToManager — prunes expired subscriptions", () => {
 
     expect(res).toEqual({ sent: 0, reason: "ok" });
     expect(store.subscriptionCount("mgr-1")).toBe(0); // pruned
+  });
+});
+
+const ALERT_PAYLOAD = {
+  title: "Playoff cut needs review",
+  body: "R32: a boundary tie can't be auto-cut — run commish:advance --break-tie.",
+  url: "/commish",
+  tag: "cut_needs_review:R32",
+};
+
+describe("dispatchCommissionerAlert — governance alert (no preference gate)", () => {
+  it("sends + records the free-TEXT ledger row on the first call, then dedups", async () => {
+    const store = new MemoryNotifyStore();
+    await store.addSubscription("commish", SUB);
+
+    const first = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R32",
+      ALERT_PAYLOAD,
+    );
+    const second = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R32",
+      ALERT_PAYLOAD,
+    );
+
+    expect(first).toEqual({ sent: 1, reason: "ok" });
+    expect(second).toEqual({ sent: 0, reason: "duplicate" }); // at-most-once per round
+    expect(store.sends).toHaveLength(1);
+    expect(store.hasLedger("commish", "cut_needs_review", "R32")).toBe(true);
+  });
+
+  it("is NOT preference-gated — fires even with every channel muted", async () => {
+    const store = new MemoryNotifyStore();
+    await store.upsertPreferences("commish", {
+      draftTurn: false,
+      playerNotStarting: false,
+      matchStarting: false,
+    });
+    await store.addSubscription("commish", SUB);
+
+    const res = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R32",
+      ALERT_PAYLOAD,
+    );
+    expect(res).toEqual({ sent: 1, reason: "ok" }); // governance alerts are not opt-out
+    expect(store.sends).toHaveLength(1);
+  });
+
+  it("no device → no send and does NOT burn the ledger (a later subscribe is still alerted)", async () => {
+    const store = new MemoryNotifyStore();
+
+    const first = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R32",
+      ALERT_PAYLOAD,
+    );
+    expect(first).toEqual({ sent: 0, reason: "no_subscriptions" });
+    expect(store.hasLedger("commish", "cut_needs_review", "R32")).toBe(false);
+
+    await store.addSubscription("commish", SUB);
+    const second = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R32",
+      ALERT_PAYLOAD,
+    );
+    expect(second).toEqual({ sent: 1, reason: "ok" });
+  });
+
+  it("a different round is a distinct ledger row → alerts again", async () => {
+    const store = new MemoryNotifyStore();
+    await store.addSubscription("commish", SUB);
+
+    await dispatchCommissionerAlert(store, "commish", "cut_needs_review", "R32", ALERT_PAYLOAD);
+    const other = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R16",
+      ALERT_PAYLOAD,
+    );
+    expect(other).toEqual({ sent: 1, reason: "ok" });
+    expect(store.sends).toHaveLength(2);
+  });
+
+  it("prunes a 410 Gone endpoint", async () => {
+    const store = new MemoryNotifyStore();
+    await store.addSubscription("commish", SUB);
+    store.failingEndpoints.set(SUB.endpoint, 410);
+
+    const res = await dispatchCommissionerAlert(
+      store,
+      "commish",
+      "cut_needs_review",
+      "R32",
+      ALERT_PAYLOAD,
+    );
+    expect(res).toEqual({ sent: 0, reason: "ok" });
+    expect(store.subscriptionCount("commish")).toBe(0);
   });
 });

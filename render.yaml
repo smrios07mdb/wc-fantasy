@@ -112,6 +112,15 @@ services:
         value: "2000"
       - key: WORKER_ROSTERS_SYNC_EVERY_TICKS # boot + ~daily roster re-pull, self-scheduled (no cron)
         value: "1440"
+      # Playoff round AUTO-FIRE (feat/autofire-round-cut) — an UNATTENDED, IRREVERSIBLE cut+release on
+      # PROVISIONAL scores. AUTOFIRE_CUTS_ENABLED is the master kill-switch: DEFAULT OFF (unset ⇒ the
+      # scheduler's auto-fire step is a byte-identical no-op). sync:false so enabling it is a deliberate
+      # dashboard toggle Sergio flips — NEVER committed on. AUTOFIRE_SETTLE_MIN is the minutes after a
+      # round's last-FT proxy before the auto-cut fires (default 5).
+      - key: AUTOFIRE_CUTS_ENABLED # master kill-switch — set "true" in the dashboard to enable auto-cuts
+        sync: false
+      - key: AUTOFIRE_SETTLE_MIN # settle window (minutes) after the round's last-FT proxy before firing
+        value: "5"
       # Web Push / VAPID (Prompt 41a wiring; CONSUMED in 41b). The worker gains the @app/notify dep but
       # no behavior until the three triggers (draft-turn / player-not-starting / match-starting) land in
       # 41b — these vars are inert until then. Set the SAME keypair as the web service.

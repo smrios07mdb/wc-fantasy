@@ -47,6 +47,10 @@ export const COMMISH_ACTION_TYPES = [
   "period_freeze",
   "period_unfreeze",
   "round_advance",
+  // The UNATTENDED playoff round auto-cut (feat/autofire-round-cut) — a distinct action_type so the
+  // governance ledger legibly separates auto-fired cuts from operator-run `round_advance`. Free TEXT
+  // (this array, NOT a pg enum), so it needs NO migration. Written with a NULL actor (the system row).
+  "auto_advance",
   "field_locked",
   "playoff_config",
   "lock_fallback_changed",

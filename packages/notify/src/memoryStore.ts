@@ -13,7 +13,7 @@
  */
 import type { NotifyStore } from "./store";
 import type {
-  NotificationKind,
+  LedgerKind,
   NotificationPreference,
   PushPayload,
   PushSubscriptionRecord,
@@ -75,11 +75,7 @@ export class MemoryNotifyStore implements NotifyStore {
     );
   }
 
-  async claimLedger(
-    managerId: string,
-    kind: NotificationKind,
-    subjectId: string,
-  ): Promise<boolean> {
+  async claimLedger(managerId: string, kind: LedgerKind, subjectId: string): Promise<boolean> {
     const key = `${managerId}|${kind}|${subjectId}`;
     if (this.ledger.has(key)) return false; // a prior claim won
     this.ledger.add(key);
@@ -94,7 +90,7 @@ export class MemoryNotifyStore implements NotifyStore {
   }
 
   // ── read helpers for assertions ──────────────────────────────────────────────
-  hasLedger(managerId: string, kind: NotificationKind, subjectId: string): boolean {
+  hasLedger(managerId: string, kind: LedgerKind, subjectId: string): boolean {
     return this.ledger.has(`${managerId}|${kind}|${subjectId}`);
   }
   subscriptionCount(managerId: string): number {

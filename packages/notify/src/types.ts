@@ -10,6 +10,22 @@
  */
 export type NotificationKind = "draft_turn" | "player_not_starting" | "match_starting";
 
+/**
+ * Governance / system ALERT kinds — NOT preference-gated channels. A commissioner adjudication nudge (e.g.
+ * a playoff round cut that hit a boundary tie and cannot be auto-cut) is not something a manager opts out
+ * of, so it is deliberately kept OUT of {@link NotificationKind} + `KIND_TO_PREF` (which stay a closed
+ * union of the three opt-in channels). It is written to the SAME `notification_sent.kind` ledger column,
+ * which is free TEXT (not a Prisma enum), so a new governance kind needs NO migration.
+ */
+export type AlertKind = "cut_needs_review";
+
+/**
+ * Any value the `notification_sent` idempotency ledger accepts — a preference-gated {@link NotificationKind}
+ * OR a governance {@link AlertKind}. The DB column is free TEXT, so this superset needs no migration. Only
+ * the ledger port ({@link NotifyStore.claimLedger}) speaks it; the preference gate is `NotificationKind`-only.
+ */
+export type LedgerKind = NotificationKind | AlertKind;
+
 /** A manager's per-channel opt-in state (all default `true`; see the migration). */
 export interface NotificationPreference {
   draftTurn: boolean;

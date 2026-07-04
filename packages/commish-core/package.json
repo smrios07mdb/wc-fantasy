@@ -13,6 +13,10 @@
     "./advanceStore": {
       "types": "./src/advanceStore.ts",
       "default": "./src/advanceStore.ts"
+    },
+    "./advanceAudit": {
+      "types": "./src/advanceAudit.ts",
+      "default": "./src/advanceAudit.ts"
     }
   },
   "scripts": {

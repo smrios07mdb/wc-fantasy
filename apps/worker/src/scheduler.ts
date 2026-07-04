@@ -8,10 +8,13 @@ import {
   faabBatchStore,
   faabCadenceStore,
   periodStatusStore,
+  autoFireStore,
+  makeAutoFireAdvanceStore,
 } from "./wiring";
 import { dispatchPlayersNotStarting, dispatchMatchStarting } from "./notify/triggers";
 import { dispatchFaabBatches } from "./faab/dispatch";
 import { dispatchPeriodStatusAdvance } from "./period/dispatch";
+import { dispatchAutoFireCut } from "./autofire/dispatch";
 import { runRecomputeSweep } from "./recompute";
 import {
   decideMatchModes,
@@ -277,6 +280,32 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
         }
       } catch (err) {
         log.error("period.status.advance.error", { message: (err as Error).message });
+      }
+
+      // Playoff round AUTO-FIRE (feat/autofire-round-cut) — the HIGHEST-RISK step: an UNATTENDED, IRREVERSIBLE
+      // cut that releases the eliminated managers' rosters on PROVISIONAL scores. Runs LAST — AFTER the
+      // status-advance above, so a just-finished round is already `closed` before this reads it. DEFAULT-OFF
+      // behind AUTOFIRE_CUTS_ENABLED: unset/false ⇒ `dispatchAutoFireCut` short-circuits to a byte-identical
+      // no-op before any IO. It NEVER re-implements a cut — it INVOKES the untouched `runRoundAdvance` (the
+      // commish:advance orchestrator) with a SYSTEM commissioner actor + the deliberate allowIncomplete:true
+      // (at +settle the round is closed but not frozen — the provisional-score path). A boundary tie is NEVER
+      // auto-cut: it dispatches a ledgered commissioner alert and leaves the round for manual commish:advance.
+      // Idempotent: `runRoundAdvance`'s 0-row alive→eliminated claim + the notification_sent ledger make
+      // re-ticks and re-alerts no-ops. Its OWN try/catch so a failure never starves ingestion/recompute/notify
+      // (the notify-trigger isolation precedent).
+      try {
+        const outcome = await dispatchAutoFireCut({
+          now: new Date(),
+          enabled: config.autofireCutsEnabled,
+          settleMs: config.autofireSettleMs,
+          store: autoFireStore,
+          makeAdvanceStore: makeAutoFireAdvanceStore,
+          notify: notifyStore,
+          log,
+        });
+        if (outcome.action !== "none") log.info("autofire.cut", { ...outcome });
+      } catch (err) {
+        log.error("autofire.cut.error", { message: (err as Error).message });
       }
 
       // NOTE: the draft timer is NOT ticked here. A draft's per-pick clock needs a far tighter cadence

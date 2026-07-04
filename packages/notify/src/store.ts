@@ -8,7 +8,7 @@
  * Mirrors `FaabBidStore` / `DraftStore`: one coherent port, one Memory double, one Prisma adapter.
  */
 import type {
-  NotificationKind,
+  LedgerKind,
   NotificationPreference,
   PushPayload,
   PushSubscriptionRecord,
@@ -40,9 +40,10 @@ export interface NotifyStore {
   /**
    * Idempotency ledger claim. Inserts the unique `(managerId, kind, subjectId)` row and returns
    * `true` iff THIS call inserted it (won the race). A second identical call returns `false` — the
-   * load-bearing guard that keeps 41b's polling triggers from re-sending.
+   * load-bearing guard that keeps 41b's polling triggers from re-sending. `kind` is a {@link LedgerKind}
+   * (a preference channel OR a governance alert), matching the free-TEXT `notification_sent.kind` column.
    */
-  claimLedger(managerId: string, kind: NotificationKind, subjectId: string): Promise<boolean>;
+  claimLedger(managerId: string, kind: LedgerKind, subjectId: string): Promise<boolean>;
 
   /** Encrypt + POST one push to the subscription's endpoint (the transport; never touches the DB). */
   send(subscription: PushSubscriptionRecord, payload: PushPayload): Promise<SendOutcome>;

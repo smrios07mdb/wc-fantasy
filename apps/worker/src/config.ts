@@ -14,6 +14,12 @@ function intEnv(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** Truthy-string env flag. Unset (or anything other than 1/true/yes/on) ⇒ false — the default-OFF idiom. */
+function boolEnv(name: string): boolean {
+  const raw = (process.env[name] ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   logLevel: (process.env.LOG_LEVEL ?? "info") as "debug" | "info" | "warn" | "error",
@@ -53,4 +59,13 @@ export const config = {
    *  peek). National-team sheets publish ~75 min out; the selector re-fires each tick across
    *  [kickoff - this, kickoff) until the snapshot lands. ORTHOGONAL to the kickoff lock path. Default 75m. */
   lineupPeekLeadMs: intEnv("LINEUP_PEEK_LEAD_MS", 75 * 60_000),
+  /** Master kill-switch for the UNATTENDED playoff round auto-cut (feat/autofire-round-cut). DEFAULT OFF —
+   *  unset/false ⇒ the scheduler tick's auto-fire step short-circuits to a byte-identical no-op. Sergio
+   *  flips this to "true" in the Render dashboard ONLY when he wants automated, unattended cuts. */
+  autofireCutsEnabled: boolEnv("AUTOFIRE_CUTS_ENABLED"),
+  /** Settle window after a knockout round's last-FT proxy before the auto-cut fires (minutes; default 5).
+   *  The last-FT proxy is `max(kickoffAt)` (freeze.ts P45 — no completed-at column). Because the auto-fire
+   *  also requires the round's period to be CLOSED (every fixture completed), for real matches this is
+   *  effectively a floor of "the first tick after the round closes"; it stays a tunable minimum. */
+  autofireSettleMs: intEnv("AUTOFIRE_SETTLE_MIN", 5) * 60_000,
 } as const;

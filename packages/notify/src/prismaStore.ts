@@ -15,7 +15,7 @@ import type { PrismaClient } from "@app/db";
 import { sendPush } from "./send";
 import type { NotifyStore } from "./store";
 import type {
-  NotificationKind,
+  LedgerKind,
   NotificationPreference,
   PushPayload,
   PushSubscriptionRecord,
@@ -80,11 +80,7 @@ export function createPrismaNotifyStore(prisma: Db): NotifyStore {
       await prisma.pushSubscription.deleteMany({ where: { managerId, endpoint } });
     },
 
-    async claimLedger(
-      managerId: string,
-      kind: NotificationKind,
-      subjectId: string,
-    ): Promise<boolean> {
+    async claimLedger(managerId: string, kind: LedgerKind, subjectId: string): Promise<boolean> {
       const result = await prisma.notificationSent.createMany({
         data: [{ managerId, kind, subjectId }],
         skipDuplicates: true,
