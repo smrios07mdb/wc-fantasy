@@ -85,6 +85,55 @@ export const MORE_SHEET_ITEMS: readonly NavItem[] = [
 
 const MORE_IDS: ReadonlySet<NavId> = new Set(MORE_SHEET_ITEMS.map((i) => i.id));
 
+/* ── T15-CUT: phase-aware nav (executes the T15-4 IA decision; spec §6 "no new tab") ───────────── */
+
+/** The shell's tournament arc — group (incl. pre-kickoff) → knockout → complete. */
+export type NavPhase = "group" | "knockout" | "complete";
+
+export interface PhaseNav {
+  navItems: readonly NavItem[];
+  bottomTabItems: readonly NavItem[];
+  moreSheetItems: readonly NavItem[];
+  /** The vsfield slot's glyph: the goal-circle (group) or the machete (knockout onward). */
+  vsfieldGlyph: "vsfield" | "cut";
+  /** Light the vsfield tab's live dot (a knockout round is underway; dark on pend + post-final). */
+  vsfieldLiveDot: boolean;
+}
+
+/**
+ * Derive the phase-aware nav lists. GROUP returns the base arrays BY REFERENCE (byte-identical nav —
+ * rider E); knockout/complete relabel exactly two slots on fresh copies: vsfield → "The Cut" (+ the
+ * machete glyph; live dot while a knockout round runs) and playoffs → "Theater" (the demoted
+ * ceremonial stage). Same ids, same hrefs, same slot count — one mental model: the tab where I see
+ * how I stand against everyone.
+ */
+export function navItemsForPhase(phase: NavPhase, knockoutLive: boolean): PhaseNav {
+  if (phase === "group") {
+    return {
+      navItems: NAV_ITEMS,
+      bottomTabItems: BOTTOM_TAB_ITEMS,
+      moreSheetItems: MORE_SHEET_ITEMS,
+      vsfieldGlyph: "vsfield",
+      vsfieldLiveDot: false,
+    };
+  }
+  const relabel = (items: readonly NavItem[]): NavItem[] =>
+    items.map((item) =>
+      item.id === "vsfield"
+        ? { ...item, label: "The Cut" }
+        : item.id === "playoffs"
+          ? { ...item, label: "Theater" }
+          : item,
+    );
+  return {
+    navItems: relabel(NAV_ITEMS),
+    bottomTabItems: relabel(BOTTOM_TAB_ITEMS),
+    moreSheetItems: relabel(MORE_SHEET_ITEMS),
+    vsfieldGlyph: "cut",
+    vsfieldLiveDot: phase === "knockout" && knockoutLive,
+  };
+}
+
 /**
  * Map a pathname (from `usePathname()`) to the active nav id, or null when none applies.
  *

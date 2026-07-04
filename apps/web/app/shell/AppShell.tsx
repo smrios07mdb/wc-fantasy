@@ -29,13 +29,12 @@
 import type { ReactNode } from "react";
 import { BrandBadge } from "@/components/Brand";
 import {
-  NAV_ITEMS,
-  BOTTOM_TAB_ITEMS,
-  MORE_SHEET_ITEMS,
   COMMISH_NAV_ITEM,
+  navItemsForPhase,
   selectMobileNavPartition,
   type NavId,
 } from "@/src/shell/crossNav";
+import { loadNavPhase } from "@/src/shell/loadNavPhase";
 import { MoreSheet } from "./MoreSheet";
 import "./shell.css";
 
@@ -137,7 +136,29 @@ function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
   );
 }
 
-export function AppShell({
+/**
+ * The machete tab glyph (T15-CUT): the ONE blade silhouette (see vsfield/MacheteGlyph) rendered
+ * monochrome in currentColor for the knockout-phase "The Cut" slot. Fill-based (the blade is a
+ * shape, not a stroke), so it is its own svg rather than a NavIcon path set.
+ */
+function CutTabIcon({ size = 18 }: { size?: number }) {
+  const h = Math.max(8, Math.round(size * 0.42));
+  return (
+    <svg
+      aria-hidden="true"
+      width={size + 6}
+      height={h}
+      viewBox="0 0 120 44"
+      fill="currentColor"
+      style={{ margin: `${Math.round((size - h) / 2)}px 0` }}
+    >
+      <rect x="1" y="25" width="26" height="12" rx="5" opacity=".7" />
+      <path d="M26 23 C48 18 84 12 116 2 C119 8 117 20 100 29 C82 38 52 38 26 37 Z" />
+    </svg>
+  );
+}
+
+export async function AppShell({
   active,
   signedInAs,
   isCommissioner,
@@ -152,6 +173,16 @@ export function AppShell({
   children: ReactNode;
 }) {
   const { moreHasActive } = selectMobileNavPartition(active);
+  // T15-CUT: phase-aware nav (the T15-4 decision). One cache()-memoized read per request feeds every
+  // mount site; on failure the nav degrades to the group labels (chrome must never 500 a screen).
+  const { phase, knockoutLive } = await loadNavPhase();
+  const nav = navItemsForPhase(phase, knockoutLive);
+  const itemIcon = (id: NavId, size?: number) =>
+    id === "vsfield" && nav.vsfieldGlyph === "cut" ? (
+      <CutTabIcon size={size} />
+    ) : (
+      <NavIcon id={id} size={size} />
+    );
 
   return (
     <div className="sh-app sh-app-top">
@@ -177,7 +208,7 @@ export function AppShell({
             useEffect, which scrolls the [aria-current="page"] item into this container. */}
         <div className="sh-topnav-scroll">
           <nav className="sh-topnav" aria-label="Primary">
-            {NAV_ITEMS.map((item) => {
+            {nav.navItems.map((item) => {
               const isActive = item.id === active;
               return (
                 <a
@@ -186,8 +217,11 @@ export function AppShell({
                   className={isActive ? "sh-nav-item is-active" : "sh-nav-item"}
                   aria-current={isActive ? "page" : undefined}
                 >
-                  <NavIcon id={item.id} />
+                  {itemIcon(item.id)}
                   {item.label}
+                  {item.id === "vsfield" && nav.vsfieldLiveDot && (
+                    <span className="sh-nav-dotlive" aria-hidden="true" />
+                  )}
                 </a>
               );
             })}
@@ -231,7 +265,7 @@ export function AppShell({
           switches between them — no matchMedia, no hydration fork (§18 precedent). The More
           button and sheet are the only stateful piece; they live in the MoreSheet client island. */}
       <nav className="sh-btmnav" aria-label="Primary">
-        {BOTTOM_TAB_ITEMS.map((item) => {
+        {nav.bottomTabItems.map((item) => {
           const isActive = item.id === active;
           return (
             <a
@@ -240,8 +274,13 @@ export function AppShell({
               className={isActive ? "sh-btnav-item is-active" : "sh-btnav-item"}
               aria-current={isActive ? "page" : undefined}
             >
-              <NavIcon id={item.id} size={20} />
-              <span>{item.label}</span>
+              {itemIcon(item.id, 20)}
+              <span>
+                {item.label}
+                {item.id === "vsfield" && nav.vsfieldLiveDot && (
+                  <span className="sh-nav-dotlive" aria-hidden="true" />
+                )}
+              </span>
             </a>
           );
         })}
@@ -251,7 +290,7 @@ export function AppShell({
           moreHasActive={moreHasActive}
           signedInAs={signedInAs}
           isCommissioner={isCommissioner}
-          moreItems={MORE_SHEET_ITEMS}
+          moreItems={nav.moreSheetItems}
         />
       </nav>
     </div>

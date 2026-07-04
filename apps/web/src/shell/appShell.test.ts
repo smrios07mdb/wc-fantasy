@@ -30,7 +30,12 @@ describe("AppShell — the global nav chrome (server component, pure-presentatio
 
   it("reuses the shared nav config instead of forking the link set", () => {
     expect(shell).toContain('from "@/src/shell/crossNav"');
-    expect(shell).toContain("NAV_ITEMS");
+    // T15-CUT: the shell renders through the phase-aware derivation OVER the shared arrays
+    // (navItemsForPhase — group returns NAV_ITEMS/BOTTOM_TAB_ITEMS/MORE_SHEET_ITEMS by reference),
+    // fed by the cache()-memoized per-request loadNavPhase read. Still ONE config, never a fork.
+    expect(shell).toContain("navItemsForPhase");
+    expect(shell).toContain('from "@/src/shell/loadNavPhase"');
+    expect(shell, "no hand-forked link list").not.toMatch(/href:\s*"\/(draft|lineup|waivers)"/);
   });
 
   it("renders the nav with an active highlight + the no-JS POST sign-out", () => {
@@ -125,7 +130,6 @@ describe("Commissioner nav entry — threaded on every feature layout (Thread 6)
     "/playoffs": read("playoffs/layout.tsx"),
     "/scoring": read("scoring/layout.tsx"),
     "/settings": read("settings/layout.tsx"),
-    "/games/[matchId]": read("games/[matchId]/layout.tsx"),
   };
   for (const [route, src] of Object.entries(wiredLayouts)) {
     it(`${route} layout resolves getViewerIsCommissioner and passes it into AppShell`, () => {
@@ -141,6 +145,22 @@ describe("Commissioner nav entry — threaded on every feature layout (Thread 6)
       );
     });
   }
+
+  it("/games/[matchId] mounts the shell in the PAGE with the validated ?from tab (F-P3-A4)", () => {
+    // T15-CUT rider: layouts cannot read searchParams, so the games shell moved to page.tsx — the
+    // commissioner threading moved with it, and the active tab derives from the ?from allowlist
+    // (home | pool | vsfield) with "pool" as the fallback (the old hardcode, now only the default).
+    const layout = read("games/[matchId]/layout.tsx");
+    expect(layout, "the layout no longer mounts the shell").not.toContain("<AppShell");
+    const page = read("games/[matchId]/page.tsx");
+    expect(page).toMatch(
+      /import\s*\{\s*getSessionManager,\s*getViewerIsCommissioner\s*\}\s*from\s*"@\/lib\/auth\/manager"/,
+    );
+    expect(page).toContain("const isCommissioner = await getViewerIsCommissioner();");
+    expect(page).toMatch(/<AppShell[^>]*isCommissioner=\{isCommissioner\}/);
+    expect(page).toContain('GAME_FROM_TABS = new Set<NavId>(["home", "pool", "vsfield"])');
+    expect(page).toContain(': "pool"');
+  });
 });
 
 describe("global surface — collision A resolved (Prompt 20, mandatory)", () => {

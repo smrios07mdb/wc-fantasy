@@ -426,8 +426,12 @@ function MatchRow({ match }: { match: MatchView }) {
   const hasScore = match.homeScore !== null && match.awayScore !== null;
 
   // The whole row links to the real-match detail view (T5). matchId is a real fifa_match id.
+  // `?from=home` keeps the Dashboard tab lit on the drill-in (F-P3-A4).
   return (
-    <a className={"db-match-row" + (isLive ? " is-live" : "")} href={`/games/${match.matchId}`}>
+    <a
+      className={"db-match-row" + (isLive ? " is-live" : "")}
+      href={`/games/${match.matchId}?from=home`}
+    >
       <span className="db-match-team db-match-home">{match.homeTeamName ?? "—"}</span>
       <span className="db-match-score mono">
         {hasScore ? (

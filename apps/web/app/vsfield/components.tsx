@@ -155,7 +155,7 @@ export function MatchStrip({ matches }: { matches: MatchView[] }) {
           const c = matchClock(m);
           const scored = m.status !== "scheduled";
           return (
-            <a className="v2-match" key={m.matchId} href={`/games/${m.matchId}`}>
+            <a className="v2-match" key={m.matchId} href={`/games/${m.matchId}?from=vsfield`}>
               <div className={"v2-match-clock " + c.cls}>
                 {c.live && <span className="vf-livedot" aria-hidden="true" />}
                 {c.label}

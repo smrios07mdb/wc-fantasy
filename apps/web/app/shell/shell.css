@@ -311,3 +311,15 @@
     padding-bottom: calc(58px + env(safe-area-inset-bottom));
   }
 }
+
+/* ── T15-CUT: the knockout-phase live dot on the "The Cut" slot (dark on pend + post-final) ── */
+.sh-nav-dotlive {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--live);
+  margin-left: 4px;
+  vertical-align: 2px;
+  flex: none;
+}
