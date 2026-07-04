@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  playoffEntryBinding,
   scoreManagerPeriodBinding,
   standingBinding,
   subscribeVsField,
@@ -58,6 +59,15 @@ describe("vs-the-field Realtime descriptors", () => {
       filter: "league_id=eq.lg1",
     });
   });
+
+  it("targets playoff_entry LEAGUE-FILTERED (T15-CUT rider D — never the unfiltered /playoffs shape)", () => {
+    expect(playoffEntryBinding("lg1")).toEqual({
+      event: "*",
+      schema: "public",
+      table: "playoff_entry",
+      filter: "league_id=eq.lg1",
+    });
+  });
 });
 
 describe("subscribeVsField — JWT-authed postgres_changes (Prompt-08 pattern)", () => {
@@ -107,6 +117,27 @@ describe("subscribeVsField — JWT-authed postgres_changes (Prompt-08 pattern)",
       TOKEN,
     );
     expect(channel.bindings.map((b) => b.binding.table)).toEqual(["standing"]);
+  });
+
+  it("binds playoff_entry ONLY in knockout mode, league-filtered, nudging the same onChange", () => {
+    const channel = mockChannel();
+    const client = mockClient(channel);
+    const onChange = vi.fn();
+    subscribeVsField(
+      client as unknown as RealtimeClientLike,
+      { leagueId: "lg1", currentPeriodId: "r32", subscribeKnockout: true },
+      { onChange },
+      TOKEN,
+    );
+    expect(channel.bindings.map((b) => b.binding.table)).toEqual([
+      "score_manager_period",
+      "standing",
+      "playoff_entry",
+    ]);
+    const po = channel.bindings.find((b) => b.binding.table === "playoff_entry")!;
+    expect(po.binding.filter).toBe("league_id=eq.lg1");
+    channel.fire("playoff_entry");
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it("forwards channel status and tears the channel down on unsubscribe", () => {

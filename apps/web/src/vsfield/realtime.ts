@@ -57,6 +57,14 @@ export interface SubscribeVsFieldArgs {
   leagueId: string;
   /** The current period whose `score_manager_period` rows we stream; null = no live wave (standing only). */
   currentPeriodId: string | null;
+  /**
+   * T15-CUT: also bind the league's `playoff_entry` rows so a round-advance (cut applied / champion
+   * crowned) nudges a refetch — the ceremony latch + fallen section ride the SAME snapshot refresh.
+   * OFF by default: the group-phase channel stays byte-identical to today. Client-side subscription
+   * composition only — `playoff_entry` is already published + RLS-readable (the /playoffs channel
+   * binds it); NO publication/RLS change.
+   */
+  subscribeKnockout?: boolean;
 }
 
 /** The per-league vs-the-field channel name. */
@@ -80,6 +88,21 @@ export function standingBinding(leagueId: string): PostgresChangeBinding {
 }
 
 /**
+ * postgres_changes binding for the league's `playoff_entry` rows (knockout mode only — T15-CUT).
+ * LEAGUE-FILTERED by contract (rider D): this deliberately does NOT copy the /playoffs channel's
+ * unfiltered binding — the launch audit flagged that shape as the anti-pattern; every vsfield
+ * binding scopes to the viewer's league (or period) server-side.
+ */
+export function playoffEntryBinding(leagueId: string): PostgresChangeBinding {
+  return {
+    event: "*",
+    schema: "public",
+    table: "playoff_entry",
+    filter: `league_id=eq.${leagueId}`,
+  };
+}
+
+/**
  * Subscribe to the league's score/standing changes and nudge `onChange` on any of them. Returns an
  * unsubscribe fn that tears the channel down. `accessToken` is the signed-in user's JWT:
  * `realtime.setAuth(accessToken)` runs BEFORE subscribe so the RLS-gated postgres_changes are delivered.
@@ -100,6 +123,11 @@ export function subscribeVsField(
     );
   }
   channel.on("postgres_changes", standingBinding(args.leagueId), () => handlers.onChange?.());
+  if (args.subscribeKnockout) {
+    channel.on("postgres_changes", playoffEntryBinding(args.leagueId), () =>
+      handlers.onChange?.(),
+    );
+  }
   channel.subscribe((status) => handlers.onStatus?.(status));
 
   return () => {

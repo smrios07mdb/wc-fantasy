@@ -65,6 +65,9 @@ export function VsFieldClient({
 }) {
   const [view, setView] = useState<VsFieldViewWithBenches>(initialView);
   const [conn, setConn] = useState<ConnState>("loading");
+  // K3 (T15-CUT): honest resume-staleness cue from the live controller — true while the tab has just
+  // resumed with an over-age snapshot, cleared the moment a fresh snapshot applies.
+  const [stale, setStale] = useState(false);
   const [tab, setTab] = useState<"period" | "season">("period");
   // Direction-A selection (replaces `selected`): `"field"` = the aggregate view, a managerId (UUID —
   // can never collide with the sentinel) = that opponent's H2H, null = nothing picked yet. Desktop
@@ -87,6 +90,9 @@ export function VsFieldClient({
   // (fully scored, fully revealed because locked), so there is nothing to subscribe to — and the refetch
   // path (GET /api/vsfield, which always loads the live wave) must not overwrite the historical snapshot.
   const isLivePeriod = view.isLivePeriod;
+  // T15-CUT: bind playoff_entry (league-filtered) only in knockout mode so a round-advance nudges the
+  // refetch that feeds the ceremony latch + the fallen. Group-phase subscription byte-identical.
+  const subscribeKnockout = view.ko !== undefined;
 
   useEffect(() => {
     if (!isLivePeriod) {
@@ -104,10 +110,19 @@ export function VsFieldClient({
       if (cancelled || !token) return;
       teardown = startVsFieldLive<VsFieldViewWithBenches>({
         client: supabase as unknown as RealtimeClientLike,
-        args: { leagueId, currentPeriodId },
+        args: { leagueId, currentPeriodId, subscribeKnockout },
         accessToken: token,
         fetchSnapshot: () => fetchVsField({ fetch: (input, init) => fetch(input, init) }),
         onSnapshot: (v) => setView(v),
+        // K3: resume → immediate refetch + the honest "Delayed" cue while the snapshot is over-age.
+        visibility: {
+          isVisible: () => !document.hidden,
+          subscribe: (onChange) => {
+            document.addEventListener("visibilitychange", onChange);
+            return () => document.removeEventListener("visibilitychange", onChange);
+          },
+        },
+        onStale: setStale,
         onStatus: (status) =>
           setConn(
             status === "SUBSCRIBED"
@@ -131,7 +146,7 @@ export function VsFieldClient({
       teardown?.();
       subscription.unsubscribe();
     };
-  }, [leagueId, currentPeriodId, isLivePeriod]);
+  }, [leagueId, currentPeriodId, isLivePeriod, subscribeKnockout]);
 
   // Compute the "updated" label CLIENT-ONLY (after mount) so the server (UTC) and the browser (local
   // tz) don't disagree on the SSR text node — a hydration mismatch. asOf is a tz-stable UTC ISO string.
@@ -280,7 +295,9 @@ export function VsFieldClient({
         <div style={{ flex: 1 }} />
         <div className="vf-top-right">
           {isLivePeriod && <span className="t-micro text-tertiary">Updated {updated ?? "…"}</span>}
-          <ConnPill state={conn} />
+          {/* K3: the resume-staleness cue overrides a nominally-"live" socket with the honest
+              Delayed pill until the immediate resume refetch lands. */}
+          <ConnPill state={stale && conn === "live" ? "stale" : conn} />
         </div>
       </div>
 

@@ -169,3 +169,89 @@ describe("startVsFieldLive — change-nudge + polling fallback → seq-guarded r
     expect(s.timers.setInterval).not.toHaveBeenCalled();
   });
 });
+
+describe("startVsFieldLive — resume staleness honesty (F-P2-K3, T15-CUT)", () => {
+  function setupVisible(startAt = 100_000) {
+    const channel = mockChannel();
+    const client = mockClient(channel);
+    const { fetchSnapshot, calls } = controllableFetcher();
+    const onSnapshot = vi.fn();
+    const onStale = vi.fn();
+    const { timers } = manualTimers();
+    let clock = startAt;
+    let visible = true;
+    let fireVisibility: (() => void) | undefined;
+    const unsubscribeVisibility = vi.fn();
+    const stop = startVsFieldLive({
+      client: client as unknown as RealtimeClientLike,
+      args: { leagueId: "lg1", currentPeriodId: "r32", subscribeKnockout: true },
+      accessToken: "jwt",
+      fetchSnapshot,
+      onSnapshot,
+      onStale,
+      staleAfterMs: 45_000,
+      now: () => clock,
+      timers,
+      visibility: {
+        isVisible: () => visible,
+        subscribe: (cb) => {
+          fireVisibility = cb;
+          return unsubscribeVisibility;
+        },
+      },
+    });
+    return {
+      calls,
+      fetchSnapshot,
+      onSnapshot,
+      onStale,
+      stop,
+      unsubscribeVisibility,
+      advance: (ms: number) => (clock += ms),
+      setVisible: (v: boolean) => (visible = v),
+      resume: () => fireVisibility?.(),
+    };
+  }
+
+  it("refetches IMMEDIATELY on tab resume (never waits for the next poll tick)", () => {
+    const s = setupVisible();
+    s.advance(5_000);
+    s.resume();
+    expect(s.fetchSnapshot).toHaveBeenCalledTimes(1);
+    s.stop();
+  });
+
+  it("flags stale on resume ONLY when the snapshot is over-age, and clears it when fresh applies", async () => {
+    const s = setupVisible();
+    // Under the threshold → no stale cue, still refetches.
+    s.advance(30_000);
+    s.resume();
+    expect(s.onStale).not.toHaveBeenCalledWith(true);
+    // Over the threshold → the honest Delayed cue…
+    s.advance(46_000);
+    s.resume();
+    expect(s.onStale).toHaveBeenCalledWith(true);
+    // …cleared the moment the resume refetch lands.
+    s.calls.at(-1)!.resolve(view("fresh"));
+    await flush();
+    expect(s.onStale).toHaveBeenLastCalledWith(false);
+    expect(s.onSnapshot).toHaveBeenCalledWith(view("fresh"));
+    s.stop();
+  });
+
+  it("ignores visibility fires while the tab is still hidden", () => {
+    const s = setupVisible();
+    s.setVisible(false);
+    s.advance(60_000);
+    s.resume();
+    expect(s.fetchSnapshot).not.toHaveBeenCalled();
+    expect(s.onStale).not.toHaveBeenCalled();
+    s.stop();
+  });
+
+  it("teardown unsubscribes the visibility listener", () => {
+    const s = setupVisible();
+    s.stop();
+    expect(s.unsubscribeVisibility).toHaveBeenCalledTimes(1);
+  });
+});
