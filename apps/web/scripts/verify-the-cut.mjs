@@ -375,9 +375,7 @@ const PROBE = () => {
   const faab = q(".koc-faab");
   return {
     machetes,
-    trophy: trophy
-      ? { complete: trophy.complete, naturalWidth: trophy.naturalWidth }
-      : null,
+    trophy: trophy ? { complete: trophy.complete, naturalWidth: trophy.naturalWidth } : null,
     youClass: you ? you.className : "",
     youWord: you ? (you.querySelector(".ko-you-tx b")?.textContent ?? "") : "",
     youNumColor: youNum ? getComputedStyle(youNum).color : "",
@@ -389,9 +387,7 @@ const PROBE = () => {
       const dam = q(".ko-mach.damocles");
       return dam ? getComputedStyle(dam).animationName : "";
     })(),
-    cutRect: cut
-      ? { top: rect(cut).top + (document.scrollingElement?.scrollTop ?? 0) }
-      : null,
+    cutRect: cut ? { top: rect(cut).top + (document.scrollingElement?.scrollTop ?? 0) } : null,
     rows,
     deadStrike: dead ? getComputedStyle(dead).textDecorationLine : "",
     deadTag: q(".ko-dead-tag")?.textContent ?? "",
@@ -431,7 +427,9 @@ let browser;
 try {
   browser = await chromium.launch();
 } catch (e) {
-  console.log(`SKIP: no Chromium available (${e.message.split("\n")[0]}) — run: npx playwright install chromium`);
+  console.log(
+    `SKIP: no Chromium available (${e.message.split("\n")[0]}) — run: npx playwright install chromium`,
+  );
   process.exit(0);
 }
 
@@ -460,12 +458,15 @@ const stateChecks = {
     const fails = [];
     if (!d.trophy?.complete || d.trophy.naturalWidth <= 0) fails.push("trophy did not decode");
     if (d.machetes.length !== 1 || !d.machetes[0].cls.includes("loom"))
-      fails.push(`blade discipline: want exactly the loom, got [${d.machetes.map((m) => m.cls).join(", ")}]`);
+      fails.push(
+        `blade discipline: want exactly the loom, got [${d.machetes.map((m) => m.cls).join(", ")}]`,
+      );
     if (d.machetes[0] && (d.machetes[0].w <= 0 || d.machetes[0].h <= 0))
       fails.push("machete has zero painted size");
     if (!d.youClass.includes("is-safe")) fails.push(`YOU band not is-safe (${d.youClass})`);
     if (!/Surviving/.test(d.youWord)) fails.push(`YOU word "${d.youWord}" lacks Surviving`);
-    if (!/77, 141, 255/.test(d.youNumColor)) fails.push(`safe margin not cobalt (${d.youNumColor})`);
+    if (!/77, 141, 255/.test(d.youNumColor))
+      fails.push(`safe margin not cobalt (${d.youNumColor})`);
     if (!d.cutRect) fails.push("cut line missing");
     else {
       const safeRows = d.rows.filter((r) => !r.block);
@@ -473,50 +474,70 @@ const stateChecks = {
       const lastSafe = Math.max(...safeRows.map((r) => r.top));
       const firstBlock = Math.min(...blockRows.map((r) => r.top));
       if (!(d.cutRect.top > lastSafe && d.cutRect.top < firstBlock))
-        fails.push(`cut line at ${d.cutRect.top} not between last-safe ${lastSafe} and first-block ${firstBlock}`);
-      if (blockRows.length !== 2) fails.push(`expected 2 on-the-block rows, got ${blockRows.length}`);
+        fails.push(
+          `cut line at ${d.cutRect.top} not between last-safe ${lastSafe} and first-block ${firstBlock}`,
+        );
+      if (blockRows.length !== 2)
+        fails.push(`expected 2 on-the-block rows, got ${blockRows.length}`);
     }
     const short = d.rows.filter((r) => r.h < 44);
-    if (short.length) fails.push(`${short.length} ladder rows under 44px (min ${Math.min(...short.map((r) => r.h)).toFixed(1)})`);
-    if (d.scrollW > d.innerW + 1) fails.push(`horizontal overflow: scrollWidth ${d.scrollW} > ${d.innerW} @${w}`);
+    if (short.length)
+      fails.push(
+        `${short.length} ladder rows under 44px (min ${Math.min(...short.map((r) => r.h)).toFixed(1)})`,
+      );
+    if (d.scrollW > d.innerW + 1)
+      fails.push(`horizontal overflow: scrollWidth ${d.scrollW} > ${d.innerW} @${w}`);
     if (d.navTop !== null && d.lastContentBottom !== null && d.lastContentBottom > d.navTop + 1)
-      fails.push(`content bottom ${d.lastContentBottom.toFixed(0)} paints under the nav top ${d.navTop.toFixed(0)}`);
+      fails.push(
+        `content bottom ${d.lastContentBottom.toFixed(0)} paints under the nav top ${d.navTop.toFixed(0)}`,
+      );
     return fails;
   },
   b: (d) => {
     const fails = [];
     if (d.machetes.length !== 1 || !d.machetes[0].cls.includes("damocles"))
-      fails.push(`blade discipline: the loom must YIELD to Damocles, got [${d.machetes.map((m) => m.cls).join(", ")}]`);
+      fails.push(
+        `blade discipline: the loom must YIELD to Damocles, got [${d.machetes.map((m) => m.cls).join(", ")}]`,
+      );
     if (!d.youClass.includes("is-block")) fails.push(`YOU band not is-block (${d.youClass})`);
     if (!/ON THE BLOCK/.test(d.youWord)) fails.push("YOU word lacks ON THE BLOCK");
-    if (!/229, 72, 77/.test(d.youNumColor)) fails.push(`block margin not danger (${d.youNumColor})`);
+    if (!/229, 72, 77/.test(d.youNumColor))
+      fails.push(`block margin not danger (${d.youNumColor})`);
     return fails;
   },
   c: (d) => {
     const fails = [];
     if (!d.youClass.includes("is-out")) fails.push(`YOU band not is-out (${d.youClass})`);
     if (!/Cut in the/.test(d.youWord)) fails.push("YOU word lacks the cut-round phrasing");
-    if (!/126, 141, 168/.test(d.youNumColor)) fails.push(`out number not locked-slate (${d.youNumColor})`);
-    if (!d.deadStrike.includes("line-through")) fails.push(`fallen name not struck (${d.deadStrike})`);
+    if (!/126, 141, 168/.test(d.youNumColor))
+      fails.push(`out number not locked-slate (${d.youNumColor})`);
+    if (!d.deadStrike.includes("line-through"))
+      fails.push(`fallen name not struck (${d.deadStrike})`);
     if (!/cut in R32/.test(d.deadTag)) fails.push(`fallen tag "${d.deadTag}" wrong`);
     return fails;
   },
   e: (d) => {
     const fails = [];
     if (d.champWho !== "Marlon") fails.push(`champion hero name "${d.champWho}"`);
-    if (!d.trophy?.complete || d.trophy.naturalWidth <= 0) fails.push("champion trophy did not decode");
+    if (!d.trophy?.complete || d.trophy.naturalWidth <= 0)
+      fails.push("champion trophy did not decode");
     if (d.machetes.length !== 1 || !d.machetes[0].cls.includes("rest"))
-      fails.push(`blade discipline: want the resting blade only, got [${d.machetes.map((m) => m.cls).join(", ")}]`);
+      fails.push(
+        `blade discipline: want the resting blade only, got [${d.machetes.map((m) => m.cls).join(", ")}]`,
+      );
     if (d.cutRect) fails.push("cut line must NOT render in the champion endgame");
     if (!d.medalC || d.medalC.text !== "CHAMPION") fails.push("CHAMPION medal missing");
-    else if (!/47, 191, 113/.test(d.medalC.color)) fails.push(`CHAMPION medal not win-green (${d.medalC.color}) — gold is banned`);
+    else if (!/47, 191, 113/.test(d.medalC.color))
+      fails.push(`CHAMPION medal not win-green (${d.medalC.color}) — gold is banned`);
     return fails;
   },
   f: (d) => {
     const fails = [];
     if (!d.youClass.includes("is-pend")) fails.push(`YOU band not is-pend (${d.youClass})`);
-    if (!/226, 135, 60/.test(d.youNumColor)) fails.push(`pend margin not ytp orange (${d.youNumColor})`);
-    if (d.marqueeTitle !== "THE BLADE DROPS SOON") fails.push(`pend marquee title "${d.marqueeTitle}"`);
+    if (!/226, 135, 60/.test(d.youNumColor))
+      fails.push(`pend margin not ytp orange (${d.youNumColor})`);
+    if (d.marqueeTitle !== "THE BLADE DROPS SOON")
+      fails.push(`pend marquee title "${d.marqueeTitle}"`);
     if (/UTC/.test(d.bodyText)) fails.push("pend copy carries a fabricated clock (UTC)");
     return fails;
   },
@@ -592,7 +613,8 @@ for (const motion of ["reduce", "no-preference"]) {
     const fails = [];
     if (!d.trophy?.complete) fails.push("desktop marquee trophy did not decode");
     // Desktop shows the marquee loom AND the rail band: still exactly one big machete.
-    if (d.machetes.length !== 1) fails.push(`blade discipline on desktop: ${d.machetes.length} machetes`);
+    if (d.machetes.length !== 1)
+      fails.push(`blade discipline on desktop: ${d.machetes.length} machetes`);
     if (!d.youClass.includes("is-safe")) fails.push("desktop rail YOU band missing");
     if (d.scrollW > d.innerW + 1) fails.push(`desktop horizontal overflow ${d.scrollW}`);
     report(`state a · desktop 1180 [${motion}]`, fails);
@@ -607,18 +629,25 @@ for (const motion of ["reduce", "no-preference"]) {
 
   // The ceremony takeover — armed, then aftermath (stamps land, victims WRAP, FAAB truth).
   for (const phase of ["armed", "aftermath"]) {
-    currentHtml = buildHTML(mobileScreen(marquee({ loom: false }), { withNav: true }) + ceremony(phase));
+    currentHtml = buildHTML(
+      mobileScreen(marquee({ loom: false }), { withNav: true }) + ceremony(phase),
+    );
     await page.setViewportSize({ width: 390, height: 820 });
     await page.goto("http://pw.local/");
     await page.waitForTimeout(motion === "reduce" ? 80 : 400);
     const d = await page.evaluate(PROBE);
     const fails = [];
     if (phase === "aftermath") {
-      if (d.stampOpacity !== "1") fails.push(`Eliminated! stamp opacity ${d.stampOpacity} (class-driven reveal broken)`);
-      if (d.victimsWrap !== "wrap") fails.push(`victims row flex-wrap "${d.victimsWrap}" — F-P3-K4`);
-      if (d.victimsRight > 390 + 1) fails.push(`victims row clips off-screen (right ${d.victimsRight})`);
-      if (!d.faabText || !d.faabText.includes("carries over")) fails.push(`FAAB line lost the carry-forward truth: "${d.faabText}"`);
-      if (/resets/i.test(d.faabText ?? "")) fails.push("FAAB line says RESETS — the excluded P1 copy shipped");
+      if (d.stampOpacity !== "1")
+        fails.push(`Eliminated! stamp opacity ${d.stampOpacity} (class-driven reveal broken)`);
+      if (d.victimsWrap !== "wrap")
+        fails.push(`victims row flex-wrap "${d.victimsWrap}" — F-P3-K4`);
+      if (d.victimsRight > 390 + 1)
+        fails.push(`victims row clips off-screen (right ${d.victimsRight})`);
+      if (!d.faabText || !d.faabText.includes("carries over"))
+        fails.push(`FAAB line lost the carry-forward truth: "${d.faabText}"`);
+      if (/resets/i.test(d.faabText ?? ""))
+        fails.push("FAAB line says RESETS — the excluded P1 copy shipped");
     }
     report(`ceremony ${phase} · mobile 390 [${motion}]`, fails);
     if (motion === "reduce" && phase === "aftermath") {

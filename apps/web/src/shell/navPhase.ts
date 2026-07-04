@@ -27,9 +27,7 @@ export interface NavPhaseState {
 
 const KICKED_OFF = new Set(["in_progress", "completed", "abandoned"]);
 
-export function deriveNavPhaseState(
-  matches: ReadonlyArray<NavPhaseMatchSummary>,
-): NavPhaseState {
+export function deriveNavPhaseState(matches: ReadonlyArray<NavPhaseMatchSummary>): NavPhaseState {
   const tournament = selectTournamentPhase(matches);
   const phase: NavPhase =
     tournament === "playoff" ? "knockout" : tournament === "complete" ? "complete" : "group";

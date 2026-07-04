@@ -235,9 +235,7 @@ describe("buildKnockoutContext — viewer eliminated, spectating a later round (
     return {
       managerId: id,
       seed: i + 1,
-      status: (id === "m9" || id === "m10" ? "eliminated" : "alive") as
-        | "alive"
-        | "eliminated",
+      status: (id === "m9" || id === "m10" ? "eliminated" : "alive") as "alive" | "eliminated",
       eliminatedRound: id === "m9" || id === "m10" ? "R32" : null,
     };
   });
@@ -358,8 +356,7 @@ describe("buildKnockoutContext — champion endgame (mock state e)", () => {
     expect(ko.champion).toEqual({ managerId: "m1", displayName: "Manager 1", isMe: true });
     expect(ko.roundLabel).toBe("QF");
     const fallenIds = ko.fallen.map((f) => f.managerId);
-    for (const qfCut of ["m2", "m3", "m4", "m5", "m6"])
-      expect(fallenIds).not.toContain(qfCut);
+    for (const qfCut of ["m2", "m3", "m4", "m5", "m6"]) expect(fallenIds).not.toContain(qfCut);
     expect(fallenIds.slice(0, 2)).toEqual(["m7", "m8"]); // R16 first (most recent BEFORE the last round)
   });
 

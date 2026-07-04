@@ -198,8 +198,9 @@ describe("vsfield re-skin — colour + shape invariants (BRAND.md §1, ARCHITECT
 
 describe("vsfield — match cards link to the match detail page (mirrors dashboard MatchRow)", () => {
   it("renders each fixture card as an <a> to /games/<matchId>, not a non-interactive div", () => {
+    // T15-CUT rider F-P3-A4: the link carries ?from=vsfield so the match page lights this tab.
     expect(components).toContain(
-      '<a className="v2-match" key={m.matchId} href={`/games/${m.matchId}`}>',
+      '<a className="v2-match" key={m.matchId} href={`/games/${m.matchId}?from=vsfield`}>',
     );
     expect(components).not.toContain('<div className="v2-match" key={m.matchId}>');
     // neutralised anchor styling so the card reads identically to its former div, per the

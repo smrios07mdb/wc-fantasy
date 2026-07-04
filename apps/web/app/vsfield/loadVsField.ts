@@ -162,59 +162,59 @@ export async function loadVsField(
 
   const [managerRows, periodRows, standingRows, eliminatedManagerIds, playoffEntryRows] =
     await Promise.all([
-    // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
-    // no current-period score_manager_period row (and no XI) MUST still appear, so buildVsField pads
-    // him to 0 points + empty XI and he is a free win for everyone strictly above (Prompt 04 line 42 /
-    // Theme C). Closing this loader-side, NOT via the recompute sweeper writing 0 rows.
-    prisma.manager.findMany({
-      where: { leagueId },
-      select: { id: true, displayName: true },
-      orderBy: { displayName: "asc" },
-    }),
-    prisma.period.findMany({
-      where: { leagueId },
-      select: {
-        id: true,
-        label: true,
-        kind: true,
-        status: true,
-        // cutCount feeds the knockout ("The Cut") projection only — the per-round commissioner-set
-        // cut (T15-CUT); an additive column on the SAME read, no new query.
-        cutCount: true,
-        // status is selected alongside kickoffAt so the T11 started-set predicate (isPickLocked on the
-        // first fixture) can run on these rows without a second read.
-        matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
-      },
-      orderBy: [{ opensAt: "asc" }, { label: "asc" }],
-    }),
-    prisma.standing.findMany({
-      where: { leagueId, scope: "group_stage" },
-      select: {
-        managerId: true,
-        allPlayAllW: true,
-        allPlayAllL: true,
-        allPlayAllD: true,
-        totalPoints: true,
-        seed: true,
-      },
-    }),
-    // The set of managers OUT OF CONTENTION for the live field — the data-existence eliminated predicate,
-    // shared with /waivers via @app/faab/prisma so the two surfaces cannot drift (CONTRACT-P2/P3: playoff
-    // participation is read from playoff_entry, NEVER league.status). It is EMPTY during the group phase
-    // (no playoff_entry rows exist yet), so the hide below stays inert until the group→playoff transition;
-    // once active it catches BOTH non-advancers (NO playoff_entry row — status is NULL, never the string
-    // 'eliminated', the case the old status='eliminated' read silently missed) AND managers guillotined
-    // mid-playoffs (status='eliminated'). Survivors (status='alive') are the only ones kept on the field.
-    loadEliminatedManagerIds(prisma, leagueId),
-    // The seeded knockout field (T15-CUT) — same read shape as loadPlayoffs. EMPTY during the group
-    // phase (the transition writes the rows), which is the ko gate below: no entries → NO ko sibling,
-    // group-phase output byte-identical. One cheap indexed query; playoff participation stays a
-    // data-existence contract (CONTRACT-P2/P3), never league.status.
-    prisma.playoffEntry.findMany({
-      where: { leagueId },
-      select: { managerId: true, seed: true, status: true, eliminatedRound: true },
-    }),
-  ]);
+      // The FULL league roster (no activity filter) — this is the inactive-0 contract: a manager with
+      // no current-period score_manager_period row (and no XI) MUST still appear, so buildVsField pads
+      // him to 0 points + empty XI and he is a free win for everyone strictly above (Prompt 04 line 42 /
+      // Theme C). Closing this loader-side, NOT via the recompute sweeper writing 0 rows.
+      prisma.manager.findMany({
+        where: { leagueId },
+        select: { id: true, displayName: true },
+        orderBy: { displayName: "asc" },
+      }),
+      prisma.period.findMany({
+        where: { leagueId },
+        select: {
+          id: true,
+          label: true,
+          kind: true,
+          status: true,
+          // cutCount feeds the knockout ("The Cut") projection only — the per-round commissioner-set
+          // cut (T15-CUT); an additive column on the SAME read, no new query.
+          cutCount: true,
+          // status is selected alongside kickoffAt so the T11 started-set predicate (isPickLocked on the
+          // first fixture) can run on these rows without a second read.
+          matches: { orderBy: { kickoffAt: "asc" }, select: { kickoffAt: true, status: true } },
+        },
+        orderBy: [{ opensAt: "asc" }, { label: "asc" }],
+      }),
+      prisma.standing.findMany({
+        where: { leagueId, scope: "group_stage" },
+        select: {
+          managerId: true,
+          allPlayAllW: true,
+          allPlayAllL: true,
+          allPlayAllD: true,
+          totalPoints: true,
+          seed: true,
+        },
+      }),
+      // The set of managers OUT OF CONTENTION for the live field — the data-existence eliminated predicate,
+      // shared with /waivers via @app/faab/prisma so the two surfaces cannot drift (CONTRACT-P2/P3: playoff
+      // participation is read from playoff_entry, NEVER league.status). It is EMPTY during the group phase
+      // (no playoff_entry rows exist yet), so the hide below stays inert until the group→playoff transition;
+      // once active it catches BOTH non-advancers (NO playoff_entry row — status is NULL, never the string
+      // 'eliminated', the case the old status='eliminated' read silently missed) AND managers guillotined
+      // mid-playoffs (status='eliminated'). Survivors (status='alive') are the only ones kept on the field.
+      loadEliminatedManagerIds(prisma, leagueId),
+      // The seeded knockout field (T15-CUT) — same read shape as loadPlayoffs. EMPTY during the group
+      // phase (the transition writes the rows), which is the ko gate below: no entries → NO ko sibling,
+      // group-phase output byte-identical. One cheap indexed query; playoff participation stays a
+      // data-existence contract (CONTRACT-P2/P3), never league.status.
+      prisma.playoffEntry.findMany({
+        where: { leagueId },
+        select: { managerId: true, seed: true, status: true, eliminatedRound: true },
+      }),
+    ]);
 
   // Current period: the open wave (if any), else the earliest period whose last match has not yet
   // finished (now < lastKickoff + MATCH_DURATION_MS). opensAt is never populated by the provisioning
@@ -284,75 +284,75 @@ export async function loadVsField(
 
   const [scoreRows, lineupRows, matchRows, playerScoreRows, knockoutScoreRows, cumulativeTotals] =
     await Promise.all([
-    scorePeriodIds.length
-      ? prisma.scoreManagerPeriod.findMany({
-          where: { periodId: { in: scorePeriodIds } },
-          select: { managerId: true, periodId: true, points: true },
-        })
-      : Promise.resolve([]),
-    currentPeriod
-      ? // Read the FULL current-period lineup (starters AND bench) in ONE query: the starters feed
-        // buildVsField exactly as before (filtered below), the `is_starter = false` rows are composed into
-        // the display-only `benches` sibling. `isStarter` is selected so the two are partitioned in JS.
-        prisma.lineupSlot.findMany({
-          where: { periodId: currentPeriod.id },
-          select: {
-            managerId: true,
-            playerId: true,
-            role: true,
-            lockedAt: true,
-            isStarter: true,
-            // displayName + the fifa_team name (NEVER player.country — P34) make the drill-in XI
-            // identifiable. Per-player points are joined from the whole-field score_player_match read
-            // below (path a) — SERVER-SIDE only; the box-score modal still serves the full breakdown.
-            player: {
-              select: { teamId: true, displayName: true, team: { select: { name: true } } },
+      scorePeriodIds.length
+        ? prisma.scoreManagerPeriod.findMany({
+            where: { periodId: { in: scorePeriodIds } },
+            select: { managerId: true, periodId: true, points: true },
+          })
+        : Promise.resolve([]),
+      currentPeriod
+        ? // Read the FULL current-period lineup (starters AND bench) in ONE query: the starters feed
+          // buildVsField exactly as before (filtered below), the `is_starter = false` rows are composed into
+          // the display-only `benches` sibling. `isStarter` is selected so the two are partitioned in JS.
+          prisma.lineupSlot.findMany({
+            where: { periodId: currentPeriod.id },
+            select: {
+              managerId: true,
+              playerId: true,
+              role: true,
+              lockedAt: true,
+              isStarter: true,
+              // displayName + the fifa_team name (NEVER player.country — P34) make the drill-in XI
+              // identifiable. Per-player points are joined from the whole-field score_player_match read
+              // below (path a) — SERVER-SIDE only; the box-score modal still serves the full breakdown.
+              player: {
+                select: { teamId: true, displayName: true, team: { select: { name: true } } },
+              },
             },
-          },
-        })
-      : Promise.resolve([]),
-    currentPeriod
-      ? prisma.fifaMatch.findMany({
-          where: { periodId: currentPeriod.id },
-          select: {
-            id: true,
-            homeTeamId: true,
-            awayTeamId: true,
-            status: true,
-            kickoffAt: true,
-            homeScore: true,
-            awayScore: true,
-            homeTeam: { select: { name: true } },
-            awayTeam: { select: { name: true } },
-          },
-        })
-      : Promise.resolve([]),
-    // Whole-field per-player points for the current period (Prompt 41, path a): the SAME owner-bypass
-    // source loadPlayerBox reads (score_player_match, joined to the period via match.periodId), but for
-    // every starter at once (~N×11 rows — trivial payload). SERVER-SIDE only — this introduces NO
-    // browser-direct read, NO RLS policy, NO publication entry, and NO migration; the points reach the
-    // client solely inside this server-computed snapshot. The browser's direct read scope is unchanged
-    // (still only score_manager_period + standing), so the live nudge→refetch carries the chip for free.
-    currentPeriod
-      ? prisma.scorePlayerMatch.findMany({
-          where: { match: { periodId: currentPeriod.id } },
-          select: { playerId: true, points: true },
-        })
-      : Promise.resolve([]),
-    // T15-CUT: each knockout round's per-manager score (fallen pts-at-cut + the authoritative round
-    // ranking) — skipped entirely pre-transition. Same shape as loadPlayoffs' knockoutScores read.
-    knockoutPhaseActive && knockoutPeriodIds.length
-      ? prisma.scoreManagerPeriod.findMany({
-          where: { periodId: { in: knockoutPeriodIds }, managerId: { in: participantIds } },
-          select: { periodId: true, managerId: true, points: true },
-        })
-      : Promise.resolve([]),
-    // T15-CUT: the cumulative tournament totals — the SAME canonical helper the /playoffs loader and
-    // the commish apply path share, so the displayed blade and the eventual cut cannot drift.
-    knockoutPhaseActive
-      ? loadCumulativeTournamentTotals(prisma, leagueId, participantIds)
-      : Promise.resolve(new Map<string, number>()),
-  ]);
+          })
+        : Promise.resolve([]),
+      currentPeriod
+        ? prisma.fifaMatch.findMany({
+            where: { periodId: currentPeriod.id },
+            select: {
+              id: true,
+              homeTeamId: true,
+              awayTeamId: true,
+              status: true,
+              kickoffAt: true,
+              homeScore: true,
+              awayScore: true,
+              homeTeam: { select: { name: true } },
+              awayTeam: { select: { name: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // Whole-field per-player points for the current period (Prompt 41, path a): the SAME owner-bypass
+      // source loadPlayerBox reads (score_player_match, joined to the period via match.periodId), but for
+      // every starter at once (~N×11 rows — trivial payload). SERVER-SIDE only — this introduces NO
+      // browser-direct read, NO RLS policy, NO publication entry, and NO migration; the points reach the
+      // client solely inside this server-computed snapshot. The browser's direct read scope is unchanged
+      // (still only score_manager_period + standing), so the live nudge→refetch carries the chip for free.
+      currentPeriod
+        ? prisma.scorePlayerMatch.findMany({
+            where: { match: { periodId: currentPeriod.id } },
+            select: { playerId: true, points: true },
+          })
+        : Promise.resolve([]),
+      // T15-CUT: each knockout round's per-manager score (fallen pts-at-cut + the authoritative round
+      // ranking) — skipped entirely pre-transition. Same shape as loadPlayoffs' knockoutScores read.
+      knockoutPhaseActive && knockoutPeriodIds.length
+        ? prisma.scoreManagerPeriod.findMany({
+            where: { periodId: { in: knockoutPeriodIds }, managerId: { in: participantIds } },
+            select: { periodId: true, managerId: true, points: true },
+          })
+        : Promise.resolve([]),
+      // T15-CUT: the cumulative tournament totals — the SAME canonical helper the /playoffs loader and
+      // the commish apply path share, so the displayed blade and the eventual cut cannot drift.
+      knockoutPhaseActive
+        ? loadCumulativeTournamentTotals(prisma, leagueId, participantIds)
+        : Promise.resolve(new Map<string, number>()),
+    ]);
   // Default a starter with no scored row (yet-to-play, or live-but-not-yet-appeared) to 0 points.
   const pointsForPlayer = playerPointsLookup(playerScoreRows);
 

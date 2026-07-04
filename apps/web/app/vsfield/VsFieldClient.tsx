@@ -537,8 +537,8 @@ export function VsFieldClient({
                 sheet
               />
               <div className="ko-sfoot">
-                Tap any player for the minute-by-minute breakdown · <b>✕, tap outside, or go
-                back</b> to return to the ladder
+                Tap any player for the minute-by-minute breakdown ·{" "}
+                <b>✕, tap outside, or go back</b> to return to the ladder
               </div>
             </>
           )}

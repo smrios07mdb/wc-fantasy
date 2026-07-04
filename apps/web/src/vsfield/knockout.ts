@@ -146,7 +146,11 @@ export interface BuildKnockoutContextInput {
 }
 
 /** Reference margin math: safe → me − first-on-the-block; block → me − last-safe (negative). */
-function bladeMargin(ranked: readonly RankedRow[], meRank: number, cutIndex: number): number | null {
+function bladeMargin(
+  ranked: readonly RankedRow[],
+  meRank: number,
+  cutIndex: number,
+): number | null {
   const me = ranked[meRank - 1];
   if (!me) return null;
   const boundary = meRank - 1 >= cutIndex ? ranked[cutIndex - 1] : ranked[cutIndex];

@@ -124,9 +124,7 @@ export function subscribeVsField(
   }
   channel.on("postgres_changes", standingBinding(args.leagueId), () => handlers.onChange?.());
   if (args.subscribeKnockout) {
-    channel.on("postgres_changes", playoffEntryBinding(args.leagueId), () =>
-      handlers.onChange?.(),
-    );
+    channel.on("postgres_changes", playoffEntryBinding(args.leagueId), () => handlers.onChange?.());
   }
   channel.subscribe((status) => handlers.onStatus?.(status));
 

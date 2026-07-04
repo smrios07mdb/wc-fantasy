@@ -28,12 +28,16 @@ describe("MatchStrip — fixture cards link to the match detail page", () => {
   it("renders each match as a real <a href> to /games/<matchId>, not an inert div", () => {
     render(<MatchStrip matches={[match({ matchId: "m-123" })]} />);
     const link = screen.getByRole("link");
-    expect(link.getAttribute("href")).toBe("/games/m-123");
+    // T15-CUT rider F-P3-A4: the link carries its origin tab so the match page lights the right slot.
+    expect(link.getAttribute("href")).toBe("/games/m-123?from=vsfield");
   });
 
   it("renders one link per match, each pointing at its own matchId", () => {
     render(<MatchStrip matches={[match({ matchId: "m-1" }), match({ matchId: "m-2" })]} />);
     const links = screen.getAllByRole("link");
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/games/m-1", "/games/m-2"]);
+    expect(links.map((l) => l.getAttribute("href"))).toEqual([
+      "/games/m-1?from=vsfield",
+      "/games/m-2?from=vsfield",
+    ]);
   });
 });

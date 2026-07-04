@@ -122,16 +122,14 @@ describe("The Cut — loader gate (rider E: group phase composes NO ko sibling)"
     );
   });
   it("the ko sibling attaches ONLY on the live knockout wave or the complete default view", () => {
-    expect(loader).toMatch(
-      /displayedIsLiveKnockout \|\| \(koCtx\.complete && onDefaultView\)/,
-    );
+    expect(loader).toMatch(/displayedIsLiveKnockout \|\| \(koCtx\.complete && onDefaultView\)/);
   });
 });
 
 describe("The Cut — client fold contracts", () => {
   it("the drill-in sheet rides the EXISTING validated ?manager= param via native history", () => {
     expect(client).toContain('url.searchParams.set("manager", id)');
-    expect(client).toContain('window.history.pushState({ koSheet: true }');
+    expect(client).toContain("window.history.pushState({ koSheet: true }");
     expect(client).toContain('window.addEventListener("popstate", onPop)');
   });
   it("the ceremony fires on the live→past latch (the Chocoyo pattern), never on mount", () => {

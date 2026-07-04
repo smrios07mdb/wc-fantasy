@@ -534,10 +534,7 @@ export function KOCeremony({ ko, onClose }: { ko: KnockoutContext; onClose: () =
   if (!s) return null;
   const after = phase === "aftermath";
   return (
-    <div
-      className={"koc is-" + phase}
-      onClick={() => (after ? onClose() : setPhase("aftermath"))}
-    >
+    <div className={"koc is-" + phase} onClick={() => (after ? onClose() : setPhase("aftermath"))}>
       <div className="koc-inner" onClick={(e) => e.stopPropagation()}>
         <div className="koc-eyebrow">{s.roundLabel} · RESULTS OFFICIAL</div>
         <div className="koc-head">
@@ -566,7 +563,8 @@ export function KOCeremony({ ko, onClose }: { ko: KnockoutContext; onClose: () =
           <div className="koc-verdict">
             {s.viewerOutcome === "out" ? (
               <span className="koc-verdict-out">
-                ✗ Your run ends here{s.viewerRank ? ` — ${ordinal(s.viewerRank)} of ${s.viewerOf}` : ""}
+                ✗ Your run ends here
+                {s.viewerRank ? ` — ${ordinal(s.viewerRank)} of ${s.viewerOf}` : ""}
               </span>
             ) : s.viewerOutcome === "survived" ? (
               <span className="koc-verdict-safe">
