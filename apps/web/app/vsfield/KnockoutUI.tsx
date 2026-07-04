@@ -12,9 +12,9 @@
  * Damocles blade whenever the YOU band shows `block`. Brand contract: cobalt marks YOU + primary
  * actions only; functional states are color + icon + word; min 44px targets; variable manager count.
  *
- * FAAB copy (P1 exclusion, rider A): the reference ceremony says "FAAB resets to $100" — that is the
- * banned stale copy (DECISIONS: $100 one-time, never reset). The shipped line reads carry-forward
- * truth and is pinned by theCutSkin.test.ts.
+ * FAAB copy (P1 exclusion, rider A): the reference ceremony's aftermath line claims a fresh $100 at
+ * the transition — the banned stale copy (DECISIONS: one-time $100, never replenished). The shipped
+ * line reads carry-forward truth and is pinned by theCutSkin.test.ts.
  *
  * z-scale note (pre-T15-2): the ceremony (z 120) and the drill-in sheet (z 110) deliberately sit
  * ABOVE the fixed bottom nav (z 100) with a body-scroll lock while open — a screen-local step toward
