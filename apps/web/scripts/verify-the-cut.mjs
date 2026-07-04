@@ -411,10 +411,8 @@ const PROBE = () => {
 
 /* ── runner ── */
 const results = [];
-let failed = false;
 function report(label, fails) {
   if (fails.length) {
-    failed = true;
     console.error(`✗ ${label}`);
     for (const f of fails) console.error(`    - ${f}`);
   } else {

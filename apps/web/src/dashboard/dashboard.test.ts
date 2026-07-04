@@ -293,7 +293,8 @@ describe("dashboard — group phase modules are built (P38)", () => {
 
   it("each match row links to the real-match detail view (T5)", () => {
     // The MatchRow is now an <a> to /games/<matchId> (matchId is a real fifa_match id).
-    expect(dashboard).toContain("href={`/games/${match.matchId}`}");
+    // T15-CUT rider F-P3-A4: the link carries ?from=home so the match page lights the Dashboard tab.
+    expect(dashboard).toContain("href={`/games/${match.matchId}?from=home`}");
   });
 
   it("modulesFor 'group' returns record + standings + matchday", () => {
