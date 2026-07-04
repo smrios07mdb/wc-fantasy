@@ -12,7 +12,8 @@ import type { ReactNode } from "react";
 import { AppShell } from "../shell/AppShell";
 import { getViewerIsCommissioner } from "@/lib/auth/manager";
 
-export const metadata: Metadata = { title: "Guillotine" };
+// T15-CUT demote-lite: the screen is the ceremonial Theater now (the live ladder is The Cut).
+export const metadata: Metadata = { title: "Theater" };
 
 export default async function PlayoffsLayout({ children }: { children: ReactNode }) {
   const isCommissioner = await getViewerIsCommissioner();

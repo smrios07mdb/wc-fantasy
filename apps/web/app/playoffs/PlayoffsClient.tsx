@@ -13,12 +13,11 @@
  * the fresh JWT, tearing the prior one down first. `setAuth`-before-subscribe + the change-nudge→refetch +
  * the visibility-gated poll are all inside the (unit-tested) `startPlayoffsLive`.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { startPlayoffsLive } from "@/src/playoffs/liveController";
 import { fetchPlayoffs } from "@/src/playoffs/snapshotClient";
 import type { RealtimeClientLike } from "@/src/playoffs/realtime";
-import { buildReducedPitch } from "@/src/playoffs/theaterView";
 import type { PlayoffsView } from "./loadPlayoffs";
 import {
   ConnPill,
@@ -37,14 +36,6 @@ const BLADE_SETTLE_MS = 1950;
 export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
   const [view, setView] = useState<PlayoffsView>(initialView);
   const [conn, setConn] = useState<ConnState>("loading");
-  const [layout, setLayout] = useState<"board" | "ladder">("board");
-  // The round the board/nav inspects. null = FOLLOW the live round (the default) — so a refetch that
-  // advances the cut (round rollover) moves the board with it; a user click PINS a specific round.
-  const [pinnedRoundIdx, setPinnedRoundIdx] = useState<number | null>(null);
-  const viewRoundIdx = pinnedRoundIdx ?? view.currentRoundIdx;
-
-  // The viewer's reduced playoff pitch, mapped from the server-composed reducedLineup (live lock + pts).
-  const pitch = useMemo(() => buildReducedPitch(view.reducedLineup), [view.reducedLineup]);
 
   // ── the blade CHOREOGRAPHY — a purely CLIENT-side state machine (STOP seam: no loader/view-model
   // change; the snapshot is clockless). At rest the hero centres on the live round (idle sway) or, once
@@ -168,9 +159,10 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
           so the body keeps only the screen label + the live round line + the layout toggle + ConnPill. */}
       <div className="po-screenhead">
         <div className="po-screenhead-title">
-          {/* The mascot is the CHOCOYO HERO below now (parrot peeking from the trophy, hoisting the
-              machete) — not a tiny header chip; the screenhead keeps only the screen label + round line. */}
-          <b className="display">Guillotine</b>
+          {/* T15-CUT demote-lite: /playoffs is the ceremonial THEATER — the Board/Ladder toggle
+              (walkthrough step-64's status-bar-zone tap trap) is gone with the board; the live
+              ladder lives on The Cut (/vsfield). The Chocoyo hero below owns the show. */}
+          <b className="display">Theater</b>
           <span className="t-micro text-tertiary" style={{ letterSpacing: ".06em" }}>
             {currentRound
               ? `${currentRound.round.toUpperCase()} · ROUND ${view.currentRoundIdx + 1} OF ${view.totalRounds}`
@@ -178,22 +170,6 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="tabs po-layout-tabs">
-            <button
-              type="button"
-              className={"tab" + (layout === "board" ? " is-active" : "")}
-              onClick={() => setLayout("board")}
-            >
-              Board
-            </button>
-            <button
-              type="button"
-              className={"tab" + (layout === "ladder" ? " is-active" : "")}
-              onClick={() => setLayout("ladder")}
-            >
-              Ladder
-            </button>
-          </div>
           <ConnPill state={conn} />
         </div>
       </div>
@@ -206,21 +182,8 @@ export function PlayoffsClient({ initialView }: { initialView: PlayoffsView }) {
 
       {/* The champion / tournament-complete endgame is OWNED BY THE HERO (it swaps the CHOP framing for
           the celebratory trophy in-place), so there is no separate top-of-page ChampionBanner. */}
-      <DesktopPlayoffs
-        view={view}
-        pitch={pitch}
-        layout={layout}
-        viewRoundIdx={viewRoundIdx}
-        onViewRound={setPinnedRoundIdx}
-        drop={drop}
-      />
-      <MobilePlayoffs
-        view={view}
-        layout={layout}
-        viewRoundIdx={viewRoundIdx}
-        onViewRound={setPinnedRoundIdx}
-        drop={drop}
-      />
+      <DesktopPlayoffs view={view} drop={drop} />
+      <MobilePlayoffs view={view} drop={drop} />
     </div>
   );
 }
