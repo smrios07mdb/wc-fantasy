@@ -19,7 +19,7 @@ export default async function LineupPage() {
   const state = await loadLineup(outcome.manager.id);
   if (!state || state.squad.length === 0 || state.periods.length === 0) {
     return (
-      <div style={{ display: "grid", placeItems: "center", minHeight: "60vh", padding: 24 }}>
+      <div style={{ display: "grid", placeItems: "center", minHeight: "60dvh", padding: 24 }}>
         <div className="card" style={{ maxWidth: 460, padding: 24, textAlign: "center" }}>
           <h2 className="t-h2">No lineup to set yet</h2>
           <p className="text-secondary t-sm" style={{ marginBottom: 0 }}>

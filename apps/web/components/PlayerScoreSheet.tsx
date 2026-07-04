@@ -18,12 +18,13 @@
  * Auth: league-scoped read — any manager can view any player's card.
  * Server-only data: score_player_match and stat_player_match never flow to the browser directly.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PlayerBoxView, SectionView, ScoreLineView } from "@app/player-box";
 import type { Position } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
 import { toIso2 } from "@/src/draft/flag";
 import { usePlayerTournamentStats, PlayerStatsTab } from "./PlayerStatsTab";
+import { useSheetChrome } from "./useSheetChrome";
 
 /** Position badge (ds.css `.pos-*`). Inlined so this shared modal has no route-local dependency. */
 function Pos({ position }: { position: Position }) {
@@ -64,6 +65,10 @@ export function PlayerScoreSheet({
   // is instant and it never blocks/affects the Points tab.
   const { stats, loading: statsLoading, error: statsError } = usePlayerTournamentStats(playerId);
 
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  // T15-2 (F-P2-I6 + a11y): body scroll lock + Escape + focus trap for the modal's open lifetime.
+  useSheetChrome(true, onClose, modalRef);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -96,8 +101,11 @@ export function PlayerScoreSheet({
         aria-modal="true"
         aria-label={view ? `${view.header.displayName} — score breakdown` : "Score breakdown"}
         className="sl-scoremodal card"
+        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* T15-2 (F-P2-PSC1): ✕ + tab strip are FIXED chrome — only `.sl-sm-body` below scrolls,
+            so close/tab-switch never scroll out of reach on a dense breakdown. */}
         <button
           type="button"
           className="btn btn-ghost btn-sm sl-sm-close"
@@ -128,16 +136,18 @@ export function PlayerScoreSheet({
           </button>
         </div>
 
-        {tab === "points" ? (
-          <>
-            {loading && <div className="sl-sm-empty t-sm">Loading…</div>}
-            {error && <div className="sl-sm-empty t-sm">Couldn&apos;t load breakdown.</div>}
-            {view && <BreakdownBody view={view} />}
-            {forfeitProps && <ForfeitSection forfeitProps={forfeitProps} />}
-          </>
-        ) : (
-          <PlayerStatsTab loading={statsLoading} error={statsError} stats={stats} />
-        )}
+        <div className="sl-sm-body">
+          {tab === "points" ? (
+            <>
+              {loading && <div className="sl-sm-empty t-sm">Loading…</div>}
+              {error && <div className="sl-sm-empty t-sm">Couldn&apos;t load breakdown.</div>}
+              {view && <BreakdownBody view={view} />}
+              {forfeitProps && <ForfeitSection forfeitProps={forfeitProps} />}
+            </>
+          ) : (
+            <PlayerStatsTab loading={statsLoading} error={statsError} stats={stats} />
+          )}
+        </div>
       </div>
     </div>
   );

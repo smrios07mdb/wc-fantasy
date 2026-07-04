@@ -45,6 +45,23 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.4, 0, 1, 1);
 
+  /* Z-scale (T15-2) — the ONE documented stacking ladder. Every fixed/overlay surface uses a
+     token; an ad-hoc z-index between --z-nav and --z-takeover is a defect. The invariant:
+     every route modal/sheet scrim paints ABOVE the fixed mobile bottom nav, and the nav is
+     pointer-inert while any scrim is open (see shell.css).
+       --z-nav            fixed shell chrome (mobile bottom tab bar); 101/102 are RESERVED for
+                          the shell's own More backdrop/sheet (nav+1/nav+2, shell.css).
+       --z-overlay        route modal/sheet scrims (player cards, composers, drill-ins, toasts).
+       --z-overlay-stack  a second overlay opened ON TOP of an open overlay (e.g. the FA player
+                          card launched from inside the waivers bid composer).
+       --z-takeover       full-screen takeovers (score sheet, forfeit confirm).
+     The Cut's ko-sheetwrap(110)/koc(120) already sit inside this ladder and stay literal
+     (T15-CUT surfaces are fenced byte-untouched this thread). */
+  --z-nav: 100;
+  --z-overlay: 120;
+  --z-overlay-stack: 130;
+  --z-takeover: 200;
+
   /* ---- DARK THEME (default) ---- */
   --surface-0: #0A0D12;   /* app background */
   --surface-1: #11151C;   /* cards / panels */
@@ -426,12 +443,16 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .pc-stat b { font-size: var(--fs-caption); color: var(--text-primary); }
 .pc-foot { margin-top: 12px; font-size: var(--fs-micro); color: var(--text-tertiary); }
 
-/* standalone card chrome (Free Agents / Waivers) — fixed, centered over the scaled stage */
-.pc-scrim { position: fixed; inset: 0; z-index: 80; background: var(--overlay); display: grid; place-items: center; padding: 22px; }
-.pc-sheet { position: relative; width: 392px; max-width: 92vw; max-height: 88vh; overflow-y: auto; background: var(--surface-1); border: 1px solid var(--hairline-strong); border-radius: var(--r-xl); box-shadow: var(--e3); padding: 16px; }
-.pc-x { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: var(--r-sm); border: 1px solid var(--hairline); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+/* standalone card chrome (Free Agents / Waivers) — fixed, centered over the scaled stage.
+   T15-2: scrim on the z-scale token (above the mobile bottom nav) with safe-area padding; the
+   sheet caps at dvh (not vh — iOS URL-bar collapse) and is a non-scrolling flex column: the ✕ /
+   header chrome stays put while `.pc-body` (the tab panel) scrolls internally, contained. */
+.pc-scrim { position: fixed; inset: 0; z-index: var(--z-overlay); background: var(--overlay); display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px)); }
+.pc-sheet { position: relative; width: 392px; max-width: 92vw; max-height: 88dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-1); border: 1px solid var(--hairline-strong); border-radius: var(--r-xl); box-shadow: var(--e3); padding: 16px; }
+.pc-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pc-x { position: absolute; top: 6px; right: 6px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: var(--r-sm); border: 1px solid var(--hairline); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; font-size: 13px; }
 .pc-x:hover { background: var(--surface-3); color: var(--text-primary); }
-.pc-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; padding-right: 32px; }
+.pc-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; padding-right: 48px; /* clears the 44px ✕ (T15-2 touch target) */ }
 .pc-headid { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .pc-headid b { font-size: var(--fs-body-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-headtotal { font-family: var(--font-display); font-weight: 800; font-size: 30px; line-height: 1; flex: none; }

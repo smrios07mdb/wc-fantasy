@@ -8,7 +8,7 @@
  * On EDIT the add target is FIXED (the route ignores a changed add — change-the-add = cancel+resubmit),
  * so the FA picker is locked to the bid's current add and only amount/drop are editable.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Position } from "@app/shared";
 import type { WvClaim, WvPlayer } from "./types";
 import {
@@ -29,6 +29,7 @@ import {
   Sealed,
 } from "./components";
 import { NationFilter } from "@/components/NationFilter";
+import { useSheetChrome } from "@/components/useSheetChrome";
 
 const POS_FILTERS: ReadonlyArray<"ALL" | Position> = ["ALL", "GK", "DEF", "MID", "FWD"];
 
@@ -110,6 +111,10 @@ export function BidComposer({
 
   const clamp = (n: number) => Math.max(0, Math.min(maxBid, n));
 
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  // T15-2 (F-P2-I6 + a11y): body scroll lock + Escape + focus trap for the modal's open lifetime.
+  useSheetChrome(true, onClose, composerRef);
+
   return (
     <div
       className="wv-scrim"
@@ -118,7 +123,7 @@ export function BidComposer({
       aria-modal="true"
       aria-label="Waiver claim"
     >
-      <div className="wv-composer" onClick={(e) => e.stopPropagation()}>
+      <div className="wv-composer" ref={composerRef} onClick={(e) => e.stopPropagation()}>
         <div className="wv-comp-head">
           <b className="wv-comp-title">{editClaim ? "Edit claim" : "New waiver claim"}</b>
           <button className="wv-icon-btn" onClick={onClose} aria-label="Close">

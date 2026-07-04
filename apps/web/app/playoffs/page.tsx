@@ -35,7 +35,7 @@ export default async function PlayoffsPage() {
   ]);
   if (!view) {
     return (
-      <div style={{ display: "grid", placeItems: "center", minHeight: "60vh", padding: 24 }}>
+      <div style={{ display: "grid", placeItems: "center", minHeight: "60dvh", padding: 24 }}>
         <div className="card" style={{ maxWidth: 480, padding: 24, textAlign: "center" }}>
           <h2 className="t-h2">The guillotine hasn’t started yet</h2>
           <p className="text-secondary t-sm" style={{ marginBottom: 0 }}>

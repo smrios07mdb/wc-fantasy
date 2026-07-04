@@ -1186,7 +1186,7 @@ button.vf-bench-tok:hover {
 .vf-empty {
   display: grid;
   place-items: center;
-  min-height: 60vh;
+  min-height: 60dvh; /* T15-2 (F-P2-I7): dvh — stable centering under the iOS dynamic toolbar */
   padding: 24px;
 }
 

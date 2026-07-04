@@ -600,12 +600,9 @@
   color: var(--text-primary);
 }
 
-/* ── mobile hard-rule: the shared player card must layer ABOVE the fixed bottom tab bar (z-100) and
-   its More sheet (z-102). Route-scoped lift of the shared .pc-scrim (leaves the ds.css token intact,
-   same technique as waivers' .wv-app override — but higher, clearing the bar per the T15 rule). ── */
-.pl-app .pc-scrim {
-  z-index: 120;
-}
+/* ── The route-scoped `.pl-app .pc-scrim` lift to 120 is RETIRED (T15-2): the ds.css base
+   `.pc-scrim` now sits at `--z-overlay` (120) globally — "the T15 rule" this override
+   pioneered is the documented app-wide z-scale, so the local exception became redundant. ── */
 
 /* ── desktop: widen the toolbar inline + the stat table becomes a wide-list (design image 2) ────
    The grid's fr columns (Player + Pts) soak up the extra width so it fits 1180px with NO horizontal

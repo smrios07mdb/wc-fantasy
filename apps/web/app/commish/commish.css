@@ -17,6 +17,12 @@
   flex-direction: column;
   gap: 14px;
   padding: 16px 18px 32px;
+  /* T15-2 (F-P3-G3): the last audit row / final Apply buttons must clear the home indicator.
+     The <640px nav band itself is already reserved by the shell (.sh-content padding-bottom,
+     shell.css) — F-P3-G3's runtime question, resolved static: the console mounts inside
+     AppShell (commish/layout.tsx). This env() covers the ≥640px home-indicator case
+     (iPad PWA / landscape) that the shell rule doesn't pad. */
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
 }
 .adm-console.adm-look-warning {
   --adm-edge: var(--ytp);
@@ -356,7 +362,9 @@
   position: absolute;
   right: 0;
   top: 42px;
-  z-index: 40;
+  /* T15-2 (F-P1-I1): overlay tier of the ds.css z-scale — a dropdown must never paint under
+     the fixed bottom nav when its trigger sits low in the viewport */
+  z-index: var(--z-overlay);
   width: 240px;
   background: var(--surface-1);
   border: 1px solid var(--hairline-strong);

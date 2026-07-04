@@ -9,7 +9,8 @@
  * vsfield never renders the forfeit action.
  */
 
-/* ── Scrim / overlay (shared with the lineup forfeit sheet on its own route) ─── */
+/* ── Scrim / overlay (shared with the lineup forfeit sheet on its own route) ───
+   T15-2: takeover tier of the ds.css z-scale (same computed 200) + safe-area padding. */
 .sl-forfeit-overlay {
   position: fixed;
   inset: 0;
@@ -17,16 +18,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
-  padding: 16px;
+  z-index: var(--z-takeover, 200);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
 }
 
-/* ── Score modal (PlayerScoreSheet) ────────────────────────────────────── */
+/* ── Score modal (PlayerScoreSheet) ──────────────────────────────────────
+   T15-2 (F-P2-PSC1 + I7): the modal itself no longer scrolls — the ✕ and the Points|Stats
+   strip are fixed chrome and `.sl-sm-body` is the contained internal scroller, so close/tabs
+   never scroll out of reach; dvh cap tracks the iOS dynamic toolbar. */
 .sl-scoremodal {
   max-width: 400px;
   width: 100%;
-  max-height: 85vh;
-  overflow-y: auto;
+  max-height: 85dvh;
+  overflow: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -34,12 +39,21 @@
   position: relative;
   box-shadow: var(--e3);
 }
+.sl-sm-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .sl-sm-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 28px;
-  height: 28px;
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -50,7 +64,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-right: 36px;
+  padding-right: 48px;
 }
 .sl-sm-name {
   flex: 1;

@@ -548,20 +548,24 @@
   border-bottom: 1px solid var(--hairline);
 }
 
-/* composer modal */
+/* composer modal — T15-2: z on the ds.css scale (above the mobile bottom nav, F-P1-I1),
+   safe-area padding on the scrim, dvh cap (F-P2-I7), and contained internal scrollers
+   (F-P2-I6; scoped to the MODAL — the in-flow FA panel reuses .wv-comp-* and must keep
+   chaining page scroll). */
 .wv-scrim {
   position: fixed;
   inset: 0;
   background: var(--overlay);
   display: grid;
   place-items: center;
-  z-index: 90;
-  padding: 20px;
+  z-index: var(--z-overlay);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
 }
 .wv-composer {
   width: 780px;
   max-width: 100%;
-  max-height: 90vh;
+  max-height: 90dvh;
   background: var(--surface-1);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--r-xl);
@@ -569,6 +573,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.wv-scrim .wv-comp-list,
+.wv-scrim .wv-drop-pick,
+.wv-scrim .wv-comp-config {
+  overscroll-behavior: contain;
 }
 .wv-comp-head {
   display: flex;
@@ -764,10 +773,10 @@
   color: var(--accent);
 }
 /* The view-only player card mounts at the .wv-app root and can be opened from inside the bid composer
-   modal (.wv-scrim, z-index 90). Lift the shared .pc-scrim above it WITHIN the waivers app only — a
-   route-scoped override, leaving the global ds.css token untouched. */
+   modal (.wv-scrim, --z-overlay). Lift the shared .pc-scrim one tier up WITHIN the waivers app only —
+   the stacked-overlay slot of the ds.css z-scale (T15-2), leaving the global token untouched. */
 .wv-app .pc-scrim {
-  z-index: 95;
+  z-index: var(--z-overlay-stack);
 }
 .wv-comp-config {
   display: flex;
@@ -1080,10 +1089,33 @@
   }
   .wv-comp-body {
     grid-template-columns: 1fr;
+    /* T15-2: one scroll surface for the stacked panels — inside the dvh-capped MODAL the
+       overflowing grid was clipped by .wv-composer{overflow:hidden}, stranding the Place-bid
+       actions row. In the in-flow FA panel this is a no-op (no height constraint). */
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .wv-comp-pick {
     border-right: none;
     border-bottom: 1px solid var(--hairline);
+  }
+  /* T15-2 step-27 (walkthrough FAIL, F-P1-I1 escalation): the IN-FLOW instant-pickup panel's
+     action column (Adding · drop-picker · confirm) stacked BELOW the FA pool list, whose
+     240-420px internal scroller ate vertical gestures — the confirm row sat under the fixed
+     bottom nav and page scroll could never be initiated from the list surface. One-column
+     order flip puts the action column ABOVE the list (always reachable under the panel
+     header); the pool list keeps page-scroll chaining (in-flow — deliberately NOT contained,
+     unlike the .wv-scrim modal instances). Scoped to .wv-fa: the sealed-bid MODAL keeps its
+     pick→config order (it scrolls internally above the nav instead). */
+  .wv-fa .wv-comp-config {
+    order: -1;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .wv-fa .wv-comp-pick {
+    border-bottom: none;
+  }
+  .wv-fa .wv-comp-list {
+    max-height: min(420px, 44dvh);
   }
   .wv-res {
     grid-template-columns: 1fr auto;

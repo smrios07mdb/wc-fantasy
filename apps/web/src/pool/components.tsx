@@ -5,9 +5,11 @@
  * imagery, and the global `.dtable` + `.row-me` styling for the leaderboard. No IO, no data fetching: the
  * client shell owns state + the `/api/pool/pick` round-trips and passes everything down.
  */
+import { useRef } from "react";
 import type { PoolPrediction } from "@app/shared";
 import { Flag } from "@/app/draft/Flag";
 import { toIso2 } from "@/src/draft/flag";
+import { useSheetChrome } from "@/components/useSheetChrome";
 import type { ManagerPickRow, ManagerPicksView } from "./managerPicks";
 import { isKnockoutFixturePickable, isTeamResolved } from "./poolView";
 import type { PoolFixture, PoolLeaderRow, PoolTeam } from "./types";
@@ -373,6 +375,10 @@ export function ManagerPicksModal({
   onClose: () => void;
 }) {
   const title = picks.isMe ? "Your picks" : `${picks.managerName}’s picks`;
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  // T15-2 (F-P2-I6 + a11y): body scroll lock + Escape + focus trap while the drill-in is open
+  // (PoolClient keeps its own Escape listener — both close paths hit the same setter, idempotent).
+  useSheetChrome(true, onClose, modalRef);
   return (
     <div className="pl-modal-overlay" role="presentation" onClick={onClose}>
       <div
@@ -380,6 +386,7 @@ export function ManagerPicksModal({
         aria-modal="true"
         aria-label={title}
         className="pl-modal card"
+        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="pl-modal-head">

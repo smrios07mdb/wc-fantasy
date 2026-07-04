@@ -24,6 +24,7 @@
  * a fieldable shape instead of being stuck on a default it can't fill. Direct start↔bench swaps remain for
  * fine-tuning WITHIN a shape (GK kept on its own side); the validator stays the sole legality gate.
  */
+import { useRef } from "react";
 import type { Position } from "@app/shared";
 import { formatInLeagueTz } from "@app/shared";
 import type { PitchSlot, PitchView, SlotKind } from "../../src/lineup/view";
@@ -36,6 +37,7 @@ import type {
 import { FlagBadge } from "../../components/PlayerAvatar";
 import { Flag } from "../draft/Flag";
 import { toIso2 } from "../../src/draft/flag";
+import { useSheetChrome } from "../../components/useSheetChrome";
 
 const LANE_ORDER: Position[] = ["FWD", "MID", "DEF", "GK"];
 
@@ -687,6 +689,10 @@ export function ForfeitConfirmSheet({
   onCancel,
 }: ForfeitConfirmSheetProps) {
   const ptsText = pointsAtStake > 0 ? `his ${pointsAtStake} pts` : "his points";
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  // T15-2 (F-P2-I6 + a11y): body scroll lock + Escape(=cancel) + focus trap while open.
+  // The hook focuses the first control — Cancel, agreeing with the autoFocus safe default below.
+  useSheetChrome(true, onCancel, sheetRef);
   return (
     // Clicking the overlay backdrop = cancel (same as the Cancel button).
     <div className="sl-forfeit-overlay" role="presentation" onClick={onCancel}>
@@ -695,6 +701,7 @@ export function ForfeitConfirmSheet({
         aria-modal="true"
         aria-label={`Bench ${playerName}`}
         className="sl-forfeit-sheet card"
+        ref={sheetRef}
         // Stop the backdrop's onClick from propagating through the card.
         onClick={(e) => e.stopPropagation()}
       >

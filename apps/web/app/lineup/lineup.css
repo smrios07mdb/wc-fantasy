@@ -9,7 +9,7 @@
 .sl-app {
   background: var(--surface-0);
   color: var(--text-primary);
-  min-height: 100vh;
+  min-height: 100dvh; /* T15-2 (F-P2-I7): dvh — vh over-measures under the collapsed iOS URL bar */
 }
 
 .sl-screen {
@@ -627,7 +627,8 @@
   cursor: not-allowed;
 }
 
-/* ── C2: forfeit confirm sheet (modal overlay) ─────────────────────────── */
+/* ── C2: forfeit confirm sheet (modal overlay) ─────────────────────────────
+   T15-2: takeover tier of the ds.css z-scale (same computed 200) + safe-area padding. */
 .sl-forfeit-overlay {
   position: fixed;
   inset: 0;
@@ -635,8 +636,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
-  padding: 16px;
+  z-index: var(--z-takeover, 200);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
 }
 .sl-forfeit-sheet {
   max-width: 440px;
@@ -691,12 +693,15 @@
   flex-shrink: 0;
 }
 
-/* ── Score modal (PlayerScoreSheet) ────────────────────────────────────── */
+/* ── Score modal (PlayerScoreSheet) ──────────────────────────────────────
+   T15-2 (F-P2-PSC1 + I7), kept in lockstep with components/PlayerScoreSheet.css: the modal no
+   longer scrolls — ✕ and the Points|Stats strip are fixed chrome; `.sl-sm-body` is the
+   contained internal scroller; dvh cap tracks the iOS dynamic toolbar. */
 .sl-scoremodal {
   max-width: 400px;
   width: 100%;
-  max-height: 85vh;
-  overflow-y: auto;
+  max-height: 85dvh;
+  overflow: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -704,12 +709,21 @@
   position: relative;
   box-shadow: var(--e3);
 }
+.sl-sm-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .sl-sm-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 28px;
-  height: 28px;
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -720,7 +734,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-right: 36px;
+  padding-right: 48px;
 }
 .sl-sm-name {
   flex: 1;
@@ -874,6 +888,15 @@
   background: var(--surface-2);
   border: 1px solid var(--surface-4);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+/* T15-2 (F-P1-C1): on phones the fixed shell bottom nav occupies the bottom
+   58px + env(safe-area-inset-bottom) band (shell.css .sh-content clearance constant) — pin the
+   sticky Save bar (primary Save action + the only legality-error line) fully ABOVE that band.
+   639px matches the shell's nav swap breakpoint, NOT this file's 900px layout swap. */
+@media (max-width: 639px) {
+  .sl-savebar {
+    bottom: calc(58px + env(safe-area-inset-bottom, 0px) + 10px);
+  }
 }
 .sl-savebar-reason.is-error {
   color: var(--loss);

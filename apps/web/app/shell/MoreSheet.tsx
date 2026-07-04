@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { COMMISH_NAV_ITEM, type NavId, type NavItem } from "@/src/shell/crossNav";
+import { useSheetChrome } from "@/components/useSheetChrome";
 
 // Three-dot "more" glyph — distinct from all other NavIcon glyphs.
 function MoreIcon() {
@@ -35,6 +36,7 @@ export function MoreSheet({
   moreItems: readonly NavItem[];
 }) {
   const [open, setOpen] = useState(false);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll the active top-nav item into its scroll container (not the document) on mount.
   // Runs once after hydration; the scroll container has overflow-x:auto so scrollIntoView
@@ -49,6 +51,9 @@ export function MoreSheet({
   function close() {
     setOpen(false);
   }
+
+  // T15-2 (F-P2-I6 + F-P3-A1): body scroll lock + Escape + focus trap while the sheet is open.
+  useSheetChrome(open, close, sheetRef);
 
   return (
     <>
@@ -69,7 +74,23 @@ export function MoreSheet({
       {open && <div className="sh-more-backdrop" aria-hidden="true" onClick={close} />}
 
       {open && (
-        <div role="dialog" aria-label="More navigation" className="sh-more-sheet">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="More navigation"
+          className="sh-more-sheet"
+          ref={sheetRef}
+          tabIndex={-1}
+        >
+          {/* T15-2 (F-P2-A4): reference MobileSheet chrome — grabber + title + explicit ✕
+              (dismissal was scrim-tap-only, with no visible affordance). */}
+          <div className="sh-sheet-grab" aria-hidden="true" />
+          <div className="sh-sheet-head">
+            <span className="sh-sheet-title">More</span>
+            <button type="button" className="sh-sheet-x" onClick={close} aria-label="Close menu">
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
           <div className="sh-more-sheet-items">
             {moreItems.map((item) => (
               <a

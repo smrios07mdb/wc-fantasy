@@ -24,7 +24,7 @@ export default async function PlayersPage() {
   const view = await loadPlayers(outcome.manager.id);
   if (!view) {
     return (
-      <div style={{ display: "grid", placeItems: "center", minHeight: "60vh", padding: 24 }}>
+      <div style={{ display: "grid", placeItems: "center", minHeight: "60dvh", padding: 24 }}>
         <div className="card" style={{ maxWidth: 460, padding: 24, textAlign: "center" }}>
           <h2 className="t-h2">Players aren’t available yet</h2>
           <p className="text-secondary t-sm" style={{ marginBottom: 0 }}>

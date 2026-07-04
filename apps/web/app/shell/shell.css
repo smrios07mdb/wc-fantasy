@@ -82,6 +82,10 @@
   gap: 16px;
   row-gap: 8px;
   padding: 10px 18px;
+  /* landscape notch clearance (F-P3-A2) — landscape phones are ≥640px wide, so the TOP strip
+     is the chrome that meets the notch; env() is 0 everywhere else */
+  padding-left: calc(18px + env(safe-area-inset-left));
+  padding-right: calc(18px + env(safe-area-inset-right));
   border-bottom: 1px solid var(--hairline);
   background: var(--surface-1);
   flex: none;
@@ -153,12 +157,15 @@
   font-weight: 600;
 }
 
-/* screen's content area — design's original flex-scroll model (see ADAPTATIONS note above) */
+/* screen's content area — design's original flex-scroll model (see ADAPTATIONS note above).
+   safe-area-x keeps content out of the notch/corners in landscape (F-P3-A2; 0 elsewhere). */
 .sh-content {
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ═══════════════════════════════ MOBILE BOTTOM BAR ═══════════════════════════════ */
@@ -174,11 +181,27 @@
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  /* shell-chrome tier of the ds.css z-scale (T15-2); 101/102 below are its reserved
+     nav+1/nav+2 slots for the More backdrop/sheet */
+  z-index: var(--z-nav, 100);
   background: var(--surface-1);
   border-top: 1px solid var(--hairline);
-  /* safe-area pad so the bar doesn't overlap the iOS home indicator */
+  /* safe-area pads: bottom clears the iOS home indicator; left/right keep the first/last
+     tab out of the notch / corner radius in landscape (F-P3-A2) */
   padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* T15-2 F-P1-I1 belt-and-braces: while a route scrim is open the nav must not receive taps.
+   The z-scale already paints every scrim ABOVE the nav (hits land on the scrim); this guard
+   additionally deadens the bar for hit-testing edge cases. The More backdrop/sheet are NOT
+   listed — they render INSIDE .sh-btmnav, so deadening the bar would deaden them too (the
+   backdrop already covers the bar at z-101). The Cut's ko surfaces are likewise excluded
+   (fenced byte-untouched; they cover the bar at z-110/120). :has() ships on all PWA-capable
+   iOS (15.4+); where unsupported, the z-order alone still intercepts. */
+body:has(.pc-scrim, .wv-scrim, .pl-modal-overlay, .sl-forfeit-overlay) .sh-btmnav {
+  pointer-events: none;
 }
 
 .sh-btmnav-inner {
@@ -186,9 +209,18 @@
   align-items: stretch;
 }
 
-/* shared tab item style — used by both <a> links and the More <button> */
+/* shared tab item style — used by both <a> links and the More <button>.
+   T15-2 (F-P0-A1/6-slot spacing): `flex: 1 1 0` + `min-width: 0` gives all 6 slots EQUAL width
+   regardless of label length (the flexbox default `min-width:auto` let long nowrap labels
+   squeeze "Players"/"More" under 44px and overflow the bar below ~340px effective width);
+   the label span ellipsizes as the overflow guard. `touch-action: manipulation` removes
+   residual tap-delay heuristics, and the `:active` state restores INSTANT press feedback that
+   `-webkit-tap-highlight-color: transparent` had removed — an MPA `<a>` gives no other signal
+   until the next document paints. */
 .sh-btnav-item {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -206,9 +238,19 @@
   white-space: nowrap;
   line-height: 1;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .sh-btnav-item svg {
   flex: none;
+}
+.sh-btnav-item > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sh-btnav-item:active {
+  background: var(--surface-3);
+  color: var(--text-primary);
 }
 .sh-btnav-item.is-active {
   color: var(--accent);
@@ -222,7 +264,7 @@
 .sh-more-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 101;
+  z-index: 101; /* reserved nav+1 (ds.css z-scale) — covers the bar below it */
   background: rgba(0, 0, 0, 0.48);
   /* no pointer-events on child sheet so clicks on backdrop dismiss */
 }
@@ -232,20 +274,75 @@
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 102;
+  z-index: 102; /* reserved nav+2 (ds.css z-scale) */
   background: var(--surface-1);
   border-radius: 16px 16px 0 0;
   border-top: 1px solid var(--hairline);
   padding-top: 8px;
   padding-bottom: env(safe-area-inset-bottom);
+  /* landscape notch clearance (F-P3-A2) */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
   display: flex;
   flex-direction: column;
+  /* T15-2 (F-P2-I7): dvh cap so a short viewport (URL bar shown) scrolls the item list
+     internally instead of pushing the footer off-screen */
+  max-height: calc(100dvh - 40px);
+}
+
+/* T15-2 (F-P2-A4): the sheet chrome the reference MobileSheet has — grabber + title + ✕.
+   Class names mirror design/design_reference/shell/nav.jsx (.sh-sheet-grab / .sh-sheet-x). */
+.sh-sheet-grab {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface-4);
+  margin: 2px auto 4px;
+  flex: none;
+}
+.sh-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px 2px 16px;
+  flex: none;
+}
+.sh-sheet-title {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.sh-sheet-x {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.sh-sheet-x:hover,
+.sh-sheet-x:active {
+  background: var(--surface-2);
+  color: var(--text-primary);
 }
 
 .sh-more-sheet-items {
   display: flex;
   flex-direction: column;
   padding: 0 8px 4px;
+  /* the scrolling region under the fixed grabber/head chrome (F-P2-I6: contained) */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sh-more-item {
@@ -258,6 +355,8 @@
   color: var(--text-secondary);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 44px;
 }
 .sh-more-item:hover,
 .sh-more-item:active {

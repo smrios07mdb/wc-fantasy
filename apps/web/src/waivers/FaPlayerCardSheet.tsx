@@ -17,10 +17,11 @@
  * Strictly informational: NO acquire CTA, NO add/drop, NO mutation. Acquisition stays on the existing
  * right-panel select→submit (`FreeAgentPanel` / `BidComposer`), which this card never touches.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { WvPlayer } from "./types";
 import { CutoffTag, IconStar, NationFlag, Pos } from "./components";
 import { PlayerStatsTab, usePlayerTournamentStats } from "@/components/PlayerStatsTab";
+import { useSheetChrome } from "@/components/useSheetChrome";
 
 export function FaPlayerCardSheet({
   player,
@@ -49,6 +50,9 @@ export function FaPlayerCardSheet({
   const [tab, setTab] = useState<"points" | "stats">("points");
   // Eager on mount — the Stats tab is hot the instant it's selected; a failure degrades quietly.
   const { stats, loading, error } = usePlayerTournamentStats(player.id);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  // T15-2 (F-P2-I6 + a11y): body scroll lock + Escape + focus trap for the card's open lifetime.
+  useSheetChrome(true, onClose, sheetRef);
 
   return (
     <div
@@ -58,7 +62,7 @@ export function FaPlayerCardSheet({
       aria-modal="true"
       aria-label="Player card"
     >
-      <div className="pc-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="pc-sheet" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
         <button className="pc-x" onClick={onClose} aria-label="Close">
           <span aria-hidden="true">✕</span>
         </button>
