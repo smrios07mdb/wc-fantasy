@@ -2298,3 +2298,41 @@ are byte-untouched; no migration / schema / RLS / Realtime change.
   **and** mobile that the Players tab is present on the visible surface, is an `<a href="/players">`,
   renders active-highlighted (computed style distinct from a sibling), and **taps through** — a click
   navigates the browser to `/players` (presence alone is insufficient). 14/14 checks green.
+
+### §29.3 — `/players` pool scoped to WC participants (`feat/players-wc-scope`, PLAYERS-DATA-scope)
+
+The `/players` pool is now SCOPED to WC tournament participants, where the participant predicate is the
+single reliable signal in the schema:
+
+> **A team is in the tournament IFF its id appears as `home_team_id` OR `away_team_id` in `fifa_match`.**
+
+Two other candidate signals are unusable and are NOT the predicate (see DECISIONS): `fifa_team.group_id`
+is NULL for every one of the 112 teams, and `eliminated` marks only knocked-out teams — so "not
+eliminated" wrongly reads as "in the tournament" for the non-WC nations the roster feed also carries.
+
+- **Loader seam.** `loadPlayers` adds ONE read-only two-column read —
+  `prisma.fifaMatch.findMany({ select: { homeTeamId: true, awayTeamId: true } })` — over the **FULL**
+  schedule (deliberately NO `status` filter: an eliminated team has only completed matches, but its
+  players are still participants and must stay in the pool greyed "out"; a status filter would wrongly
+  drop them). This is a SEPARATE read from the status-filtered kickoff-cutoff read ("what's still
+  acquirable" vs "who is in the tournament"). The pool is then filtered by two pure, unit-pinned helpers
+  in `playersLogic.ts`: `participantTeamIds(matches)` (home ∪ away, nulls skipped, deduped) and
+  `scopeToParticipants(rows, set)` (keep `teamId !== null ∧ teamId ∈ set`; a null-team or off-schedule
+  player is excluded). Rows are built from the SCOPED list, so `nationAlive = !eliminated` can now only
+  ever mark PARTICIPANTS — the Active-teams toggle can no longer over-mark a non-WC nation "alive".
+- **Guard, not a live cut (data-proven).** On today's prod data the guard removes **0** players: the
+  1,272-player pool already spans exactly **48** distinct teams, all ⊆ the **63** scheduled participant
+  teams (the 49 non-scheduled `fifa_team` rows carry 0 players). So `N` is unchanged at **1,272**. The
+  change is a DEFENSIVE INVARIANT — if the roster feed ever ingests a non-WC team's players (it already
+  knows all 112 teams), `/players` stays clean automatically. READ-scope only: no `fifa_team` write, no
+  `eliminated` change, no FAAB/scoring/ingest/worker touch, no migration; `/waivers` byte-unchanged.
+- **63-vs-48 gap (OPEN, out of scope).** The schedule carries 63 distinct teams while the pool spans 48;
+  the extra 15 scheduled teams hold no players so they never reach `/players`. Narrowing the predicate to
+  a clean 48-team bracket is NOT done — there is no fixture-type / round column to do it non-circularly
+  (see DECISIONS). Filed as an open note only.
+- **Render + invariant proof.** `verify-players.mjs` gained a DB-backed check (registers `tsx/esm/api`
+  from `packages/db` so the plain-`node` `.mjs` can import the TS `@app/db`): it mirrors the loader
+  predicate against live data and asserts the TRUE invariant — pool ⊆ participants (0 off-schedule) and
+  ≤ 63 distinct backing teams — reporting `N` + the distinct pool-team count as evidence the guard is a
+  no-op today. Skips cleanly when no DB/tsx is reachable. 15/15 checks green
+  (`N=1272 · 48 backing teams · 63 participants · 0 off-schedule`).
