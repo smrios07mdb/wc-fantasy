@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-accent="cobalt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="design_doc_mode" content="canvas">
+<meta name="theme-color" content="#0A0D12">
+<title>XI · Players</title>
+<link rel="icon" type="image/png" sizes="32x32" href="logo/favicon-32.png">
+<link rel="stylesheet" href="ds/ds.css">
+<style>
+  /* ------------------------------------------------------------------ CANVAS */
+  body { margin: 0; font-family: var(--font-sans); }
+  .cap { position: absolute; font-family: var(--font-sans); color: #E7ECF3; }
+  .cap .k { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: #4D8DFF;
+            background: rgba(77,141,255,.14); padding: 2px 7px; border-radius: 5px; }
+  .cap .t { display:block; margin-top: 8px; font-size: 15px; font-weight: 700; color:#EEF2F7; }
+  .cap .d { display:block; margin-top: 2px; font-size: 12.5px; color:#98A2B3; max-width: 340px; line-height: 1.4; }
+  .cap .d b { color:#C7D0DC; }
+
+  /* -------------------------------------------------------------------- FRAME */
+  .frame { position: absolute; background: var(--surface-0); overflow: hidden;
+           border-radius: 30px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .frame.phone { width: 360px; height: 812px; border: 1px solid var(--hairline); }
+  .frame.desk  { width: 1240px; height: 860px; border-radius: 16px; border: 1px solid var(--hairline); }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+  /* ---------------------------------------------------------------- APP HEAD */
+  .pl-appbar { display:flex; align-items:center; gap:10px; padding: 14px 16px 10px; }
+  .pl-appbar img { width: 26px; height: 26px; }
+  .pl-brand { display:flex; flex-direction:column; line-height:1; }
+  .pl-brand b { font-family: var(--font-display); font-weight: 900; font-size: 17px; letter-spacing:.02em; color: var(--text-primary); }
+  .pl-brand span { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
+  .pl-appbar .spacer { flex:1; }
+  .pl-cutchip { display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px; border-radius:var(--r-pill);
+                background: var(--elim-soft); color: var(--elim); font-size: 11px; font-weight: 700; letter-spacing:.03em; }
+  .pl-cutchip .dot { width:6px;height:6px;border-radius:50%;background:currentColor; }
+
+  /* ---------------------------------------------------------------- TOOLBAR */
+  .pl-tools { padding: 4px 16px 12px; display:flex; flex-direction:column; gap:10px;
+              border-bottom: 1px solid var(--hairline); }
+  .pl-search { display:flex; align-items:center; gap:9px; height:42px; padding:0 12px; border-radius: var(--r-lg);
+               background: var(--surface-2); border:1px solid var(--hairline); color: var(--text-tertiary); font-size: 14px; }
+  .pl-search svg { width:16px;height:16px; flex:none; }
+  .pl-search > span:first-of-type { flex:1; white-space:nowrap; }
+  .pl-search .cmd { margin-left:auto; font-family:var(--font-mono); font-size:11px; color: var(--text-disabled);
+                    border:1px solid var(--hairline); border-radius:5px; padding:1px 5px; }
+  .pl-seg { display:flex; background: var(--surface-2); border:1px solid var(--hairline); border-radius: var(--r-lg); padding:3px; gap:2px; }
+  .pl-seg button { flex:1; height:34px; border:0; background:transparent; color: var(--text-secondary);
+                   font-family:var(--font-sans); font-size:13px; font-weight:700; border-radius: 7px; cursor:pointer; letter-spacing:.02em; }
+  .pl-seg button.on { background: var(--surface-4); color: var(--text-primary); box-shadow: var(--e1); }
+  .pl-chiprow { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .pl-fchip { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius: var(--r-pill);
+              background: var(--surface-2); border:1px solid var(--hairline); color: var(--text-secondary);
+              font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .pl-fchip svg { width:13px; height:13px; }
+  .pl-fchip.on { background: var(--accent-soft); border-color: var(--accent-ring); color: var(--accent); }
+  .pl-fchip .ct { font-family:var(--font-mono); font-size:11px; opacity:.7; }
+  .pl-toggle { display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 6px 0 12px; border-radius:var(--r-pill);
+               background: var(--surface-2); border:1px solid var(--hairline); color: var(--text-secondary); font-size:12.5px; font-weight:600; }
+  .pl-sw { width:34px; height:20px; border-radius:var(--r-pill); background: var(--surface-4); position:relative; flex:none; transition: background var(--dur-base); }
+  .pl-sw::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition: transform var(--dur-base); }
+  .pl-toggle.on .pl-sw { background: var(--accent); }
+  .pl-toggle.on .pl-sw::after { transform: translateX(14px); }
+
+  /* ------------------------------------------------------------- LIST META */
+  .pl-listmeta { display:flex; align-items:center; justify-content:space-between; padding: 10px 16px 6px; }
+  .pl-count { font-size: 12px; color: var(--text-tertiary); white-space:nowrap; }
+  .pl-count b { color: var(--text-secondary); font-weight:700; }
+  .pl-sort { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color: var(--text-secondary); cursor:pointer; white-space:nowrap; }
+  .pl-sort svg { width:13px; height:13px; color: var(--accent); }
+  .pl-status { padding: 0 16px 8px; font-size: 12px; color: var(--text-tertiary); display:flex; align-items:center; gap:7px; }
+  .pl-status .d { width:6px;height:6px;border-radius:50%; }
+
+  /* ------------------------------------------------------------------ LIST */
+  .pl-scroll { flex:1; overflow: hidden; position: relative; }
+  .pl-list { display:flex; flex-direction: column; }
+  .pl-row { display:flex; align-items:center; gap:11px; padding: 9px 16px; min-height: 62px; box-sizing:border-box;
+            border-bottom: 1px solid var(--hairline); position: relative; }
+  .pl-row.mine { background: linear-gradient(90deg, var(--accent-soft), transparent 60%); }
+  .pl-row.mine::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--accent); }
+  .pl-pos { width: 34px; flex:none; text-align:center; }
+  .pl-kit { width: 30px; height: 30px; flex:none; border-radius: 7px; border:1px solid var(--hairline-strong);
+            background: var(--surface-4); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .pl-idc { min-width: 0; flex:1; display:flex; flex-direction:column; gap:3px; }
+  .pl-name { font-size: 14.5px; font-weight: 700; color: var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-sub { display:flex; align-items:center; gap:6px; font-size: 12px; color: var(--text-tertiary); }
+  .pl-flagname { color: var(--text-secondary); }
+  .pl-elimtag { color: var(--elim); font-weight:700; font-size: 10.5px; letter-spacing:.03em; text-transform:uppercase; }
+  .pl-right { display:flex; align-items:center; gap:10px; flex:none; }
+  .pl-own { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius: var(--r-pill);
+            font-size:11px; font-weight:700; max-width: 92px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-own-fa { background: var(--accent-soft); color: var(--accent); }
+  .pl-own-mgr { background: var(--surface-3); color: var(--text-tertiary); }
+  .pl-own-me { background: var(--accent-soft); color: var(--accent); }
+  .pl-pts { text-align: right; min-width: 40px; }
+  .pl-pts b { font-family: var(--font-mono); font-weight: 700; font-size: 16px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .pl-pts span { display:block; font-size: 9.5px; color: var(--text-disabled); letter-spacing:.06em; text-transform:uppercase; margin-top:1px; }
+  .pl-row.is-elim { opacity: .62; }
+  .pl-row.is-elim .pl-name { text-decoration: line-through; text-decoration-color: var(--elim); color: var(--text-secondary); }
+  .pl-row.is-elim .pl-kit { filter: grayscale(.7) brightness(.7); }
+  /* bid trailer */
+  .pl-bid { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:44px; min-width:44px; padding:0 12px;
+            border-radius: var(--r-md); background: var(--accent-soft); border:1px solid var(--accent-ring); color: var(--accent);
+            font-size:12.5px; font-weight:800; letter-spacing:.02em; cursor:pointer; flex:none; }
+  .pl-bid svg { width:15px; height:15px; }
+
+  /* --------------------------------------------------------------- DIVIDER */
+  .pl-groupdiv { padding: 9px 16px 7px; font-size: 10.5px; font-weight:800; letter-spacing:.09em; text-transform:uppercase;
+                 color: var(--text-tertiary); background: var(--surface-1); border-bottom:1px solid var(--hairline);
+                 display:flex; align-items:center; gap:8px; }
+  .pl-groupdiv .ln { flex:1; height:1px; background: var(--hairline); }
+
+  /* ------------------------------------------- MOBILE HORIZONTAL STAT TABLE */
+  .pl-scroll.tbl { display:flex; flex-direction:column; }
+  .mt-wrap { flex:1; overflow:auto; }
+  .mt-wrap.short { flex:none; overflow-x:auto; overflow-y:hidden; }
+  .mt-cols { grid-template-columns: 166px 74px 40px 46px 30px 30px 34px 34px 32px 36px 30px minmax(60px,auto); }
+  .mt-head, .mt-row { display:grid; align-items:center; width:max-content; min-width:100%; }
+  .mt-head { position:sticky; top:0; z-index:5; background: var(--surface-1); border-bottom:1px solid var(--hairline);
+             height:34px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.02em; color: var(--text-tertiary); }
+  .mt-head > div { text-align:right; padding-right:6px; }
+  .mt-head .mt-idc { position:sticky; left:0; z-index:6; background: var(--surface-1); text-align:left; padding-left:16px; display:flex; align-items:center; }
+  .mt-head .mt-end { position:sticky; right:0; z-index:6; background: var(--surface-1); text-align:right; padding-right:14px;
+                     box-shadow:-9px 0 9px -7px rgba(0,0,0,.55); }
+  .mt-row { min-height:58px; border-bottom:1px solid var(--hairline); background: var(--surface-0); }
+  .mt-row .mt-idc { position:sticky; left:0; z-index:2; background: var(--surface-0); display:flex; align-items:center; gap:9px;
+                    padding:8px 8px 8px 16px; box-shadow:9px 0 9px -7px rgba(0,0,0,.45); }
+  .mt-row.mine .mt-idc { background: linear-gradient(90deg, #16233c, var(--surface-0)); box-shadow: inset 3px 0 0 var(--accent), 9px 0 9px -7px rgba(0,0,0,.45); }
+  .mt-idc .nm { min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .mt-idc .nm b { font-size:14px; font-weight:700; color: var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:102px; }
+  .mt-idc .nm small { font-size:11px; color: var(--text-tertiary); white-space:nowrap; }
+  .mt-owner { padding-right:6px; }
+  .mt-owner .pl-own { max-width:66px; }
+  .mt-stat { text-align:right; padding-right:6px; font-family:var(--font-mono); font-size:12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .mt-stat.zero { color: var(--text-disabled); }
+  .mt-end { position:sticky; right:0; z-index:3; background: var(--surface-0); display:flex; align-items:center; justify-content:flex-end;
+            gap:8px; padding:0 12px 0 8px; box-shadow:-9px 0 9px -7px rgba(0,0,0,.45); }
+  .mt-row.mine .mt-end { background: var(--surface-0); }
+  .mt-end .p { font-family:var(--font-mono); font-weight:700; font-size:15px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .mt-bid { width:36px; height:36px; flex:none; border-radius: var(--r-md); background: var(--accent-soft); border:1px solid var(--accent-ring);
+            color: var(--accent); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .mt-bid svg { width:16px; height:16px; }
+  .mt-row.is-elim { opacity:.6; }
+  .mt-row.is-elim .nm b { text-decoration: line-through; text-decoration-color: var(--elim); }
+  .mt-row.is-elim .pl-kit { filter: grayscale(.7) brightness(.7); }
+  .mt-scrollhint { padding: 0 16px 8px; font-size:11px; color: var(--text-disabled); display:flex; align-items:center; gap:6px; }
+
+  /* ----------------------------------------------------------------- PAGER */
+  .pl-pager { padding: 14px 16px 12px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .pl-loadmore { width:100%; height:44px; border-radius: var(--r-md); background: var(--surface-2);
+                 border:1px solid var(--hairline-strong); color: var(--text-primary); font-family:var(--font-sans);
+                 font-size:13.5px; font-weight:700; cursor:pointer; }
+  .pl-pager small { font-size: 11.5px; color: var(--text-disabled); }
+
+  /* --------------------------------------------------------------- TAB BAR */
+  .pl-tabbar { position:absolute; left:0; right:0; bottom:0; height:64px; display:flex; align-items:stretch;
+               background: rgba(17,21,28,.92); backdrop-filter: blur(12px); border-top:1px solid var(--hairline); z-index: 40; }
+  .pl-tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color: var(--text-tertiary); }
+  .pl-tab svg { width:20px; height:20px; }
+  .pl-tab span { font-size: 10px; font-weight:700; letter-spacing:.02em; }
+  .pl-tab.on { color: var(--accent); }
+
+  /* ------------------------------------------------------------ EMPTY STATE */
+  .pl-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding: 40px 30px 90px; text-align:center; }
+  .pl-empty .glyph { width:64px; height:64px; border-radius: 18px; background: var(--surface-2); border:1px solid var(--hairline);
+                     display:flex; align-items:center; justify-content:center; color: var(--text-tertiary); }
+  .pl-empty .glyph svg { width:28px; height:28px; }
+  .pl-empty h3 { margin:0; font-size:16px; color: var(--text-primary); font-weight:700; }
+  .pl-empty p { margin:0; font-size:13px; color: var(--text-tertiary); line-height:1.5; max-width: 240px; }
+  .pl-empty .clr { height:40px; padding:0 18px; border-radius:var(--r-md); background: var(--accent); color: var(--text-on-accent);
+                   border:0; font-family:var(--font-sans); font-size:13px; font-weight:800; cursor:pointer; }
+
+  /* --------------------------------------------------------- PLAYER SHEET */
+  .pl-scrim { position:absolute; inset:0; background: var(--overlay); z-index: 50; }
+  .pc-sheet { position:absolute; left:0; right:0; bottom:0; height: auto; max-height: none; overflow: visible; z-index: 60; background: var(--surface-1);
+              border-top-left-radius: 22px; border-top-right-radius: 22px; border-top:1px solid var(--hairline-strong);
+              display:flex; flex-direction:column; box-shadow: 0 -20px 60px rgba(0,0,0,.5); }
+  .pc-grab { width:38px; height:4px; border-radius:2px; background: var(--surface-4); margin: 8px auto 4px; flex:none; }
+  .pc-head { padding: 6px 16px 12px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--hairline); flex:none; }
+  .pc-khead { width:44px; height:44px; border-radius: 10px; border:1px solid var(--hairline-strong); flex:none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .pc-hid { flex:1; min-width:0; }
+  .pc-hid h2 { margin:0; font-family: var(--font-display); font-size: 20px; font-weight:800; color: var(--text-primary); }
+  .pc-hid .m { display:flex; align-items:center; gap:8px; margin-top:4px; font-size:12.5px; color: var(--text-secondary); flex-wrap:nowrap; min-width:0; }
+  .pc-hid .m .mtx { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .pc-x { width:36px; height:36px; border-radius:50%; background: var(--surface-3); border:1px solid var(--hairline);
+          color: var(--text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+  .pc-x svg { width:16px; height:16px; }
+  .pc-tabs { display:flex; gap:4px; padding: 12px 16px 0; flex:none; }
+  .pc-tab { height:34px; padding:0 16px; border-radius: var(--r-pill); border:1px solid transparent; background:transparent;
+            color: var(--text-tertiary); font-family:var(--font-sans); font-size:13px; font-weight:700; cursor:pointer; }
+  .pc-tab.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-ring); }
+  .pc-body { flex:0 0 auto; overflow:visible; padding: 14px 16px 24px; }
+  .pc-tot { display:flex; align-items:flex-end; justify-content:space-between; padding: 4px 2px 14px; border-bottom:1px solid var(--hairline); }
+  .pc-tot .big { font-family: var(--font-mono); font-size: 40px; font-weight:700; color: var(--text-primary); line-height:1; font-variant-numeric: tabular-nums; }
+  .pc-tot .lbl { font-size: 11px; color: var(--text-tertiary); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; white-space:nowrap; }
+  .pc-tot .fig { text-align:right; }
+  .pc-tot .fig b { font-family:var(--font-mono); font-size:18px; color: var(--text-secondary); font-weight:700; }
+  .pc-tot .fig span { display:block; font-size:10px; color: var(--text-disabled); text-transform:uppercase; letter-spacing:.05em; margin-top:2px; }
+  .pc-brk { display:flex; flex-direction:column; margin-top: 6px; }
+  .pc-brow { display:flex; align-items:center; padding: 10px 2px; border-bottom:1px solid var(--hairline); gap:10px; }
+  .pc-brow .cat { flex:1; font-size:13px; color: var(--text-secondary); font-weight:600; }
+  .pc-cat { position:relative; cursor:help; border-bottom:1px dotted var(--hairline-strong); }
+  .pc-tip { position:absolute; bottom:calc(100% + 9px); left:-4px; width:212px; z-index:70; text-transform:none; letter-spacing:0;
+            background: var(--surface-3); border:1px solid var(--hairline-strong); border-radius:10px; padding:9px 11px; box-shadow: var(--e2);
+            opacity:0; visibility:hidden; transform: translateY(4px); pointer-events:none;
+            transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard), visibility var(--dur-fast); }
+  .pc-tip::after { content:''; position:absolute; bottom:-5px; left:18px; width:9px; height:9px; background: var(--surface-3);
+                   border-right:1px solid var(--hairline-strong); border-bottom:1px solid var(--hairline-strong); transform: rotate(45deg); }
+  .pc-cat:hover .pc-tip { opacity:1; visibility:visible; transform: translateY(0); }
+  .pc-tip b { display:block; font-family: var(--font-display); font-size:12.5px; font-weight:800; color: var(--text-primary); margin-bottom:3px; }
+  .pc-tip i { display:block; font-style:normal; font-size:11.5px; font-weight:500; color: var(--text-secondary); line-height:1.45; }
+  .pc-tip i .il { color: var(--text-tertiary); }
+  .pc-brow .n { font-family:var(--font-mono); font-size:12px; color: var(--text-tertiary); min-width: 54px; text-align:right; }
+  .pc-brow .v { font-family:var(--font-mono); font-size:13.5px; font-weight:700; color: var(--text-primary); min-width: 44px; text-align:right; }
+  .pc-brow.tot { border-bottom:0; margin-top:4px; }
+  .pc-brow.tot .cat { color: var(--text-primary); font-weight:800; }
+  .pc-illus { margin-top:12px; font-size:11px; color: var(--text-disabled); display:flex; align-items:center; gap:6px; }
+
+  /* ------------------------------------------------------------- DESKTOP */
+  .dk-top { display:flex; align-items:center; gap:14px; padding: 16px 22px; border-bottom:1px solid var(--hairline); }
+  .dk-top img { width:26px; height:26px; }
+  .dk-brand b { font-family: var(--font-display); font-weight:900; font-size:18px; color: var(--text-primary); }
+  .dk-brand span { font-size:11px; color: var(--text-tertiary); }
+  .dk-nav { display:flex; gap:4px; margin-left: 10px; }
+  .dk-nav a { padding:0 12px; height:34px; display:flex; align-items:center; border-radius: var(--r-md); font-size:13px; font-weight:700;
+              color: var(--text-tertiary); text-decoration:none; }
+  .dk-nav a.on { background: var(--accent-soft); color: var(--accent); }
+  .dk-toolbar { display:flex; align-items:center; gap:12px; padding: 14px 22px; border-bottom:1px solid var(--hairline); flex-wrap:wrap; }
+  .dk-toolbar .pl-seg { max-width: 320px; }
+  .dk-toolbar .pl-search { flex:1; min-width: 220px; max-width: 360px; }
+  .dk-tablehead { display:grid; grid-template-columns: 42px 30px minmax(0,1fr) 126px 38px 50px 32px 32px 36px 36px 34px 38px 32px 56px 108px; gap:10px; align-items:center;
+                  padding: 10px 18px; border-bottom:1px solid var(--hairline); font-size:10px; font-weight:800; letter-spacing:.03em;
+                  text-transform:uppercase; color: var(--text-tertiary); }
+  .dk-tablehead .r { text-align:right; }
+  .dk-tablehead .srt { color: var(--accent); display:inline-flex; gap:5px; align-items:center; justify-content:flex-end; }
+  .dk-tablehead .srt svg { width:12px; height:12px; }
+  .dk-row { display:grid; grid-template-columns: 42px 30px minmax(0,1fr) 126px 38px 50px 32px 32px 36px 36px 34px 38px 32px 56px 108px; gap:10px; align-items:center;
+            padding: 11px 18px; border-bottom:1px solid var(--hairline); position:relative; }
+  .dk-row.mine { background: linear-gradient(90deg, var(--accent-soft), transparent 40%); }
+  .dk-row.mine::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--accent); }
+  .dk-row.is-elim { opacity:.6; }
+  .dk-row.is-elim .dk-name { text-decoration: line-through; text-decoration-color: var(--elim); }
+  .dk-row.is-elim .pl-kit { filter: grayscale(.7) brightness(.7); }
+  .dk-kit { width:30px; height:30px; border-radius:7px; border:1px solid var(--hairline-strong); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .dk-nm { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .dk-name { font-size:14.5px; font-weight:700; color: var(--text-primary); }
+  .dk-nat { font-size:12px; color: var(--text-tertiary); display:flex; gap:6px; align-items:center; }
+  .dk-r { text-align:right; }
+  .dk-r b { font-family:var(--font-mono); font-weight:700; font-size:16px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .dk-act { display:flex; justify-content:flex-end; }
+  .dk-stat { text-align:right; font-family:var(--font-mono); font-size:12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .dk-stat.zero { color: var(--text-disabled); }
+  /* header tooltips */
+  .dk-th { position:relative; cursor:help; }
+  .dk-th .thl { display:inline-flex; align-items:center; gap:5px; border-bottom:1px dotted var(--hairline-strong); padding-bottom:1px; }
+  .dk-th .tip { position:absolute; top:calc(100% + 9px); right:0; width:216px; z-index:80; text-align:left; text-transform:none;
+                letter-spacing:0; background: var(--surface-3); border:1px solid var(--hairline-strong); border-radius:10px;
+                padding:10px 12px; box-shadow: var(--e2); opacity:0; visibility:hidden; transform: translateY(-4px);
+                transition: opacity var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard), visibility var(--dur-fast); pointer-events:none; }
+  .dk-th .tip::before { content:''; position:absolute; top:-5px; right:14px; width:9px; height:9px; background: var(--surface-3);
+                        border-left:1px solid var(--hairline-strong); border-top:1px solid var(--hairline-strong); transform: rotate(45deg); }
+  .dk-th:hover .tip { opacity:1; visibility:visible; transform: translateY(0); }
+  .dk-th .tip b { display:block; font-family: var(--font-display); font-size:12.5px; font-weight:800; color: var(--text-primary); margin-bottom:3px; }
+  .dk-th .tip i { display:block; font-style:normal; font-size:11.5px; font-weight:500; color: var(--text-secondary); line-height:1.45; }
+  .dk-th .tip i .il { color: var(--text-tertiary); }
+  .dk-tablehead .grp { grid-column: 5 / 9; text-align:center; color: var(--text-disabled); font-size:9.5px; letter-spacing:.09em;
+                       border-bottom:1px solid var(--hairline); padding-bottom:4px; margin-bottom:2px; }
+
+  /* --------------------------------------------------- DESKTOP PLAYER CARD */
+  .dc-dim { position:absolute; inset:0; filter: blur(2px) saturate(.9); opacity:.42; pointer-events:none; }
+  .dc-scrim { position:absolute; inset:0; background: var(--overlay); }
+  .dc-modal { position:absolute; left:50%; top:52%; transform:translate(-50%,-50%); width: 1020px; max-height: 720px;
+              background: var(--surface-1); border:1px solid var(--hairline-strong); border-radius: 18px; overflow:hidden;
+              display:flex; flex-direction:column; box-shadow: var(--e3); }
+  .dc-head { display:flex; align-items:center; gap:14px; padding: 20px 22px; border-bottom:1px solid var(--hairline);
+             background: linear-gradient(180deg, var(--surface-2), var(--surface-1)); }
+  .dc-khead { width:52px; height:52px; border-radius:12px; border:1px solid var(--hairline-strong); flex:none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .dc-hid { flex:1; min-width:0; }
+  .dc-hid h2 { margin:0; font-family: var(--font-display); font-size:26px; font-weight:800; color: var(--text-primary); }
+  .dc-hid .m { display:flex; align-items:center; gap:9px; margin-top:6px; font-size:13px; color: var(--text-secondary); }
+  .dc-x { width:38px; height:38px; border-radius:50%; background: var(--surface-3); border:1px solid var(--hairline);
+          color: var(--text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+  .dc-x svg { width:16px; height:16px; }
+  .dc-tabs { display:flex; gap:6px; padding: 14px 22px 0; }
+  .dc-grid { display:grid; grid-template-columns: 0.92fr 0.92fr 1.16fr; gap:20px; padding: 18px 22px 24px; }
+  .dc-col h4 { margin:0 0 12px; font-size:11px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color: var(--text-tertiary); }
+  .dc-tiles { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .dc-tile { background: var(--surface-2); border:1px solid var(--hairline); border-radius: var(--r-lg); padding: 12px; }
+  .dc-tile b { font-family: var(--font-mono); font-size:21px; font-weight:700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .dc-tile span { display:block; margin-top:4px; font-size:11px; color: var(--text-tertiary); text-transform:uppercase; letter-spacing:.05em; }
+  .dc-note { margin-top:14px; padding:12px 14px; background: var(--surface-2); border:1px solid var(--hairline); border-radius: var(--r-lg);
+             font-size:12px; color: var(--text-secondary); line-height:1.5; }
+  .dc-note b { color: var(--text-primary); }
+  .dc-panelhead { display:flex; align-items:center; gap:8px; margin:0 0 12px; }
+  .dc-panelhead .tabname { font-family: var(--font-display); font-size:15px; font-weight:800; color: var(--text-primary); letter-spacing:.01em; }
+  .dc-panelhead .badge { font-size:9.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color: var(--accent);
+                         background: var(--accent-soft); padding:2px 7px; border-radius: var(--r-pill); }
+  .dc-log { margin-top:14px; display:flex; flex-direction:column; }
+  .dc-logrow { display:grid; grid-template-columns: 34px 26px 1fr auto; gap:9px; align-items:center; padding:8px 2px; border-bottom:1px solid var(--hairline); }
+  .dc-logrow .md { font-family:var(--font-mono); font-size:11px; color: var(--text-tertiary); }
+  .dc-logrow .lk { width:20px; height:20px; border-radius:5px; border:1px solid var(--hairline-strong); box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .dc-logrow .op { font-size:12.5px; color: var(--text-secondary); font-weight:600; }
+  .dc-logrow .lp { font-family:var(--font-mono); font-size:13.5px; font-weight:700; color: var(--text-primary); }
+  /* match-log table */
+  .dc-logtable { width:100%; border-collapse:collapse; }
+  .dc-logtable th { font-size:9.5px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color: var(--text-tertiary);
+                    padding:6px 5px; border-bottom:1px solid var(--hairline); text-align:right; }
+  .dc-logtable th.l { text-align:left; }
+  .dc-logtable td { padding:8px 5px; border-bottom:1px solid var(--hairline); font-family:var(--font-mono); font-size:12px;
+                    color: var(--text-secondary); text-align:right; font-variant-numeric: tabular-nums; }
+  .dc-logtable td.l { text-align:left; }
+  .dc-logtable td.pt { color: var(--text-primary); font-weight:700; font-size:13px; }
+  .dc-logtable .op { display:flex; align-items:center; gap:7px; }
+  .dc-logtable .op .lk { width:18px; height:18px; border-radius:4px; border:1px solid var(--hairline-strong); flex:none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .dc-logtable .op span { font-family:var(--font-sans); font-size:12px; font-weight:600; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+
+<!-- ============================ FRAME 1 — DEFAULT LIST ===================== -->
+<div class="cap" style="left:60px; top:40px;">
+  <span class="k">01 · DEFAULT</span>
+  <span class="t">Players list — the full pool</span>
+  <span class="d">Search · position segmented · availability + nation filters · Active-teams toggle · sorted by season points. Paged reveal, not an infinite wall.</span>
+</div>
+<div class="frame phone" style="left:60px; top:150px;" data-screen-label="01 Default"><div class="screen" data-frame="default"></div></div>
+
+<!-- ============================ FRAME 2 — WINDOW OPEN ====================== -->
+<div class="cap" style="left:480px; top:40px;">
+  <span class="k">02 · CLAIMS OPEN</span>
+  <span class="t">Acquisition window open</span>
+  <span class="d">Free-agent rows gain a compact trailing <b>Bid</b> action (≥44px) that hands off to the waivers composer. Rostered rows are unchanged.</span>
+</div>
+<div class="frame phone" style="left:480px; top:150px;" data-screen-label="02 Window open"><div class="screen" data-frame="open"></div></div>
+
+<!-- ============================ FRAME 3 — WINDOW CLOSED ==================== -->
+<div class="cap" style="left:900px; top:40px;">
+  <span class="k">03 · CLAIMS CLOSED</span>
+  <span class="t">Window closed</span>
+  <span class="d">Bid actions disappear. A calm status line — not an error — tells the user why and when it reopens.</span>
+</div>
+<div class="frame phone" style="left:900px; top:150px;" data-screen-label="03 Window closed"><div class="screen" data-frame="closed"></div></div>
+
+<!-- ============================ FRAME 4 — ELIMINATED ====================== -->
+<div class="cap" style="left:1320px; top:40px;">
+  <span class="k">04 · THE CUT</span>
+  <span class="t">Eliminated nations + Active-teams toggle</span>
+  <span class="d">Players from knocked-out nations read as dead weight — dimmed, struck, grey kit — but stay visible by default. The toggle collapses them.</span>
+</div>
+<div class="frame phone" style="left:1320px; top:150px;" data-screen-label="04 Eliminated"><div class="screen" data-frame="elim"></div></div>
+
+<!-- ============================ FRAME 5 — EMPTY =========================== -->
+<div class="cap" style="left:1740px; top:40px;">
+  <span class="k">05 · EMPTY</span>
+  <span class="t">No players match</span>
+  <span class="d">When filters exclude everything, an honest empty state names the active filters and offers a one-tap clear.</span>
+</div>
+<div class="frame phone" style="left:1740px; top:150px;" data-screen-label="05 Empty"><div class="screen" data-frame="empty"></div></div>
+
+<!-- ============================ FRAME 6 — PLAYER CARD ===================== -->
+<div class="cap" style="left:2160px; top:40px;">
+  <span class="k">06 · DRILL-IN</span>
+  <span class="t">Player card — existing two-tab sheet</span>
+  <span class="d">Row tap opens the shared bottom sheet (Points / Stats) with a sticky header and an always-reachable ✕, layered above the tab bar.</span>
+</div>
+<div class="frame phone" style="left:2160px; top:150px;" data-screen-label="06 Player card"><div class="screen" data-frame="card"></div></div>
+
+<!-- ============================ FRAME 7 — DESKTOP ========================= -->
+<div class="cap" style="left:60px; top:1030px;">
+  <span class="k">07 · DESKTOP</span>
+  <span class="t">Desktop — list widens, filters inline</span>
+  <span class="d">One toolbar row holds search + all filters. The list gains a dedicated owner column and more breathing room; the same row vocabulary scales up.</span>
+</div>
+<div class="frame desk" style="left:60px; top:1140px;" data-screen-label="07 Desktop"><div class="screen" data-frame="desktop"></div></div>
+
+<!-- ======================= FRAME 8 — DESKTOP PLAYER CARD ================== -->
+<div class="cap" style="left:60px; top:2050px;">
+  <span class="k">08 · DESKTOP DRILL-IN</span>
+  <span class="t">Desktop — player card, all stats in view</span>
+  <span class="d">Desktop drops the tab switcher and uses the width for everything at once: Points breakdown · a fuller position-aware stat grid · a per-match log with statlines. Same data, no fabricated extras.</span>
+</div>
+<div class="frame desk" style="left:60px; top:2160px;" data-screen-label="08 Desktop card"><div class="screen" data-frame="deskcard"></div></div>
+
+<script>
+/* ============================== MOCK DATA (design_reference) ================ */
+const MY_TEAM = "Set Piece FC";
+
+const NATIONS = {
+  FRA:{name:"France",   alive:true },
+  ENG:{name:"England",  alive:true },
+  ESP:{name:"Spain",    alive:true },
+  POR:{name:"Portugal", alive:true },
+  NED:{name:"Netherlands",alive:true },
+  GER:{name:"Germany",  alive:true },
+  CRO:{name:"Croatia",  alive:true },
+  BRA:{name:"Brazil",   alive:true },
+  ARG:{name:"Argentina",alive:true },
+  COL:{name:"Colombia", alive:true },
+  ECU:{name:"Ecuador",  alive:true },
+  MAR:{name:"Morocco",  alive:true },
+  NGA:{name:"Nigeria",  alive:true },
+  USA:{name:"USA",      alive:true },
+  MEX:{name:"Mexico",   alive:true },
+  // —— eliminated in the group / R16 ——
+  BEL:{name:"Belgium",  alive:false },
+  URU:{name:"Uruguay",  alive:false },
+  SEN:{name:"Senegal",  alive:false },
+  EGY:{name:"Egypt",    alive:false },
+  POL:{name:"Poland",   alive:false },
+  ITA:{name:"Italy",    alive:false },
+  CAN:{name:"Canada",   alive:false },
+  SRB:{name:"Serbia",   alive:false },
+};
+
+/* flag-kit gradients — each carries its own layer sizing; NEVER apply background-size:cover */
+const KIT = {
+  FRA:'linear-gradient(90deg,#0055A4 33%,#fff 33% 66%,#EF4135 66%)',
+  ENG:'linear-gradient(#CF142B,#CF142B) 50% 0/26% 100% no-repeat, linear-gradient(#CF142B,#CF142B) 0 50%/100% 26% no-repeat, #fff',
+  ESP:'linear-gradient(#AA151B 25%,#F1BF00 25% 75%,#AA151B 75%)',
+  POR:'linear-gradient(90deg,#006600 42%,#FF0000 42%)',
+  NED:'linear-gradient(#AE1C28 33%,#fff 33% 66%,#21468B 66%)',
+  GER:'linear-gradient(#000 33%,#DD0000 33% 66%,#FFCE00 66%)',
+  CRO:'linear-gradient(#FF0000 33%,#fff 33% 66%,#171796 66%)',
+  BRA:'radial-gradient(circle at 50% 50%,#002776 0 15%,transparent 16%), conic-gradient(from 45deg,#FFDF00 0 25%,#009C3B 0 50%,#FFDF00 0 75%,#009C3B 0)',
+  ARG:'linear-gradient(#75AADB 33%,#fff 33% 66%,#75AADB 66%)',
+  COL:'linear-gradient(#FCD116 50%,#003893 50% 75%,#CE1126 75%)',
+  ECU:'linear-gradient(#FFDD00 50%,#034EA2 50% 75%,#ED1C24 75%)',
+  MAR:'radial-gradient(circle at 50% 50%,#006233 0 26%,transparent 27%), #C1272D',
+  NGA:'linear-gradient(90deg,#008751 33%,#fff 33% 66%,#008751 66%)',
+  USA:'linear-gradient(#3C3B6E,#3C3B6E) top left/46% 54% no-repeat, repeating-linear-gradient(#B22234 0 15.4%,#fff 15.4% 30.8%)',
+  MEX:'linear-gradient(90deg,#006847 33%,#fff 33% 66%,#CE1126 66%)',
+  BEL:'linear-gradient(90deg,#000 33%,#FAE042 33% 66%,#ED2939 66%)',
+  URU:'linear-gradient(#fff,#fff) 0 0/46% 55% no-repeat, repeating-linear-gradient(#fff 0 11.1%,#0038A8 11.1% 22.2%)',
+  SEN:'linear-gradient(90deg,#00853F 33%,#FDEF42 33% 66%,#E31B23 66%)',
+  EGY:'linear-gradient(#CE1126 33%,#fff 33% 66%,#000 66%)',
+  POL:'linear-gradient(#fff 50%,#DC143C 50%)',
+  ITA:'linear-gradient(90deg,#008C45 33%,#fff 33% 66%,#CD212A 66%)',
+  CAN:'linear-gradient(90deg,#D80621 25%,#fff 25% 75%,#D80621 75%)',
+  SRB:'linear-gradient(#C6363C 33%,#0C4076 33% 66%,#fff 66%)',
+};
+
+/* 12 managers (team names — placeholder, no locale flavor) */
+const TEAMS = ["Total Football","The Overlappers","Park The Bus","Nutmeg United","Set Piece FC",
+  "North Stand","Counter Press","False Nine","Back Four","Tiki Taka","The Target Man","Low Block"];
+
+/* ~40 players. owner: null = Free agent, else team name. pos GK/DEF/MID/FWD. */
+const PLAYERS = [
+  {n:"K. Mbappé",        pos:"FWD", nat:"FRA", pts:96, owner:"Low Block"},
+  {n:"Vinícius Jr",      pos:"FWD", nat:"BRA", pts:90, owner:"Set Piece FC"},
+  {n:"J. Bellingham",    pos:"MID", nat:"ENG", pts:88, owner:"North Stand"},
+  {n:"L. Yamal",         pos:"FWD", nat:"ESP", pts:87, owner:"False Nine"},
+  {n:"L. Messi",         pos:"FWD", nat:"ARG", pts:85, owner:"The Target Man"},
+  {n:"H. Kane",          pos:"FWD", nat:"ENG", pts:83, owner:"North Stand"},
+  {n:"Bruno Fernandes",  pos:"MID", nat:"POR", pts:81, owner:"Park The Bus"},
+  {n:"Pedri",            pos:"MID", nat:"ESP", pts:79, owner:"Set Piece FC"},
+  {n:"J. Musiala",       pos:"MID", nat:"GER", pts:76, owner:null},
+  {n:"O. Dembélé",       pos:"FWD", nat:"FRA", pts:74, owner:null},
+  {n:"Rodri",            pos:"MID", nat:"ESP", pts:72, owner:"The Overlappers"},
+  {n:"J. Álvarez",       pos:"FWD", nat:"ARG", pts:71, owner:"Park The Bus"},
+  {n:"F. Wirtz",         pos:"MID", nat:"GER", pts:70, owner:"False Nine"},
+  {n:"Rodrygo",          pos:"FWD", nat:"BRA", pts:69, owner:"Back Four"},
+  {n:"R. Leão",          pos:"FWD", nat:"POR", pts:68, owner:"Counter Press"},
+  {n:"J. Kimmich",       pos:"DEF", nat:"GER", pts:68, owner:null},
+  {n:"C. Palmer",        pos:"MID", nat:"ENG", pts:67, owner:"Low Block"},
+  {n:"E. Fernández",     pos:"MID", nat:"ARG", pts:66, owner:"Tiki Taka"},
+  {n:"A. Hakimi",        pos:"DEF", nat:"MAR", pts:64, owner:"Counter Press"},
+  {n:"Vitinha",          pos:"MID", nat:"POR", pts:63, owner:null},
+  {n:"W. Saliba",        pos:"DEF", nat:"FRA", pts:62, owner:"The Overlappers"},
+  {n:"V. van Dijk",      pos:"DEF", nat:"NED", pts:60, owner:"Back Four"},
+  {n:"E. Martínez",      pos:"GK",  nat:"ARG", pts:58, owner:"Set Piece FC"},
+  {n:"V. Osimhen",       pos:"FWD", nat:"NGA", pts:58, owner:null},
+  {n:"C. Romero",        pos:"DEF", nat:"ARG", pts:57, owner:"Set Piece FC"},
+  {n:"R. Dias",          pos:"DEF", nat:"POR", pts:55, owner:"Park The Bus"},
+  {n:"Marquinhos",       pos:"DEF", nat:"BRA", pts:52, owner:"Tiki Taka"},
+  {n:"K. De Bruyne",     pos:"MID", nat:"BEL", pts:51, owner:"Total Football"},
+  {n:"R. Lewandowski",   pos:"FWD", nat:"POL", pts:49, owner:null},
+  {n:"F. Valverde",      pos:"MID", nat:"URU", pts:48, owner:null},
+  {n:"M. Maignan",       pos:"GK",  nat:"FRA", pts:47, owner:null},
+  {n:"M. Salah",         pos:"FWD", nat:"EGY", pts:46, owner:null},
+  {n:"J. Koundé",        pos:"DEF", nat:"FRA", pts:45, owner:null},
+  {n:"J. Pickford",      pos:"GK",  nat:"ENG", pts:44, owner:"North Stand"},
+  {n:"W. Zaïre-Emery",   pos:"MID", nat:"FRA", pts:44, owner:null},
+  {n:"S. Mané",          pos:"FWD", nat:"SEN", pts:42, owner:null},
+  {n:"G. Donnarumma",    pos:"GK",  nat:"ITA", pts:41, owner:"Total Football"},
+  {n:"K. Walker",        pos:"DEF", nat:"ENG", pts:40, owner:null},
+  {n:"Y. Bounou",        pos:"GK",  nat:"MAR", pts:39, owner:null},
+  {n:"A. Davies",        pos:"DEF", nat:"CAN", pts:33, owner:"Nutmeg United"},
+];
+
+/* ================================ ICONS ==================================== */
+const I = {
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>',
+  sort:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 4v16M7 20l-3-3M7 4l3 3M17 20V4M17 4l-3 3M17 4l3 3" opacity=".9"/></svg>',
+  bid:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M8 9h5.5a2.5 2.5 0 0 1 0 5H8m0 3h6"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m6 9 6 6 6-6"/></svg>',
+  x:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  empty:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3M8.5 11h5"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11 12 4l8 7M6 10v9h12v-9"/></svg>',
+  matchup:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4v16M18 4v16M6 12h12"/></svg>',
+  players:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M4 20c0-3 2.5-5 5-5s5 2 5 5"/><circle cx="17" cy="9" r="2.3"/><path d="M15.5 20c.2-2.4 1.5-4 3.5-4"/></svg>',
+  waiver:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+};
+
+/* ============================== RENDER HELPERS ============================= */
+function kitChip(nat, cls){ return `<div class="${cls}" style="background:${KIT[nat]||'var(--surface-4)'}"></div>`; }
+
+function ownerChip(p){
+  if(p.owner === null) return `<span class="pl-own pl-own-fa">Free agent</span>`;
+  if(p.owner === MY_TEAM) return `<span class="pl-own pl-own-me">${p.owner} · you</span>`;
+  return `<span class="pl-own pl-own-mgr">${p.owner}</span>`;
+}
+
+function row(p, {trailer=false}={}){
+  const nat = NATIONS[p.nat];
+  const elim = !nat.alive;
+  const mine = p.owner === MY_TEAM;
+  const bid = trailer && p.owner === null && !elim
+    ? `<button class="pl-bid" aria-label="Place a bid on ${p.n}">${I.bid}<span>Bid</span></button>` : '';
+  return `<div class="pl-row ${mine?'mine':''} ${elim?'is-elim':''}">
+    <div class="pl-pos"><span class="pos pos-${p.pos}">${p.pos}</span></div>
+    ${kitChip(p.nat,'pl-kit')}
+    <div class="pl-idc">
+      <div class="pl-name">${p.n}</div>
+      <div class="pl-sub"><span class="pl-flagname">${nat.name}</span>${elim?'<span class="pl-elimtag">Eliminated</span>':''}</div>
+    </div>
+    <div class="pl-right">
+      ${ownerChip(p)}
+      <div class="pl-pts"><b>${p.pts}</b><span>PTS</span></div>
+      ${bid}
+    </div>
+  </div>`;
+}
+
+const byPts = a => [...a].sort((x,y)=>y.pts-x.pts);
+
+/* shared chrome pieces ----------------------------------------------------- */
+const appbar = `<div class="pl-appbar">
+  <img src="logo/trophy.png" alt="XI">
+  <div class="pl-brand"><b>XI</b><span>WC Fantasy League</span></div>
+  <div class="spacer"></div>
+  <span class="pl-cutchip"><span class="dot"></span>THE CUT · R16</span>
+</div>`;
+
+function tools(active, {avail='All', posOn='ALL', activeTeams=false}={}){
+  const seg = ['ALL','GK','DEF','MID','FWD'].map(s=>`<button class="${s===posOn?'on':''}">${s}</button>`).join('');
+  const av = ['All','Free agents','Rostered','Mine'].map(s=>`<span class="pl-fchip ${s===avail?'on':''}">${s}</span>`).join('');
+  return `<div class="pl-tools">
+    <div class="pl-search">${I.search}<span>Search players</span><span class="cmd">⌘U</span></div>
+    <div class="pl-seg">${seg}</div>
+    <div class="pl-chiprow">${av}</div>
+    <div class="pl-chiprow">
+      <span class="pl-fchip">Nation${I.chev}<span class="ct">all</span></span>
+      <div class="pl-toggle ${activeTeams?'on':''}"><span>Active teams</span><span class="pl-sw"></span></div>
+    </div>
+  </div>`;
+}
+
+function listmeta(shown, total){
+  return `<div class="pl-listmeta">
+    <span class="pl-count">Showing <b>${shown}</b> of ${total.toLocaleString()}</span>
+    <span class="pl-sort">Season pts ${I.sort}</span>
+  </div>`;
+}
+
+function statusLine(html){ return `<div class="pl-status">${html}</div>`; }
+
+function pager(){
+  return `<div class="pl-pager"><button class="pl-loadmore">Load 25 more</button><small>1,204 players · knockout pool</small></div>`;
+}
+
+const tabbar = `<div class="pl-tabbar">
+  <div class="pl-tab"><span class="i">${I.home}</span><span>Home</span></div>
+  <div class="pl-tab"><span class="i">${I.matchup}</span><span>Matchup</span></div>
+  <div class="pl-tab on"><span class="i">${I.players}</span><span>Players</span></div>
+  <div class="pl-tab"><span class="i">${I.waiver}</span><span>Waivers</span></div>
+  <div class="pl-tab"><span class="i">${I.more}</span><span>More</span></div>
+</div>`;
+
+/* mobile horizontally-scrollable stat table — player col pinned left, Pts pinned right */
+function mtHead(){
+  return `<div class="mt-head mt-cols">
+    <div class="mt-idc">Player</div>
+    <div>Owner</div>
+    <div>Pld</div><div>Min</div><div>G</div><div>A</div><div>Sh</div><div>KP</div><div>CS</div><div>Tkl</div><div>YC</div>
+    <div class="mt-end">Pts</div>
+  </div>`;
+}
+function rowStat(p, {trailer=false}={}){
+  const nat = NATIONS[p.nat]; const elim=!nat.alive; const mine=p.owner===MY_TEAM; const st=statsFor(p);
+  const owner = p.owner===null ? `<span class="pl-own pl-own-fa">FA</span>`
+    : (mine ? `<span class="pl-own pl-own-me">You</span>` : `<span class="pl-own pl-own-mgr">${p.owner}</span>`);
+  const bid = (trailer && p.owner===null && !elim) ? `<button class="mt-bid" aria-label="Bid on ${p.n}">${I.bid}</button>` : '';
+  const cell = v => `<div class="mt-stat ${v===0?'zero':''}">${v===0?'—':v}</div>`;
+  return `<div class="mt-row mt-cols ${mine?'mine':''} ${elim?'is-elim':''}">
+    <div class="mt-idc"><span class="pos pos-${p.pos}">${p.pos}</span>${kitChip(p.nat,'pl-kit')}<div class="nm"><b>${p.n}</b><small>${nat.name}${elim?' · <span style="color:var(--elim)">out</span>':''}</small></div></div>
+    <div class="mt-owner">${owner}</div>
+    ${cell(st.apps)}${cell(st.min)}${cell(st.g)}${cell(st.a)}${cell(st.sh)}${cell(st.kp)}${cell(st.cs)}${cell(st.tkl)}${cell(st.yc)}
+    <div class="mt-end"><span class="p">${p.pts}</span>${bid}</div>
+  </div>`;
+}
+const scrollhint = `<div class="mt-scrollhint">← swipe stats · tap a player to open the card</div>`;
+
+/* ================================ FRAMES ================================== */
+const sorted = byPts(PLAYERS);
+const top11 = sorted.slice(0,11);
+
+const FRAMES = {};
+
+FRAMES.default = () => `${appbar}${tools('players',{avail:'All'})}
+  ${listmeta(25,1204)}
+  ${statusLine('<span style="color:var(--text-secondary)">Sorted by season points</span> · high to low')}
+  ${scrollhint}
+  <div class="pl-scroll tbl"><div class="mt-wrap">${mtHead()}${top11.map(p=>rowStat(p)).join('')}</div>${pager()}</div>
+  ${tabbar}`;
+
+FRAMES.open = () => `${appbar}${tools('players',{avail:'All'})}
+  ${listmeta(25,1204)}
+  ${statusLine('<span class="d" style="background:var(--win)"></span><span style="color:var(--win);font-weight:700">Claims open</span> · window closes at each match kickoff')}
+  ${scrollhint}
+  <div class="pl-scroll tbl"><div class="mt-wrap">${mtHead()}${top11.map(p=>rowStat(p,{trailer:true})).join('')}</div>${pager()}</div>
+  ${tabbar}`;
+
+FRAMES.closed = () => `${appbar}${tools('players',{avail:'All'})}
+  ${listmeta(25,1204)}
+  ${statusLine('<span class="d" style="background:var(--locked)"></span><span style="color:var(--locked);font-weight:700">Claims closed</span> · next waiver window opens Thu 20:00')}
+  ${scrollhint}
+  <div class="pl-scroll tbl"><div class="mt-wrap">${mtHead()}${top11.map(p=>rowStat(p)).join('')}</div>${pager()}</div>
+  ${tabbar}`;
+
+FRAMES.elim = () => {
+  // a slice mixing alive + eliminated, to show the treatment + the toggle pair
+  const pick = ["Bruno Fernandes","J. Kimmich","K. De Bruyne","V. van Dijk","R. Lewandowski",
+                "F. Valverde","M. Salah","G. Donnarumma","A. Davies","W. Saliba"];
+  const set = pick.map(n=>PLAYERS.find(p=>p.n===n));
+  const off = byPts(set); // Active-teams OFF: everyone, eliminated dimmed
+  const on  = byPts(set.filter(p=>NATIONS[p.nat].alive)); // ON: eliminated collapsed away
+  return `${appbar}${tools('players',{avail:'All'})}
+  ${scrollhint}
+  <div class="pl-scroll tbl" style="overflow-y:auto">
+    <div class="pl-groupdiv"><span>Active teams · OFF</span><span class="ln"></span><span style="color:var(--elim)">4 eliminated shown</span></div>
+    <div class="mt-wrap short">${mtHead()}${off.map(p=>rowStat(p)).join('')}</div>
+    <div class="pl-groupdiv"><span>Active teams · ON</span><span class="ln"></span><span>eliminated hidden</span></div>
+    <div class="mt-wrap short">${mtHead()}${on.slice(0,4).map(p=>rowStat(p)).join('')}</div>
+    ${pager()}
+  </div>
+  ${tabbar}`;
+};
+
+FRAMES.empty = () => `${appbar}${tools('players',{avail:'Mine',posOn:'GK'})}
+  <div class="pl-listmeta"><span class="pl-count">Showing <b>0</b> of 1,204</span><span class="pl-sort">Season pts ${I.sort}</span></div>
+  <div class="pl-empty">
+    <div class="glyph">${I.empty}</div>
+    <h3>No players match</h3>
+    <p>No <b style="color:var(--text-secondary)">goalkeepers</b> on <b style="color:var(--text-secondary)">your team</b> right now. Try widening the position or availability filter.</p>
+    <button class="clr">Clear filters</button>
+  </div>
+  ${tabbar}`;
+
+/* player card — faithful placeholder of the existing two-tab sheet */
+FRAMES.card = () => {
+  const p = PLAYERS.find(x=>x.n==="J. Bellingham");
+  const nat = NATIONS[p.nat];
+  const behind = top11.slice(0,7).map(x=>row(x)).join('');
+  const brk = [
+    {c:"Appearances", n:"5 × 2", v:"10", tip:"+2 pts for each match played"},
+    {c:"Minutes",     n:"438 × .02", v:"9", tip:"+0.02 pts per minute on the pitch"},
+    {c:"Goals",       n:"4 × 9", v:"36", tip:"+9 pts each <span class='il'>· illustrative</span>"},
+    {c:"Assists",     n:"3 × 6", v:"18", tip:"+6 pts each <span class='il'>· illustrative</span>"},
+    {c:"Clean sheets",n:"2 × 4", v:"8", tip:"+4 pts · GK &amp; DEF who play the full match"},
+    {c:"Bonus",       n:"—",     v:"7", tip:"Performance bonus <span class='il'>· illustrative</span>"},
+  ];
+  return `${appbar}${tools('players',{avail:'All'})}
+    ${listmeta(25,1204)}
+    <div class="pl-scroll"><div class="pl-list">${behind}</div></div>
+    ${tabbar}
+    <div class="pl-scrim"></div>
+    <div class="pc-sheet" style="top:auto; bottom:0; height:auto;">
+      <div class="pc-grab"></div>
+      <div class="pc-head">
+        ${kitChip(p.nat,'pc-khead')}
+        <div class="pc-hid">
+          <h2>${p.n}</h2>
+          <div class="m"><span class="pos pos-${p.pos}">${p.pos}</span><span class="mtx">${nat.name} · ${p.owner}</span></div>
+        </div>
+        <button class="pc-x" aria-label="Close">${I.x}</button>
+      </div>
+      <div class="pc-tabs">
+        <button class="pc-tab on">Points</button>
+        <button class="pc-tab">Stats</button>
+      </div>
+      <div class="pc-body">
+        <div class="pc-tot">
+          <div><div class="lbl">Tournament total</div><div class="big">${p.pts}</div></div>
+          <div class="fig"><b>5</b><span>matches</span></div>
+        </div>
+        <div class="pc-brk">
+          ${brk.map(b=>`<div class="pc-brow"><span class="cat"><span class="pc-cat">${b.c}<span class="pc-tip"><b>${b.c}</b><i>${b.tip}</i></span></span></span><span class="n">${b.n}</span><span class="v">${b.v}</span></div>`).join('')}
+          <div class="pc-brow tot"><span class="cat">Season points</span><span class="n"></span><span class="v">${p.pts}</span></div>
+        </div>
+        <div class="pc-illus">◇ Point values illustrative pending SCORING.md · hold a stat to see how it scores · Stats tab holds the per-match log</div>
+      </div>
+    </div>`;
+};
+
+/* ------------------------------------- DESKTOP ---------------------------- */
+/* deterministic, plausible season statline per player (illustrative — same
+   stats layer the player card reads; values flagged illustrative pending SCORING.md) */
+function statsFor(p){
+  let s=0; for(const c of p.n) s=(s*31+c.charCodeAt(0))>>>0;
+  const rnd=n=>{ s=(s*1103515245+12345)>>>0; return s%n; };
+  const apps = 5 - (rnd(10)<2?1:0) - (rnd(12)<1?1:0);
+  const min  = apps*90 - rnd(45);
+  const P=p.pts;
+  let g=0,a=0,sh=0,kp=0,cs=0,tkl=0; const yc=rnd(3);
+  if(p.pos==='FWD'){ g=Math.round(P/18); a=Math.round(P/40); sh=Math.round(P/8);  kp=Math.round(P/24); tkl=Math.round(P/45); cs=0; }
+  else if(p.pos==='MID'){ g=Math.round(P/22); a=Math.round(P/28); sh=Math.round(P/13); kp=Math.round(P/11); tkl=Math.round(P/15); cs=rnd(3); }
+  else if(p.pos==='DEF'){ g=Math.round(P/62); a=Math.round(P/55); sh=Math.round(P/40); kp=Math.round(P/45); tkl=Math.round(P/8);  cs=1+rnd(3); }
+  else { g=0; a=0; sh=0; kp=0; tkl=rnd(2); cs=1+rnd(3); }
+  return {apps,min,g,a,sh,kp,cs,tkl,yc};
+}
+function statCell(v){ return `<div class="dk-stat ${v===0?'zero':''}">${v===0?'—':v}</div>`; }
+
+function dkRow(p, {trailer=false}={}){
+  const nat = NATIONS[p.nat]; const elim=!nat.alive; const mine=p.owner===MY_TEAM;
+  const st = statsFor(p);
+  const owner = p.owner===null
+    ? `<span class="pl-own pl-own-fa">Free agent</span>`
+    : (mine ? `<span class="pl-own pl-own-me">${p.owner} · you</span>` : `<span class="pl-own pl-own-mgr">${p.owner}</span>`);
+  const act = (trailer && p.owner===null && !elim)
+    ? `<button class="pl-bid">${I.bid}<span>Place bid</span></button>`
+    : (p.owner===null ? `<span style="font-size:12px;color:var(--text-disabled)">—</span>` : `<span style="font-size:12px;color:var(--text-disabled)">Rostered</span>`);
+  return `<div class="dk-row ${mine?'mine':''} ${elim?'is-elim':''}">
+    <div><span class="pos pos-${p.pos}">${p.pos}</span></div>
+    ${kitChip(p.nat,'pl-kit dk-kit')}
+    <div class="dk-nm"><div class="dk-name">${p.n}</div><div class="dk-nat">${nat.name}${elim?'<span class="pl-elimtag">Eliminated</span>':''}</div></div>
+    <div>${owner}</div>
+    ${statCell(st.apps)}
+    ${statCell(st.min)}
+    ${statCell(st.g)}
+    ${statCell(st.a)}
+    ${statCell(st.sh)}
+    ${statCell(st.kp)}
+    ${statCell(st.cs)}
+    ${statCell(st.tkl)}
+    ${statCell(st.yc)}
+    <div class="dk-r"><b>${p.pts}</b></div>
+    <div class="dk-act">${act}</div>
+  </div>`;
+}
+
+FRAMES.desktop = () => {
+  const rows = sorted.slice(0,14).map(p=>dkRow(p,{trailer:true})).join('');
+  const seg = ['ALL','GK','DEF','MID','FWD'].map(s=>`<button class="${s==='ALL'?'on':''}">${s}</button>`).join('');
+  const av = ['All','Free agents','Rostered','Mine'].map(s=>`<span class="pl-fchip ${s==='All'?'on':''}">${s}</span>`).join('');
+  const STAT_COLS = [
+    {h:'Pld', name:'Appearances', score:'<b class="fake"></b>+2 pts for each match played'},
+    {h:'Min', name:'Minutes played', score:'+0.02 pts per minute on the pitch'},
+    {h:'G',   name:'Goals', score:'+9 pts each <span class="il">· illustrative</span>'},
+    {h:'A',   name:'Assists', score:'+6 pts each <span class="il">· illustrative</span>'},
+    {h:'Sh',  name:'Shots', score:'Tracked stat — <span class="il">not directly scored</span>'},
+    {h:'KP',  name:'Key passes', score:'Chances created — <span class="il">tracked, not scored</span>'},
+    {h:'CS',  name:'Clean sheets', score:'+4 pts · GK &amp; DEF who play the full match'},
+    {h:'Tkl', name:'Tackles won', score:'Tracked stat — <span class="il">not directly scored</span>'},
+    {h:'YC',  name:'Yellow cards', score:'−1 pt each <span class="il">· illustrative</span>'},
+  ];
+  const th = c => `<div class="r dk-th"><span class="thl">${c.h}</span><span class="tip"><b>${c.name}</b><i>${c.score.replace('<b class="fake"></b>','')}</i></span></div>`;
+  return `<div class="dk-top">
+      <img src="logo/trophy.png" alt="XI">
+      <div class="dk-brand"><b>XI</b><br><span>WC Fantasy League</span></div>
+      <nav class="dk-nav"><a>Home</a><a>Matchup</a><a>League</a><a class="on">Players</a><a>Waivers</a><a>Standings</a></nav>
+      <div style="flex:1"></div>
+      <span class="pl-cutchip"><span class="dot"></span>THE CUT · ROUND OF 16</span>
+    </div>
+    <div class="dk-toolbar">
+      <div class="pl-search">${I.search}<span>Search players</span><span class="cmd">⌘U</span></div>
+      <div class="pl-seg">${seg}</div>
+      <div class="pl-chiprow">${av}</div>
+      <span class="pl-fchip">Nation${I.chev}<span class="ct">all</span></span>
+      <div class="pl-toggle"><span>Active teams</span><span class="pl-sw"></span></div>
+      <div style="flex:1"></div>
+      <span class="pl-count" style="font-size:12.5px">Showing <b>25</b> of 1,204 · <span style="color:var(--win);font-weight:700">claims open</span></span>
+    </div>
+    <div class="dk-tablehead">
+      <div>Pos</div><div>Kit</div><div>Player</div><div>Owner</div>
+      ${STAT_COLS.map(th).join('')}
+      <div class="r dk-th"><span class="thl srt">Pts ${I.sort}</span><span class="tip"><b>Fantasy points</b><i>Season total from the scoring at left <span class="il">· hover a column</span></i></span></div>
+      <div class="r">Action</div>
+    </div>
+    <div class="pl-scroll"><div>${rows}</div>
+      <div class="pl-pager" style="align-items:center"><button class="pl-loadmore" style="max-width:280px">Load 25 more</button></div>
+    </div>`;
+};
+
+/* ------------------------------- DESKTOP PLAYER CARD --------------------- */
+FRAMES.deskcard = () => {
+  const p = PLAYERS.find(x=>x.n==="J. Bellingham");
+  const nat = NATIONS[p.nat];
+  const brk = [
+    {c:"Appearances", n:"5 × 2", v:"10"},
+    {c:"Minutes",     n:"438 × .02", v:"9"},
+    {c:"Goals",       n:"4 × 9", v:"36"},
+    {c:"Assists",     n:"3 × 6", v:"18"},
+    {c:"Clean sheets",n:"2 × 4", v:"8"},
+    {c:"Bonus",       n:"—",     v:"7"},
+  ];
+  const tiles = [
+    {v:"4", l:"Goals"},{v:"3", l:"Assists"},{v:"5", l:"Apps"},{v:"438", l:"Minutes"},
+    {v:"14", l:"Shots"},{v:"11", l:"Chances"},{v:"9", l:"Tackles"},{v:"87%", l:"Pass %"},
+  ];
+  const log = [
+    {md:"MD1", op:"SEN", min:90, g:1, a:1, p:14},
+    {md:"MD2", op:"URU", min:90, g:2, a:0, p:22},
+    {md:"MD3", op:"USA", min:78, g:0, a:1, p:9},
+    {md:"MD4", op:"NED", min:90, g:1, a:1, p:25},
+    {md:"MD5", op:"BRA", min:90, g:0, a:0, p:18},
+  ];
+  return `<div class="dc-dim">${FRAMES.desktop()}</div>
+    <div class="dc-scrim"></div>
+    <div class="dc-modal">
+      <div class="dc-head">
+        ${kitChip(p.nat,'dc-khead')}
+        <div class="dc-hid">
+          <h2>${p.n}</h2>
+          <div class="m"><span class="pos pos-${p.pos}">${p.pos}</span><span>${nat.name}</span><span style="color:var(--text-tertiary)">·</span><span>${p.owner}</span></div>
+        </div>
+        <button class="dc-x" aria-label="Close">${I.x}</button>
+      </div>
+      <div class="dc-grid">
+        <div class="dc-col">
+          <div class="dc-panelhead"><span class="tabname">Points</span><span class="badge">Season overview</span></div>
+          <div class="pc-tot" style="padding-top:0">
+            <div><div class="lbl">Tournament total</div><div class="big">${p.pts}</div></div>
+            <div class="fig"><b>5</b><span>matches</span></div>
+          </div>
+          <div class="pc-brk">
+            ${brk.map(b=>`<div class="pc-brow"><span class="cat">${b.c}</span><span class="n">${b.n}</span><span class="v">${b.v}</span></div>`).join('')}
+            <div class="pc-brow tot"><span class="cat">Season points</span><span class="n"></span><span class="v">${p.pts}</span></div>
+          </div>
+        </div>
+        <div class="dc-col">
+          <div class="dc-panelhead"><span class="tabname">Stats</span><span class="badge">Position-aware</span></div>
+          <div class="dc-tiles">
+            ${tiles.map(t=>`<div class="dc-tile"><b>${t.v}</b><span>${t.l}</span></div>`).join('')}
+          </div>
+        </div>
+        <div class="dc-col">
+          <div class="dc-panelhead"><span class="tabname">Match log</span><span class="badge">Per match</span></div>
+          <table class="dc-logtable">
+            <thead><tr><th class="l">MD</th><th class="l">Opp</th><th>Min</th><th>G</th><th>A</th><th>Pts</th></tr></thead>
+            <tbody>
+              ${log.map(g=>`<tr><td class="l">${g.md}</td><td class="l"><div class="op">${kitChip(g.op,'lk')}<span>${g.op}</span></div></td><td>${g.min}</td><td>${g.g||'—'}</td><td>${g.a||'—'}</td><td class="pt">${g.p}</td></tr>`).join('')}
+            </tbody>
+          </table>
+          <div class="dc-note" style="margin-top:14px">◇ Point &amp; stat values illustrative pending SCORING.md · ${nat.name} still alive in the <b>Round of 16</b>.</div>
+        </div>
+      </div>
+    </div>`;
+};
+
+/* =============================== MOUNT =================================== */
+document.querySelectorAll('[data-frame]').forEach(el=>{
+  const f = FRAMES[el.getAttribute('data-frame')];
+  if(f) el.innerHTML = f();
+});
+</script>
+</body>
+</html>
