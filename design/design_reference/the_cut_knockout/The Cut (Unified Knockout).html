@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-accent="cobalt">
+<head>
+<meta charset="utf-8">
+<meta name="design_doc_mode" content="canvas">
+<title>XI · The Cut — unified knockout surface</title>
+<link rel="icon" href="logo/favicon-32.png">
+<link rel="stylesheet" href="ds/ds.css">
+<link rel="stylesheet" href="unified/ku.css">
+</head>
+<body>
+<script>
+/* ------------------------------------------------------------------ glyphs --- */
+const BLADE = '<svg class="ku-blade" viewBox="0 0 120 44"><rect class="grip" x="1" y="25" width="26" height="12" rx="5"/><path class="edge" d="M26 26 C48 21 84 15 116 5 C119 11 117 23 100 32 C82 41 52 41 26 40 Z"/><path class="steel" d="M26 23 C48 18 84 12 116 2 C119 8 117 20 100 29 C82 38 52 38 26 37 Z"/></svg>';
+const MACHETE = (cls) => `<svg class="ku-mach ${cls}" viewBox="0 0 120 44">
+  <rect x="1" y="25" width="26" height="12" rx="5" fill="#6B4A2E"/>
+  <rect x="9" y="25" width="3" height="12" fill="#57391F"/><rect x="16" y="25" width="3" height="12" fill="#57391F"/>
+  <path d="M26 26 C48 21 84 15 116 5 C119 11 117 23 100 32 C82 41 52 41 26 40 Z" fill="#C4525F"/>
+  <path d="M26 23 C48 18 84 12 116 2 C119 8 117 20 100 29 C82 38 52 38 26 37 Z" fill="#93A2BC"/>
+  <path d="M32 26 C52 22 82 17 106 9" stroke="rgba(255,255,255,.4)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>`;
+const CHEV  = '<svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+const TABIC = {
+  dash:'<svg viewBox="0 0 20 20" fill="currentColor"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.5"/></svg>',
+  lineup:'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="2.5" width="13" height="15" rx="2"/><circle cx="10" cy="10" r="3"/><path d="M3.5 10h3M13.5 10h3"/></svg>',
+  cut:'<svg viewBox="0 0 120 44" fill="currentColor" style="width:26px;height:11px;margin:4px 0 5px"><rect x="1" y="25" width="26" height="12" rx="5" opacity=".7"/><path d="M26 23 C48 18 84 12 116 2 C119 8 117 20 100 29 C82 38 52 38 26 37 Z"/></svg>',
+  quin:'<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M6.8 10.2l2.2 2.2 4.2-4.6"/></svg>',
+  more:'<svg viewBox="0 0 20 20" fill="currentColor"><circle cx="4" cy="10" r="1.8"/><circle cx="10" cy="10" r="1.8"/><circle cx="16" cy="10" r="1.8"/></svg>'
+};
+
+/* ------------------------------------------------------------------ chrome --- */
+const statusBar = () => '<div class="ku-status"><span>20:14</span><span class="r">●●● · 5G · ▮▮▮</span></div>';
+const tabbar = (live) => `<div class="ku-tabbar">
+  <div class="ku-tab">${TABIC.dash}Dashboard</div>
+  <div class="ku-tab">${TABIC.lineup}Set lineup</div>
+  <div class="ku-tab on">${TABIC.cut}The Cut${live !== false ? '<span class="dotlive"></span>' : ''}</div>
+  <div class="ku-tab">${TABIC.quin}Quiniela</div>
+  <div class="ku-tab">${TABIC.more}More</div>
+</div><div class="ku-home"><i></i></div>`;
+
+const header = (stamp) => `<div class="ku-hdr"><h1>The Cut</h1><div class="ku-stamp"><span>Updated 20:14</span>${stamp ? '<span class="lv"><i></i>LIVE</span>' : '<span>FULL TIME</span>'}</div></div>`;
+
+const pstrip = (chips) => `<div class="ku-pstrip">${chips.map(c =>
+  c.live ? `<span class="ku-pchip live"><i></i>${c.t}</span>` :
+  c.pend ? `<span class="ku-pchip pend">⏳ ${c.t}</span>` :
+  c.done ? `<span class="ku-pchip done">✓ ${c.t}</span>` :
+  `<span class="ku-pchip">${c.t}</span>`).join('')}<span class="ku-pchip season">Season</span></div>`;
+
+const marquee = (title, sub, loom) => `<div class="ku-marq">${loom !== false ? MACHETE('loom') : ''}<img src="logo/trophy.png" alt=""><div><div class="t">${title}</div><div class="s">${sub}</div></div><span class="go">Theater ›</span></div>`;
+
+const youband = (variant, ic, a, b, n1, n2, pts, extra) => `<div class="ku-you ${variant}">${extra || ''}
+  <span class="ic">${ic}</span><div><div class="a">${a}</div><div class="b">${b}</div></div>
+  <div class="num"><div class="n1">${n1}</div><div class="n2">${n2}</div></div>
+  ${pts ? `<div class="pts">${pts}<br>pts</div>` : ''}</div>`;
+
+/* ------------------------------------------------------------------ ladder --- */
+const COLORS = {Chocoyo:'#2E8B8B', Armando:'#B0823A', Marlon:'#5C7CFF', Cesar:'#7C5CFF', Alvaro:'#C0568A', Denis:'#3FA66A', Wilmer:'#D08A3E', Sebastian:'#4C9BC0', Norlan:'#B5524E', Fran:'#6E8A2E', Yader:'#8A5CC0', Bismarck:'#3E8FD0'};
+const init = n => n.slice(0,2).toUpperCase();
+
+function stLine(s){ // [live, played, toplay]
+  const p = [];
+  if (s[0]) p.push(`<span class="lv"><i></i>${s[0]} live</span>`);
+  if (s[1]) p.push(`<span class="pd"><i></i>${s[1]} played</span>`);
+  if (s[2]) p.push(`<span class="tp"><i></i>${s[2]} to play</span>`);
+  return p.join('');
+}
+function row(m){
+  const cls = ['ku-row', m.me?'me':'', m.block?'block':'', m.dead?'dead':''].filter(Boolean).join(' ');
+  const nm = m.me ? `${m.name} <span style="font-weight:600;opacity:.8">(You)</span>` : m.name;
+  const wl = m.wl ? `<div class="p2 ${m.wl[0]==='W'?'w':m.wl[0]==='L'?'l':'d'}">${m.wl}</div>` : (m.rtag ? '' : '<div class="p2 d">&nbsp;</div>');
+  return `<div class="${cls}">
+    <span class="rk">${m.rk ?? ''}</span>
+    <span class="ku-ava" style="background:${COLORS[m.name]||'#556'}">${init(m.name)}</span>
+    <div class="mid"><div class="nm">${nm}</div><div class="st">${m.rtag ? `<span class="rtag">${m.rtag}</span>` : stLine(m.st)}</div></div>
+    ${m.block ? `<span class="blocktag">${BLADE} ON THE BLOCK</span>` : ''}
+    ${m.medal ? `<span class="ku-medal ${m.medal[0]}">${m.medal[1]}</span>` : ''}
+    <div class="pt"><div class="p1">${m.pts}</div>${wl}</div>
+    ${CHEV}
+  </div>`;
+}
+const cutline = (n) => `<div class="ku-cut"><span class="beam"></span><span class="chipp">${BLADE} CUT LINE · LOWEST ${n}</span><span class="beam r"></span></div>`;
+const fallenHd = (open, n) => `<div class="ku-fallen"><div class="hd"><span class="arr">${open?'▾':'▸'}</span> THE FALLEN (${n})<span class="ln"></span></div>`;
+const fallenSummary = (t) => `<div style="font:600 10px/14px var(--font-mono);color:var(--text-tertiary);padding:5px 6px">${t}</div>`;
+
+/* ------------------------------------------------------------------ frames --- */
+function frame(x, capTitle, capSub, inner, liveTab){
+  document.body.insertAdjacentHTML('beforeend',
+    `<div class="ku-cap" style="left:${x}px;top:52px"><b>${capTitle}</b>${capSub}</div>
+     <div class="ku-frame" style="left:${x}px;top:110px">${statusBar()}${inner}${tabbar(liveTab)}</div>`);
+}
+
+/* ---- shared round data ---- */
+const R32_ALIVE = [
+  {rk:1, name:'Marlon',    pts:91, st:[2,3,2], wl:'L −12'},
+  {rk:2, name:'Wilmer',    pts:88, st:[1,4,2], wl:'L −9'},
+  {rk:3, name:'Chocoyo',   pts:84, st:[2,2,3], wl:'L −5'},
+  {rk:4, name:'Cesar',     pts:79, st:[1,2,4], me:true},
+  {rk:5, name:'Alvaro',    pts:74, st:[2,3,2], wl:'W +5'},
+  {rk:6, name:'Denis',     pts:71, st:[0,5,2], wl:'W +8'},
+  {rk:7, name:'Sebastian', pts:68, st:[1,4,2], wl:'W +11'},
+  {rk:8, name:'Yader',     pts:65, st:[2,2,3], wl:'W +14'},
+];
+const R32_BLOCK = [
+  {rk:9,  name:'Armando', pts:63, st:[1,3,3], wl:'W +16', block:true},
+  {rk:10, name:'Fran',    pts:58, st:[0,4,3], wl:'W +21', block:true},
+];
+const STRIP_R32 = [{t:'GRP', done:true},{t:'R32', live:true},{t:'R16'},{t:'QF'}];
+
+/* ================= STATE A — live round, viewer surviving ================= */
+frame(40, 'a — Live round · you\u2019re surviving',
+  'R32 live · 4th of 10 · +16 clear of the blade',
+  header(true) + pstrip(STRIP_R32) +
+  marquee('LOWEST 2 GET THE CHOP', '10 standing · 8 advance · cut at full time') +
+  youband('safe', '✓', 'Surviving · 4th of 10', 'Rows below open the head-to-head', '+16', 'clear of the blade', '79') +
+  `<div class="ku-ladder">` + R32_ALIVE.map(row).join('') + cutline(2) + R32_BLOCK.map(row).join('') +
+  fallenHd(false, 2) + `</div></div>`
+);
+
+/* ================= STATE B — viewer ON THE BLOCK ================= */
+const B_ROWS = [
+  {rk:1, name:'Marlon',    pts:91, st:[2,3,2], wl:'L −34'},
+  {rk:2, name:'Wilmer',    pts:88, st:[1,4,2], wl:'L −31'},
+  {rk:3, name:'Chocoyo',   pts:84, st:[2,2,3], wl:'L −27'},
+  {rk:4, name:'Alvaro',    pts:74, st:[2,3,2], wl:'L −17'},
+  {rk:5, name:'Denis',     pts:71, st:[0,5,2], wl:'L −14'},
+  {rk:6, name:'Sebastian', pts:68, st:[1,4,2], wl:'L −11'},
+  {rk:7, name:'Armando',   pts:63, st:[1,3,3], wl:'L −6'},
+  {rk:8, name:'Yader',     pts:61, st:[2,2,3], wl:'L −4'},
+];
+const B_BLOCK = [
+  {rk:9,  name:'Cesar', pts:57, st:[1,2,4], me:true, block:true},
+  {rk:10, name:'Fran',  pts:55, st:[0,4,3], wl:'W +2', block:true},
+];
+frame(500, 'b — You are ON THE BLOCK',
+  '9th of 10 · −4 behind the blade · 4 of yours still to play',
+  header(true) + pstrip(STRIP_R32) +
+  marquee('LOWEST 2 GET THE CHOP', '10 standing · 8 advance · cut at full time', false) +
+  youband('block', '⚠', 'ON THE BLOCK · 9th of 10', 'Need 5 pts — 4 still to play', '−4', 'behind the blade', '57', MACHETE('damocles')) +
+  `<div class="ku-ladder">` + B_ROWS.map(row).join('') + cutline(2) + B_BLOCK.map(row).join('') +
+  fallenHd(false, 2) + `</div></div>`
+);
+
+/* ================= STATE C — viewer eliminated, later round live ================= */
+const C_ROWS = [
+  {rk:1, name:'Marlon',    pts:54, st:[2,3,2]},
+  {rk:2, name:'Chocoyo',   pts:51, st:[1,4,2]},
+  {rk:3, name:'Wilmer',    pts:49, st:[2,2,3]},
+  {rk:4, name:'Yader',     pts:44, st:[1,3,3]},
+];
+const C_BLOCK = [
+  {rk:5, name:'Denis',     pts:41, st:[0,4,3], block:true},
+  {rk:6, name:'Sebastian', pts:38, st:[1,3,3], block:true},
+];
+frame(960, 'c — You\u2019re out · spectating a later round',
+  'Cut in R16 · QF live · fallen section expanded, rows still open',
+  header(true) + pstrip([{t:'R32', done:true},{t:'R16', done:true},{t:'QF', live:true},{t:'SF'}]) +
+  marquee('LOWEST 2 GET THE CHOP', '6 standing · 4 advance · cut at full time') +
+  youband('out', '✗', 'Cut in the Round of 16', 'Spectating — rows still open', '6', 'still standing') +
+  `<div class="ku-ladder">` + C_ROWS.map(row).join('') + cutline(2) + C_BLOCK.map(row).join('') +
+  fallenHd(true, 6) + `<div class="rows">` +
+  row({name:'Cesar', pts:57, rtag:'cut in R16', me:true, dead:true}) +
+  row({name:'Alvaro', pts:52, rtag:'cut in R16', dead:true}) +
+  fallenSummary('R32 — Armando · Fran &nbsp;·&nbsp; Group stage — Norlan · Bismarck') +
+  `</div></div></div>`
+);
+
+/* ================= STATE D — drill-in sheet ================= */
+const KITS = {
+  FRA:'linear-gradient(180deg,#25349B,#171F66)', ENG:'linear-gradient(180deg,#F2F4F8,#D6DCE7)',
+  ESP:'linear-gradient(180deg,#C43A3A,#9E2828)', POR:'linear-gradient(90deg,#A31F2B 62%,#0E5C36 62%)',
+  GK:'linear-gradient(180deg,#3E8F5A,#2A6640)'
+};
+function tok(x, y, kit, nm, pill, mode){ // mode: live | played | toplay
+  const p = mode==='live' ? `<span class="ku-spill"><i></i>${pill}</span>`
+        : mode==='played' ? `<span class="ku-spill pd">${pill}</span>`
+        : `<span class="ku-spill pd" style="color:var(--ytp)">${pill}</span>`;
+  return `<div class="ku-tok${mode==='played'?' dim':''}" style="left:${x}%;top:${y}%"><span class="ku-kit" style="background:${kit}"></span><span class="pn">${nm}</span>${p}</div>`;
+}
+const D_BG = header(true) + pstrip(STRIP_R32) +
+  marquee('LOWEST 2 GET THE CHOP', '10 standing · 8 advance') +
+  `<div class="ku-ladder">` + R32_ALIVE.slice(0,5).map(row).join('') + `</div>`;
+const D_SHEET = `<div class="ku-scrim"></div><div class="ku-sheet">
+  <div class="ku-grab"><i></i></div>
+  <div class="ku-shead"><span class="ku-ava" style="background:${COLORS.Marlon};width:32px;height:32px;font-size:11px">MA</span>
+    <div><div class="nm">Marlon</div><div class="sub">1st of 10 · 91 pts · <span class="lv">● LIVE</span></div></div>
+    <span class="x">✕</span></div>
+  <div class="ku-facts">
+    <div class="ku-fact"><span class="n">1</span><span class="k l">−12</span><span class="d">Marlon leads you, 91–79</span></div>
+    <div class="ku-fact"><span class="n">2</span><span class="k t">+2 to play</span><span class="d">your upside — 4 left vs his 2</span></div>
+    <div class="ku-fact"><span class="n">3</span><span class="k">Mbappé +11</span><span class="d">his biggest edge · yours is Kane +3</span></div>
+  </div>
+  <div class="ku-seg"><span>Your XI</span><span class="on">Marlon\u2019s XI</span></div>
+  <div class="ku-pitch">
+    ${tok(50,6,  KITS.FRA,'Mbappé','11','live')}
+    ${tok(22,32, KITS.ENG,'Bellingham','6','played')}
+    ${tok(50,28, KITS.ESP,'Pedri','4','live')}
+    ${tok(78,32, KITS.POR,'Vitinha','21:00','toplay')}
+    ${tok(32,58, KITS.FRA,'Saliba','1','live')}
+    ${tok(68,58, KITS.ESP,'Cubarsí','21:00','toplay')}
+    ${tok(50,80, KITS.GK,'Donnarumma','2','played')}
+  </div>
+  <div class="ku-sfoot">Tap any player for the minute-by-minute breakdown · <b>swipe down or ✕</b> to return to the ladder</div>
+</div>`;
+frame(1420, 'd — Drill-in: how is Marlon beating me?',
+  'In-place sheet · 3 ranked facts · his XI ↔ yours · players tap through',
+  D_BG + D_SHEET
+);
+
+/* ================= STATE E — champion endgame ================= */
+const E_ROWS = [
+  {rk:1, name:'Marlon',  pts:96, st:[0,7,0], medal:['c','CHAMPION']},
+  {rk:2, name:'Wilmer',  pts:89, st:[0,7,0], medal:['r','RUNNER-UP']},
+  {rk:3, name:'Chocoyo', pts:84, rtag:'cut in the Final', dead:true},
+];
+frame(1880, 'e — Champion endgame',
+  'Theater takes the hero · final order · fallen by round · rows still open',
+  header(false) + pstrip([{t:'QF', done:true},{t:'SF', done:true},{t:'F', done:true}]) +
+  `<div class="ku-champ">${MACHETE('rest')}<img src="logo/trophy.png" alt="XI trophy">
+    <div class="ey">CHAMPION</div><div class="who">Marlon</div>
+    <div class="ln"><b>96 pts</b> in the Final · outlasted the whole field over 5 rounds</div></div>` +
+  youband('out', '✗', 'Cut in the Round of 16', 'Placement = round survived, then pts', '7th', 'of 12 overall') +
+  `<div class="ku-ladder">` + E_ROWS.map(row).join('') +
+  fallenHd(true, 9) + `<div class="rows">` +
+  fallenSummary('SF — Yader &nbsp;·&nbsp; QF — Denis · Sebastian') +
+  row({name:'Cesar', pts:57, rtag:'cut in R16', me:true, dead:true}) +
+  fallenSummary('R16 — Alvaro &nbsp;·&nbsp; R32 — Armando · Fran &nbsp;·&nbsp; Group — Norlan · Bismarck') +
+  `</div></div></div>`,
+  false
+);
+
+/* ================= STATE F — round locked, awaiting official results ================= */
+const F_ROWS = R32_ALIVE.map(m => ({...m, st:[0,7,0]}));
+const F_BLOCK = R32_BLOCK.map(m => ({...m, st:[0,7,0]}));
+frame(2340, 'f — Round locked · awaiting results',
+  'Full time · provisional order · official after the corrections window',
+  header(false) + pstrip([{t:'GRP', done:true},{t:'R32', pend:true},{t:'R16'},{t:'QF'}]) +
+  marquee('THE BLADE DROPS SOON', 'Full time · official after corrections · 09:00 UTC') +
+  youband('pend', '⏳', 'Provisionally safe · 4th of 10', 'Order can still move on stat corrections', '+16', 'clear at full time', '79') +
+  `<div class="ku-ladder">` + F_ROWS.map(row).join('') + cutline(2) + F_BLOCK.map(row).join('') +
+  fallenHd(false, 2) + `</div></div>`,
+  false
+);
+
+/* ================= SPEC PANEL ================= */
+document.body.insertAdjacentHTML('beforeend', `<div class="ku-spec" style="left:2800px;top:110px">
+  <h2>The Cut — implementation spec</h2>
+  <p class="sub">Unified knockout surface · hybrid of Shape B · feeds the /vsfield route</p>
+
+  <h3>1 · Shape: hybrid, weighted B</h3>
+  <p><b>/vsfield becomes the one knockout surface</b> ("The Cut" during knockout rounds): it keeps everything it already has (live field, period strip, Season power record, manager drill-in, fixture taps) and gains the guillotine framing — compact theater marquee, YOU band with margin-to-blade, cut line, ON THE BLOCK zone, the fallen. <b>/playoffs demotes to the ceremonial theater</b> (the full parrot-and-machete stage), reached from the marquee's <code>Theater ›</code> and auto-surfaced at round lock ("the blade drops" ceremony) and at the champion moment. No logic lives there — it is pure celebration; deleting it breaks nothing.</p>
+
+  <h3>2 · Ladder row anatomy (44px+ target)</h3>
+  <ul>
+    <li>Whole row is ONE tap target (min-height 48px). Anatomy: rank · avatar · name + live-status line (<code>n live · n played · n to play</code>, color+dot+word) · points (display, tabular) · <b>W/L margin vs YOU</b> (<code>W +16</code> / <code>L −12</code>, existing .wld vocabulary) · chevron. The chevron is the affordance the old /playoffs ladder lacked.</li>
+    <li>Tap → <b>in-place bottom sheet</b> (state d), NOT navigation. Route stays <code>/vsfield</code>; sheet pushes <code>?m=&lt;managerId&gt;</code> so back-gesture/back-button closes it. Dismiss: swipe-down on grabber, ✕, scrim tap, or hardware back — all one-handed.</li>
+    <li>Sheet content reuses the existing vsfield H2H: 3-fact compare band (margin → upside-to-play → biggest player edge), Your XI ↔ Their XI segmented pitch toggle, player tap → the shared score-breakdown sheet. Zero new components.</li>
+  </ul>
+
+  <h3>3 · Live re-sorting while a sheet is open</h3>
+  <ul>
+    <li>Sheet is <b>pinned to the manager, not the rank</b>. Their rank/pts/margin update live in the sheet header (score-pulse on change).</li>
+    <li>The ladder underneath re-sorts freely (it's scrimmed; no mid-tap rug-pulls). On dismiss, restore scroll to the tapped row's <b>new</b> position.</li>
+    <li>In the open ladder, re-sorts animate with ~300ms FLIP moves, <b>throttled to one re-sort per 10s window</b>; a row crossing the cut line flashes its new state (word + icon, not color alone). YOU band margin updates instantly — it is the #1 glanceable fact and never throttles.</li>
+  </ul>
+
+  <h3>4 · Eliminated managers: "the fallen"</h3>
+  <p>Resolves hides-vs-shows explicitly: the living field and the dead are <b>one ladder, two sections</b>. Alive rows rank 1..N with the cut line + ON THE BLOCK zone at the bottom. Below, <b>THE FALLEN (n)</b> — collapsed to a single header by default (survivor's view, state a), so the live field stays as tight as today's /vsfield. Expanded: struck-through rows tagged <code>cut in R16</code>, older rounds compressed to one summary line per round. Fallen rows remain tappable (their final round is a period-strip lookup — same drill-in). <b>If YOU are eliminated it auto-expands</b> to your row (state c) and the YOU band flips to the locked/elim treatment. Cut managers stay visibly dead — never silently vanish.</p>
+
+  <h3>5 · Where the theater lives</h3>
+  <p>Three homes, none eating the glanceable area: <b>(1) the marquee</b> — a compact strip the <b>oversized trophy mark bursts out of</b> (mark overflows the band with the <b>machete looming overhead</b> and a gentle idle bob — whimsy without spending layout height) + <code>LOWEST n GET THE CHOP · n standing · n advance</code> + Theater link; <b>(2) the ceremony</b> — full theater (parrot, machete, blood, Eliminated! stamps) auto-plays as a takeover when the round locks, then dismisses back here; <b>(3) the champion state</b> — theater owns the hero permanently (state e). Trophy gold is allowed (it IS the brand mark); no gold elsewhere.</p>
+
+  <h3>6 · Bottom nav</h3>
+  <p>No new tab. The existing Vs-the-field slot <b>relabels by phase</b>: "Vs the field" in groups → <b>"The Cut"</b> + blade icon + live dot during knockout → stays "The Cut" post-final (champion state). "Playoffs" leaves the More sheet (More keeps a "Theater" link to the ceremonial stage). One mental model: <i>the tab where I see how I stand against everyone</i>.</p>
+
+  <h3>States & tokens</h3>
+  <p>YOU band variants: <code>safe</code> = accent (cobalt marks you), <code>block</code> = danger + ⚠ + word <b>+ the machete of Damocles swinging over the band</b>, <code>out</code> = locked/elim + ✗ + word, <code>pend</code> (state f) = ytp orange + ⏳ + word — round locked at full time, order provisional through the stat-corrections window; nothing is live, tab dot dark, blade-drop ceremony fires only when results go official. Cut zone rows = elim fill + blade icon + ON THE BLOCK word. Never color alone. <b>Blade discipline: exactly ONE machete per screen</b> — the marquee's looming blade yields to the Damocles blade when YOU are on the block; post-final it rests behind the trophy and the tab's live dot goes dark. Variable manager count everywhere (10/6/12 shown are data, not layout).</p>
+</div>`);
+</script>
+</body>
+</html>

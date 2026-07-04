@@ -1,0 +1,141 @@
+/* vsfield2/knockout.css — knockout ("The Cut") mode styles. Loads after v2.css.
+   Tokens from ds/ds.css; functional colors only (elim/danger/ytp); accent marks YOU. */
+
+/* ---- theater marquee ---- */
+.ko-marq{ position:relative; display:flex; align-items:center; gap:10px; margin:10px 18px 0; padding:5px 12px; min-height:44px;
+  border:1px solid rgba(229,72,77,.28); border-radius:var(--r-lg);
+  background:linear-gradient(90deg, var(--elim-soft), var(--surface-1) 55%); }
+.ko-trophy{ width:44px; height:52px; object-fit:contain; position:relative; z-index:2; flex:none;
+  transform:rotate(-7deg); margin:-12px 0 -8px -2px; filter:drop-shadow(0 4px 10px rgba(0,0,0,.55)); }
+.ko-marq-tx{ min-width:0; }
+.ko-marq-tx .t{ font:800 12.5px/15px var(--font-display); letter-spacing:.05em; color:var(--text-primary); white-space:nowrap; }
+.ko-marq-tx .s{ font:600 10.5px/13px var(--font-sans); color:var(--text-secondary); white-space:nowrap; }
+.ko-theater{ margin-left:auto; flex:none; font:700 10.5px/12px var(--font-sans); color:var(--text-secondary); text-decoration:none;
+  border:1px solid var(--hairline-strong); border-radius:var(--r-pill); padding:7px 11px; white-space:nowrap; }
+.ko-theater:hover{ background:var(--surface-2); color:var(--text-primary); }
+.ko-marq-mob{ margin:0 0 10px; min-height:42px; padding:4px 10px; }
+.ko-marq-mob .ko-trophy{ width:38px; height:46px; margin:-10px 0 -7px -2px; }
+.ko-marq-mob .ko-marq-tx .t{ font-size:11.5px; }
+
+/* ---- the machete ---- */
+.ko-mach{ position:absolute; pointer-events:none; filter:drop-shadow(0 5px 10px rgba(0,0,0,.5)); }
+.ko-mach.loom{ width:76px; left:34px; top:-12px; z-index:3; transform:rotate(-24deg); transform-origin:12% 88%; }
+.ko-mach.damocles{ width:70px; right:64px; top:-12px; z-index:3; transform:rotate(110deg); transform-origin:50% 0%; }
+.ko-marq-mob .ko-mach.loom{ width:66px; left:26px; top:-14px; }
+@media (prefers-reduced-motion: no-preference){
+  .ko-trophy{ animation:ko-bob 4.5s ease-in-out infinite; }
+  .ko-mach.loom{ animation:ko-loom 3.8s ease-in-out infinite; }
+  .ko-mach.damocles{ animation:ko-swing 2.6s ease-in-out infinite; }
+}
+@keyframes ko-bob{ 0%,100%{ transform:rotate(-7deg) translateY(0);} 50%{ transform:rotate(-4deg) translateY(-2px);} }
+@keyframes ko-loom{ 0%,100%{ transform:rotate(-24deg) translateY(0);} 50%{ transform:rotate(-12deg) translateY(-4px);} }
+@keyframes ko-swing{ 0%,100%{ transform:rotate(110deg);} 50%{ transform:rotate(127deg);} }
+
+/* ---- YOU band ---- */
+.ko-you{ position:relative; display:flex; align-items:center; gap:9px; margin:10px 10px 4px; padding:7px 10px;
+  border-radius:var(--r-lg); border:1px solid; min-height:44px; }
+.ko-you-ic{ font-size:14px; font-weight:800; flex:none; }
+.ko-you-tx{ min-width:0; display:flex; flex-direction:column; gap:1px; }
+.ko-you-tx b{ font:800 11.5px/14px var(--font-display); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text-primary); }
+.ko-you-tx span{ font:600 9.5px/12px var(--font-sans); color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ko-you-num{ margin-left:auto; text-align:right; flex:none; }
+.ko-you-num b{ display:block; font:800 18px/19px var(--font-display); font-variant-numeric:tabular-nums; }
+.ko-you-num span{ font:600 8.5px/10px var(--font-sans); color:var(--text-secondary); white-space:nowrap; }
+.ko-you-pts{ flex:none; border-left:1px solid var(--hairline); padding-left:9px; margin-left:9px; text-align:right;
+  font:700 13px/15px var(--font-mono); color:var(--text-secondary); }
+.ko-you-pts span{ display:block; font-size:9px; font-weight:600; }
+.ko-you.is-safe{ background:var(--accent-soft); border-color:var(--accent-ring); }
+.ko-you.is-safe .ko-you-ic, .ko-you.is-safe .ko-you-num b{ color:var(--accent); }
+.ko-you.is-block{ background:var(--danger-soft); border-color:rgba(229,72,77,.55); }
+.ko-you.is-block .ko-you-ic, .ko-you.is-block .ko-you-num b{ color:var(--danger); }
+.ko-you.is-pend{ background:var(--ytp-soft); border-color:rgba(226,135,60,.5); }
+.ko-you.is-pend .ko-you-ic, .ko-you.is-pend .ko-you-num b{ color:var(--ytp); }
+.ko-you-mob{ margin:0 0 12px; padding:9px 12px; }
+.ko-you-mob .ko-you-tx b{ font-size:12.5px; }
+
+/* ---- cut line ---- */
+.ko-cut{ display:flex; align-items:center; gap:8px; padding:4px 10px; }
+.ko-cut .beam{ flex:1; height:2px; border-radius:1px; background:linear-gradient(90deg, transparent, rgba(229,72,77,.8)); }
+.ko-cut .beam.r{ background:linear-gradient(90deg, rgba(229,72,77,.8), transparent); }
+.ko-cut .chip{ display:flex; gap:6px; align-items:center; white-space:nowrap; font:800 9px/11px var(--font-display); letter-spacing:.08em;
+  color:#FF6B70; background:rgba(229,72,77,.14); border:1px solid rgba(229,72,77,.55); border-radius:var(--r-pill);
+  padding:4px 9px; box-shadow:0 0 12px rgba(229,72,77,.3); }
+[data-theme="light"] .ko-cut .chip{ color:var(--danger); }
+.ko-cut-mob{ padding:2px 2px; }
+.ko-blade{ width:16px; height:7px; flex:none; }
+
+/* ---- ON THE BLOCK rows (word + machete icon + elim fill; accent stripe still wins for YOU) ---- */
+.ko-blocksub{ display:inline-flex; align-items:center; gap:4px; color:var(--elim); font-weight:700; font-style:normal; white-space:nowrap; }
+.da-lb-row.is-block{ background:var(--elim-soft); border-left-color:var(--elim); }
+.da-lb-row.is-block:hover{ background:var(--elim-soft); }
+.da-lb-row.is-block.is-me{ border-left-color:var(--accent); }
+.ma-row.is-block{ background:var(--elim-soft); border-color:rgba(176,85,99,.5); box-shadow:inset 3px 0 0 var(--elim); }
+.ma-row.is-block.is-me{ box-shadow:inset 3px 0 0 var(--accent); }
+
+/* ---- the fallen ---- */
+.ko-fallen{ padding:2px 10px 12px; }
+.ko-fallen-hd{ display:flex; align-items:center; gap:7px; width:100%; background:none; border:none; cursor:pointer;
+  color:var(--text-tertiary); font:700 10px/13px var(--font-sans); letter-spacing:.05em; padding:8px 2px 6px; text-align:left; }
+.ko-fallen-hd .arr{ font-size:9px; }
+.ko-fallen-hd .ln{ flex:1; height:1px; background:var(--hairline); }
+.ko-dead{ display:flex; align-items:center; gap:9px; width:100%; background:none; border:none; cursor:pointer;
+  color:var(--text-primary); font:inherit; padding:7px 4px; opacity:.62; border-radius:var(--r-md); text-align:left; }
+.ko-dead:hover{ background:var(--surface-2); opacity:.85; }
+.ko-dead-name{ font-weight:700; font-size:var(--fs-sm); text-decoration:line-through; color:var(--text-secondary); }
+.ko-dead-tag{ margin-left:auto; font:600 10px/12px var(--font-mono); color:var(--elim); }
+.ko-dead-chev{ color:var(--text-tertiary); flex:none; }
+.ko-fallen-mob{ padding:2px 0 8px; }
+
+/* ---- the cutting ceremony (takeover) ---- */
+.v2-app{ position:relative; }
+.ma{ position:relative; }
+.koc{ position:absolute; inset:0; z-index:80; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(90% 70% at 50% 30%, rgba(176,85,99,.22), transparent 72%), linear-gradient(rgba(5,7,10,.95), rgba(5,7,10,.95)); }
+.koc-inner{ width:min(520px, 94%); text-align:center; display:flex; flex-direction:column; align-items:center; gap:5px; padding:16px 0; }
+.koc-eyebrow{ font:900 10px/12px var(--font-display); letter-spacing:.24em; color:#FF6B70; white-space:nowrap; align-self:stretch; }
+.koc-head{ font:900 30px/34px var(--font-display); letter-spacing:-.01em; color:#F1F4F9; align-self:stretch; }
+.koc-sub{ font:600 11.5px/15px var(--font-sans); color:#A6B0C0; white-space:nowrap; align-self:stretch; }
+.koc-mech{ position:relative; width:230px; height:190px; margin-top:4px; }
+.koc-trophy{ position:absolute; left:50%; bottom:0; transform:translateX(-50%); width:140px; height:160px; object-fit:contain;
+  filter:drop-shadow(0 10px 26px rgba(0,0,0,.6)); }
+.koc-mach.ko-mach{ position:absolute; left:56%; bottom:92px; top:auto; right:auto; width:132px; z-index:2;
+  transform-origin:14% 86%; transform:rotate(-20deg); transition:transform .6s var(--ease-out); filter:drop-shadow(0 6px 12px rgba(0,0,0,.6)); }
+.is-wind .koc-mach.ko-mach{ transform:rotate(-76deg) translate(-4px,-8px); transition-duration:1.05s; }
+.is-drop .koc-mach.ko-mach, .is-aftermath .koc-mach.ko-mach{ transform:rotate(36deg) translate(8px,10px); transition-duration:.16s; transition-timing-function:var(--ease-in); }
+.koc-slash{ position:absolute; left:-34px; right:-34px; top:58%; height:10px; border-radius:6px; opacity:0; transition:opacity .4s; pointer-events:none;
+  background:linear-gradient(90deg, transparent, #FF6B70 30%, #FFD9DB 50%, #FF6B70 70%, transparent);
+  filter:drop-shadow(0 0 10px rgba(229,72,77,.8)); }
+.is-drop .koc-slash{ opacity:1; }
+.koc-victims{ display:flex; gap:56px; justify-content:center; margin-top:6px; }
+.koc-victim{ position:relative; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:84px; }
+.koc-blood{ position:absolute; top:-8px; left:50%; width:76px; height:60px; transform:translateX(-50%); opacity:0; transition:opacity .3s; pointer-events:none;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(229,72,77,.85) 0 12%, transparent 13%),
+    radial-gradient(circle at 65% 22%, rgba(229,72,77,.8) 0 9%, transparent 10%),
+    radial-gradient(circle at 55% 60%, rgba(176,85,99,.9) 0 16%, transparent 17%),
+    radial-gradient(circle at 82% 55%, rgba(229,72,77,.7) 0 7%, transparent 8%); }
+.koc-victim.is-out .koc-blood{ opacity:.95; }
+.koc-victim.is-out .koc-vname{ text-decoration:line-through; color:#A6B0C0; }
+.koc-stamp{ position:absolute; top:36px; left:50%; z-index:2; opacity:0; transform:translate(-50%,0) rotate(-12deg) scale(.6); white-space:nowrap;
+  font:900 12px/14px var(--font-display); letter-spacing:.04em; color:#fff; background:var(--danger); border:2px solid #fff; border-radius:6px;
+  padding:3px 8px; box-shadow:0 4px 14px rgba(0,0,0,.5); }
+.koc-victim.is-out .koc-stamp{ opacity:1; transform:translate(-50%,0) rotate(-12deg) scale(1); transition:transform .25s var(--ease-out), opacity .1s; }
+.koc-vname{ font:800 13px/16px var(--font-sans); color:#F1F4F9; white-space:nowrap; }
+.koc-vpts{ font:700 10.5px/13px var(--font-mono); color:#A6B0C0; white-space:nowrap; }
+.koc-verdict{ display:flex; flex-direction:column; gap:4px; margin-top:7px; align-self:stretch; }
+.koc-verdict-safe, .koc-verdict-out, .koc-faab{ display:block; white-space:nowrap; }
+.koc-verdict-safe{ font:800 13px/17px var(--font-display); color:var(--accent); }
+.koc-verdict-out{ font:800 13px/17px var(--font-display); color:#FF6B70; }
+.koc-faab{ font:600 10.5px/14px var(--font-sans); color:#6C7689; }
+.koc-faab a{ color:#A6B0C0; }
+.koc-actions{ margin-top:9px; }
+@media (prefers-reduced-motion: no-preference){
+  .is-drop .koc-inner{ animation:koc-shake .45s var(--ease-standard); }
+}
+@keyframes koc-shake{ 0%,100%{ transform:translate(0,0);} 20%{ transform:translate(-5px,3px);} 40%{ transform:translate(5px,-3px);} 60%{ transform:translate(-4px,-2px);} 80%{ transform:translate(3px,2px);} }
+.koc-mob .koc-head{ font-size:23px; line-height:27px; }
+.koc-mob .koc-sub{ font-size:10.5px; }
+.koc-mob .koc-mech{ width:190px; height:160px; }
+.koc-mob .koc-trophy{ width:116px; height:134px; }
+.koc-mob .koc-mach.ko-mach{ width:108px; bottom:78px; }
+.koc-mob .koc-victims{ gap:38px; }
