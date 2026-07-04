@@ -27,8 +27,9 @@
  * produced one) so the console renders the blocked ladder instead of a bare error.
  */
 import type { SessionManagerOutcome } from "@app/auth";
-import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
+import { KNOCKOUT_ROUNDS, type KnockoutRound, type CommishAuditTargetRef } from "@app/shared";
 import { runRoundAdvance, type AdvanceResult } from "@app/commish-core";
+import { buildAdvanceAuditRow } from "@app/commish-core/advanceAudit";
 import type { ApplyRoundCut, PlayoffAdvanceStore } from "@app/commish-core/advanceStore";
 import type { RecordCommishAuditInput } from "./recordCommishAudit";
 import { gate, type HandlerResult } from "./handleStatCorrection";
@@ -99,7 +100,10 @@ export const ADVANCE_PREVIEW_REASON = "(dry-run preview — nothing persisted)";
 
 /** Build the single `round_advance` ledger row for an applied cut. `released` is the per-manager roster
  *  shed to the wire (`managerId → playerId[]`), recorded in the `target_ref` JSON (no migration — the
- *  column is JSONB). Exported for the store's tests. */
+ *  column is JSONB). The derived summary / detail / delta / target_ref come from the SHARED
+ *  `buildAdvanceAuditRow` — the ONE owner of the round-cut audit shape, byte-identical for `round_advance`
+ *  (here) and the worker's `auto_advance` (pinned by advanceAudit.test.ts); this only re-shapes that row
+ *  into the web store's injected-insert `RecordCommishAuditInput` contract. Exported for the store's tests. */
 export function buildAdvanceAudit(
   cut: ApplyRoundCut,
   ctx: {
@@ -111,30 +115,27 @@ export function buildAdvanceAudit(
     released: Record<string, string[]>;
   },
 ): RecordCommishAuditInput {
-  const name = (id: string): string => ctx.nameOf[id] ?? id;
-  const names = cut.eliminated.map(name);
-  const champion = cut.champion ? name(cut.champion) : null;
-  const releasedCount = Object.values(ctx.released).reduce((n, ids) => n + ids.length, 0);
+  const row = buildAdvanceAuditRow({
+    leagueId: ctx.leagueId,
+    actorUserId: ctx.actorUserId,
+    actionType: "round_advance",
+    roundLabel: cut.roundLabel,
+    eliminated: cut.eliminated,
+    champion: cut.champion,
+    released: ctx.released,
+    reason: ctx.reason,
+    tieAdjudicated: ctx.tieAdjudicated,
+    nameOf: ctx.nameOf,
+  });
   return {
     leagueId: ctx.leagueId,
     actorUserId: ctx.actorUserId,
     actionType: "round_advance",
-    summary: `Round cut applied: ${cut.roundLabel} — eliminated ${names.length} (${names.join(", ")}), released ${releasedCount} to the wire`,
-    detail:
-      `Irreversible — playoff_entry flipped alive → eliminated for ${names.join(", ")}.` +
-      ` ${releasedCount} roster player${releasedCount === 1 ? "" : "s"} released to the free-agent wire.` +
-      (champion ? ` ${champion} is the champion.` : "") +
-      (ctx.tieAdjudicated ? " Boundary tie adjudicated by the commissioner." : ""),
+    summary: row.summary,
+    detail: row.detail,
     reason: ctx.reason,
-    targetRef: {
-      roundLabel: cut.roundLabel,
-      eliminated: [...cut.eliminated],
-      champion: cut.champion,
-      // The released roster ids per just-cut manager + the total (the release trail, no migration).
-      released: ctx.released,
-      releasedCount,
-    },
-    delta: `−${names.length} alive, −${releasedCount} owned`,
+    targetRef: row.targetRef as unknown as CommishAuditTargetRef,
+    delta: row.delta,
     reversible: false,
   };
 }

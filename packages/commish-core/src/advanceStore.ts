@@ -14,9 +14,16 @@
  * WRITE (`applyRoundCut`): the FIRST statement is the conditional `alive → eliminated` claim (mirrors the
  * transition store's `updateMany WHERE status='group'` entry gate) — 0 rows means a prior run already cut
  * this round, so the whole transaction is a no-op. The lone survivor (final round) is then flipped to
- * `champion`. Server-side as the table owner — RLS does not bite. No roster / FAAB / scoring writes.
+ * `champion`, the just-cut rosters are released, and (when a surface supplies the hook) a durable audit row
+ * is written — all in ONE transaction. Server-side as the table owner — RLS does not bite. No scoring writes.
+ *
+ * ONE writer, three surfaces: the cut+release+audit body is the single {@link runRoundCutInTx}. The CLI cuts
+ * with NO audit hook (stdout only); the web (`round_advance`, real actor) and the worker auto-fire
+ * (`auto_advance`, null actor) call the same `applyRoundCut` with their own tx-bound audit hook, so no surface
+ * re-implements the claim / champion / release statements. `applyRoundCut` self-opens its `$transaction`; the
+ * audit hook rides the CONCRETE adapter only, never the pure port — the IO-free surface stays `@app/db`-free.
  */
-import type { PrismaClient } from "@app/db";
+import type { PrismaClient, Prisma } from "@app/db";
 import { loadCumulativeTournamentTotals } from "@app/recompute/prisma";
 import { releaseEliminatedRosters } from "@app/faab/prisma";
 import { KNOCKOUT_ROUNDS, type KnockoutRound } from "@app/shared";
@@ -95,7 +102,81 @@ export interface PlayoffAdvanceStore {
 }
 
 // ── Prisma adapter ──────────────────────────────────────────────────────────────────────
-export function createPrismaPlayoffAdvanceStore(prisma: PrismaClient): PlayoffAdvanceStore {
+/** A tx-bound audit hook: writes the durable `commish_audit` governance row INSIDE the cut+release
+ *  transaction, so the row and the effect commit ATOMICALLY (a rolled-back cut takes its audit row with it,
+ *  and a committed cut never lacks its ledger row). It is handed the transaction client + the per-manager
+ *  released map; the caller's closure owns the row shape and captures any inserted id (the web `auditId()`
+ *  seam). Omitted ⇒ NO governance row (the CLI path — stdout audit only). Rides the CONCRETE adapter ONLY —
+ *  never the pure {@link PlayoffAdvanceStore} port (a `Prisma.TransactionClient` there would drag `@app/db`
+ *  into the IO-free surface). */
+export type RecordCutAudit = (
+  tx: Prisma.TransactionClient,
+  released: Record<string, string[]>,
+) => Promise<void>;
+
+/** Options for the concrete adapter's {@link PrismaPlayoffAdvanceStore.applyRoundCut}. `recordAudit`, when
+ *  given, writes the durable governance row inside the writer's self-opened cut+release transaction; it rides
+ *  the concrete adapter only (never the pure port — a `Prisma.TransactionClient` there would drag `@app/db`
+ *  into the IO-free surface). */
+export interface ApplyRoundCutOptions {
+  recordAudit?: RecordCutAudit;
+}
+
+/** The CONCRETE Prisma adapter shape. It widens the pure {@link PlayoffAdvanceStore} port's `applyRoundCut`
+ *  with the optional tx-bound audit hook — an extra OPTIONAL param that keeps it structurally assignable to
+ *  the port, which the orchestrator + CLI consume unchanged (they pass no hook). */
+export interface PrismaPlayoffAdvanceStore extends Omit<PlayoffAdvanceStore, "applyRoundCut"> {
+  applyRoundCut(input: ApplyRoundCut, opts?: ApplyRoundCutOptions): Promise<AdvanceApplyOutcome>;
+}
+
+/**
+ * The SINGLE writer of the cut+release+audit transaction body — the one place the conditional
+ * `alive → eliminated` claim, the champion flip, the whole-roster release, and (when a hook is given) the
+ * durable audit row live. Runs entirely within the passed transaction client (like `releaseEliminatedRosters`);
+ * `createPrismaPlayoffAdvanceStore` and the web / auto-fire surfaces all funnel through it, so the three cut
+ * surfaces share ONE implementation and none re-implement the statements. The 0-row claim is the idempotency
+ * gate that fronts BOTH the release AND the audit hook: a re-run cuts nothing, releases nothing, writes no row.
+ */
+async function runRoundCutInTx(
+  tx: Prisma.TransactionClient,
+  { leagueId, roundLabel, roundPeriodId, eliminated, champion, at }: ApplyRoundCut,
+  recordAudit?: RecordCutAudit,
+): Promise<AdvanceApplyOutcome> {
+  // Idempotent entry gate: flip only the still-ALIVE eliminated managers. 0 rows ⇒ a prior run already cut
+  // this round ⇒ no-op (NO release, NO audit row).
+  const claim = await tx.playoffEntry.updateMany({
+    where: { leagueId, status: "alive", managerId: { in: eliminated } },
+    data: { status: "eliminated", eliminatedRound: roundLabel, eliminatedAt: at },
+  });
+  if (claim.count === 0) return { outcome: "already-cut" as const };
+
+  // Last survivor → champion (final round only; the orchestrator passes null otherwise).
+  if (champion) {
+    await tx.playoffEntry.updateMany({
+      where: { leagueId, status: "alive", managerId: champion },
+      data: { status: "champion" },
+    });
+  }
+
+  // Release the just-cut managers' ENTIRE active roster to the wire, ENLISTED in THIS transaction so the cut
+  // + release commit atomically. Reuses the shared `@app/faab` release primitive (locked slots released under
+  // the `app.commish_override` GUC, scoped to the round just played).
+  const released = await releaseEliminatedRosters(tx, {
+    leagueId,
+    managerIds: eliminated,
+    roundPeriodId,
+    at,
+  });
+
+  // The durable governance row, when a surface supplies the hook — inserted in THIS same transaction so the
+  // cut + release + audit are one atomic unit. The CLI passes no hook (stdout audit only).
+  if (recordAudit) await recordAudit(tx, released);
+
+  return { outcome: "applied" as const, released };
+}
+
+// ── Prisma adapter ──────────────────────────────────────────────────────────────────────
+export function createPrismaPlayoffAdvanceStore(prisma: PrismaClient): PrismaPlayoffAdvanceStore {
   return {
     async loadRoundContext(leagueId, roundLabel): Promise<RoundContext | null> {
       const round = await prisma.period.findFirst({
@@ -168,43 +249,11 @@ export function createPrismaPlayoffAdvanceStore(prisma: PrismaClient): PlayoffAd
       return out;
     },
 
-    async applyRoundCut({
-      leagueId,
-      roundLabel,
-      roundPeriodId,
-      eliminated,
-      champion,
-      at,
-    }): Promise<AdvanceApplyOutcome> {
-      return prisma.$transaction(async (tx) => {
-        // Idempotent entry gate: flip only the still-ALIVE eliminated managers. 0 rows ⇒ a prior run
-        // already cut this round (they are already `eliminated`) → no-op (mirrors the transition claim).
-        // This gate ALSO fronts the release: a no-op cut releases nothing.
-        const claim = await tx.playoffEntry.updateMany({
-          where: { leagueId, status: "alive", managerId: { in: eliminated } },
-          data: { status: "eliminated", eliminatedRound: roundLabel, eliminatedAt: at },
-        });
-        if (claim.count === 0) return { outcome: "already-cut" as const };
-
-        // Last survivor → champion (final round only; the orchestrator passes null otherwise).
-        if (champion) {
-          await tx.playoffEntry.updateMany({
-            where: { leagueId, status: "alive", managerId: champion },
-            data: { status: "champion" },
-          });
-        }
-
-        // Release the just-cut managers' ENTIRE active roster to the wire, ENLISTED in THIS transaction so
-        // the cut + the release commit atomically. Reuses the shared `@app/faab` release primitive (locked
-        // slots released under the `app.commish_override` GUC, scoped to the round just played).
-        const released = await releaseEliminatedRosters(tx, {
-          leagueId,
-          managerIds: eliminated,
-          roundPeriodId,
-          at,
-        });
-        return { outcome: "applied" as const, released };
-      });
+    /** Apply the resolved cut in ONE self-opened `$transaction`. `opts.recordAudit`, when given, writes the
+     *  durable governance row inside that same transaction. The whole body is {@link runRoundCutInTx}, the
+     *  single writer shared by the CLI, web, and auto-fire surfaces. */
+    async applyRoundCut(input, opts = {}): Promise<AdvanceApplyOutcome> {
+      return prisma.$transaction((tx) => runRoundCutInTx(tx, input, opts.recordAudit));
     },
   };
 }
