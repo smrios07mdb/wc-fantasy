@@ -1776,6 +1776,18 @@ builder was designed for is now realized across BOTH cards. The period-BOUND Poi
 waivers card's Points tab is a real-`WvPlayer`-data overview instead. `FaPickRow` (in waivers
 `components.tsx`) is the shared free-agent picker row consumed by `BidComposer` + `FreeAgentPanel`.
 
+**PLAYERS-1 (2026-07-04) — a THIRD consumer + a cross-module dependency.** `FaPlayerCardSheet` is now
+also consumed by the `/players` browser (§29). It is used CROSS-MODULE (imported from `src/waivers/`,
+NOT physically moved) because `faPlayerCardContract.test.ts` fs-pins its current path — a move would
+break the very tests that prove /waivers is unchanged. Two OPTIONAL props were added, both defaulting to
+today's /waivers behaviour verbatim: `onToggleStar?` (the header star renders only when the handler is
+present — /players is read-only, so it omits it) and `footNote` (default = the literal /waivers copy;
+/players overrides it to point at Waivers). `PlPlayer` is a structural superset of `WvPlayer`, so the
+card takes it directly. This waivers→players import is a KNOWN, INTENTIONAL seam; the eventual clean
+home is a shared location — tracked as a BACKLOG debt item (moving the file updates the contract-test
+pin). Until then, /players imports EXACTLY ONE thing from /waivers (the card); its row atoms
+(`PlPos`/`PlKit`/`OwnerChip`) are local on ds-global + route-scoped classes.
+
 ## §20 — Group→playoff transition + playoff lineup mode
 
 **Shipped:** `feat/playoff-transition` (87a7e1a→b7dc9d3, 7 commits) + `feat/playoff-lineup-mode` (706351d + 3952e62), ff-merged to `main`. 2115 tests ✓. See also **DECISIONS.md → Group→playoff transition + playoff lineup mode**.
@@ -2158,3 +2170,58 @@ Two commissioner writes on the Stat-corrections tab. Both feed the EXISTING adap
 **Reverse-action on audit rows: WON'T-BUILD.** `commish_audit` is a reversibility record, not a control surface — see DECISIONS.md → 2026-07-02 (Thread 6) for the full rationale (per-action-type intent re-derivation, `round_advance`'s `reversible:false`, existing per-surface undo paths already covering the reversible cases).
 
 `packages/` diff EMPTY. See PROJECT.md / DECISIONS.md → 2026-07-02 (Thread 6) + BACKLOG.md → Commissioner console (sequence CLOSED).
+
+## §29 — `/players` full-tournament browser read surface (`feat/players-browser`, PLAYERS-1)
+
+A new authenticated, **READ-ONLY** route that browses the entire tournament player pool (rostered +
+free agent) — the gap between the pre-tournament draft board and the window-gated waivers FA list.
+Built to the committed design reference (`design/design_reference/players/`, landed `c0c7fce`).
+
+- **Route.** `apps/web/app/players/{page,layout,loadPlayers}.tsx`. `page.tsx` gates on the shared
+  `getSessionManager()` (no session → `/sign-in`; not-allowlisted / unlinked → `/auth/denied`),
+  `force-dynamic`. `layout.tsx` wraps in `<AppShell active={null}>` — /players is NOT a nav
+  destination (T15-2 owns the nav; entry is the dashboard tile + the /waivers link), which relied on
+  a **type-only** widening of `AppShell`'s `active` prop `NavId → NavId | null` (the single guard at
+  `AppShell.tsx`; `selectMobileNavPartition` / `MoreSheet` already accepted null). CSS is route-scoped
+  `src/players/players.css` on the canonical global ds tokens (no forked tokens, gold-free).
+
+- **Loader — `loadPlayers` (READ-ONLY, owner-bypass, page-load snapshot).** One `Promise.all`; NO
+  migration/schema/RLS/Realtime/write. Data discipline (pinned by `loadPlayers.contract.test.ts`):
+  nation ← `player.team.name` (the `fifa_team` join; `player.country` is never selected/read — it is
+  never populated by ingestion); `nationAlive` ← `!fifa_team.eliminated` (null team ⇒ alive, mirroring
+  `isAddTeamEliminated`); `seasonPoints` ← `score_player_match.groupBy({ by:["playerId"], _sum:{points} })`
+  — the SAME aggregation shape `loadWaivers` uses (R3: the contract test pins both files contain the
+  identical line, so a drift in either fails); ownership ← active `roster_player`
+  (`{ leagueId, droppedAt: null }` — the byte-identical `liveOwnedWhere` predicate, inlined because that
+  helper is not exported from `@app/faab` and packages/faab is an untouched STOP seam) with manager
+  display names attached SERVER-SIDE via a `nameById` map (the `loadGameDetail` / `loadPlayoffs`
+  scoped-read-model precedent — the browser never reads manager rows); the FA-window phase ←
+  `acquisitionWindowState` over the current period (the SAME source loadWaivers uses; never re-derived).
+  The per-player acquisition-cutoff clock (`kickoffAt`) reuses the loadWaivers per-team next-kickoff map.
+
+- **Pure view-logic — `src/players/playersLogic.ts` (no-DB, unit-tested).** Each filter is a standalone
+  predicate (search / position / availability All|FA|Rostered|Mine / nation / active-teams), AND-composed
+  by `filterPlayers`; `sortPlayers` is season-points with **nulls always last** in both directions +
+  a stable name tiebreak; `pageSlice` is the cumulative 25-row reveal; `shouldShowBidTrailer` is the
+  four-clause gate (FREE AGENT ∧ nation ALIVE ∧ cutoff NOT passed ∧ window OPEN); `activeFilterLabels`
+  names the active filters for the empty state. The client (`PlayersClient`) is a thin renderer over
+  these + the shared `NationFilter` + the shared card.
+
+- **Row → shared card + bid hand-off.** Row tap opens `FaPlayerCardSheet` (the ONE cross-module dep —
+  see the Prompt-56 note above), read-only (no star; foot points to Waivers). A FREE-agent row (window
+  open, cutoff not passed, nation alive) shows a trailing `<a href="/waivers?bid=<id>">` — a SIBLING of
+  the card-opening button (the `FaPickRow` sibling-control precedent; valid HTML, never nested). It only
+  NAVIGATES. `/waivers` reads `?bid=` server-side → `WaiversClient` resolves it ONCE
+  (`resolveBidDeepLink`, pure, mount-only) and PRESELECTS through the existing `setSelected` path
+  (sealed-bid → composer opens preselected; free-agency → FA panel armed) iff the window is open AND the
+  player is still claimable (`claimableFreeAgents`), else a silent no-op. The bid submit path, FAAB
+  engine, and composer internals are byte-untouched — preselection only. This SINGLE-SOURCES acquisition
+  on /waivers (see DECISIONS.md → 2026-07-04, PLAYERS-1).
+
+- **Entry points (only two).** A static "Player pool" `Module` tile on the dashboard (group + playoff
+  phases; needs no loader data, so `loadDashboard` is untouched) + a "Browse all players" link on
+  /waivers. No new bottom-nav tab (T15-2 owns nav).
+
+- **Mobile hard-rules.** ≥44px tap targets; the shared sheet owns `dvh` height + a sticky ✕ + scroll
+  containment; the card scrim is route-lifted to **z120** — ABOVE the z100 bottom tab bar and its z102
+  More sheet (the T15 "overlays above the bar" rule; leaves the global ds.css token intact).
