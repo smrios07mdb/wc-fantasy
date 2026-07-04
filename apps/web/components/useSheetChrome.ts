@@ -103,6 +103,5 @@ export function useSheetChrome(
     };
     // One run per open-cycle by design (re-running would re-lock/re-focus on every parent
     // render); onCloseRef + panelRef stay current without being deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 }

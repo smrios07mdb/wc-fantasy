@@ -143,11 +143,15 @@ describe("route surfaces on the scale", () => {
 
   it("draft toasts: overlay tier + lifted clear of the nav band on phones (F-P1-I1 merged instance)", () => {
     expect(draft).toMatch(/\.dr-toasts\s*{[^}]*z-index:\s*var\(--z-overlay\)/);
-    expect(draft).toMatch(/\.dr-toasts\s*{\s*bottom:\s*calc\(58px \+ env\(safe-area-inset-bottom, 0px\) \+ 12px\)/);
+    expect(draft).toMatch(
+      /\.dr-toasts\s*{\s*bottom:\s*calc\(58px \+ env\(safe-area-inset-bottom, 0px\) \+ 12px\)/,
+    );
   });
 
   it("commish: console clears the home indicator (F-P3-G3) and the view-as dropdown joins the scale", () => {
-    expect(commish).toMatch(/\.adm-console\s*{[^}]*padding-bottom:\s*calc\(32px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    expect(commish).toMatch(
+      /\.adm-console\s*{[^}]*padding-bottom:\s*calc\(32px \+ env\(safe-area-inset-bottom, 0px\)\)/,
+    );
     expect(commish).toMatch(/\.adm-viewas-menu\s*{[^}]*z-index:\s*var\(--z-overlay\)/);
   });
 
