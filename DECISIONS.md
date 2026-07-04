@@ -806,12 +806,27 @@ The staggered WC calendar has **no weekly "no-games" night**, so waivers run on 
   overall pick = priority #1) — it then persists and evolves by the move-to-bottom rule below.
   Draft order exists before MD1, so there is **no cold-start**; the order is **never** derived
   from standings/seeding.
-- **Move-to-bottom triggers ONLY when the tiebreak is actually USED** — i.e., you won a player
-  *because* order broke the tie. Winning on bid amount alone does **not** move you. (In a pure-FAAB
-  system, order only ever matters as a tiebreak, so this is the consistent reading of the locked
-  rule — you "spend" your high position only when you use it.)
-- **Batch processed highest-bid-first, player-by-player;** a manager who uses the tiebreak drops
-  to the bottom **immediately** for the rest of that batch → no sweeping all the tied players.
+- **Move-to-bottom fires on EVERY won claim** — **commissioner amendment 2026-07-04** (shipped
+  `9f31859`; supersedes the original "triggers ONLY when the waiver tiebreak is actually USED —
+  winning on bid amount alone does not move you"). Now **any** won blind-bid claim — contested,
+  uncontested, or a winning **$0 bid** — moves the winner to the back of the rolling waiver order.
+  The waiver order therefore now reads as **"longest since last win"**: whoever has gone longest
+  without winning sits at the top and wins the next tiebreak. **Future batches only** — no backfill,
+  no migration, no retroactive reshuffle; the rule changes how new batches renumber, nothing already
+  stored.
+  - **Order-neutral paths (unchanged):** the **$0 free-agent grant** (the instant `claimFreeAgent`
+    acquire) is bids-free and **never** writes `waiverOrderPosition` — deliberately distinct from a
+    winning $0 *blind bid*, which does move. Only a **seeded** winner already in the order moves; an
+    **unseeded** winner (null position) is never inserted (that would be a re-seed — out of scope).
+  - **Playoff carry-forward composes unchanged:** `carryForwardWaiverOrder` reads whatever contiguous
+    order the move-on-win rule leaves, removes the eliminated, and re-packs survivors 1..K with no
+    re-seed.
+- **Batch processed highest-bid-first, player-by-player;** the winner drops to the bottom
+  **immediately** for the rest of that batch (the **generalized anti-sweep**) → no sweeping the other
+  tied/available players, and an amount-win now costs you a *later* tied player you'd have taken on
+  priority. With multiple winners the final back-order falls out **emergently**: the highest-$ win is
+  processed first and lands furthest forward among the moved set, and a repeat winner's **last** win
+  re-sinks it to the very bottom (no special-casing).
 - **A manager's own multiple winning bids resolve highest-first**, applying each that's still
   legal (budget + roster + a valid drop) and **skipping** any that no longer fit — minimal
   conditional logic, boring/reliable. *(Conditional / grouped bids = possible later enhancement,
@@ -1591,11 +1606,13 @@ is Prompt 26). Merged to `main` @ `2145700`. The decisions of record:
   refund a bid whose add target already kicked off; highest-bid-first, player-by-player; tie → the rolling
   waiver order; a manager's own multiple wins apply highest-first, skipping any that no longer fit; $0 bids
   legal; every won claim is add/drop + a budget debit; the waiver order stays a contiguous 1..N permutation.
-- **Move-to-bottom fires ONLY when the tiebreak is actually USED** (an equal competing bid existed and the
-  waiver order decided the win). **Winning on bid amount alone never moves a manager.** The single
-  `tiebreakUsed` boolean both stamps the winning bid and gates the renumber, and the winner drops to the
-  bottom **immediately for the rest of that same batch** (so a tiebreak winner can't sweep all the tied
-  players).
+- **Move-to-bottom fires on EVERY won claim** — **amended 2026-07-04 (`9f31859`)** from the original
+  Prompt-25 rule "fires ONLY when the tiebreak is actually USED; winning on bid amount alone never moves a
+  manager." `tiebreakUsed` is still computed and stamped on the winning bid (it now reads as "was this win
+  decided by the order"), but it **no longer gates the renumber**: the gate is now "won a claim AND is a
+  seeded manager not already at the bottom." The winner still drops to the bottom **immediately for the
+  rest of that same batch** (the generalized anti-sweep), and the emergent multi-/repeat-winner back-order
+  falls out of that immediate drop. Unseeded winners are never inserted; the $0 FA grant path is untouched.
 - **Own bids resolve by AMOUNT, highest-first-skip** — this is **emergent**, not special-cased: the loop
   always awards the globally-highest live bid against the manager's *updated* budget / roster / ownership,
   so a lower own bid that no longer fits (drop already consumed, budget exhausted, roster cap) is naturally
