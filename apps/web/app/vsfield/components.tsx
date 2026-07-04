@@ -42,6 +42,7 @@ import type {
 import type { Position } from "@app/shared";
 import type { BenchPlayerView, ManagerBench } from "@/src/vsfield/benches";
 import { kitOf } from "./kitOf";
+import { MacheteMini } from "./MacheteGlyph";
 
 // "historical" (T11) is set when a PRIOR matchday is selected: the view is static (no live subscription),
 // so the pill reads "Final" rather than a connection state.
@@ -209,31 +210,46 @@ function LbWld({ h2h }: { h2h: NonNullable<FieldEntry["h2hVsViewer"]> }) {
   );
 }
 
-function LbRow({
+export function LbRow({
   entry,
   selected,
   onSelect,
   dimLive,
+  block = false,
+  rank,
 }: {
   entry: FieldEntry;
   selected: boolean;
   onSelect: (id: string) => void;
   dimLive: boolean;
+  /** T15-CUT: the row sits in the provisional facing-the-blade zone (elim fill + machete + WORD). */
+  block?: boolean;
+  /** T15-CUT: authoritative knockout ladder rank (overrides the field rank in knockout mode). */
+  rank?: number;
 }) {
   const pulse = useScorePulse(entry.points);
   const left = stillToCome(entry.counts);
   return (
     <button
       type="button"
-      className={"da-lb-row" + (entry.isMe ? " is-me" : "") + (selected ? " is-sel" : "")}
+      className={
+        "da-lb-row" +
+        (entry.isMe ? " is-me" : "") +
+        (selected ? " is-sel" : "") +
+        (block ? " is-block" : "")
+      }
       onClick={() => onSelect(entry.managerId)}
     >
-      <span className="da-lb-rk mono">{entry.rank}</span>
+      <span className="da-lb-rk mono">{rank ?? entry.rank}</span>
       <Avatar name={entry.displayName} isMe={entry.isMe} />
       <span className="da-lb-name">
         <b>{entry.isMe ? "You" : entry.displayName}</b>
         <span className="da-lb-sub">
-          {entry.counts.playing > 0 ? (
+          {block ? (
+            <em className="ko-blocksub">
+              <MacheteMini /> on the block
+            </em>
+          ) : entry.counts.playing > 0 ? (
             <em className={"da-lb-live" + (dimLive ? " is-dim" : "")}>
               <span className="vf-livedot" aria-hidden="true" />
               {entry.counts.playing} live · {left} left
@@ -865,34 +881,48 @@ export function MaYou({ field }: { field: FieldEntry[] }) {
   );
 }
 
-function MaRow({
+export function MaRow({
   entry,
   onTap,
   dimLive,
+  block = false,
+  rank,
 }: {
   entry: FieldEntry;
   onTap: (id: string) => void;
   dimLive: boolean;
+  /** T15-CUT: the row sits in the provisional facing-the-blade zone (elim fill + machete + WORD). */
+  block?: boolean;
+  /** T15-CUT: authoritative knockout ladder rank (overrides the field rank in knockout mode). */
+  rank?: number;
 }) {
   const pulse = useScorePulse(entry.points);
   return (
     <button
       type="button"
-      className={"ma-row" + (entry.isMe ? " is-me" : "")}
+      className={"ma-row" + (entry.isMe ? " is-me" : "") + (block ? " is-block" : "")}
       onClick={() => onTap(entry.managerId)}
     >
-      <span className="ma-row-rk mono">{entry.rank}</span>
+      <span className="ma-row-rk mono">{rank ?? entry.rank}</span>
       <Avatar name={entry.displayName} isMe={entry.isMe} />
       <span className="ma-row-name">
         <b>{entry.isMe ? "You" : entry.displayName}</b>
         <span className="ma-row-sub">
-          {entry.counts.playing > 0 && (
-            <span className={"ma-livetag" + (dimLive ? " is-dim" : "")}>
-              <span className="vf-livedot" aria-hidden="true" />
-              {entry.counts.playing} live
+          {block ? (
+            <span className="ko-blocksub">
+              <MacheteMini /> on the block · {stillToCome(entry.counts)} to play
             </span>
+          ) : (
+            <>
+              {entry.counts.playing > 0 && (
+                <span className={"ma-livetag" + (dimLive ? " is-dim" : "")}>
+                  <span className="vf-livedot" aria-hidden="true" />
+                  {entry.counts.playing} live
+                </span>
+              )}
+              <span className="ma-ytptag">{stillToCome(entry.counts)} to play</span>
+            </>
           )}
-          <span className="ma-ytptag">{stillToCome(entry.counts)} to play</span>
         </span>
       </span>
       <span className="ma-row-right">
@@ -1054,6 +1084,7 @@ export function MaH2H({
   onOpenPlayer,
   dimLive,
   benches = [],
+  sheet = false,
 }: {
   field: FieldEntry[];
   oppId: string;
@@ -1062,6 +1093,9 @@ export function MaH2H({
   dimLive: boolean;
   /** Per-manager benches (display-only sibling of the snapshot); the shown side's bench renders below. */
   benches?: ManagerBench[];
+  /** T15-CUT: rendered inside the knockout drill-in sheet — the sheet header owns dismissal, so the
+   *  in-flow "‹ Standings" back button is dropped. Group mode never passes this (byte-equivalent). */
+  sheet?: boolean;
 }) {
   // Open on the OPPONENT's XI: you tapped this row to scout them, so their team
   // leads; your own side is one tap away on the segment below. (Mobile only —
@@ -1073,9 +1107,11 @@ export function MaH2H({
   const shown = side === "me" ? me : opp;
   return (
     <div className="ma-h2h">
-      <button type="button" className="ma-back" onClick={onBack}>
-        ‹ Standings
-      </button>
+      {!sheet && (
+        <button type="button" className="ma-back" onClick={onBack}>
+          ‹ Standings
+        </button>
+      )}
       <MaCompare me={me} opp={opp} />
       <div className="ma-sideseg">
         <button

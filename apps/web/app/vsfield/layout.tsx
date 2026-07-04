@@ -9,6 +9,9 @@
 import type { ReactNode } from "react";
 import "./ds.css";
 import "./vsfield.css";
+// T15-CUT: knockout ("The Cut") styles — marquee/YOU band/cut line/fallen/ceremony/sheet. Loads
+// after vsfield.css; every rule is scoped under ko-/koc- (plus the two is-block row states).
+import "./knockout.css";
 // Shared box-score modal styles — the drill-in opens <PlayerScoreSheet> (info-only) on this route.
 import "@/components/PlayerScoreSheet.css";
 import { AppShell } from "../shell/AppShell";

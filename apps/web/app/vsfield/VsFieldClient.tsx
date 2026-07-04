@@ -11,7 +11,7 @@
  * controller with the fresh JWT, tearing the prior one down first. `setAuth`-before-subscribe + the
  * change-nudge→refetch + the poll are all inside the (unit-tested) `startVsFieldLive`.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { VsFieldViewWithBenches } from "@/src/vsfield/benches";
 import { createClient } from "@/lib/supabase/client";
@@ -20,6 +20,7 @@ import { fetchVsField } from "@/src/vsfield/snapshotClient";
 import type { RealtimeClientLike } from "@/src/vsfield/realtime";
 import { PlayerScoreSheet } from "@/components/PlayerScoreSheet";
 import {
+  Avatar,
   BenchStrip,
   benchFor,
   CompareBand,
@@ -33,6 +34,17 @@ import {
   YouVsField,
   type ConnState,
 } from "./components";
+import {
+  KOCeremony,
+  KOChampion,
+  KOFallen,
+  KOMarquee,
+  KOReducedShape,
+  KOSheet,
+  KOYouBand,
+  KoLadder,
+  ordinal,
+} from "./KnockoutUI";
 
 const VIEW_TABS: ["period" | "season", string][] = [
   ["period", "This period"],
@@ -64,6 +76,9 @@ export function VsFieldClient({
   const [boxPlayer, setBoxPlayer] = useState<string | null>(null);
 
   const { leagueId } = initialView;
+  // T15-CUT: the knockout ("The Cut") projection — present only on the live knockout wave (or the
+  // champion endgame). undefined ⇒ every ko branch below is inert and the group render is unchanged.
+  const ko = view.ko;
   // Drive the subscription from the LIVE period, not the SSR-frozen one: a mid-session wave rollover
   // (or pre-season → first matchday) changes this id, so the effect tears down + re-subscribes the
   // score binding to the new period. Normal refetches keep the same id → no re-subscribe thrash.
@@ -153,6 +168,91 @@ export function VsFieldClient({
   };
   const displayedPeriodId = view.currentPeriod?.id ?? null;
 
+  // ── T15-CUT client state (every hook runs unconditionally; all render branches gate on `ko`) ──
+
+  // Phone detection for the drill-in SHEET mount only (the sheet is a phone pattern; desktop keeps the
+  // split cockpit). A matchMedia hook — not a layout fork — because the sheet carries a body-scroll-lock
+  // side effect that must never fire on desktop. Initial false ⇒ hydration-safe.
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(max-width: 760px)");
+    setIsPhone(mq.matches);
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // The cutting-ceremony transition latch (the shipped Chocoyo pattern): fires ONE-TIME when a round
+  // the client was watching flips live→past between refetches — never on mount, never in a loop.
+  // KOCeremony itself honors prefers-reduced-motion (static aftermath — the verdict is information).
+  const [ceremonyOpen, setCeremonyOpen] = useState(false);
+  const prevRoundStatuses = useRef<readonly string[] | null>(null);
+  useEffect(() => {
+    const cur = ko?.roundStatuses ?? null;
+    const prev = prevRoundStatuses.current;
+    prevRoundStatuses.current = cur;
+    if (!cur || !prev || prev.length !== cur.length) return;
+    const flipped = cur.findIndex((s, i) => prev[i] === "live" && s === "past");
+    if (flipped !== -1 && ko?.settled) setCeremonyOpen(true);
+  }, [view, ko]);
+
+  // The mobile drill-in opens as a bottom sheet pushing the EXISTING validated `?manager=` param via
+  // native history (Next App Router shallow support), so the hardware back-gesture closes it. Desktop
+  // selection (the cockpit) never touches history — same as today.
+  const pushedSheetRef = useRef(false);
+  const fieldRef = useRef(view.field);
+  fieldRef.current = view.field;
+  const openManagerSheet = (id: string) => {
+    setEffSel(id === meId ? "field" : id);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("manager", id);
+    window.history.pushState({ koSheet: true }, "", url);
+    pushedSheetRef.current = true;
+  };
+  const closeManagerSheet = () => {
+    if (pushedSheetRef.current) {
+      pushedSheetRef.current = false;
+      window.history.back();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("manager");
+    window.history.replaceState({}, "", url);
+    setEffSel(null);
+  };
+  useEffect(() => {
+    if (!ko) return;
+    const onPop = () => {
+      pushedSheetRef.current = false;
+      const id = new URLSearchParams(window.location.search).get("manager");
+      setEffSel(id && fieldRef.current.some((e) => e.managerId === id) ? id : null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [ko !== undefined]);
+
+  // A fallen row's drill-in is a T11 lookup of their CUT round (started prior ⇒ fully revealed):
+  // navigate to that period with the manager pre-selected — the same server-gated read path.
+  const openFallenLookup = (managerId: string, roundLabel: string) => {
+    const target = view.selectablePeriods.find((p) => p.label === roundLabel);
+    if (!target) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("period", target.id);
+    params.set("manager", managerId);
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  // Sheet identity header — PINNED TO THE MANAGER (rank/pts update live from the latest snapshot).
+  const sheetManagerId = ko && isPhone && effSel && effSel !== "field" ? effSel : null;
+  const sheetEntry = sheetManagerId
+    ? view.field.find((e) => e.managerId === sheetManagerId)
+    : undefined;
+  const sheetRow = sheetManagerId
+    ? ko?.ladder.find((r) => r.managerId === sheetManagerId)
+    : undefined;
+
   return (
     <div className="vf-app">
       <div className="vf-top">
@@ -161,9 +261,9 @@ export function VsFieldClient({
             badge + wordmark were removed here to stop doubling it — mirrors the Prompt-22 `.dr-logo`
             de-dup. This keeps only the vsfield-LOCAL context: the screen label + the live period line. */}
         <div className="vf-status">
-          <b className="display vf-brand-title">The Field</b>
+          <b className="display vf-brand-title">{ko ? "The Cut" : "The Field"}</b>
           <span className="t-micro text-tertiary" style={{ letterSpacing: ".06em" }}>
-            {periodLabel.toUpperCase()}
+            {ko ? `${ko.roundName.toUpperCase()} · GUILLOTINE` : periodLabel.toUpperCase()}
           </span>
         </div>
         <div className="tabs vf-viewtabs">
@@ -211,6 +311,9 @@ export function VsFieldClient({
         </div>
       ) : (
         <>
+          {/* T15-CUT: the theater marquee sits under the header, above the match strip (spec §5);
+              the champion endgame replaces it once the tournament completes (state e). */}
+          {ko && (ko.complete && ko.champion ? <KOChampion ko={ko} /> : <KOMarquee ko={ko} />)}
           <MatchStrip matches={view.matches} />
           {noPeriod ? (
             <div className="vf-banner vf-banner-empty">
@@ -229,12 +332,41 @@ export function VsFieldClient({
           {/* Desktop split cockpit: leaderboard left rail + the compare/aggregate main area.
               Hidden on phones via the .da-body media query (the .ma-scroll tree takes over). */}
           <div className="da-body">
-            <Leaderboard
-              field={view.field}
-              effSel={desktopSel}
-              onSelect={select}
-              dimLive={dimLive}
-            />
+            {ko ? (
+              /* Knockout rail: YOU band + reduced-shape strip + the authoritative ladder + the
+                 fallen. The "You vs the field" aggregate BUTTON is hidden in knockout (its
+                 record-vs-everyone includes the dead; the YOU band replaces its job) — selecting
+                 your own row still collapses the main area to the aggregate view. */
+              <div className="da-lb">
+                <KOYouBand ko={ko} />
+                <KOReducedShape />
+                <div className="da-lb-head">
+                  <span className="t-label">The ladder</span>
+                  <span className="t-micro text-tertiary">live · pts</span>
+                </div>
+                <KoLadder
+                  ko={ko}
+                  field={view.field}
+                  onSelect={select}
+                  dimLive={dimLive}
+                  effSel={desktopSel}
+                  mob={false}
+                />
+                <KOFallen
+                  fallen={ko.fallen}
+                  complete={ko.complete}
+                  viewerFallen={ko.viewer.state === "out"}
+                  onOpen={openFallenLookup}
+                />
+              </div>
+            ) : (
+              <Leaderboard
+                field={view.field}
+                effSel={desktopSel}
+                onSelect={select}
+                dimLive={dimLive}
+              />
+            )}
             <div className="da-main">
               <div className="da-scroll">
                 {me && opp && !opp.isMe ? (
@@ -280,9 +412,36 @@ export function VsFieldClient({
               </div>
             </div>
           </div>
-          {/* Mobile (leaderboard-first) tree — shown only under the .ma-scroll media query. */}
+          {/* Mobile (leaderboard-first) tree — shown only under the .ma-scroll media query. In
+              knockout mode the ladder home ALWAYS renders and the drill-in overlays as a bottom
+              sheet (state d) instead of the group-mode in-place swap. */}
           <div className="ma-scroll">
-            {effSel === null ? (
+            {ko ? (
+              <>
+                <KOYouBand ko={ko} mob />
+                <KOReducedShape />
+                <div className="ma-listlab">
+                  <span className="t-label">The ladder · tap to compare</span>
+                  <span className="t-micro text-tertiary">live · pts</span>
+                </div>
+                <div className="ma-list">
+                  <KoLadder
+                    ko={ko}
+                    field={view.field}
+                    onSelect={openManagerSheet}
+                    dimLive={dimLive}
+                    effSel={null}
+                    mob
+                  />
+                </div>
+                <KOFallen
+                  fallen={ko.fallen}
+                  complete={ko.complete}
+                  viewerFallen={ko.viewer.state === "out"}
+                  onOpen={openFallenLookup}
+                />
+              </>
+            ) : effSel === null ? (
               <MaStandings field={view.field} onSelect={select} dimLive={dimLive} />
             ) : effSel === "field" || effSel === meId ? (
               <>
@@ -313,6 +472,65 @@ export function VsFieldClient({
             )}
           </div>
         </>
+      )}
+
+      {/* T15-CUT: the phone drill-in sheet — pinned to the MANAGER (header rank/pts update live);
+          the hardware back-gesture closes it via the pushed `?manager=` history entry. */}
+      {ko && isPhone && effSel !== null && (
+        <KOSheet
+          open
+          onClose={closeManagerSheet}
+          header={
+            effSel === "field" || !sheetEntry ? (
+              <div className="ko-shead-id">
+                <div className="nm">You vs the whole field</div>
+                <div className="sub">{periodLabel}</div>
+              </div>
+            ) : (
+              <>
+                <Avatar name={sheetEntry.displayName} isMe={sheetEntry.isMe} />
+                <div className="ko-shead-id">
+                  <div className="nm">{sheetEntry.displayName}</div>
+                  <div className="sub">
+                    {sheetRow ? `${ordinal(sheetRow.rank)} of ${ko.aliveCount} · ` : ""}
+                    {sheetEntry.points} pts
+                    {isLivePeriod && conn === "live" && <span className="lv"> · ● LIVE</span>}
+                  </div>
+                </div>
+              </>
+            )
+          }
+        >
+          {effSel === "field" || !sheetEntry ? (
+            <YouVsField
+              field={view.field}
+              periodLabel={periodLabel}
+              onOpenPlayer={setBoxPlayer}
+              dimLive={dimLive}
+            />
+          ) : (
+            <>
+              <MaH2H
+                field={view.field}
+                oppId={effSel}
+                onBack={closeManagerSheet}
+                onOpenPlayer={setBoxPlayer}
+                dimLive={dimLive}
+                benches={view.benches}
+                sheet
+              />
+              <div className="ko-sfoot">
+                Tap any player for the minute-by-minute breakdown · <b>✕, tap outside, or go
+                back</b> to return to the ladder
+              </div>
+            </>
+          )}
+        </KOSheet>
+      )}
+
+      {/* T15-CUT: the cutting ceremony — a one-shot takeover fired by the live→past latch above. */}
+      {ko && ceremonyOpen && ko.settled && (
+        <KOCeremony ko={ko} onClose={() => setCeremonyOpen(false)} />
       )}
 
       {/* Info-only box-score modal — NO forfeitProps (vsfield never edits lineups). currentPeriod is
