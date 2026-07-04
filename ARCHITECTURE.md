@@ -2180,7 +2180,8 @@ Built to the committed design reference (`design/design_reference/players/`, lan
 - **Route.** `apps/web/app/players/{page,layout,loadPlayers}.tsx`. `page.tsx` gates on the shared
   `getSessionManager()` (no session → `/sign-in`; not-allowlisted / unlinked → `/auth/denied`),
   `force-dynamic`. `layout.tsx` wraps in `<AppShell active={null}>` — /players is NOT a nav
-  destination (T15-2 owns the nav; entry is the dashboard tile + the /waivers link), which relied on
+  destination **[SUPERSEDED by §29.2 — now `active="players"`, a first-class tab]** (T15-2 owns the nav;
+  entry was the dashboard tile + the /waivers link), which relied on
   a **type-only** widening of `AppShell`'s `active` prop `NavId → NavId | null` (the single guard at
   `AppShell.tsx`; `selectMobileNavPartition` / `MoreSheet` already accepted null). CSS is route-scoped
   `src/players/players.css` on the canonical global ds tokens (no forked tokens, gold-free).
@@ -2220,7 +2221,8 @@ Built to the committed design reference (`design/design_reference/players/`, lan
 
 - **Entry points (only two).** A static "Player pool" `Module` tile on the dashboard (group + playoff
   phases; needs no loader data, so `loadDashboard` is untouched) + a "Browse all players" link on
-  /waivers. No new bottom-nav tab (T15-2 owns nav).
+  /waivers. No new bottom-nav tab (T15-2 owns nav). **[§29.2: Players is now a first-class desktop
+  top-strip + mobile bottom-bar tab.]**
 
 - **Mobile hard-rules.** ≥44px tap targets; the shared sheet owns `dvh` height + a sticky ✕ + scroll
   containment; the card scrim is route-lifted to **z120** — ABOVE the z100 bottom tab bar and its z102
@@ -2256,9 +2258,43 @@ Reverses PLAYERS-1's G1 drop and fixes the entry points (merge HELD for review).
   players" `<a href="/players">` was added to the `MoreSheet` (the mobile nav surface) — additive, NOT a
   `NavId`, so /players stays out of the nav model. (3) The dashboard "Player pool" `Module` tile (already a
   real `<a>` cta) had its phase gate widened to group·playoff·complete. **A first-class Players bottom-nav
-  tab is T15-2's to add** (it owns the tab bar).
+  tab is T15-2's to add** (it owns the tab bar). **[DONE in §29.2 (`feat/players-nav-tab`) — this thread
+  added the nav item + wiring only; T15-2 retains the 6-item spacing + the F-P0-A1 bottom-bar tap-fix.]**
 - **Render proof.** `apps/web/scripts/verify-players.mjs` (`pnpm test:players`) — a real-browser replica
   (same class markers, REAL ds.css/players.css/waivers.css/shell.css/dashboard.css) asserting by paint
   geometry across desktop 1180 + phone 360/390: statline + flag-kit + full pool count + tappable tile +
   closed-window waivers link + MoreSheet entry. Pinned to source by `playersRenderProof.test.ts` (the
   `theCutSkin.test.ts` tripwire pattern) so the replica can't drift.
+
+### §29.2 — `/players` promoted to a first-class nav tab (`feat/players-nav-tab`, PLAYERS-TAB)
+
+Executes what §29 / §29.1 deferred to T15-2: the **Players tab** is now a real, UNGATED entry in the
+shared nav config — reachable by tap on **both** surfaces, not just by URL / dashboard tile / MoreSheet.
+Nav-only: the `/players` route, `loadPlayers`, the statline, the shared card, and every acquisition path
+are byte-untouched; no migration / schema / RLS / Realtime change.
+
+- **One config, two surfaces.** `crossNav.ts` gained a `players` `NavId` and a
+  `{ id:"players", href:"/players", label:"Players" }` `NavItem` in **`NAV_ITEMS`** (desktop top strip,
+  immediately after Waivers — its acquisition companion) **and** in **`BOTTOM_TAB_ITEMS`** (mobile bottom
+  bar). It is kept OUT of `MORE_SHEET_ITEMS`, so `selectMobileNavPartition("players")` returns
+  `bottomActive:"players"` — a primary bottom tab, never the More overflow. `AppShell` renders both
+  surfaces off these arrays with the existing `is-active`/`aria-current` wiring, so **no** `AppShell`
+  render change was needed beyond the one the type system forces: the exhaustive `NavIcon`
+  `Record<NavId,ReactNode>` gained a `players` person glyph (a missing key is a `tsc` error). The gated
+  `COMMISH_NAV_ITEM` precedent was the model, but Players is **ungated / always-render**.
+  `navItemsForPhase` passes `players` through unchanged (neither `vsfield`→"The Cut" nor
+  `playoffs`→"Theater"), so the tab is present + labelled "Players" in every phase.
+- **Active highlight.** `app/players/layout.tsx` flipped `active={null}` → `active="players"` (the §29
+  `NavId | null` widening still stands for genuinely nav-less shell screens). The tab now highlights on
+  `/players`: desktop `.sh-nav-item.is-active` (surface-3 pill + accent glyph), mobile
+  `.sh-btnav-item.is-active` (accent color).
+- **MoreSheet fallback kept.** The §29.1 additive "Browse players" `MoreSheet` entry stays byte-identical
+  as a redundant fallback (MoreSheet taps are not subject to the F-P0-A1 bottom-bar tap P0).
+- **T15-2 boundary.** The mobile bottom bar is now 5 tabs + More (6 slots). The tighter 6-item spacing
+  **and** the F-P0-A1 bottom-bar tap-reliability fix remain **T15-2's** — this thread added the item +
+  wiring only and did not touch that fix.
+- **Render proof (extended).** `verify-players.mjs` gained a 5th proof: a nav replica (real
+  `.sh-topnav`/`.sh-btmnav` classes, pinned to source by `playersRenderProof.test.ts`) asserts on desktop
+  **and** mobile that the Players tab is present on the visible surface, is an `<a href="/players">`,
+  renders active-highlighted (computed style distinct from a sibling), and **taps through** — a click
+  navigates the browser to `/players` (presence alone is insufficient). 14/14 checks green.
