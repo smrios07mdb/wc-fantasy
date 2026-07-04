@@ -74,6 +74,14 @@ function NavIcon({ id, size = 18 }: { id: NavId; size?: number }) {
         <path d="M8 11V8a4 4 0 0 1 8 0v3" />
       </>
     ),
+    // Players = the full-tournament player directory (PLAYERS-TAB): a person, head + shoulders.
+    // Distinct from every other glyph — no framed square, no ballot check, no podium bars.
+    players: (
+      <>
+        <circle cx="12" cy="8" r="3.4" />
+        <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+      </>
+    ),
     // Pool = a pick'em ballot card with a check (the match pick'em pool, Prompt 42) — distinct from
     // scoring's lined doc and vsfield's goal-circle.
     pool: (

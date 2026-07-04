@@ -17,6 +17,7 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
       "vsfield",
       "standings",
       "waivers",
+      "players",
       "pool",
       "playoffs",
       "scoring",
@@ -32,6 +33,8 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
     // T10: dedicated all-play-all standings page.
     expect(byId.standings).toMatchObject({ href: "/standings", label: "Standings" });
     expect(byId.waivers).toMatchObject({ href: "/waivers", label: "Waivers" });
+    // PLAYERS-TAB: the read-only /players browser is now a first-class nav entry (adjacent to Waivers).
+    expect(byId.players).toMatchObject({ href: "/players", label: "Players" });
     // Prompt 42 / feat/pool-nav: the pick'em pool seam is now a real nav entry.
     // Prompt 45: user-facing label renamed to "Quiniela" (the id/href/key stay "pool").
     expect(byId.pool).toMatchObject({ href: "/pool", label: "Quiniela" });
@@ -45,8 +48,14 @@ describe("crossNav config — shared cross-nav link set (pure, presentational)",
 });
 
 describe("BOTTOM_TAB_ITEMS — primary mobile bottom bar destinations", () => {
-  it("lists the 4 primary tabs in the specified order", () => {
-    expect(BOTTOM_TAB_ITEMS.map((i) => i.id)).toEqual(["home", "lineup", "vsfield", "pool"]);
+  it("lists the primary tabs in the specified order (PLAYERS-TAB added Players as the 5th)", () => {
+    expect(BOTTOM_TAB_ITEMS.map((i) => i.id)).toEqual([
+      "home",
+      "lineup",
+      "vsfield",
+      "pool",
+      "players",
+    ]);
   });
 
   it("relabels home as Dashboard on the bottom bar (same route, different label)", () => {
@@ -83,6 +92,7 @@ describe("selectActiveNav — current path → active nav id (pure, IO-free)", (
     expect(selectActiveNav("/vsfield")).toBe("vsfield");
     expect(selectActiveNav("/standings")).toBe("standings");
     expect(selectActiveNav("/waivers")).toBe("waivers");
+    expect(selectActiveNav("/players")).toBe("players");
     expect(selectActiveNav("/pool")).toBe("pool");
     expect(selectActiveNav("/playoffs")).toBe("playoffs");
     expect(selectActiveNav("/scoring")).toBe("scoring");
@@ -133,6 +143,12 @@ describe("selectMobileNavPartition — maps active NavId to primary/secondary bu
       moreActive: null,
       moreHasActive: false,
     });
+    // PLAYERS-TAB: Players is a primary bottom tab, never routed to the More overflow.
+    expect(selectMobileNavPartition("players")).toMatchObject({
+      bottomActive: "players",
+      moreActive: null,
+      moreHasActive: false,
+    });
   });
 
   it("places More-sheet routes in moreActive and sets moreHasActive", () => {
@@ -177,6 +193,38 @@ describe("selectMobileNavPartition — maps active NavId to primary/secondary bu
       // moreHasActive flag is consistent with moreActive
       expect(moreHasActive).toBe(inMore);
     }
+  });
+});
+
+describe("Players — first-class nav tab (PLAYERS-TAB)", () => {
+  it("sits in the desktop top strip immediately after Waivers", () => {
+    const ids = NAV_ITEMS.map((i) => i.id);
+    expect(ids[ids.indexOf("waivers") + 1]).toBe("players");
+    expect(NAV_ITEMS.find((i) => i.id === "players")).toMatchObject({
+      href: "/players",
+      label: "Players",
+    });
+  });
+
+  it("is a PRIMARY mobile bottom tab — never a More-sheet-only entry", () => {
+    expect(BOTTOM_TAB_ITEMS.map((i) => i.id)).toContain("players");
+    expect(MORE_SHEET_ITEMS.map((i) => i.id)).not.toContain("players");
+    // so the partition routes /players to the bottom bar, never the More overflow
+    expect(selectMobileNavPartition("players")).toEqual({
+      bottomActive: "players",
+      moreActive: null,
+      moreHasActive: false,
+    });
+  });
+
+  it("is UNGATED — present in the always-render lists (unlike the gated COMMISH entry)", () => {
+    expect(NAV_ITEMS.map((i) => i.id)).toContain("players");
+    expect(BOTTOM_TAB_ITEMS.map((i) => i.id)).toContain("players");
+  });
+
+  it("resolves /players (and a trailing slash) to the players nav id", () => {
+    expect(selectActiveNav("/players")).toBe("players");
+    expect(selectActiveNav("/players/")).toBe("players");
   });
 });
 

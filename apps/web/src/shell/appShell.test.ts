@@ -52,11 +52,12 @@ describe("AppShell — the global nav chrome (server component, pure-presentatio
     }
   });
 
-  it("defines a glyph for every NavId — including the Prompt-42 pool + T10 standings entries", () => {
+  it("defines a glyph for every NavId — including the Prompt-42 pool + T10 standings + PLAYERS-TAB players entries", () => {
     // The glyph map is `Record<NavId, ReactNode>` (exhaustive), so a missing key is a tsc error too;
-    // this guards the source-level contract that adding "pool"/"standings" to the union added its glyph.
+    // this guards the source-level contract that adding "pool"/"standings"/"players" to the union added its glyph.
     expect(shell).toMatch(/pool:\s*\(/);
     expect(shell).toMatch(/standings:\s*\(/);
+    expect(shell).toMatch(/players:\s*\(/);
   });
 
   it("labels the topbar banner so it's distinguishable from a screen's own <header>", () => {
@@ -95,6 +96,17 @@ describe("AppShell mounting — wraps the authenticated screens ONLY", () => {
     // feat/pool-nav: now that "pool" is a real NavId, the Prompt-42 escape-hatch cast must be gone.
     expect(poolLayout, "the `as NavId` cast must be dropped").not.toMatch(/as NavId/);
     expect(poolLayout).toContain('active="pool"');
+  });
+
+  it('mounts the shell on the /players layout with active="players" (PLAYERS-TAB — first-class tab)', () => {
+    const playersLayout = read("players/layout.tsx");
+    expect(playersLayout).toMatch(/<AppShell active=/);
+    // PLAYERS-TAB flipped the PLAYERS-1 `active={null}` (URL/tile-only reach) to the real NavId, so the
+    // shell's Players tab highlights on /players. The old null must be gone.
+    expect(playersLayout).toContain('active="players"');
+    expect(playersLayout, "the PLAYERS-1 `active={null}` must be gone").not.toContain(
+      "active={null}",
+    );
   });
 
   it("wraps the signed-in hub state — and ONLY that landing state", () => {

@@ -72,6 +72,9 @@ describe("navItemsForPhase — the T15-4 decision: relabel, never a new tab", ()
       lineup: "Set lineup",
       vsfield: "The Cut",
       pool: "Quiniela",
+      // PLAYERS-TAB: Players passes through the knockout relabel unchanged (neither vsfield nor
+      // playoffs), so it stays "Players" — an always-render bottom tab in the knockout phase too.
+      players: "Players",
     });
     const more = Object.fromEntries(nav.moreSheetItems.map((i) => [i.id, i.label]));
     expect(more.playoffs).toBe("Theater");

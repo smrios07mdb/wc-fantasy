@@ -7,8 +7,9 @@
  * Labels are reused VERBATIM from the Prompt-16 hub (`app/page.tsx` FEATURES) so the top strip
  * and the hub name the same screens identically. "Home" links back to the hub.
  *
- * Mobile nav (Prompt 40): the bottom tab bar shows 4 primary destinations + More. The 4 primary
- * ids are in BOTTOM_TAB_ITEMS; the More-sheet ids are in MORE_SHEET_ITEMS.
+ * Mobile nav (Prompt 40): the bottom tab bar shows the primary destinations + More. The primary
+ * ids are in BOTTOM_TAB_ITEMS; the More-sheet ids are in MORE_SHEET_ITEMS. (PLAYERS-TAB promoted
+ * Players to a 5th primary bottom tab — the 4→5 spacing + tap-reliability are T15-2's, see BACKLOG.)
  */
 export type NavId =
   | "home"
@@ -17,6 +18,7 @@ export type NavId =
   | "vsfield"
   | "standings"
   | "waivers"
+  | "players"
   | "pool"
   | "playoffs"
   | "scoring"
@@ -51,6 +53,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // (its live companion), ahead of the reference pages; mirrors the design IA (The Field → Standings).
   { id: "standings", href: "/standings", label: "Standings" },
   { id: "waivers", href: "/waivers", label: "Waivers" },
+  // Full-tournament player browser (PLAYERS-TAB) — the read-only /players directory promoted to a
+  // first-class tab, placed adjacent to Waivers (its acquisition companion: an FA row hands a bid
+  // off to /waivers via ?bid=). UNGATED / always-render, unlike the is_commissioner COMMISH entry.
+  { id: "players", href: "/players", label: "Players" },
   // Match pick'em pool (Prompt 42) — grouped with the gameplay screens, ahead of the reference pages.
   // User-facing label is "Quiniela" (Prompt 45 copy rename); the NavId/route/id key stay "pool".
   { id: "pool", href: "/pool", label: "Quiniela" },
@@ -69,6 +75,11 @@ export const BOTTOM_TAB_ITEMS: readonly NavItem[] = [
   { id: "lineup", href: "/lineup", label: "Set lineup" },
   { id: "vsfield", href: "/vsfield", label: "Vs the field" },
   { id: "pool", href: "/pool", label: "Quiniela" },
+  // PLAYERS-TAB: Players is a first-class MOBILE bottom tab too (not More-sheet-only). It is kept
+  // OUT of MORE_SHEET_ITEMS, so `selectMobileNavPartition` routes it to the bottom bar (bottomActive),
+  // never the More overflow. This takes the bottom bar to 5 tabs + More (6 slots) — the tighter
+  // spacing + the F-P0-A1 bottom-bar tap-reliability fix belong to T15-2 (see BACKLOG).
+  { id: "players", href: "/players", label: "Players" },
 ];
 
 // Secondary destinations surfaced in the More bottom sheet, in order (per Prompt 40 spec; Phase 4 adds

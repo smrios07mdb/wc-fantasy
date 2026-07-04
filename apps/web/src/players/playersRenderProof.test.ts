@@ -107,3 +107,44 @@ describe("render proof reads the REAL CSS (can't pass against stale styles)", ()
     }
   });
 });
+
+describe("players nav TAB — the render proof's nav replica is pinned to source (PLAYERS-TAB)", () => {
+  const crossNav = read("src/shell/crossNav.ts");
+  const appShell = read("app/shell/AppShell.tsx");
+  const playersLayout = read("app/players/layout.tsx");
+
+  it("crossNav lists Players in BOTH always-render lists (desktop top strip + mobile bottom bar)", () => {
+    // the replica renders /players tabs on both surfaces — they must map to real config entries
+    expect(crossNav).toContain('{ id: "players", href: "/players", label: "Players" }');
+    // …and NOT in the More sheet, so the mobile partition makes it a bottom tab (never overflow)
+    const moreBlock = crossNav.slice(
+      crossNav.indexOf("export const MORE_SHEET_ITEMS"),
+      crossNav.indexOf("const MORE_IDS"),
+    );
+    expect(moreBlock, "players must stay OUT of MORE_SHEET_ITEMS").not.toContain('id: "players"');
+  });
+
+  it("AppShell emits the .sh-nav-item / .sh-btnav-item active markers the replica mirrors", () => {
+    expect(appShell).toContain("sh-nav-item");
+    expect(appShell).toContain("sh-btnav-item");
+    expect(appShell).toContain("is-active");
+    expect(appShell).toContain('aria-current={isActive ? "page" : undefined}');
+    // the exhaustive glyph map carries the players person glyph
+    expect(appShell).toMatch(/players:\s*\(/);
+  });
+
+  it('the /players layout mounts the shell with active="players" (highlights the tab)', () => {
+    expect(playersLayout).toContain('active="players"');
+    expect(playersLayout).not.toContain("active={null}");
+  });
+
+  it("verify-players.mjs mounts a nav replica and PROVES the tap-through (not just presence)", () => {
+    expect(verify).toContain("navReplica");
+    for (const cls of ["sh-topnav", "sh-btmnav", "sh-nav-item", "sh-btnav-item"]) {
+      expect(verify).toContain(cls);
+    }
+    // presence alone is not enough — the proof clicks the tab and waits for the /players navigation
+    expect(verify).toContain("waitForURL");
+    expect(verify).toContain('navigatedTo === "/players"');
+  });
+});

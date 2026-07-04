@@ -7,12 +7,16 @@
  * to source by `playersRenderProof.test.ts` so the replica can't silently drift — with the REAL
  * app/styles/ds.css + src/players/players.css + src/waivers/waivers.css + app/shell/shell.css +
  * app/_dashboard/dashboard.css, in headless Chromium, and asserts by true paint geometry across desktop
- * 1180 + phone widths 360/390. It proves the four things the remediation fixes:
+ * 1180 + phone widths 360/390. It proves five things — the four PLAYERS-1 remediation fixes, plus the
+ * PLAYERS-TAB first-class nav tab:
  *
  *   1 · /players paints the STATLINE (real stat columns) + the FLAG-KIT column + the full pool count.
  *   2 · the dashboard "Player pool" tile is a tappable <a> that navigates to /players.
  *   3 · the /waivers "Browse all players" link RENDERS while claims are CLOSED (locked window).
  *   4 · the MoreSheet "Browse players" entry exists and links to /players.
+ *   5 · PLAYERS-TAB: the Players NAV TAB is present on the real nav surface — the desktop top strip
+ *       AND the mobile bottom bar — renders active-highlighted on /players, and TAPS THROUGH (a click
+ *       navigates the browser to /players; presence in the bar alone is not enough).
  *
  * Plus the T15 mobile hard-rules on the table: the Player column is sticky-pinned (horizontal swipe),
  * the bid trailer is a ≥44px tap target, and the page does not overflow horizontally (the swipe is
@@ -195,6 +199,39 @@ function moreScreen() {
         <a href="/scoring" class="sh-more-item">Scoring</a>
       </div>
     </div>
+  </nav>
+</div>`;
+}
+
+// ── nav-chrome replica (class names pinned to AppShell.tsx by playersRenderProof.test.ts) ──
+// Renders BOTH the desktop top strip (.sh-topnav > .sh-nav-item) and the mobile bottom bar
+// (.sh-btmnav > .sh-btnav-item) AS the /players page: the Players tab carries `is-active` +
+// `aria-current="page"`, exactly as AppShell emits when `active="players"`. shell.css's 640px swap
+// shows the top strip on desktop and the bottom bar on mobile, so each width exercises the surface
+// actually visible there — proving the FIRST-CLASS Players tab (PLAYERS-TAB) on BOTH surfaces.
+const NAV_PERSON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>`;
+const topItem = (href, label, active) =>
+  `<a href="${href}" class="sh-nav-item${active ? " is-active" : ""}"${active ? ' aria-current="page"' : ""}>${NAV_PERSON}${label}</a>`;
+const btmItem = (href, label, active) =>
+  `<a href="${href}" class="sh-btnav-item${active ? " is-active" : ""}"${active ? ' aria-current="page"' : ""}>${NAV_PERSON}<span>${label}</span></a>`;
+function navReplica() {
+  return `
+<div class="sh-app sh-app-top">
+  <header class="sh-topbar" aria-label="Global">
+    <a class="sh-brand" href="/"><span class="sh-brand-txt"><b class="display">XI</b></span></a>
+    <div class="sh-topnav-scroll"><nav class="sh-topnav" aria-label="Primary">
+      ${topItem("/standings", "Standings", false)}
+      ${topItem("/waivers", "Waivers", false)}
+      ${topItem("/players", "Players", true)}
+      ${topItem("/pool", "Quiniela", false)}
+    </nav></div>
+  </header>
+  <div class="sh-content" style="min-height:200px"></div>
+  <nav class="sh-btmnav" aria-label="Primary">
+    ${btmItem("/", "Dashboard", false)}
+    ${btmItem("/vsfield", "Vs the field", false)}
+    ${btmItem("/players", "Players", true)}
+    <button class="sh-btnav-item sh-more-btn" aria-label="More navigation options"><span>More</span></button>
   </nav>
 </div>`;
 }
@@ -386,6 +423,90 @@ for (const vp of VIEWPORTS) {
       ...(more.w > 0 && more.h > 0 ? [] : ["MoreSheet entry has zero painted size"]),
     ]);
   }
+
+  // 5 · Players NAV TAB (PLAYERS-TAB) — the FIRST-CLASS tab on the real nav surface: present + active
+  //     highlight + tap-through. Desktop uses the top strip; mobile uses the bottom bar (the other is
+  //     display:none at that width per shell.css's 640px swap), mirroring the real AppShell. Presence
+  //     alone is not enough — we CLICK the visible tab and assert the browser navigates to /players.
+  currentHtml = buildHTML(navReplica());
+  await page.goto("http://pw.local/");
+  const navSel = isMobile ? ".sh-btmnav" : ".sh-topnav";
+  const itemSel = isMobile ? ".sh-btnav-item" : ".sh-nav-item";
+  const navProbe = await page.evaluate(
+    ({ navSel, itemSel }) => {
+      const nav = document.querySelector(navSel);
+      const items = nav ? [...nav.querySelectorAll(itemSel)] : [];
+      const players = items.find((a) => a.getAttribute && a.getAttribute("href") === "/players");
+      const sibling = items.find((a) => a.tagName === "A" && a.getAttribute("href") !== "/players");
+      if (!players) return { found: false };
+      const r = players.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      const cs = getComputedStyle(players);
+      const sib = sibling ? getComputedStyle(sibling) : null;
+      return {
+        found: true,
+        tag: players.tagName,
+        href: players.getAttribute("href"),
+        isActive: players.classList.contains("is-active"),
+        ariaCurrent: players.getAttribute("aria-current"),
+        w: r.width,
+        h: r.height,
+        hitInside: !!hit && (hit === players || players.contains(hit)),
+        color: cs.color,
+        bg: cs.backgroundColor,
+        sibColor: sib ? sib.color : null,
+        sibBg: sib ? sib.backgroundColor : null,
+      };
+    },
+    { navSel, itemSel },
+  );
+  await shot(page, `players-navtab-${vp.tag}.png`);
+  // active highlight paints distinct from a non-active sibling: mobile .sh-btnav-item.is-active sets
+  // color:accent; desktop .sh-nav-item.is-active sets background:surface-3 (shell.css) — compare the
+  // property each surface actually moves.
+  const highlightPaints = navProbe.found
+    ? isMobile
+      ? navProbe.color !== navProbe.sibColor
+      : navProbe.bg !== navProbe.sibBg
+    : false;
+  // tap-through: click the visible tab and assert the browser navigates to /players. The static route
+  // handler fulfills any pw.local path, so a real <a> navigation lands on http://pw.local/players.
+  let navigatedTo = null;
+  if (navProbe.found && navProbe.hitInside) {
+    try {
+      await Promise.all([
+        page.waitForURL((u) => u.pathname === "/players", { timeout: 4000 }),
+        page.click(`${navSel} ${itemSel}[href="/players"]`),
+      ]);
+      navigatedTo = new URL(page.url()).pathname;
+    } catch (e) {
+      navigatedTo = `NO-NAV (${e.message.split("\n")[0]})`;
+    }
+  }
+  report(`players NAV TAB · ${vp.tag} · present + active + taps through to /players`, [
+    ...(navProbe.found
+      ? []
+      : [`Players tab absent from the ${isMobile ? "bottom bar" : "top strip"}`]),
+    ...(navProbe.tag === "A" && navProbe.href === "/players"
+      ? []
+      : [`tab is <${navProbe.tag}> href=${navProbe.href} (not an <a> to /players)`]),
+    ...(navProbe.w > 0 && navProbe.h > 0 && navProbe.hitInside
+      ? []
+      : ["tab not visible / hit-testable on this surface"]),
+    ...(navProbe.isActive && navProbe.ariaCurrent === "page"
+      ? []
+      : [
+          `tab not marked active on /players (is-active=${navProbe.isActive} aria-current=${navProbe.ariaCurrent})`,
+        ]),
+    ...(highlightPaints
+      ? []
+      : [
+          `active highlight not distinct from a sibling (self ${isMobile ? navProbe.color : navProbe.bg} vs sib ${isMobile ? navProbe.sibColor : navProbe.sibBg})`,
+        ]),
+    ...(navigatedTo === "/players"
+      ? []
+      : [`tap did NOT navigate to /players (got ${navigatedTo})`]),
+  ]);
 
   await page.close();
 }
