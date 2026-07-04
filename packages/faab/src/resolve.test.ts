@@ -5,9 +5,10 @@ import type { Position } from "@app/shared";
 
 /**
  * The pure batch resolver is the heart of the FAAB engine (DECISIONS.md §D). These literal-driven
- * tests pin the 8 locked algorithm steps — especially the two subtle ones: move-to-bottom fires ONLY
- * when the waiver tiebreak is actually used, and a manager's own winning bids resolve highest-first,
- * skipping any that no longer fit.
+ * tests pin the 8 locked algorithm steps — especially the two subtle ones: move-to-bottom fires on
+ * EVERY won claim (commissioner amendment 2026-07-04 — was tiebreak-only), immediately so a winner
+ * slides to the back mid-batch and can't keep winning from the front; and a manager's own winning bids
+ * resolve highest-first, skipping any that no longer fit.
  */
 
 // ── terse builders ───────────────────────────────────────────────────────────
@@ -141,9 +142,9 @@ describe("resolveFaabBatch — highest bid wins (step 2)", () => {
   });
 });
 
-// ── Steps 3 & 4: tie → waiver order, move-to-bottom ONLY when the tiebreak is used ──────────────
+// ── Steps 3 & 4: tie → waiver order; move-to-bottom on EVERY won claim (commissioner amendment) ──────
 
-describe("resolveFaabBatch — tie breaks on waiver order; move-to-bottom only when USED", () => {
+describe("resolveFaabBatch — tie breaks on waiver order; move-to-bottom on EVERY won claim", () => {
   it("equal bids on a player break on waiver order (lower position wins) and mark the win tiebreakUsed", () => {
     const managers = [
       mgr("A", 1, { owned: ["A-drop"] }), // higher priority (lower number)
@@ -160,16 +161,22 @@ describe("resolveFaabBatch — tie breaks on waiver order; move-to-bottom only w
     if (b.outcome === "lost") expect(b.reason).toBe("lost-tiebreak");
   });
 
-  it("winning on amount alone does NOT move the winner to the bottom (the critical asymmetry)", () => {
+  it("winning on amount alone NOW moves the winner to the bottom (the inverted asymmetry — every won claim moves)", () => {
     const managers = [mgr("A", 1, { owned: ["A-drop"] }), mgr("B", 2, { owned: ["B-drop"] })];
-    // A outbids B on amount — no tie, so the order must NOT change.
+    // A outbids B on amount — NO tie. Under the OLD rule the order stayed put (move-to-bottom was gated
+    // on the tiebreak); under the commissioner amendment EVERY won claim moves the winner to the back, so
+    // A (pos 1) drops below B even though the win used no tiebreak. This is the exact inversion of the
+    // former "critical asymmetry" test.
     const out = resolveFaabBatch(
       input(managers, [bid("A", "X", 30, { id: "a" }), bid("B", "X", 10, { id: "b" })]),
     );
-    expect(out.waiverOrderChanged).toBe(false);
+    const a = resolutionFor(out, "a");
+    expect(a.outcome).toBe("won");
+    if (a.outcome === "won") expect(a.tiebreakUsed).toBe(false); // won on amount, NOT the tiebreak…
+    expect(out.waiverOrderChanged).toBe(true); // …yet the winner still moves to the back now
     expect(out.waiverOrder).toEqual([
-      { managerId: "A", position: 1 },
-      { managerId: "B", position: 2 },
+      { managerId: "B", position: 1 },
+      { managerId: "A", position: 2 },
     ]);
   });
 
@@ -205,6 +212,155 @@ describe("resolveFaabBatch — tie breaks on waiver order; move-to-bottom only w
       { managerId: "A", position: 2 },
       { managerId: "B", position: 3 },
     ]);
+  });
+});
+
+// ── The commissioner amendment (2026-07-04): EVERY won claim moves the winner to the back ────────────
+// These tests are the headline of the change — they pin the behaviors the old tiebreak-only rule did NOT
+// have: an uncontested / amount-only / $0 win now moves; multi- and repeat-winners fall out emergently;
+// and an unseeded winner is still never inserted into the seeded order.
+describe("resolveFaabBatch — every won claim moves the winner to the back (amendment)", () => {
+  it("an uncontested win (no rival bid at all) moves the winner to the back", () => {
+    // No contest, no tiebreak — just a lone won claim. Under the old rule the order never changed; now it
+    // does. B never bid, so B rises to the top and A drops beneath it.
+    const managers = [mgr("A", 1, { owned: ["A-drop"] }), mgr("B", 2, { owned: ["B-drop"] })];
+    const out = resolveFaabBatch(input(managers, [bid("A", "X", 25, { id: "a" })]));
+    const a = resolutionFor(out, "a");
+    expect(a.outcome).toBe("won");
+    if (a.outcome === "won") expect(a.tiebreakUsed).toBe(false);
+    expect(out.waiverOrderChanged).toBe(true);
+    expect(out.waiverOrder).toEqual([
+      { managerId: "B", position: 1 },
+      { managerId: "A", position: 2 },
+    ]);
+  });
+
+  it("a WINNING $0 blind bid still moves the winner to the back (distinct from the $0 FA grant, which is order-neutral)", () => {
+    // A $0 blind bid is legal (minimum bid) and, when it WINS, it is a won claim → the winner moves to the
+    // back like any other. This is deliberately DIFFERENT from the $0 FREE-AGENT grant (`claimFreeAgent`),
+    // which is bids-free and never touches the waiver order — see the FA-path grep in the writeup.
+    const managers = [mgr("A", 1, { owned: ["A-drop"] }), mgr("B", 2, { owned: ["B-drop"] })];
+    const out = resolveFaabBatch(input(managers, [bid("A", "X", 0, { id: "a" })]));
+    const a = resolutionFor(out, "a");
+    expect(a.outcome).toBe("won");
+    if (a.outcome === "won") expect(a.amount).toBe(0);
+    expect(out.waiverOrderChanged).toBe(true);
+    expect(out.waiverOrder).toEqual([
+      { managerId: "B", position: 1 },
+      { managerId: "A", position: 2 },
+    ]);
+  });
+
+  it("a win on AMOUNT immediately drops the winner, so they LOSE a later tied player to a rival (generalized anti-sweep)", () => {
+    // The anti-sweep now generalizes past ties: A wins X outright on amount (50), which under the amendment
+    // drops A to the back IMMEDIATELY — so when the tied player Y (A 20 = B 20) resolves, B is now the
+    // higher priority and takes it. Under the OLD tiebreak-only rule A would have kept pos 1 and swept BOTH.
+    const managers = [mgr("A", 1, { owned: ["A-x", "A-y"] }), mgr("B", 2, { owned: ["B-y"] })];
+    const bids = [
+      bid("A", "X", 50, { id: "ax", drop: "A-x" }),
+      bid("A", "Y", 20, { id: "ay", drop: "A-y" }),
+      bid("B", "Y", 20, { id: "by", drop: "B-y" }),
+    ];
+    const out = resolveFaabBatch(input(managers, bids));
+
+    expect(resolutionFor(out, "ax").outcome).toBe("won"); // A takes X on amount…
+    expect(resolutionFor(out, "ay").outcome).toBe("lost"); // …but that immediate drop costs A the Y tiebreak
+    const by = resolutionFor(out, "by");
+    expect(by.outcome).toBe("won");
+    if (by.outcome === "won") expect(by.tiebreakUsed).toBe(true);
+    // A → bottom (winning X) gives [B,A]; then B → bottom (winning Y) gives [A,B]. Both moved once, netting
+    // back to [A,B] — but the OUTCOME (A denied Y) is the point, and the order genuinely churned.
+    expect(out.waiverOrderChanged).toBe(true);
+    expect(out.waiverOrder).toEqual([
+      { managerId: "A", position: 1 },
+      { managerId: "B", position: 2 },
+    ]);
+  });
+
+  it("multiple distinct winners fall out emergently: non-winner stays at the front, winners ordered highest-$-first", () => {
+    // FOUR seeded managers; A, B, C each win ONE distinct uncontested player, D never bids. Amounts are
+    // NOT aligned with priority (B 50 > C 40 > A 30) so the emergent order is meaningful. The award loop
+    // processes highest-$ first (B, then C, then A), each immediately dropping to the back.
+    //
+    //   start [A,B,C,D]
+    //   B wins (50) → [A,C,D,B]
+    //   C wins (40) → [A,D,B,C]
+    //   A wins (30) → [D,B,C,A]
+    //
+    // RESULTING ORDER — pinned + called out for review: D(1) B(2) C(3) A(4). The non-winner D keeps the
+    // front; the three winners fill the back ordered by processing = DESCENDING amount, so the biggest win
+    // (B, 50) lands nearest the front of the moved block and the smallest (A, 30) sits at the very bottom.
+    const managers = [
+      mgr("A", 1, { owned: ["A-drop"] }),
+      mgr("B", 2, { owned: ["B-drop"] }),
+      mgr("C", 3, { owned: ["C-drop"] }),
+      mgr("D", 4, { owned: ["D-drop"] }),
+    ];
+    const bids = [
+      bid("A", "PA", 30, { id: "a", drop: "A-drop" }),
+      bid("B", "PB", 50, { id: "b", drop: "B-drop" }),
+      bid("C", "PC", 40, { id: "c", drop: "C-drop" }),
+    ];
+    const out = resolveFaabBatch(input(managers, bids));
+
+    expect(
+      wonBids(out)
+        .map((r) => r.bidId)
+        .sort(),
+    ).toEqual(["a", "b", "c"]);
+    expect(out.waiverOrderChanged).toBe(true);
+    expect(out.waiverOrder).toEqual([
+      { managerId: "D", position: 1 },
+      { managerId: "B", position: 2 },
+      { managerId: "C", position: 3 },
+      { managerId: "A", position: 4 },
+    ]);
+    // Contiguity 1..N: exactly the positions 1..4, no gaps or duplicates.
+    expect(out.waiverOrder.map((s) => s.position)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("a REPEAT winner ends at the very bottom — its LAST win re-sinks it, regardless of its biggest amount", () => {
+    // A wins TWICE (PX 50 and PY 20) and B wins once (PZ 40), all distinct + uncontested.
+    //   start [A,B]; PX→A wins → [B,A]; PZ→B wins → [A,B]; PY→A wins again → [B,A].
+    // A owns the single highest bid of the batch (50) yet ends LAST, because its later win (PY) moved it to
+    // the back again. The back-order is emergent from the immediate drop — no special-casing of repeats.
+    const managers = [mgr("A", 1, { owned: ["A1", "A2"] }), mgr("B", 2, { owned: ["B1"] })];
+    const bids = [
+      bid("A", "PX", 50, { id: "ax", drop: "A1" }),
+      bid("A", "PY", 20, { id: "ay", drop: "A2" }),
+      bid("B", "PZ", 40, { id: "bz", drop: "B1" }),
+    ];
+    const out = resolveFaabBatch(input(managers, bids));
+
+    expect(resolutionFor(out, "ax").outcome).toBe("won");
+    expect(resolutionFor(out, "ay").outcome).toBe("won");
+    expect(resolutionFor(out, "bz").outcome).toBe("won");
+    expect(out.waiverOrder).toEqual([
+      { managerId: "B", position: 1 },
+      { managerId: "A", position: 2 },
+    ]);
+    // A won two bids (50 + 20 = 70); B won one (40). Budgets debited accordingly.
+    expect(out.budgetDeltas.find((d) => d.managerId === "A")).toEqual({
+      managerId: "A",
+      spent: 70,
+      newBudget: 30,
+    });
+    expect(out.budgetDeltas.find((d) => d.managerId === "B")).toEqual({
+      managerId: "B",
+      spent: 40,
+      newBudget: 60,
+    });
+  });
+
+  it("an UNSEEDED winner is never inserted into the seeded order (seeding stays out of scope)", () => {
+    // A is unseeded (waiverOrderPosition null) and wins on amount. The amendment moves SEEDED winners; an
+    // unseeded winner is NOT added to the rolling order (that would be a re-seed, out of scope). B, the sole
+    // seeded manager, is untouched and nothing moves.
+    const managers = [mgr("A", null, { owned: ["A-drop"] }), mgr("B", 1, { owned: ["B-drop"] })];
+    const out = resolveFaabBatch(input(managers, [bid("A", "X", 50, { id: "a" })]));
+    expect(resolutionFor(out, "a").outcome).toBe("won");
+    expect(out.waiverOrderChanged).toBe(false);
+    expect(out.waiverOrder).toEqual([{ managerId: "B", position: 1 }]);
   });
 });
 

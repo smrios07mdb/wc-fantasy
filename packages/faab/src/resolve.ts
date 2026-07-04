@@ -10,7 +10,9 @@
  *     (DECISIONS §D add gate), or (D4) whose bidder is a playoff non-participant (the pre-loop split).
  *  2. Highest bid wins, player-by-player (the loop awards the globally-highest live bid each pass).
  *  3. Tie → rolling waiver order (the per-player winner sort; lower position wins).
- *  4. Move-to-bottom ONLY when the tiebreak is USED (`tiebreakUsed` gates `moveToBottom`).
+ *  4. Move-to-bottom on EVERY won claim (commissioner amendment 2026-07-04; was tiebreak-only) —
+ *     applied immediately so a winner slides to the back mid-batch and can't keep winning from the
+ *     front (the generalized anti-sweep); the waiver tiebreak now means "longest since last win".
  *  5. A manager's own multiple wins resolve highest-first, skipping any that no longer fit — emergent
  *     from always awarding the globally-highest live bid against the manager's UPDATED state.
  *  6. $0 bids are legal (no special case — amount 0 is just the lowest amount).
@@ -263,9 +265,15 @@ export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
       resolved.add(b.bidId);
     }
 
-    // (4/8) Move-to-bottom ONLY when the tiebreak was used — and immediately, for the rest of this
-    // batch (so a tiebreak winner can't sweep the other tied players). Renumber keeps it contiguous.
-    if (tiebreakUsed) {
+    // (4/8) Move-to-bottom on EVERY won claim (commissioner amendment 2026-07-04 — was gated on
+    // `tiebreakUsed`): immediately, for the rest of this batch, so a winner slides to the back and
+    // can't keep winning from the front (the generalized anti-sweep; the waiver tiebreak now decides
+    // "longest since last win"). Only a SEEDED winner already in `order` moves — an unseeded winner
+    // (waiverOrderPosition null) is never inserted, so seeding stays out of scope — and a winner
+    // already at the bottom is a no-op, so `waiverOrderChanged` still means the order actually changed.
+    // `moveToBottom` renumbers the whole seeded order, keeping it a contiguous 1..N permutation.
+    const winnerIdx = order.indexOf(winner.managerId);
+    if (winnerIdx !== -1 && winnerIdx !== order.length - 1) {
       order = moveToBottom(order, winner.managerId);
       waiverOrderChanged = true;
     }
