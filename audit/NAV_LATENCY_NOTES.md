@@ -34,7 +34,7 @@ fenced surface (`git status` = 15 `??`, 0 `M`).
   deliberately NOT the async `<AppShell>` (an async fallback would suspend and defeat the point). Inert
   (`<span>`s, no JS), reusing the real `shell.css` classes + `crossNav` labels so it can't drift.
 - `apps/web/app/shell/routeSkeleton.dom.test.tsx` — Vitest jsdom contract test mounting the **REAL**
-  components (10 tests), the anti-drift pin for the harness.
+  components (30 cases: 10 render + a 20-case source-drift pin, §3), the anti-drift pin for the harness.
 - `apps/web/scripts/verify-nav-latency.mjs` — real-browser proof (below).
 
 ## 2. Architecture findings (grounding the design)
@@ -46,8 +46,13 @@ fenced surface (`git status` = 15 `??`, 0 `M`).
   `/games/[matchId]` mount it in `page.tsx`. `loading.tsx` is the Suspense fallback for a segment's
   `page.tsx`, rendered INSIDE that segment's layout — so for the 11 layout-mounted routes the shell is
   outside the boundary and survives the loading state automatically. Only `/` needed its own chrome.
-- **`/games/[matchId]` is out of scope** — it is a detail route (reached from screens), not a
-  bottom-bar / More destination, so it gets no loader this thread.
+- **`/games` is out of scope, confirmed against `crossNav.ts`** — there is no `games` id in the `NavId`
+  union or in `BOTTOM_TAB_ITEMS` / `MORE_SHEET_ITEMS`, and **no `/games` index route** exists (`app/games/`
+  holds only `[matchId]/`, no `page.tsx`). `/games/[matchId]` is a detail route reached **only by in-screen
+  deep link** (dashboard match cards `Dashboard.tsx:433`, vsfield fixtures `vsfield/components.tsx:158`,
+  pool fixtures `pool/components.tsx:220`) — never the bottom bar or MoreSheet. So it is outside the
+  brief's "reachable from the bottom bar and the MoreSheet" clause and gets no loader this thread.
+  (Recorded so the next thread does not re-litigate it.)
 - **There is NO shared authenticated nav layout.** Every authed route is a direct child of the root
   layout and mounts its OWN `<AppShell>` with a hardcoded `active`. (Relevant to §5's Link analysis.)
 - **`/` has four outcomes** (hub / signin / unlinked / denied); only `hub` (authenticated) renders the
@@ -57,10 +62,16 @@ fenced surface (`git status` = 15 `??`, 0 `M`).
 
 ## 3. Verification
 
-`pnpm test` → `routeSkeleton.dom.test.tsx` (10/10): mounts the REAL `RouteSkeleton` (all variants) +
+`pnpm test` → `routeSkeleton.dom.test.tsx` (30/30): mounts the REAL `RouteSkeleton` (all variants) +
 the REAL home `<Loading>`; pins `[data-skeleton]` hooks, `role=status`/`aria-busy`, per-variant bodies,
 the `bare` header-band rule, and the home loader's static shell chrome keeping the bottom nav + active
-"Dashboard" slot present.
+"Dashboard" slot present. **Source-drift pin (added f63d144):** because the home loader hand-mirrors
+AppShell's nav chrome (`/` mounts the async AppShell in `page.tsx`, not a layout), a 20-case block reads
+the REAL `AppShell.tsx` / `MoreSheet.tsx` source and asserts a shared `SHELL_VOCAB` (`sh-app sh-app-top`,
+`sh-topbar`, `sh-topnav-scroll`, `sh-topnav`, `sh-nav-item`, `sh-content`, `sh-btmnav`, `sh-btnav-item`,
+`is-active`, `sh-more-btn`) is present in BOTH the source and the loader — so a future rename in AppShell
+breaks THIS test instead of silently diverging the loading chrome (the `shellStacking.contract` /
+`verify-players` byte-pin precedent; verified non-vacuous). Labels are pinned to the real `crossNav` arrays.
 
 `node apps/web/scripts/verify-nav-latency.mjs` (48/48, Playwright + chromium): renders the **actual**
 `RouteSkeleton` (transpile → `renderToStaticMarkup`, no replica — the component has zero non-type
@@ -78,7 +89,7 @@ real component output. At 390 + 1180, against real `ds.css` + `shell.css`:
 Screenshots: `apps/web/screenshots/nav-latency-*.png` (+ `/tmp`) for Sergio's eyeball.
 
 Fence verifiers all pass **unmodified**: verify-the-cut (43), verify-playoffs-hero, verify-players (14),
-verify-shell-stacking (33/33). Full DoD gate green (typecheck, lint, format:check, test 3287, web build).
+verify-shell-stacking (33/33). Full DoD gate green (typecheck, lint, format:check, test **3307**, web build).
 
 ---
 
