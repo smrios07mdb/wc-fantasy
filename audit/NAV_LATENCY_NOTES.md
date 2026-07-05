@@ -5,8 +5,9 @@ SEQUENCE_T15_LAUNCH + T15-2_SHELL_STACKING_NOTES §5/§6 (the F-P0-A1 **residual
 latency itself — no prefetch, zero `loading.tsx` — cross-ref walkthrough step 7's tab-switch freeze).
 Merge: **HOLD** (deliver + await Sergio's decision on the merge AND the Link-conversion clearance).
 
-This thread owns the **latency-feedback content layer**. It does NOT close F-P0-A1 (still *mitigated,
-on-device verdict pending* — §6 below). T15-2 shipped the touch-down `:active` press state; this thread
+This thread owns the **latency-feedback content layer**. At merge time it did NOT close F-P0-A1 (still
+*mitigated, on-device verdict pending*) — **F-P0-A1 was CLOSED 2026-07-05** by Sergio's live on-device
+pass (§6 below). T15-2 shipped the touch-down `:active` press state; this thread
 adds the content-level companion: the destination starts painting structure the instant the response
 streams, instead of the frozen previous screen sitting there through TTFB.
 
@@ -103,8 +104,14 @@ covers the touch-down feedback for that window. The piece that collapses the dea
 **client-side navigation (Link) + prefetch**, where `loading.tsx` fires the instant the tab is tapped —
 which is exactly the ANALYZE deliverable in §5, deliberately NOT built here.
 
-So: F-P0-A1 remains **mitigated, on-device verdict pending**. This thread strengthens the mitigation
-(content now paints, not just a press flash) but the residual routing behavior is still Sergio's call.
+So: at merge time F-P0-A1 remained **mitigated, on-device verdict pending**. This thread strengthened
+the mitigation (content now paints, not just a press flash), and the residual routing behavior was left
+to Sergio's on-device call.
+
+**Update 2026-07-05 — F-P0-A1 CLOSED.** Sergio's live on-device pass: skeleton visual pass PASS with no
+issues on any route (no Safari-vs-PWA discrepancy); verdict **A — closed** (the `:active` press state
+registers on every tap, navigation completes, no residual dead-tap case survived). See §6 and
+DECISIONS.md → 2026-07-05.
 
 ---
 
@@ -167,7 +174,8 @@ is a zero-new-dependency change. Active state is explicit props (no `usePathname
 - The `loading.tsx` skeletons in this thread are a prerequisite/complement either way: with Link they
   become the instant transition affordance; without Link they still shorten the post-TTFB paint gap.
 
-**STOP — awaiting Sergio's clearance on the Link conversion. Nothing converted on this branch.**
+**Update 2026-07-05 — CLEARED.** Sergio's live on-device pass cleared the Link conversion (§7). Nothing
+converted on this branch — the conversion is a separate future thread.
 
 ---
 
@@ -178,3 +186,20 @@ UI only); `crossNav.ts` item arrays byte-untouched (imported read-only for label
 `shell.css` + `ds.css` (all copies) + the T15-2 surfaces byte-untouched (z-scale/sheets/nav CSS
 unchanged); T15-CUT + Theater behavior untouched (verify-the-cut + verify-playoffs-hero pass unmodified);
 verify-players + verify-shell-stacking pass unmodified.
+
+---
+
+## 7. 2026-07-05 — Sergio's live on-device pass: F-P0-A1 CLOSED + Link-conversion CLEARED
+
+**Skeleton visual pass: PASS, no issues.** Every route's `loading.tsx` skeleton rendered cleanly on
+device, no Safari-vs-PWA discrepancy on any route.
+
+**F-P0-A1 on-device verdict: A — closed.** The T15-2 `:active` press state registers on every tap and
+navigation completes; no residual "registered tap, dead nav" case survived. F-P0-A1 is CLOSED,
+superseding the "mitigated, on-device verdict pending" status in §4/§5 above and everywhere else it was
+recorded (BACKLOG T15/NAV-LAT rows, PROJECT.md, DECISIONS.md).
+
+**Link-conversion clearance: CLEARED.** The §5 `<Link>`+prefetch conversion is cleared to build as its
+own thread. Nothing routing-related was touched by this docs-only pass.
+
+Docs-only update — no code/test/CSS/config change. See DECISIONS.md → 2026-07-05 and BACKLOG → T15/NAV-LAT.

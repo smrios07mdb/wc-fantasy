@@ -294,3 +294,13 @@ _The delayed R32 real match kicked off ~6 pm ET: **Argentina 0–0 Cape Verde** 
 - **Resolved from deferred → FAIL:** 38 (live minute), 39 (ET/pens anomaly), 65 (backgrounded socket). All three are **new confirmed defects** on top of the session-2 set (6, 13, 52, 58).
 - **Appendix A:** blade-drop / live-points / live-feed **captured**; lock-flip, eliminated-band (63), FA-window-flip **still pending** the right micro-state (my-player kickoff / a frozen round).
 - **Full confirmed-FAIL list (whole audit):** 6 (404 unbranded), 13 (stale provisional-cut), 38 (no live minute), 39 (drawn-knockout "Full-time" no ET/pens), 52 (input zoom), 58 (kickoff tz UTC/no-zone), 65 (backgrounded LIVE-pill over stale ~20 s). Plus findings N1, N2/N6 (email PII), N4 (balldontlie), N5 (over-cap tile).
+
+## NAV-LAT live-pass — 2026-07-05 (resolves F-P0-A1 + Link-conversion clearance)
+
+**Skeleton visual pass: PASS, no issues.** All `loading.tsx` routes rendered clean on device — no Safari-vs-PWA discrepancy on any route.
+
+**F-P0-A1 verdict: A — closed.** The T15-2 `:active` press state registers on every tap and navigation completes; no residual "registered tap, dead nav" case survived. **F-P0-A1 is now CLOSED**, superseding N1 and the "mitigated, on-device verdict pending" status recorded against it (§ NEW FINDINGS above, BACKLOG T15/NAV-LAT, PROJECT.md, DECISIONS.md).
+
+**Link-conversion clearance: CLEARED.** The `audit/NAV_LATENCY_NOTES.md §5` `<Link>`+prefetch conversion is cleared to proceed as its own thread.
+
+**OPERATOR-REQUIRED queue: F-P0-A1 item retired.** The bottom-nav tap-reliability entry is closed; remaining operator-required items (61, 63, 67/35) and the pending-live-match items are unaffected by this pass.
