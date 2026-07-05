@@ -19,9 +19,22 @@
  *      across /commish (FREEZE+CUT confirm words, reason fields, search, numeric/decimal), /sign-in,
  *      /settings, /players, /waivers, /draft.
  *
- * SKIPs (exit 0) if Playwright/Chromium is unavailable, like the other render proofs.
+ *  (3) DEPLOYED DRIFT (opt-in): checks (1)+(2) prove the WORKING TREE; they said nothing about
+ *      what production serves — T15-3b reopened exactly because this verifier was green on an
+ *      unmerged branch while the deployed site had none of it. With `--deployed[=URL]` (or
+ *      VERIFY_DEPLOYED_URL; default https://wc-fantasy-web.onrender.com) this section loads the
+ *      LIVE unauthenticated /sign-in in a Playwright touch context and asserts the real deployed
+ *      DOM: computed font-size of the rendered .au-input >= 16px under pointer:coarse, plus the
+ *      swept keyboard attributes on the live email input. (Authed fields — settings display-name,
+ *      FA search — can't be fetched anonymously; their DOM is pinned by the jsdom RTL test
+ *      SettingsClient.dom.test.tsx and by (1)/(2).) This is the post-deploy close-out gate: run
+ *      it with --deployed after Render finishes, not just before merge.
  *
- * Run:  node apps/web/scripts/verify-form-attrs.mjs
+ * SKIPs (exit 0) if Playwright/Chromium is unavailable, like the other render proofs.
+ * The --deployed section does NOT skip-soft: if requested and the site is unreachable or the
+ * assertions fail, the run fails — an unreachable prod check is a failed prod check.
+ *
+ * Run:  node apps/web/scripts/verify-form-attrs.mjs [--deployed[=https://host]]
  * Screenshots → apps/web/screenshots/form-attrs_*.png
  */
 /* eslint-disable no-undef */
@@ -245,13 +258,70 @@ function runAttrSweep() {
   check("draft clock: inputMode numeric", draftClock.includes('inputMode="numeric"'));
 }
 
+// ── (3) deployed-drift check (opt-in via --deployed / VERIFY_DEPLOYED_URL) ──────────────────
+function deployedBaseUrl() {
+  const arg = process.argv.find((a) => a === "--deployed" || a.startsWith("--deployed="));
+  const fromArg = arg && arg.includes("=") ? arg.split("=")[1] : undefined;
+  if (!arg && !process.env.VERIFY_DEPLOYED_URL) return null;
+  return (
+    fromArg ||
+    process.env.VERIFY_DEPLOYED_URL ||
+    "https://wc-fantasy-web.onrender.com"
+  ).replace(/\/$/, "");
+}
+
+async function runDeployedDrift(chromium, base) {
+  console.log(`deployed-drift target: ${base}/sign-in`);
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 800 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto(`${base}/sign-in`, { waitUntil: "networkidle", timeout: 30000 });
+
+  const live = await page.evaluate(() => {
+    const el = document.querySelector(".au-input");
+    if (!el) return null;
+    return {
+      fontSize: parseFloat(getComputedStyle(el).fontSize),
+      autocapitalize: el.getAttribute("autocapitalize"),
+      autocorrect: el.getAttribute("autocorrect"),
+      enterkeyhint: el.getAttribute("enterkeyhint"),
+      inputmode: el.getAttribute("inputmode"),
+    };
+  });
+
+  check("[deployed] /sign-in renders .au-input", live !== null);
+  if (live) {
+    check(
+      `[deployed touch 390] .au-input computed font-size ${live.fontSize}px >= 16px`,
+      live.fontSize >= 16,
+    );
+    check(`[deployed] .au-input inputmode=email`, live.inputmode === "email");
+    check(`[deployed] .au-input autocapitalize=none`, live.autocapitalize === "none");
+    check(`[deployed] .au-input autocorrect=off`, live.autocorrect === "off");
+    check(`[deployed] .au-input enterkeyhint=go`, live.enterkeyhint === "go");
+  }
+  await page.screenshot({ path: resolve(screenshotsDir, "form-attrs_deployed_signin.png") });
+  await context.close();
+  await browser.close();
+}
+
 async function main() {
   runAttrSweep();
+
+  const deployed = deployedBaseUrl();
 
   let chromium;
   try {
     ({ chromium } = await import("@playwright/test"));
   } catch {
+    if (deployed) {
+      console.log("FAILED: --deployed requested but playwright is not installed.");
+      process.exit(1);
+    }
     console.log("SKIP: playwright not installed — attribute sweep ran, font-floor check skipped.");
     process.exit(0);
   }
@@ -259,8 +329,21 @@ async function main() {
   try {
     await runFontFloor(chromium);
   } catch (e) {
+    if (deployed) {
+      console.log(`FAILED: --deployed requested but chromium unavailable (${e.message}).`);
+      process.exit(1);
+    }
     console.log(`SKIP: chromium unavailable (${e.message}) — attribute sweep still ran.`);
     process.exit(0);
+  }
+
+  if (deployed) {
+    // No soft-skip here: an unreachable prod check is a failed prod check.
+    try {
+      await runDeployedDrift(chromium, deployed);
+    } catch (e) {
+      check(`[deployed] drift check completed (${e.message})`, false);
+    }
   }
 
   console.log("");
