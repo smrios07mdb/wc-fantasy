@@ -5,7 +5,12 @@
  * REVERSE draft order, §4), and the `allowlist_email` set. No IO, no clock, no env — the runner
  * (cli.ts) applies this against the real DB. Defaults come from `LEAGUE_SEED_DEFAULTS` (single source).
  */
-import { KNOCKOUT_ROUNDS, LEAGUE_SEED_DEFAULTS, type PeriodKind } from "@app/shared";
+import {
+  KNOCKOUT_ROUNDS,
+  LEAGUE_SEED_DEFAULTS,
+  looksLikeEmail,
+  type PeriodKind,
+} from "@app/shared";
 
 export interface ProvisionLeague {
   name: string;
@@ -106,6 +111,14 @@ export function validateConfig(config: ProvisionConfig): string[] {
   for (const m of managers) {
     if (!m.email.includes("@")) errors.push(`manager email looks invalid: ${m.email}`);
     if (!m.displayName.trim()) errors.push(`manager ${m.email} has an empty displayName`);
+    // Reject an email-SHAPED displayName — this config is the sole creator of manager rows, and
+    // an email here persists PII into a display-only column (T15-14R §3b). A name that merely
+    // CONTAINS "@" stays legal; only a full-string address is rejected.
+    else if (looksLikeEmail(m.displayName)) {
+      errors.push(
+        `manager ${m.email} has an email-shaped displayName (${m.displayName.trim()}) — use a real name or "Manager ${m.draftSlot}"`,
+      );
+    }
   }
 
   // Period labels distinct across group + knockout.

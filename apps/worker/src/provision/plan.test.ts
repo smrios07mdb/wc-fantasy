@@ -100,6 +100,47 @@ describe("validateConfig", () => {
     });
     expect(validateConfig(missing)).toContainEqual(expect.stringMatching(/knockout round labels/i));
   });
+
+  // PII write-guard (T15-14R §3b) — the provisioning upsert is the SOLE creator of manager rows,
+  // and email-shaped displayNames in prod entered through this config verbatim. Reject them loud
+  // at plan time (operator-authored, re-runnable) rather than silently persist PII.
+  it("rejects an email-shaped displayName (the config-borne PII vector)", () => {
+    const emailName = cfg({
+      managers: [
+        {
+          email: "yader@example.com",
+          displayName: "yader.rosales@gmail.com",
+          isCommissioner: true,
+          draftSlot: 1,
+        },
+        { email: "bob@example.com", displayName: "Bob", draftSlot: 2 },
+      ],
+    });
+    expect(validateConfig(emailName)).toContainEqual(expect.stringMatching(/email-shaped/i));
+  });
+
+  it("rejects a displayName that equals the manager's own email", () => {
+    const same = cfg({
+      managers: [
+        {
+          email: "carol@example.com",
+          displayName: "carol@example.com",
+          isCommissioner: true,
+          draftSlot: 1,
+        },
+      ],
+    });
+    expect(validateConfig(same)).toContainEqual(expect.stringMatching(/email-shaped/i));
+  });
+
+  it("still ALLOWS a stylized displayName that merely contains @ (n@cho)", () => {
+    const stylized = cfg({
+      managers: [
+        { email: "nacho@example.com", displayName: "n@cho", isCommissioner: true, draftSlot: 1 },
+      ],
+    });
+    expect(validateConfig(stylized)).toEqual([]);
+  });
 });
 
 describe("buildWaiverOrder — reverse draft order", () => {

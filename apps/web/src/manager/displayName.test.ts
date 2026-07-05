@@ -63,4 +63,29 @@ describe("validateDisplayName — pure normalization + length gate", () => {
     const r = validateDisplayName("张伟");
     expect(r).toEqual({ ok: true, value: "张伟" });
   });
+
+  // PII write-guard (T15-14R §3b) — block the recurrence vector: a member cannot rename
+  // themselves TO an email-shaped string. Route maps `reason` straight into the 400 body.
+  it("rejects an email-shaped display name", () => {
+    expect(validateDisplayName("a@b.co")).toEqual({ ok: false, reason: "email_like" });
+  });
+
+  it("rejects a real member address as a display name", () => {
+    expect(validateDisplayName("yader.rosales@gmail.com")).toEqual({
+      ok: false,
+      reason: "email_like",
+    });
+  });
+
+  it("trims BEFORE the email check (whitespace-padded address still rejected)", () => {
+    expect(validateDisplayName("  a@b.co  ")).toEqual({ ok: false, reason: "email_like" });
+  });
+
+  it("still ALLOWS a stylized name that merely contains @ (not a full address)", () => {
+    expect(validateDisplayName("n@cho")).toEqual({ ok: true, value: "n@cho" });
+  });
+
+  it("empty still reports empty, not email_like (order preserved)", () => {
+    expect(validateDisplayName("")).toEqual({ ok: false, reason: "empty" });
+  });
 });
