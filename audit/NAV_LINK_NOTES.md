@@ -75,6 +75,20 @@ refactor (relocating 11 layouts' shell mount) held as its own future thread.
     bar stays flush/full-width at 360/390/430. Plus a source pin: bottom-tab + MoreSheet are `<Link
     prefetch={false}>`, no plain-`<a>` survives in `.sh-btmnav`, AppShell has no `"use client"`.
   - Screenshots: `apps/web/screenshots/nav-link-*.png` (+ `/tmp`).
+- **Source-drift pin (added, pre-merge addendum item 1):** a new `describe` block in
+  `routeSkeleton.dom.test.tsx` (the SHELL_VOCAB precedent) reads the REAL `AppShell.tsx` /
+  `MoreSheet.tsx` source and asserts (a) both import `next/link`; (b) the bottom-tab bar (sliced to the
+  `.sh-btmnav` region, comment-stripped) and the MoreSheet items render as `<Link>` with no plain `<a>`
+  surviving; (c) `prefetch={false}` is present on those Links; (d) AppShell has no `"use client"`. This
+  pins the PRODUCTION shell source (closing the gap that `verify-nav-link.mjs` section A proves only
+  against a generated fixture). **Non-vacuous, verified:** temporarily flipping a bottom-tab `<Link>`
+  back to `<a>` fails assertions (b) and (c) (2 failed); restored via `git checkout`.
+- **MoreSheet dismiss-on-tap (addendum item 2):** the sheet DISMISSES on item tap (not just navigates)
+  is asserted by `moreSheetChrome.dom.test.tsx` — "selecting a More item closes the sheet (navigation
+  close path)": it `fireEvent.click`s a real `<Link>` item and asserts `queryByRole("dialog")` is null
+  + body overflow cleared. Passes 6/6 post-conversion (the `onClick={close}` state update runs on the
+  click regardless of the Link's client nav). The replica in `verify-nav-link.mjs` deliberately does
+  NOT fake this (it ships no React) — dismissal is React state, proven in the DOM suite.
 - **Fence verifiers all pass UNMODIFIED:** verify-the-cut (43), verify-playoffs-hero, verify-players
   (14 — its MoreSheet "Browse players" → /players + Players-tab tap-through cases already exercise the
   converted Links), verify-shell-stacking (33/33 — its tap-through-all-5-tabs + More-item cases
@@ -85,10 +99,10 @@ refactor (relocating 11 layouts' shell mount) held as its own future thread.
   href="/players" prefetch={false} …>` markup the conversion produces. The `routeSkeleton.dom.test.tsx`
   SHELL_VOCAB source-drift pin (class-based) stays green **unmodified** — `<Link>` renders an `<a>`
   with the same classes.
-- **Full DoD gate green:** `-w typecheck`, `lint`, `format:check`, full test suite **3307 passed / 104
-  skipped** (baseline, no regressions), `@app/web build` with every authed route still `ƒ` dynamic
-  (`/lineup /vsfield /pool /players /standings /waivers /scoring /settings /playoffs /draft /commish
-  /games/[matchId]`).
+- **Full DoD gate green:** `-w typecheck`, `lint`, `format:check`, full test suite **3312 passed / 104
+  skipped** (baseline 3307 + 5 new NAV-LINK pin cases, no regressions), `@app/web build` with every
+  authed route still `ƒ` dynamic (`/lineup /vsfield /pool /players /standings /waivers /scoring
+  /settings /playoffs /draft /commish /games/[matchId]`).
 
 ## 5. A note on the pre-existing jsdom "navigation not implemented" console line
 
@@ -103,4 +117,81 @@ line. It is non-fatal console noise (the test still passes 6/6), not introduced 
 `packages/*` untouched; loaders / API / schema / RLS / Realtime / migrations untouched; `crossNav.ts`
 arrays byte-untouched; `shell.css` + `ds.css` (all copies) + T15-2 surfaces byte-untouched; T15-CUT +
 Theater untouched (verify-the-cut + hero pass unmodified). Only `AppShell.tsx` + `MoreSheet.tsx`
-(the conversion), one retargeted test assertion, and the new `verify-nav-link.mjs` + this notes file.
+(the conversion), one retargeted test assertion + the new NAV-LINK source-drift `describe` block (both
+in existing test files), and the new `verify-nav-link.mjs` + this notes file.
+
+---
+
+## Staged brain-doc updates (apply at merge)
+
+These are DRAFTS. They apply only AFTER Sergio's on-device gate passes, as docs commits `[skip render]`
+(the NAV-LAT precedent). Do not commit to the brain files before the gate. Verify each cited SHA is an
+ancestor of `origin/main` at apply-time (the "status is derived" rule).
+
+### BACKLOG.md — new NAV-LINK row (insert directly under the NAV-LAT row)
+
+> | **NAV-LINK** | NAV-LAT payoff — convert the 5 bottom-tab `<a>` + the MoreSheet item `<a>` to
+> `next/link <Link>` so the `loading.tsx` skeletons fire INSTANTLY on tap (client-side transition), not
+> merely sooner after TTFB | Med | S | additive UI (2 shell files) | `DONE` — **MERGED `--ff-only` +
+> DEPLOYED** (2026-07-0X, Sergio-cleared after the on-device gate) | `feat/nav-link-conversion` — the
+> routing companion to NAV-LAT's skeletons. **AppShell stays a pure server component** (`<Link>` ≠
+> `"use client"`); the desktop top strip (`.sh-topnav` / `.sh-nav-item`) + brand link are untouched,
+> still plain `<a>` (out of scope). MoreSheet keeps `onClick={close}` on every item so the sheet still
+> dismisses on tap. **`prefetch={false}` on every converted Link** (deliberate, §5 point 2: the fixed
+> bar keeps all 5 tabs in-viewport, so eager prefetch would warm every `loading.tsx` boundary on every
+> authed screen; hover/touchstart fetching is the accepted posture), commented at both sites.
+> **Verification:** new `verify-nav-link.mjs` **14/14** (a real Next 15 App Router fixture proves the
+> client transition — a post-hydration window sentinel survives the tap, no document reload — + the
+> `[data-skeleton]` `loading.tsx` paints instantly before content + `<Link>` SSRs a real `<a href>` so
+> pre-hydration MPA degrades gracefully; a class-faithful replica proves MPA tap-through on all 5 tabs
+> + active-highlight + MoreSheet nav + no h-overflow) + a new **source-drift `describe`** in
+> `routeSkeleton.dom.test.tsx` (5 cases, non-vacuous: reverting a `<Link>` to `<a>` fails it) + the
+> existing `moreSheetChrome.dom.test.tsx` proving sheet-dismiss-on-tap. All fence verifiers pass
+> UNMODIFIED (the-cut 43, playoffs-hero, players 14, shell-stacking 33/33, nav-latency 48/48,
+> mobile-nav). Full DoD gate green (typecheck · lint · format · **3312** · web build — every authed
+> route still `ƒ` dynamic). `playersRenderProof.test.ts`'s `<a href="/players">` markup pin retargeted
+> to the `<Link>` markup (its /players-linkage contract unchanged). Fences: `packages/*` / loaders /
+> API / schema / RLS / Realtime / migrations / `crossNav.ts` arrays / `shell.css` / `ds.css` / T15-2
+> surfaces / T15-CUT + Theater byte-untouched. See `audit/NAV_LINK_NOTES.md`. |
+
+### PROJECT.md — session entry (append to the 2026-07-0X log)
+
+> **NAV-LINK — bottom-nav `<a>` → `next/link` `<Link>` (prefetch off).** The routing payoff for
+> NAV-LAT: converts the 5 bottom-tab anchors (`AppShell.tsx`, `.sh-btmnav`) and the MoreSheet item
+> anchors (`MoreSheet.tsx`) to `<Link prefetch={false}>`, so NAV-LAT's `loading.tsx` skeletons fire
+> instantly on tap via a client-side transition instead of merely sooner after TTFB. AppShell stays a
+> pure server component. Desktop top strip + brand link untouched (out of scope). `prefetch={false}` is
+> the deliberate posture (fixed bar ⇒ all 5 Links always in-viewport ⇒ eager prefetch would amplify).
+> Proven by a new `verify-nav-link.mjs` (real Next fixture for the client transition + instant skeleton;
+> replica for MPA degradation) and a non-vacuous source-drift pin. Merge HELD for the on-device gate;
+> merged/deployed 2026-07-0X. Cross-ref `[[mobile-bottom-nav-layer]]`, NAV-LAT, T15-2.
+
+### DECISIONS.md — new entry (2026-07-0X)
+
+> **NAV-LINK: bottom-nav Links carry `prefetch={false}` (conscious posture, not a default).** The 5
+> bottom-tab Links + the MoreSheet item Links convert to `next/link` but with prefetch DISABLED.
+> Rationale: the fixed bottom bar keeps all 5 tab Links in-viewport on every authed screen, so App
+> Router's default eager prefetch would warm all 5 `loading.tsx` boundaries on every render, re-warmed
+> as the user navigates — pure amplification. Because every authed route is `ƒ` force-dynamic, prefetch
+> would fetch only the static shell-up-to-Suspense boundary (not page data), but the always-in-viewport
+> multiplier makes even that wasteful on metered connections. `prefetch={false}` fetches on
+> hover/touchstart instead. Tunable back to eager if measurement wants it; the point is the choice is
+> recorded, not defaulted. **Corollary decision — `playersRenderProof.test.ts` retarget:** that test
+> pinned the literal `<a href="/players" …>` MoreSheet markup; since the conversion is intentional and
+> the test's *contract* (a MoreSheet entry linking to /players) is unchanged, the assertion was
+> retargeted to the `<Link>` markup rather than deleted — a source pin tracking a deliberate markup
+> change, the shellStacking.contract precedent. **Held for a separate future thread (§5 point 4):** a
+> shared authenticated route-group layout so the nav is truly persistent (stops re-mounting AppShell +
+> re-running `loadNavPhase()` per client transition). Cross-ref `[[no-reopening-spec-pinned-decisions]]`.
+
+### SEQUENCE_T15_LAUNCH.md — derived-status correction (add under the 2026-07-04 corrections block)
+
+> **Derived-status corrections (2026-07-05):**
+> - **F-P0-A1 CLOSED** (Sergio's live on-device pass, verdict A) — the tap-reliability finding that
+>   drove A1/T15-2 is resolved; no residual dead-tap case survives the T15-2 + NAV-LAT fix set.
+> - **A1 (T15-2) DONE/MERGED** (2026-07-04, `1a8c36d`) — the `TODO`/`FIRST THREAD` label is stale.
+> - **NAV-LAT DONE/MERGED+DEPLOYED** (2026-07-04) — the `loading.tsx` skeleton layer shipped.
+> - **NAV-LINK delivered, HOLD** (2026-07-05, `feat/nav-link-conversion`) — the `<Link>`+`prefetch=false`
+>   conversion; merges after Sergio's on-device gate. Not a Window-A blocker.
+> - **Remaining Window A order UNCHANGED:** T15-3 → T15-1 → T15-5 → T15-7, with **T15-6 promoted** and
+>   T15-13 still `PROPOSED` (gated on Sergio accepting the thread).

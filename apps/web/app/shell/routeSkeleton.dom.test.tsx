@@ -128,3 +128,69 @@ describe("home loading.tsx chrome — pinned to the REAL AppShell source (anti-d
     expect(homeLoader).toContain("NAV_ITEMS");
   });
 });
+
+/**
+ * NAV-LINK source-drift pin — the SHELL_VOCAB precedent, applied to the <a>→next/link <Link>
+ * conversion. Reads the REAL AppShell.tsx / MoreSheet.tsx source and asserts the bottom-tab bar and
+ * the MoreSheet items render as <Link prefetch={false}> (not plain <a>), so a future revert to <a>
+ * (losing the client-side transition / instant loading.tsx) breaks THIS test instead of silently
+ * regressing nav feel. It closes the gap that verify-nav-link.mjs section A proves only against a
+ * generated fixture: this one pins the PRODUCTION shell source. Non-vacuous — flipping a bottom-tab
+ * or MoreSheet <Link> back to <a> fails the relevant assertion (verified locally).
+ *
+ * SCOPE (matches the conversion): only the bottom-tab bar (.sh-btmnav) + MoreSheet convert. The
+ * desktop top strip (.sh-topnav / .sh-nav-item) stays plain <a> by design, so the "no plain <a>"
+ * assertion is sliced to just the .sh-btmnav region.
+ */
+describe("NAV-LINK — bottom-tab + MoreSheet are next/link <Link prefetch={false}> (anti-revert pin)", () => {
+  const appShell = read("app/shell/AppShell.tsx");
+  const moreSheet = read("app/shell/MoreSheet.tsx");
+  // JSX/line comments legitimately mention "<a href>" in prose; strip them so they can't satisfy
+  // (or falsely trip) the tag-level assertions below.
+  const stripComments = (s: string) => s.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  const btmnavRegion = stripComments(
+    appShell.slice(appShell.indexOf('className="sh-btmnav"'), appShell.indexOf("<MoreSheet")),
+  );
+  const moreItemsRegion = stripComments(moreSheet);
+
+  it("(a) both shell files import next/link", () => {
+    expect(appShell).toContain('import Link from "next/link"');
+    expect(moreSheet).toContain('import Link from "next/link"');
+  });
+
+  it("(b) the bottom-tab item renders as <Link href={item.href}>, with no plain <a> in .sh-btmnav", () => {
+    expect(btmnavRegion).toMatch(/<Link\s+key=\{item\.id\}\s+href=\{item\.href\}/);
+    expect(btmnavRegion, "a plain <a> bottom-tab anchor survived the conversion").not.toMatch(
+      /<a[\s>]/,
+    );
+  });
+
+  it("(b) the MoreSheet items render as <Link> (mapped items + the /players entry), no plain <a> items", () => {
+    // mapped items: <Link key={item.id} href={item.href} … onClick={close}>
+    expect(moreItemsRegion).toMatch(/<Link\s+key=\{item\.id\}\s+href=\{item\.href\}/);
+    // the standalone Browse-players entry
+    expect(moreItemsRegion).toMatch(
+      /<Link href="\/players" prefetch=\{false\} className="sh-more-item"/,
+    );
+    // no plain <a> item anchors (the mapped item or the /players entry) survive
+    expect(moreItemsRegion, "a plain <a key={item.id}> MoreSheet item survived").not.toMatch(
+      /<a\s+key=\{item\.id\}/,
+    );
+    expect(moreItemsRegion, "a plain <a href=/players> MoreSheet item survived").not.toMatch(
+      /<a href="\/players" className/,
+    );
+  });
+
+  it("(c) prefetch={false} is present on the bottom-tab and MoreSheet Links (NAV_LATENCY_NOTES §5 posture)", () => {
+    expect(btmnavRegion).toMatch(
+      /<Link\s+key=\{item\.id\}\s+href=\{item\.href\}\s+prefetch=\{false\}/,
+    );
+    expect(moreItemsRegion).toMatch(
+      /<Link\s+key=\{item\.id\}[\s\S]{0,300}?prefetch=\{false\}[\s\S]{0,300}?onClick=\{close\}/,
+    );
+  });
+
+  it('(d) AppShell stays a server component — no "use client" (Link does not require it)', () => {
+    expect(appShell).not.toMatch(/^\s*["']use client["']/m);
+  });
+});
