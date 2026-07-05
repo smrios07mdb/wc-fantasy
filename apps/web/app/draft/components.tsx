@@ -352,6 +352,11 @@ export function AvailableList({
           placeholder="Search players or nations…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          inputMode="search"
+          enterKeyHint="search"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
         />
       </div>
       <div className="dr-filters">

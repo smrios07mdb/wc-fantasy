@@ -100,6 +100,9 @@ export default function SignInPage() {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
               spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+              enterKeyHint="go"
               autoFocus
             />
             {error && (

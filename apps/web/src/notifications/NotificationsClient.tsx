@@ -46,6 +46,7 @@ function browserEnv(): PushBrowserEnv | null {
 export function NotificationsClient({ initial }: { initial: NotificationPreference }) {
   const [prefs, setPrefs] = useState<NotificationPreference>(initial);
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [enabling, setEnabling] = useState(false);
   const [enableStatus, setEnableStatus] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
 
@@ -78,16 +79,21 @@ export function NotificationsClient({ initial }: { initial: NotificationPreferen
       setEnableStatus("This browser doesn't support push notifications.");
       return;
     }
+    setEnabling(true);
     setEnableStatus("Enabling…");
-    const result = await enableBrowserPush(env);
-    if (result.ok) {
-      setEnableStatus("Browser notifications enabled on this device.");
-    } else if (result.reason === "denied") {
-      setEnableStatus("Permission was blocked — enable notifications in your browser settings.");
-    } else if (result.reason === "unsupported") {
-      setEnableStatus("Push isn't configured yet — try again later.");
-    } else {
-      setEnableStatus("Couldn't register this device — try again.");
+    try {
+      const result = await enableBrowserPush(env);
+      if (result.ok) {
+        setEnableStatus("Browser notifications enabled on this device.");
+      } else if (result.reason === "denied") {
+        setEnableStatus("Permission was blocked — enable notifications in your browser settings.");
+      } else if (result.reason === "unsupported") {
+        setEnableStatus("Push isn't configured yet — try again later.");
+      } else {
+        setEnableStatus("Couldn't register this device — try again.");
+      }
+    } finally {
+      setEnabling(false);
     }
   }
 
@@ -134,7 +140,12 @@ export function NotificationsClient({ initial }: { initial: NotificationPreferen
       </div>
 
       <div className="se-notif-actions">
-        <button type="button" className="btn btn-primary" onClick={handleEnable}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={handleEnable}
+          disabled={enabling}
+        >
           Enable browser notifications
         </button>
         <button type="button" className="btn btn-ghost" onClick={handleTest}>

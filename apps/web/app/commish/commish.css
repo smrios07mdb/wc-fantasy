@@ -614,6 +614,10 @@
   outline: none;
   border-color: var(--accent);
 }
+/* F-P1-I2: 16px floor on touch — under 16px, iOS Safari zooms on focus and never resets. */
+@media (pointer: coarse) {
+  .adm-select, .adm-input, .adm-num { font-size: 16px; }
+}
 .adm-preview {
   font-weight: 800;
   font-variant-numeric: tabular-nums;

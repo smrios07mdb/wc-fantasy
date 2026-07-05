@@ -223,6 +223,11 @@ export function SearchField({ value, onChange }: { value: string; onChange: (v: 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label="Search players"
+        inputMode="search"
+        enterKeyHint="search"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
       />
     </div>
   );

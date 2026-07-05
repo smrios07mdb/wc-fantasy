@@ -315,6 +315,10 @@ function FreezeConfirm({
           onChange={(e) => setTyped(e.target.value)}
           placeholder={FREEZE_CONFIRM_WORD}
           autoComplete="off"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="done"
         />
       </div>
       <div className="adm-field">
@@ -326,6 +330,7 @@ function FreezeConfirm({
           className="adm-input"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          enterKeyHint="done"
           placeholder="e.g. results verified — finalize ahead of the window"
         />
       </div>
@@ -411,6 +416,7 @@ function UnfreezeConfirm({
           className="adm-input"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          enterKeyHint="done"
           placeholder="e.g. late rating correction for MD2 needs to restate"
         />
       </div>
@@ -874,6 +880,10 @@ function AdvanceApplyConfirm({
           onChange={(e) => setTyped(e.target.value)}
           placeholder={CUT_CONFIRM_WORD}
           autoComplete="off"
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="done"
         />
       </div>
       <div className="adm-field">
@@ -885,6 +895,7 @@ function AdvanceApplyConfirm({
           className="adm-input"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+          enterKeyHint="done"
           placeholder={`e.g. ${plan.round} results frozen — applying the scheduled cut`}
         />
       </div>
@@ -1247,6 +1258,11 @@ function RosterAddForm({ view, onDone }: { view: CommishRepairView; onDone: () =
           placeholder="Search the free-agent pool…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          inputMode="search"
+          enterKeyHint="search"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
         />
         <select
           className="adm-select"
@@ -1304,6 +1320,7 @@ function RosterAddForm({ view, onDone }: { view: CommishRepairView; onDone: () =
         placeholder="Reason (required — recorded to the audit log)"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
+        enterKeyHint="done"
       />
       <div className="adm-form-actions">
         <button
@@ -1432,6 +1449,7 @@ function TrimForm({ view, onDone }: { view: CommishRepairView; onDone: () => voi
         placeholder="Reason (required — recorded to the audit log)"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
+        enterKeyHint="done"
       />
       <div className="adm-form-actions">
         <button
@@ -1578,6 +1596,7 @@ function LineupRepairForm({
             placeholder="Reason (required — recorded to the audit log)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
+            enterKeyHint="done"
           />
           <div className="adm-form-actions">
             <button
@@ -1694,6 +1713,8 @@ function PenaltyForm({
             className="adm-num"
             value={won}
             onChange={(e) => setWon(e.target.value)}
+            inputMode="numeric"
+            enterKeyHint="done"
           />
         </label>
         <label className="adm-inline">
@@ -1705,6 +1726,8 @@ function PenaltyForm({
             className="adm-num"
             value={committed}
             onChange={(e) => setCommitted(e.target.value)}
+            inputMode="numeric"
+            enterKeyHint="done"
           />
         </label>
         <span className="adm-preview">{preview}</span>
@@ -1714,6 +1737,7 @@ function PenaltyForm({
         placeholder="Reason (required — recorded to the audit log)"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
+        enterKeyHint="done"
       />
       <div className="adm-form-actions">
         <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
@@ -1832,6 +1856,8 @@ function RatingForm({
             className="adm-num"
             value={rating}
             onChange={(e) => setRating(e.target.value)}
+            inputMode="decimal"
+            enterKeyHint="done"
           />
         </label>
       </div>
@@ -1840,6 +1866,7 @@ function RatingForm({
         placeholder="Reason (required — recorded to the audit log)"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
+        enterKeyHint="done"
       />
       <div className="adm-form-actions">
         <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>
@@ -2004,6 +2031,8 @@ function StatLineEditor({
                     placeholder={feed != null ? String(feed) : "—"}
                     value={values[f.key] ?? ""}
                     onChange={(e) => setValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    inputMode="numeric"
+                    enterKeyHint="done"
                   />
                 </label>
               );
@@ -2016,6 +2045,7 @@ function StatLineEditor({
         placeholder="Reason (required — recorded to the audit log)"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
+        enterKeyHint="done"
       />
       <div className="adm-form-actions">
         <button type="submit" className="btn btn-sm btn-primary" disabled={pending}>

@@ -160,6 +160,11 @@ export function BidComposer({
                     placeholder="Search free agents…"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
+                    inputMode="search"
+                    enterKeyHint="search"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                 </div>
                 <div className="wv-comp-seg">
@@ -235,6 +240,8 @@ export function BidComposer({
                       max={maxBid}
                       value={amount}
                       onChange={(e) => setAmount(clamp(Number(e.target.value) || 0))}
+                      inputMode="numeric"
+                      enterKeyHint="done"
                     />
                     <button
                       className="btn btn-ghost btn-sm"

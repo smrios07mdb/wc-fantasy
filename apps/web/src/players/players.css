@@ -55,6 +55,10 @@
   font-size: 14px;
   outline: none;
 }
+/* F-P1-I2: 16px floor on touch — under 16px, iOS Safari zooms on focus and never resets. */
+@media (pointer: coarse) {
+  .pl-search-input { font-size: 16px; }
+}
 .pl-search-input::placeholder {
   color: var(--text-tertiary);
 }

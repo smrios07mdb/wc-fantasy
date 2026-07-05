@@ -247,6 +247,10 @@ button { font-family: inherit; }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .input.is-error { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
 .input[disabled] { opacity: 0.5; cursor: not-allowed; }
+/* F-P1-I2: 16px floor on touch — under 16px, iOS Safari zooms on focus and never resets. */
+@media (pointer: coarse) {
+  .input, .select, .textarea { font-size: 16px; }
+}
 .field-label { display: block; font-size: var(--fs-sm); font-weight: var(--fw-medium); margin-bottom: var(--sp-15); color: var(--text-secondary); }
 .field-hint { font-size: var(--fs-caption); color: var(--text-tertiary); margin-top: var(--sp-15); }
 .field-error { font-size: var(--fs-caption); color: var(--danger); margin-top: var(--sp-15); display: flex; gap: 4px; align-items: center; }

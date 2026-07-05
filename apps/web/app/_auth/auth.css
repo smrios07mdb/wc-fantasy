@@ -222,6 +222,10 @@
   border-color: var(--danger);
   box-shadow: 0 0 0 3px var(--danger-soft);
 }
+/* F-P1-I2: 16px floor on touch — under 16px, iOS Safari zooms on focus and never resets. */
+@media (pointer: coarse) {
+  .au-input { font-size: 16px; }
+}
 .au-err {
   display: flex;
   align-items: center;

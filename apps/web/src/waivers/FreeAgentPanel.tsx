@@ -115,6 +115,11 @@ export function FreeAgentPanel({
               placeholder="Search free agents…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              inputMode="search"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </div>
           <div className="wv-comp-seg">

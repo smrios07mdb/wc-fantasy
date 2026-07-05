@@ -587,8 +587,10 @@ function ClockEditor({
         max={600}
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        inputMode="numeric"
+        enterKeyHint="done"
         style={{
-          fontSize: 13,
+          fontSize: 16,
           padding: "4px 8px",
           borderRadius: 6,
           border: "1px solid var(--border)",

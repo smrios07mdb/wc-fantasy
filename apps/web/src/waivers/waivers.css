@@ -625,6 +625,10 @@
 .wv-comp-input::placeholder {
   color: var(--text-tertiary);
 }
+/* F-P1-I2: 16px floor on touch — under 16px, iOS Safari zooms on focus and never resets. */
+@media (pointer: coarse) {
+  .wv-comp-input { font-size: 16px; }
+}
 .wv-comp-seg {
   display: inline-flex;
   gap: 2px;

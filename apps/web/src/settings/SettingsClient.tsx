@@ -68,6 +68,11 @@ export function SettingsClient({ currentName }: { currentName: string }) {
               setSaved(false);
             }}
             autoComplete="off"
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
+            maxLength={40}
           />
           {error && (
             <p className="field-error" role="alert">
