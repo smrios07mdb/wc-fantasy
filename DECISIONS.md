@@ -2245,12 +2245,15 @@ separately — `feat/pool-nav` → main, the P17 cross-nav pattern.)
   `/api/pool/pick`, and `pool_pick` keep their names — renaming any would break links/PWA/nav/RLS for
   zero gain. The mobile bottom-bar label was renamed alongside the desktop one (not literally named in
   the prompt) because it is equally user-read; a split would have been inconsistent.
-- **Kickoff times render in Eastern via `America/New_York`, labelled "ET" — NOT a hardcoded "EST"/offset.**
+- ~~**Kickoff times render in Eastern via `America/New_York`, labelled "ET" — NOT a hardcoded "EST"/offset.**
   The tournament is Jun–Jul 2026 = EDT (UTC−4); a literal "EST"/−5 would be an hour wrong all event. The
   IANA zone auto-resolves EDT now / EST in winter; "ET" sidesteps the EDT-vs-EST label confusion. The
   `Intl.DateTimeFormat` keeps an **explicit fixed `timeZone`** (not the machine's local zone) — that is
   what guarantees identical SSR + client output, the property the formatter was built for, which survives
-  the zone swap.
+  the zone swap.~~ **← SUPERSEDED by T15-6 (2026-07-05, see the time-truth entry below): /pool now renders
+  via the shared `formatInLeagueTz` over the loader-threaded `league.timezone` — dynamic "EDT"/"EST" label,
+  no hardcoded zone, matching /lineup + /waivers app-wide. The determinism property is preserved (the tz is
+  still an explicit fixed IANA string, server-resolved — just the LEAGUE's, not a literal).**
 - **A completed match older than a day sinks to a Completed bucket — kickoff-based proxy, group stage
   only.** `fifa_match` has no completion timestamp, so "completed for more than a day" is approximated as
   `status === "completed" && now − kickoffAt ≥ 24h` (`ARCHIVE_AFTER_MS`, one named constant). Matches end
@@ -3783,3 +3786,58 @@ copy change touching `/scoring`) — moot now since T15-7 already shipped (`main
 before this ordering was confirmed; the sequencing is preserved here as the historical record of how
 the conflict was meant to resolve. Resolves the three-way conflict flagged in `audit/T15-5_NOTES.md`.
 Related: [[t15-7-scoring-reconciliation]], [[t15-5-error-loading-boundaries]].
+
+## 2026-07-05 — T15-6: time truth — every manager-visible instant renders league-local via the shared formatter (`feat/time-truth-fix`, display-only, merge **HELD** for Sergio's on-device gate)
+
+**Decision.** The three-way time-render drift (bare-UTC on /games + dashboard, hardcoded-ET on /pool,
+hover-only UTC ISO on /commish) is killed by ONE discipline: loader selects `league.timezone` (read-only,
+`?? "UTC"` fallback — the waivers-exemplar pattern), the view carries it, and the render goes through
+`packages/shared/src/time.ts`. The canon `formatInLeagueTz` is byte-untouched; three sibling variants were
+added IN the same module — `formatInLeagueTzTime` ("1:00 PM EDT", dashboard match rows),
+`formatInLeagueTzShort` ("Jun 12, 1:00 PM EDT", banner secondary stat), `formatInLeagueTzDate`
+("Jul 1, 2026", frozen-since). One module = one tz discipline; no surface hand-rolls a formatter again.
+
+**The five retired ad-hoc formatters.** `Dashboard.formatKickoffTime` (bare-UTC "19:00"),
+`PrimaryBanner.formatKickoffDate`/`formatKickoffShort` (bare-UTC, and the docstring's promised "UTC"
+suffix was never even appended), `buildGameDetail.kickoffLabelUtc` ("Sat 11 Jul · 19:00" — the
+step-58 live-confirmed FAIL), `PoolClient.fmtKickoff` (hardcoded `America/New_York` + literal `" ET"`).
+`WaiversClient.formatRunAt` (dynamic tz, no zone suffix) is NOT a bug and was left untouched, like both
+correct exemplars (/lineup `KickoffTag`, /waivers `buildBatchWindowView`).
+
+**Four snapshots widened (all display-only reads — nothing mutates).** (1) `loadGameDetail` viewer select
++ a `timezone` INPUT on the pure `buildGameDetail` — the label stays SERVER-COMPUTED in the view
+(`header.kickoffLabel`), preserving the documented no-client-reformat / no-hydration-mismatch posture.
+(2) `loadDashboard` — the DIAGNOSE map suggested widening `loadDraftRoom`'s league select, but that would
+put a display field on `DraftRoomState`, the /draft Realtime patch contract; instead the dashboard's own
+loader does a parallel one-field `manager → league.timezone` read and `DashboardData.timezone` carries it
+to MatchdayModule + PrimaryBanner (serving BOTH gated dashboard findings). (3) `loadPool` manager select →
+`PoolView.timezone`. (4) `loadCommish` league select → `CommishConsoleView.timezone`.
+
+**/pool label consequence (supersedes the Prompt-45 "ET" decision above, at its origin).** Routing /pool
+through the canon flips the label `"ET"` → `"EDT"` (dynamic, `"EST"` in winter). The original rationale —
+"ET sidesteps the EDT-vs-EST confusion" — is already defeated in practice: /lineup and /waivers have shown
+"EDT" all tournament, so /pool's "ET" was the odd one out, not the convention. Wall clock is UNCHANGED at
+prod tz = America/New_York (the hardcoded zone was coincidentally right); the on-device gate should expect
+a near-no-op there and treat the label flip as CORRECT.
+
+**/commish (F-P2-G4).** Audit-row exact instants become TAP-VISIBLE (the relative `whenLabel` stays the
+default; a tap toggles the league-local absolute — pure client render off the already-present
+`createdAtIso` + the new `view.timezone`; hover title keeps the raw ISO). Bonus defect fixed: `frozenSince`
+sliced the bare UTC date (`iso.slice(0, 10)`), so an evening-ET freeze displayed the NEXT day — now
+`formatInLeagueTzDate`.
+
+**The class-killer (F-P3-TZ1).** Consolidation alone doesn't STOP the next hand-rolled `getUTCHours()`;
+a new CI fence does: `apps/web/src/fences/timeTruthFence.test.ts` — a real-file grep over apps/web product
+source (tests excluded) that FAILS on any `.getUTC*(` or literal `timeZone: "<string>"` outside
+`packages/shared`, with a non-vacuity probe (the scan must find `formatInLeagueTz` uses, so a moved tree
+can't green-scan nothing). It rides `pnpm test`, so it runs in CI and the DoD gate automatically — the §9
+engine-probe analog for the time-drift class. RED-proven (injected offenders fail both patterns), then
+green on the refactored tree.
+
+**Hydration invariant (non-negotiable, held).** The tz is resolved SERVER-SIDE in every case and threaded
+as a fixed IANA string — never the machine's local zone; `Intl.DateTimeFormat` output is deterministic
+given (instant, tz), so SSR and hydration render identically. No formatter moved to the client.
+
+Related: [[t15-6-time-truth-diagnosis]], [[lineup-waivers-polish-layer]] (the exemplar pattern),
+[[waivers-batch-time-layer]], [[pool-ui-layer]] (the superseded ET bullet), [[commish-4-freeze]]
+(frozenSince origin), [[game-detail-layer]], [[t15-7-scoring-reconciliation]] (the probe-fence precedent).
