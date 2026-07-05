@@ -381,6 +381,17 @@ score is recomputable at any time.** This is exactly what the late-settling rati
   Sofascore scraper writes ratings concurrently. Real-Postgres atomicity validated only by
   `packages/recompute/src/sweepClaimClear.integration.test.ts` (skipped in CI gate; must run green
   against a real Postgres before concurrent scraper writes begin).
+- **The `/scoring` rulebook is pinned to the engine (T15-7, `main@2267a4c`).** The reference page is
+  the one place that *describes* the rules in prose/tables rather than computing them, so it can drift
+  from `packages/scoring` silently — and it had (F-P1-J1/J2/J3: §1 bands, §4 ÷10 + five missing
+  categories, §8 red values). The shipped guard keeps the page a *view* of the engine, never a second
+  copy: §1/§4/§8 render from local data tables in `apps/web/src/scoring/scoringData.ts`, the §9 worked
+  examples are **derived** by pushing `ScoreInput` fixtures through `scorePlayerMatch` (rows/totals are
+  the engine's own output), and `scoringData.test.ts` probes every displayed value against
+  `scorePlayerMatch` — so page-vs-engine drift fails CI. The engine stays byte-untouched (read-only pure
+  import). A stronger form — an exported `RULES` manifest generating §1–§8 from engine constants — is
+  deliberately **deferred**: it would lift function-internal literals into the purity/fence-critical
+  engine package whose value is that it never churns. See DECISIONS.md → 2026-07-05 (T15-7).
 
 ### The rating source (resolver)
 **BALLDONTLIE's native per-match `rating` is the canonical rating source of record** (CODE_PROMPT_57).
