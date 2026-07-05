@@ -27,6 +27,7 @@
  *     commissioner entry — these need their target screens + identity wiring first.
  */
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { BrandBadge } from "@/components/Brand";
 import {
   COMMISH_NAV_ITEM,
@@ -280,9 +281,14 @@ export async function AppShell({
         {nav.bottomTabItems.map((item) => {
           const isActive = item.id === active;
           return (
-            <a
+            // prefetch={false}: deliberate per NAV_LATENCY_NOTES §5 — the fixed bar keeps all 5
+            // tabs in-viewport, so default (eager) prefetch would warm every loading.tsx boundary
+            // on every authed screen; fetch on hover/touchstart instead. Link still renders a real
+            // <a href> so pre-hydration taps degrade to plain MPA navigation (§5 point 3).
+            <Link
               key={item.id}
               href={item.href}
+              prefetch={false}
               className={isActive ? "sh-btnav-item is-active" : "sh-btnav-item"}
               aria-current={isActive ? "page" : undefined}
             >
@@ -293,7 +299,7 @@ export async function AppShell({
                   <span className="sh-nav-dotlive" aria-hidden="true" />
                 )}
               </span>
-            </a>
+            </Link>
           );
         })}
         {/* MoreSheet: client island for open/close + scroll-into-view side-effect */}

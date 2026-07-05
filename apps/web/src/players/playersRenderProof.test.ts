@@ -89,7 +89,9 @@ describe("entry points — the markers the render proof asserts", () => {
   });
 
   it("the MoreSheet carries a 'Browse players' entry linking to /players", () => {
-    expect(moreSheet).toContain('<a href="/players" className="sh-more-item"');
+    // NAV-LINK conversion: the More-sheet entries are next/link <Link> (client-side transition +
+    // instant loading.tsx), prefetch={false} per NAV_LATENCY_NOTES §5. Still an entry → /players.
+    expect(moreSheet).toContain('<Link href="/players" prefetch={false} className="sh-more-item"');
     expect(moreSheet).toContain("Browse players");
   });
 });

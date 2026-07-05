@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { COMMISH_NAV_ITEM, type NavId, type NavItem } from "@/src/shell/crossNav";
 import { useSheetChrome } from "@/components/useSheetChrome";
 
@@ -92,27 +93,32 @@ export function MoreSheet({
             </button>
           </div>
           <div className="sh-more-sheet-items">
+            {/* prefetch={false} per NAV_LATENCY_NOTES §5 (same posture as the bottom-tab Links);
+                onClick={close} keeps the sheet-dismiss-on-tap behavior. Link renders a real <a href>
+                so pre-hydration taps still navigate as plain MPA anchors. */}
             {moreItems.map((item) => (
-              <a
+              <Link
                 key={item.id}
                 href={item.href}
+                prefetch={false}
                 className={item.id === active ? "sh-more-item is-active" : "sh-more-item"}
                 aria-current={item.id === active ? "page" : undefined}
                 onClick={close}
               >
                 {item.label}
-              </a>
+              </Link>
             ))}
             {/* PLAYERS-1 remediation: the mobile reachability entry for the read-only /players browser.
                 A standalone additive item (NOT a NavId, so /players stays out of the nav model — a
                 first-class Players tab is T15-2's to add); the More sheet is the mobile nav surface. */}
-            <a href="/players" className="sh-more-item" onClick={close}>
+            <Link href="/players" prefetch={false} className="sh-more-item" onClick={close}>
               Browse players
-            </a>
+            </Link>
             {/* Gated Commissioner console entry — appended only for commissioners (IA §3 slate entry). */}
             {isCommissioner && (
-              <a
+              <Link
                 href={COMMISH_NAV_ITEM.href}
+                prefetch={false}
                 className={
                   active === "commish"
                     ? "sh-more-item sh-more-commish is-active"
@@ -122,7 +128,7 @@ export function MoreSheet({
                 onClick={close}
               >
                 {COMMISH_NAV_ITEM.label}
-              </a>
+              </Link>
             )}
           </div>
 
