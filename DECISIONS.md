@@ -3841,3 +3841,7 @@ given (instant, tz), so SSR and hydration render identically. No formatter moved
 Related: [[t15-6-time-truth-diagnosis]], [[lineup-waivers-polish-layer]] (the exemplar pattern),
 [[waivers-batch-time-layer]], [[pool-ui-layer]] (the superseded ET bullet), [[commish-4-freeze]]
 (frozenSince origin), [[game-detail-layer]], [[t15-7-scoring-reconciliation]] (the probe-fence precedent).
+
+### 2026-07-05 — Fence-CI gap surfaced by T15-6: `verify-*.mjs` fences are opt-in, never run in CI (docs-only note)
+
+**Observation (recorded, not fixed).** The Playwright render-proof fences (`verify-the-cut` / `verify-players` / `verify-shell-stacking` / `verify-playoffs-hero` / …) run only when invoked explicitly (gate threads, `test:*` scripts) — `.github/workflows/ci.yml` runs `pnpm test` (vitest) + the production build, so **no `.mjs` fence gates CI**. This is exactly why T15-6's class-killer was shaped as a **vitest file** (`apps/web/src/fences/timeTruthFence.test.ts`) rather than another `.mjs` script: riding `pnpm test` makes it CI-gating automatically. **Regularising the `.mjs` fences into CI** (a workflow job with a Chromium install, or a triage of which fences are cheap enough to gate every PR) is a **PROPOSED micro-thread — unnumbered, Sergio to slot**; nothing was changed here. Related: [[render-build-ci-gate]] (the precedent: CI green ≠ deployable until the build was added to CI).

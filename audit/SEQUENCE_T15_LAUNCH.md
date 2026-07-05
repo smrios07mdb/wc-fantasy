@@ -35,7 +35,9 @@ Three-way Window-A ordering conflict **RESOLVED** (Sergio-confirmed): remaining 
 and the earlier 07-05 line's unplaced "T15-6 promoted" note — T15-6 ranks ahead of T15-1 because its
 promotion was driven by a live-confirmed FAIL (step-58), a higher-confidence signal than T15-1's
 360-conditional P0s (not reproduced at real device widths). T15-7 is already `DONE` (MERGED+DEPLOYED
-`main@2267a4c`); T15-6 and T15-1 remain the two open threads of this ordering, in that sequence.
+`main@2267a4c`); **T15-6 is now CLOSED too** (MERGED+DEPLOYED `main@071eac1`, Sergio's post-deploy
+on-device gate PASS, 2026-07-05), leaving **T15-1 as the sole open thread of the resolved order**
+(T15-13 still `PROPOSED`, gated on Sergio accepting).
 T15-5/T15-3 are already `DONE`/CLOSED and were never part of this three-way conflict's threads. See
 `DECISIONS.md` and `audit/T15-5_NOTES.md` for the full record.
 
@@ -57,7 +59,7 @@ T15-5/T15-3 are already `DONE`/CLOSED and were never part of this three-way conf
 | A1 | **T15-2 — shell stacking, z-scale, safe-areas + tap reliability** | F-P0-A1 (diagnose first), F-P1-I1 incl. step-27 P0, F-P1-C1, F-P2-I6/I7, F-P2-PSC1, F-P2-A4+F-P3-A1, F-P3-A2, F-P3-G3, 6-slot bar spacing | clearance · implementation (HOLD) | **Fable 5 / high** | `TODO` — **FIRST THREAD** |
 | A2 | **DEC-0 — launch decisions + investigations** | Tier-0 decisions (membership, commissioner, wrapper, pool ties, one-DB, UCL pricing) + INV-2..11 | contained · **decision (Chat/Sergio)**, no code | Chat (Fable 5 / medium) | `TODO` — runs in parallel with A1 |
 | A3 | **T15-3 — keyboards & form attributes** | F-P1-I2 (16px floor), F-P1-G1 (FREEZE/CUT autocap), inputmode/enterkeyhint sweep, F-P3-H1/H2 | contained · implementation (delegable + manual FREEZE check) | Sonnet 5 / medium | `DONE` — MERGED+DEPLOYED `main@c12427a` (2026-07-05) |
-| A4 | **T15-6 — time truth** (promoted) | F-P1-TZ1, F-P2-TZ1/TZ2/TZ3, F-P2-G4, F-P3-TZ1 (shared formatter) | clearance · implementation (contract-touching, HOLD) | Opus 4.8 / medium | `TODO` — **1st of remaining order** (see 2026-07-05 ordering resolution below) |
+| A4 | **T15-6 — time truth** (promoted) | F-P1-TZ1, F-P2-TZ1/TZ2/TZ3, F-P2-G4, F-P3-TZ1 (shared formatter) | clearance · implementation (contract-touching, HOLD) | Opus 4.8 / medium (ran as Fable 5 / high) | `DONE` — **MERGED `--ff-only` + DEPLOYED** `main@071eac1` (2026-07-05; deploy hash flip `dfba3187`→`b4642846`, health 200; **Sergio's post-deploy on-device gate PASS**). All 6 finding IDs resolved: 5 ad-hoc formatters retired onto `formatInLeagueTz` (+3 shared siblings), `league.timezone` threaded read-only into 4 snapshots, /commish tap-visible timestamps + frozenSince fixed, /pool ET→EDT supersede, new CI `timeTruthFence` (class-killer). |
 | A5 | **T15-5 — error/404/loading boundaries** | F-P1-ERR1/ERR2, F-P2-ERR1 | contained · implementation (additive files only, delegable) | Sonnet 5 / low–medium | `DONE` — CLOSED, device gate PASS `main@b4f3612` (2026-07-05) |
 | A6 | **T15-7 — rulebook truth (/scoring)** | F-P1-J1/J2/J3 — every value sourced from `packages/scoring`; consider generating tables from engine constants | clearance · implementation (copy-only, trust surface, HOLD) | Opus 4.8 / high | `DONE` — **MERGED `--ff-only` + DEPLOYED** `main@2267a4c` (2026-07-05, Sergio's on-device visual PASS). F-P1-J1/J2/J3 all fixed. §1/§4/§8 render from local data tables + §9 from `ScoreInput` fixtures pushed through `scorePlayerMatch`, probed against the engine in `scoringData.test.ts` (page-vs-engine drift now fails CI). Engine-side exported RULES manifest **DEFERRED** (not built). `packages/scoring` byte-untouched. |
 | A7 | **HARD-1 — observability core** (launch, interleaved) | F-A01/A02/A03/A04, F-A09/A16; additive-only slice (F-A05 optional, Sergio's call) | clearance · implementation (review, worker hot-path adjacency; **match-free deploy window**) | Fable 5 / high | `TODO` — gated-on: Sergio's mid-tournament authorization |
@@ -94,7 +96,7 @@ T15-5/T15-3 are already `DONE`/CLOSED and were never part of this three-way conf
 - [ ] **Clear T15-2 to open** (HOLD-class; live-Render visual verification is Sergio's gate — no local runs).
 - [ ] **Convene DEC-0**: UCL feed pricing (WC tier doesn't carry; UCL tier vs ALL-ACCESS $499.99/mo) · membership model (join table vs `manager.user_id`) · commissioner model (per-league vs global) · wrapper tech (Capacitor recommended) · pool two-legged-tie semantics + guillotine "round" = leg or tie · FAAB replenishment over a 10-month season · one shared DB vs DB-per-league (decides whether F-C01 needs a migration at all).
 - [ ] **HARD-1 mid-tournament authorization** — additive-only worker-adjacent deploy in a match-free window now, vs ~2 more weeks of unobservable auto-fired irreversible cuts.
-- [ ] **Accept/reject T15-13** as a thread; **confirm T15-6 promotion**.
+- [ ] **Accept/reject T15-13** as a thread. ~~confirm T15-6 promotion~~ — **CONFIRMED + CLOSED** (T15-6 ran 1st per the resolved order and is `DONE`, `main@071eac1`, 2026-07-05).
 - [x] Operator steps: ~~PUSH-KEYS~~ · ~~INV-11~~ · ~~AUTOFIRE_CUTS_ENABLED check~~ · ~~INV-4b (external monitor wiring)~~ — all CLOSED 2026-07-05. INV-4 now fully resolved: INV-4a/INV-4b/INV-4c PASS/CLOSED. **F-A07-pin OPEN** (sole remaining operator follow-up).
 
 ## Standing constraints (apply to every thread)
