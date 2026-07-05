@@ -1,10 +1,26 @@
 # T15-3 thread notes — keyboards & form attributes
 
-Branch: `feat/keyboards-form-attrs` (worktree off `origin/main` @ `ac9e038`). Scope per
-`SEQUENCE_T15_LAUNCH.md` → A3 / T15-3: F-P1-I2 (16px input floor), F-P1-G1 (FREEZE/CUT
-autocapitalize), the inputmode/enterkeyhint sweep, F-P3-H1/H2. **HOLD — no push/merge/deploy**;
-Sergio's merge gate. This branch predates the NAV-LINK-CONVERSION merge, so the test baseline
-cut here is **3307 passed / 104 skipped** (per the assignment's stated fallback).
+Branch: `feat/keyboards-form-attrs`. Scope per `SEQUENCE_T15_LAUNCH.md` → A3 / T15-3: F-P1-I2
+(16px input floor), F-P1-G1 (FREEZE/CUT autocapitalize), the inputmode/enterkeyhint sweep,
+F-P3-H1/H2. **HOLD — no push/merge/deploy**; Sergio's merge gate.
+
+## 0. Rebase (2026-07-05, same day)
+
+Original delivery was cut pre-NAV-LINK and left **uncommitted** in the worktree. Before
+rebasing, the delivered changes were committed as a single commit (`66ca04d`) on top of the old
+base, then rebased onto current `origin/main`:
+
+- Old base: `ac9e038` (pre-NAV-LINK-CONVERSION)
+- New base: `df54c08` (`origin/main` tip — NAV-LINK-CONVERSION merged + deployed)
+- `git rebase origin/main` — **zero conflicts** (NAV-LINK touched `AppShell.tsx`/`MoreSheet.tsx`
+  `<a>`→`<Link>` conversions; this thread never touched those files — no overlap).
+- Post-rebase commit: `192a499`.
+- `git diff origin/main --stat` after rebase is byte-identical in file list/line-counts to the
+  pre-rebase diff — confirms the rebase replayed the original commit with **zero new diff
+  content**, per the fence.
+
+Test baseline is now **post-NAV-LINK: 3312 passed / 104 skipped** (was 3307 before the rebase,
++5 from NAV-LINK's own tests landing on main).
 
 Fences respected: attributes + CSS only. No loader/handler/API/schema/RLS/Realtime/migration
 changes, except the single minimal local-state guard required by F-P3-H1 (see §4) — no fetch/
@@ -114,30 +130,71 @@ T15-9f thread, out of this thread's scope) calls for; an unhandled rejection fro
 (`src/manager/displayName.ts:13`). Manager now gets a proactive stop instead of learning the
 limit only after a round-trip Save.
 
-## 6. Verification
+## 6. Verification (re-run post-rebase, 2026-07-05)
 
-- `apps/web/scripts/verify-form-attrs.mjs` (new, follows the `verify-*.mjs` house pattern) — 42
-  checks, all green:
-  - **Font floor** (real Playwright/Chromium, real CSS inlined): every touched form-control
-    class computes `font-size >= 16px` under a touch/mobile context (360, 390) and stays at its
-    original pre-fix size under a desktop mouse context (1180) — proves the fix is
-    `pointer:coarse`-scoped, not a blanket bump.
-  - **Attribute sweep** (source-pinned, not a replica — reads the real `.tsx` files and
-    regex-asserts the swept attributes are present near each named field, so a future edit that
-    drops an attribute fails this check): FREEZE/CUT confirm words, commish search/numeric/
-    decimal fields, sign-in email, settings display-name maxLength, notifications busy-guard,
-    players search, waivers bid amount, draft clock.
-- Full DoD gate green: `pnpm -w typecheck` · `pnpm -w lint` · `pnpm -w format:check` ·
-  `pnpm -w test` → **3307 passed / 104 skipped** (baseline cut before NAV-LINK-CONVERSION merge,
-  per the assignment's stated fallback) · `pnpm --filter @app/web build` green, all authed routes
-  still `ƒ` dynamic.
-- Fence verifiers UNMODIFIED and still green: `verify-the-cut.mjs` 43/43,
-  `verify-playoffs-hero.mjs` (all green), `verify-players.mjs` 14/14,
-  `verify-shell-stacking.mjs` 33/33, `verify-nav-latency.mjs` 48/48,
-  `verify-mobile-nav.mjs` 75/75. (`verify-nav-link.mjs` does not exist on this branch — it postdates
-  the NAV-LINK-CONVERSION merge this branch was cut before, consistent with the 3307 baseline.)
-- `packages/*` diff: empty (confirmed via `git status`/`git diff --stat` before commit — this
-  thread never touched a package).
+### Full DoD gate — all green on the rebased tree (`192a499`, base `df54c08`)
+
+| Check | Result |
+|---|---|
+| `pnpm -w typecheck` | green (all 17 workspace packages) |
+| `pnpm -w lint` | green (`eslint .`, zero warnings) |
+| `pnpm -w format:check` | green (prettier, all files) |
+| `pnpm -w test` | **3312 passed / 104 skipped** (post-NAV-LINK baseline) |
+| `pnpm --filter @app/web build` | green — all authed routes still `ƒ` dynamic (`/commish` `/draft` `/games/[matchId]` `/lineup` `/players` `/playoffs` `/pool` `/scoring` `/settings` `/standings` `/vsfield` `/waivers`) |
+
+### Fence verifiers — UNMODIFIED, all re-run and green on the rebased tree
+
+| Verifier | Result | Notes |
+|---|---|---|
+| `verify-the-cut.mjs` | **43/43** | matches pre-rebase count |
+| `verify-playoffs-hero.mjs` | **19/19** (all `✓`, script prints a summary line rather than an `N/N` total) | matches pre-rebase — desktop+mobile × live/dropped/champion × reduce/no-preference + 7 latch cases |
+| `verify-players.mjs` | **14/14** — run twice to check the flagged 14→15 discrepancy; **not reproduced**, count is 14 both times, no 15th check appeared. Full label list read from `/tmp/players-verify.json` — no anomaly on this tree. Verifier not modified. |
+| `verify-shell-stacking.mjs` | **33/33** | matches pre-rebase count |
+| `verify-nav-latency.mjs` | **48/48** | matches pre-rebase count |
+| `verify-nav-link.mjs` | **14/14** | now exists on `origin/main` post-NAV-LINK-CONVERSION merge (didn't exist at the prior delivery); ran clean first try |
+| `verify-mobile-nav.mjs` | **75/75** | matches pre-rebase count |
+
+### `verify-form-attrs.mjs` — 42/42, viewport matrix confirmed
+
+Re-run on the rebased tree: still **42/42**, all green. Viewport matrix explicitly confirmed
+against the original A3 spec ("360/390 + desktop"):
+
+- **360** (touch/mobile context, `hasTouch: true, isMobile: true`) — 8 font-floor checks
+- **390** (touch/mobile context) — 8 font-floor checks
+- **1180 desktop** (mouse context, no touch) — 8 font-floor checks
+- plus 18 source-pinned attribute-sweep checks (viewport-independent)
+
+No viewport was missing from the first pass — 360/390/desktop were all present pre-rebase too;
+this run just re-confirms it explicitly per the request.
+
+### Screenshots — confirmed present, added the missing focused-state shots
+
+The original delivery report didn't call out screenshots explicitly. On inspection they existed
+(115 files across the fence verifiers + the 3 whole-page shots `verify-form-attrs.mjs` already
+took), but were missing the **per-field focused-state** shots the original A3 spec asked for.
+Added: `verify-form-attrs.mjs` now focuses each of the 8 touched form-control classes at 360px
+and screenshots each (Chromium doesn't perform iOS Safari's zoom-on-focus gesture itself, so the
+photographic proof is the same signal as the computed-style assertion: the focused field renders
+legibly at ≥16px with no layout distortion).
+
+`apps/web/screenshots/` now contains (115 total; form-attrs subset listed in full):
+
+- `form-attrs_touch_360.png`, `form-attrs_touch_390.png`, `form-attrs_desktop.png` — whole-page
+  replica at each viewport (unfocused)
+- `form-attrs_focus_360_ds-input.png`, `form-attrs_focus_360_ds-select.png`,
+  `form-attrs_focus_360_au-input.png`, `form-attrs_focus_360_adm-input.png`,
+  `form-attrs_focus_360_adm-select.png`, `form-attrs_focus_360_adm-num.png`,
+  `form-attrs_focus_360_wv-comp-input.png`, `form-attrs_focus_360_pl-search-input.png` — one
+  per touched form-control class, focused, at 360px
+- plus the pre-existing fence-verifier screenshot sets: `320/375/390/414/768_{home,lineup,pool,
+  scoring,vsfield}.png` (mobile-nav), `fit_{320,375,390,414}_{lineup,pool}.png` (page-fit),
+  `nav-latency-*-390.png` (8 routes), plus `the-cut`/`playoffs-hero`/`players`/`shell-stacking`/
+  `nav-link` sets — all present, none touched by this thread.
+
+### `packages/*`
+
+Diff empty (confirmed via `git diff origin/main -- packages/` — no output). This thread never
+touched a package, before or after the rebase.
 
 ## 7. Staged brain-docs section (for `/braindocs`, not yet applied)
 

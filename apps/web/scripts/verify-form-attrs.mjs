@@ -113,6 +113,21 @@ async function runFontFloor(chromium) {
       check(`[touch ${width}] .${id} computed font-size ${size}px >= 16px`, size >= 16);
     }
     await page.screenshot({ path: resolve(screenshotsDir, `form-attrs_touch_${width}.png`) });
+
+    // Representative per-route FOCUSED-state shots at 360 — visual evidence alongside the
+    // computed-style assertion above. Chromium (unlike iOS Safari/WebKit) never performs the
+    // zoom-on-focus gesture itself, so the photographic proof here is the same signal as the
+    // assertion: the focused field renders at a legible ≥16px with no layout distortion.
+    if (width === 360) {
+      for (const id of Object.keys(DESKTOP_BASELINE_PX)) {
+        await page.locator(`#${id}`).focus();
+        await page.screenshot({
+          path: resolve(screenshotsDir, `form-attrs_focus_360_${id}.png`),
+          clip: { x: 0, y: 0, width: 360, height: 400 },
+        });
+      }
+    }
+
     await context.close();
   }
 
