@@ -3770,3 +3770,16 @@ Post-merge live verification of PLAYERS-1 found three gaps: the statline was dro
 **§9 possession-lost — TEACH not OMIT.** With possession-lost corrected to ÷10, the small example counts (3–6) floor to 0 and the negative line vanishes. Decision: **bump each fixture's `possessionLost` to ≥10** so the −1 line renders and the ÷10 penalty is demonstrated — the engine recomputes each total accordingly (**14/20/17/22**), vs the OMIT alternative of dropping the line (15/21/18/23). Teaching the penalty beat hiding it.
 
 **Gate + verification.** typecheck/lint/format/**3345** (+11 vs 3334 baseline)/`@app/web` build (`/scoring` stays `ƒ`); fences UNMODIFIED (the-cut 43 · players 14 · shell-stacking 33/33 · playoffs-hero). True fast-forward `b557fbf..2267a4c`, so the branch gate stood — deploy (not tests) re-verified: build-hash flip `webpack-8a150c…`→`dfba3187…` + `/api/health` 200 + Sergio's on-device visual PASS + "Render is green". Related: [[scoring-page-layer]], [[scoring-zero-rating-line-layer]], [[scoring-promote-lines-layer]], [[t15-7-scoring-reconciliation]].
+
+### 2026-07-05 Window-A remaining-thread order resolved (docs-only)
+
+**Decision.** The three-way T15 ordering conflict flagged in `audit/T15-5_NOTES.md` (BACKLOG.md's T15
+row vs. SEQUENCE_T15_LAUNCH.md's own table vs. its later "Derived-status corrections" line) is
+**resolved**: remaining order is **T15-6 → T15-1 → T15-7**. T15-6 (live-confirmed FAIL, step-58)
+outranks T15-1 (360-conditional, unconfirmed at real device widths) on confidence grounds — a
+hardware-reproduced defect beats a P0 that hasn't reproduced outside the audit's synthetic width.
+T15-7 stays last of the three (Opus 4.8/high, clearance-gated, highest blast radius as a trust-surface
+copy change touching `/scoring`) — moot now since T15-7 already shipped (`main@2267a4c`, 2026-07-05)
+before this ordering was confirmed; the sequencing is preserved here as the historical record of how
+the conflict was meant to resolve. Resolves the three-way conflict flagged in `audit/T15-5_NOTES.md`.
+Related: [[t15-7-scoring-reconciliation]], [[t15-5-error-loading-boundaries]].

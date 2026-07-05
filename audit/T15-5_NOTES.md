@@ -203,7 +203,9 @@ hardcoded color palette is a point-in-time copy of ds.css's dark tokens, not a l
 token change won't propagate here automatically, by design (self-containment > freshness for a crash
 page).
 
-### [SERGIO TO CONFIRM OR STRIKE] — three-way T15 ordering conflict (not just a two-way one)
+### RESOLVED 2026-07-05 — Sergio confirmed T15-6 → T15-1 → T15-7, see SEQUENCE_T15_LAUNCH.md's 2026-07-05 ordering-resolution block.
+
+### [historical] three-way T15 ordering conflict (not just a two-way one)
 
 The first pass of this note flagged BACKLOG vs. SEQUENCE's table as a two-way conflict. On closer
 reading, `SEQUENCE_T15_LAUNCH.md` disagrees with **itself**, so this is a three-way conflict. All three

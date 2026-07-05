@@ -20,13 +20,24 @@
 - **A1 (T15-2) DONE/MERGED** (2026-07-04, `1a8c36d`) — the `TODO` / `FIRST THREAD` label in the Window-A table is stale.
 - **NAV-LAT DONE/MERGED+DEPLOYED** (2026-07-04) — the route `loading.tsx` skeleton layer shipped.
 - **NAV-LINK DONE/MERGED+DEPLOYED** (2026-07-05, `feat/nav-link-conversion` → `main@909cecf`) — the `<Link>`+`prefetch={false}` conversion (§5 recommendation); merged after Sergio's on-device gate PASSED. Not a Window-A blocker.
-- **Remaining Window A order UNCHANGED:** T15-3 → T15-1 → T15-5 → T15-7, with **T15-6 promoted** and T15-13 still `PROPOSED` (gated on Sergio accepting the thread).
+- **Remaining Window A order UNCHANGED:** T15-3 → T15-1 → T15-5 → T15-7, with **T15-6 promoted** and T15-13 still `PROPOSED` (gated on Sergio accepting the thread). — **Superseded**, see "Derived-status corrections (2026-07-05, ordering conflict resolved)" below.
 - **PUSH-KEYS + AUTOFIRE_CUTS_ENABLED CLOSED** (2026-07-05, operator-confirmed DONE; struck below — see also `[[t15-3-keyboards-form-attrs]]` docs pass that first recorded them CLOSED).
 - **INV-11 (stray second `league` row check) PASS** — exactly 1 row: id `7b30166f-ec55-4ce8-b133-beddc4f6eb90` / name "WC Fantasy League" / `created_at` 2026-06-08 17:56:29.343+00. Single-tenancy holds; `findFirst()` singletons are safe as-is. De-risks the DEC-0 one-DB / singleton call.
 - **INV-4 (heartbeat/attention env vars + connection flags) resolves into three parts:**
   - **INV-4a (`DATABASE_URL` flags) PASS** — `pgbouncer=true` (Supavisor transaction pooler, prepared statements correctly disabled); `connection_limit` UNSET → Prisma default (1+2×CPU) applies. Persistent-container architecture ⇒ not serverless, so the default is safe today at current scale. **DECISION (F-A07 close):** pin an explicit modest `connection_limit` per service (web/worker/period-close), summed under the Supavisor Pool Size, tuned against Observability → Database Connections. Tracked as OPEN follow-up **F-A07-pin** (operator, dashboard — no code).
   - **INV-4b (period-close dead-man switch) CLOSED** (2026-07-05) — `PERIOD_CLOSE_HEARTBEAT_URL` is now wired to a Healthchecks.io check (green ping received; the external monitor is watching), the check's email integration is configured and confirmed "ready to deliver", and `PERIOD_CLOSE_ATTENTION_URL` is now a live HTTP sink (no longer inert). The dead-man switch is watched end-to-end: a hung/crashed cron stops the heartbeat → Healthchecks fires the email alert to a channel Sergio reads. Was PARTIAL/OPEN (external monitor + alert sink unwired); both are now live.
   - **INV-4c (retired services) PASS** — `wc-fantasy-scraper` + `wc-fantasy-faab-batch` both SUSPENDED-by-owner (inert, not deleted). Retire intent satisfied; confirms the render.yaml-removal-didn't-auto-delete-faab-batch note.
+
+## Derived-status corrections (2026-07-05, ordering conflict resolved)
+
+Three-way Window-A ordering conflict **RESOLVED** (Sergio-confirmed): remaining order is
+**T15-6 → T15-1 → T15-7**. Supersedes the 07-04 table's `T15-6 → T15-5 → T15-7 → … → T15-1 (last)`
+and the earlier 07-05 line's unplaced "T15-6 promoted" note — T15-6 ranks ahead of T15-1 because its
+promotion was driven by a live-confirmed FAIL (step-58), a higher-confidence signal than T15-1's
+360-conditional P0s (not reproduced at real device widths). T15-7 is already `DONE` (MERGED+DEPLOYED
+`main@2267a4c`); T15-6 and T15-1 remain the two open threads of this ordering, in that sequence.
+T15-5/T15-3 are already `DONE`/CLOSED and were never part of this three-way conflict's threads. See
+`DECISIONS.md` and `audit/T15-5_NOTES.md` for the full record.
 
 ## Model & effort rubric (for every Code prompt)
 
@@ -45,13 +56,13 @@
 |---|---|---|---|---|---|
 | A1 | **T15-2 — shell stacking, z-scale, safe-areas + tap reliability** | F-P0-A1 (diagnose first), F-P1-I1 incl. step-27 P0, F-P1-C1, F-P2-I6/I7, F-P2-PSC1, F-P2-A4+F-P3-A1, F-P3-A2, F-P3-G3, 6-slot bar spacing | clearance · implementation (HOLD) | **Fable 5 / high** | `TODO` — **FIRST THREAD** |
 | A2 | **DEC-0 — launch decisions + investigations** | Tier-0 decisions (membership, commissioner, wrapper, pool ties, one-DB, UCL pricing) + INV-2..11 | contained · **decision (Chat/Sergio)**, no code | Chat (Fable 5 / medium) | `TODO` — runs in parallel with A1 |
-| A3 | **T15-3 — keyboards & form attributes** | F-P1-I2 (16px floor), F-P1-G1 (FREEZE/CUT autocap), inputmode/enterkeyhint sweep, F-P3-H1/H2 | contained · implementation (delegable + manual FREEZE check) | Sonnet 5 / medium | `TODO` |
-| A4 | **T15-6 — time truth** (promoted) | F-P1-TZ1, F-P2-TZ1/TZ2/TZ3, F-P2-G4, F-P3-TZ1 (shared formatter) | clearance · implementation (contract-touching, HOLD) | Opus 4.8 / medium | `TODO` |
-| A5 | **T15-5 — error/404/loading boundaries** | F-P1-ERR1/ERR2, F-P2-ERR1 | contained · implementation (additive files only, delegable) | Sonnet 5 / low–medium | `TODO` |
+| A3 | **T15-3 — keyboards & form attributes** | F-P1-I2 (16px floor), F-P1-G1 (FREEZE/CUT autocap), inputmode/enterkeyhint sweep, F-P3-H1/H2 | contained · implementation (delegable + manual FREEZE check) | Sonnet 5 / medium | `DONE` — MERGED+DEPLOYED `main@c12427a` (2026-07-05) |
+| A4 | **T15-6 — time truth** (promoted) | F-P1-TZ1, F-P2-TZ1/TZ2/TZ3, F-P2-G4, F-P3-TZ1 (shared formatter) | clearance · implementation (contract-touching, HOLD) | Opus 4.8 / medium | `TODO` — **1st of remaining order** (see 2026-07-05 ordering resolution below) |
+| A5 | **T15-5 — error/404/loading boundaries** | F-P1-ERR1/ERR2, F-P2-ERR1 | contained · implementation (additive files only, delegable) | Sonnet 5 / low–medium | `DONE` — CLOSED, device gate PASS `main@b4f3612` (2026-07-05) |
 | A6 | **T15-7 — rulebook truth (/scoring)** | F-P1-J1/J2/J3 — every value sourced from `packages/scoring`; consider generating tables from engine constants | clearance · implementation (copy-only, trust surface, HOLD) | Opus 4.8 / high | `DONE` — **MERGED `--ff-only` + DEPLOYED** `main@2267a4c` (2026-07-05, Sergio's on-device visual PASS). F-P1-J1/J2/J3 all fixed. §1/§4/§8 render from local data tables + §9 from `ScoreInput` fixtures pushed through `scorePlayerMatch`, probed against the engine in `scoringData.test.ts` (page-vs-engine drift now fails CI). Engine-side exported RULES manifest **DEFERRED** (not built). `packages/scoring` byte-untouched. |
 | A7 | **HARD-1 — observability core** (launch, interleaved) | F-A01/A02/A03/A04, F-A09/A16; additive-only slice (F-A05 optional, Sergio's call) | clearance · implementation (review, worker hot-path adjacency; **match-free deploy window**) | Fable 5 / high | `TODO` — gated-on: Sergio's mid-tournament authorization |
 | A8 | **T15-13 — identity & copy truth** | N2/N6 raw-email PII fallback, N3 "vs Team 288", N4 provider string | contained · **gated-on: Sergio accepting the thread** | Sonnet 5 / medium | `PROPOSED` |
-| A9 | **T15-1 — 360-conditional P0 hotfixes** (demoted) | F-P0-B1+F-P1-B1, F-P0-E1, F-P0-F1, F-P2-G2 | contained · implementation (delegable, if calendar permits) | Sonnet 5 / medium | `TODO` |
+| A9 | **T15-1 — 360-conditional P0 hotfixes** (demoted) | F-P0-B1+F-P1-B1, F-P0-E1, F-P0-F1, F-P2-G2 | contained · implementation (delegable, if calendar permits) | Sonnet 5 / medium | `TODO` — **2nd of remaining order** (see 2026-07-05 ordering resolution below) |
 | A10 | **T15-9 — per-screen passes, delegable subsets (9d–9i)** | per audit §4 row T15-9; HOLD subsets 9a/9b/9c only if a live gap forces them | contained · implementation | Opus 4.8 / medium per sub-thread | `TODO` |
 
 **Operator steps this week (Sergio, no code):** ~~PUSH-KEYS~~ CLOSED · ~~AUTOFIRE_CUTS_ENABLED live verification~~ CLOSED · ~~INV-11~~ PASS · ~~INV-4b (external monitor on the heartbeat)~~ CLOSED (2026-07-05, Healthchecks.io + email alert live) — INV-4 now fully PASS/CLOSED, with the sole remaining operator follow-up **F-A07-pin** (explicit `connection_limit` per service).
