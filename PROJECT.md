@@ -1268,6 +1268,8 @@ The routing payoff for NAV-LAT (the `audit/NAV_LATENCY_NOTES.md §5` recommendat
 
 **Also this pass — INV-4b CLOSED.** `audit/SEQUENCE_T15_LAUNCH.md` INV-4b (period-close dead-man switch) flipped PARTIAL → CLOSED: `PERIOD_CLOSE_HEARTBEAT_URL` wired to Healthchecks.io (green ping received), email integration confirmed "ready to deliver", and `PERIOD_CLOSE_ATTENTION_URL` is now a live HTTP sink. INV-4 is now fully PASS/CLOSED (4a/4b/4c); sole remaining operator follow-up is F-A07-pin.
 
+**2026-07-05 — T15-5 CLOSED.** Sergio ran the full 6-item device gate on the live deploy (`main@b4f3612`): segment 404, root 404, `/games/[matchId]` loading skeleton, recoverable-error reset, global-error fallback/chrome intact, no regression on fence surfaces — **ALL PASS**. Closing evidence = the clean on-device pass itself (the F-P0-A1 precedent). T15-5 status: **CLOSED**. See BACKLOG → T15 epic "Remaining order" (T15-5 struck, next up T15-7).
+
 ### 2026-07-05 — verify-launch-env.mjs: reusable read-only launch-env gate check (`chore/verify-launch-env`, docs-only landing, **MERGED `--ff-only`**)
 
 New reusable read-only diagnostic script closing **INV-11** and **INV-4a** from `audit/SEQUENCE_T15_LAUNCH.md` (INV-CLOSE, `main@b9dd1b5`): verifies the launch environment is correctly configured without mutating anything. Landed via rebase-then-`--ff-only` onto `main@b9dd1b5` (the INV-CLOSE docs commit); full gate green at **3319 passed** (baseline 3314 + 5 new) + `@app/web` build. See BACKLOG → verify-launch-env row.
