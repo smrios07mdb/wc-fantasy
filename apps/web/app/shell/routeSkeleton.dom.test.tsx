@@ -7,11 +7,18 @@
  * `loading.tsx`'s static shell chrome keeping the bottom nav + active "Dashboard" tab present.
  */
 import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { cleanup, render } from "@testing-library/react";
 import { RouteSkeleton, type SkeletonVariant } from "@/app/shell/RouteSkeleton";
 import HomeLoading from "@/app/loading";
 
 afterEach(cleanup);
+
+// webDir = apps/web (this file lives at apps/web/app/shell/) — read REAL source for the drift pin.
+const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const read = (p: string) => readFileSync(resolve(webDir, p), "utf8");
 
 const VARIANTS: SkeletonVariant[] = ["list", "pitch", "cockpit", "board", "form", "dashboard"];
 
@@ -67,5 +74,57 @@ describe("home loading.tsx — static shell chrome keeps nav + active tab visibl
     const activeTop = container.querySelector(".sh-topbar .sh-nav-item.is-active");
     expect(activeTop).not.toBeNull();
     expect(activeTop!.textContent).toContain("Home");
+  });
+});
+
+/**
+ * DRIFT PIN — the home loader (app/loading.tsx) hand-mirrors AppShell's nav chrome because `/` mounts
+ * the real (async) AppShell in page.tsx, not a layout. The RTL cases above prove the loader OUTPUT
+ * carries these classes; this block pins that same vocabulary against the REAL AppShell / MoreSheet
+ * SOURCE (the shellStacking.contract / verify-players precedent: readFileSync + assert on source), so a
+ * future rename in AppShell breaks THIS test instead of silently diverging the loading chrome from the
+ * bar it imitates. Both halves reference one shared list, so they can't drift apart either.
+ */
+describe("home loading.tsx chrome — pinned to the REAL AppShell source (anti-drift)", () => {
+  const appShell = read("app/shell/AppShell.tsx");
+  const moreSheet = read("app/shell/MoreSheet.tsx");
+  const homeLoader = read("app/loading.tsx");
+
+  // Every chrome class the home loader emits to imitate the real bar. Kept in lockstep with AppShell.
+  const SHELL_VOCAB = [
+    "sh-app sh-app-top",
+    "sh-topbar",
+    "sh-topnav-scroll",
+    "sh-topnav",
+    "sh-nav-item",
+    "sh-content",
+    "sh-btmnav",
+    "sh-btnav-item",
+    "is-active",
+  ] as const;
+
+  it.each(SHELL_VOCAB)("AppShell source still emits %s (rename → this breaks)", (cls) => {
+    expect(appShell, `AppShell no longer emits "${cls}" — reconcile app/loading.tsx`).toContain(
+      cls,
+    );
+  });
+
+  it.each(SHELL_VOCAB)("home loader source uses the pinned class %s", (cls) => {
+    expect(
+      homeLoader,
+      `app/loading.tsx dropped "${cls}" — chrome diverged from AppShell`,
+    ).toContain(cls);
+  });
+
+  it("pins the More slot's class to the REAL MoreSheet source (where the live More button emits it)", () => {
+    expect(moreSheet).toContain("sh-more-btn");
+    expect(homeLoader).toContain("sh-more-btn");
+  });
+
+  it("pins the loader's nav labels to the REAL crossNav arrays (not hard-coded strings)", () => {
+    // The loader must derive labels from crossNav, so a label rename there flows through automatically.
+    expect(homeLoader).toMatch(/from ["']@\/src\/shell\/crossNav["']/);
+    expect(homeLoader).toContain("BOTTOM_TAB_ITEMS");
+    expect(homeLoader).toContain("NAV_ITEMS");
   });
 });
