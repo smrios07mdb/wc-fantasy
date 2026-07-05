@@ -29,7 +29,7 @@ import {
   resolveRating,
   type RatingRow,
 } from "@app/recompute";
-import type { Position } from "@app/shared";
+import { formatInLeagueTz, type Position } from "@app/shared";
 import type {
   BuildGameDetailInput,
   EventScoreAnomaly,
@@ -246,20 +246,12 @@ function roleFor(
   return "bench";
 }
 
-// ─── kickoff label (deterministic UTC — no clock, no locale) ──────────────────────
+// ─── kickoff label (deterministic league-local — tz is an injected input, never resolved here; T15-6) ──
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function kickoffLabelUtc(iso: string): string {
+function kickoffLabel(iso: string, timezone: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  const wd = WEEKDAYS[d.getUTCDay()];
-  const day = d.getUTCDate();
-  const mon = MONTHS[d.getUTCMonth()];
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${wd} ${day} ${mon} · ${hh}:${mm}`;
+  return formatInLeagueTz(d, timezone);
 }
 
 // ─── events timeline (T16b) ──────────────────────────────────────────────────────────
@@ -633,7 +625,7 @@ export function buildGameDetail(input: BuildGameDetailInput): GameDetailView {
       matchId: match.matchId,
       status: match.status,
       kickoffIso: match.kickoffIso,
-      kickoffLabel: kickoffLabelUtc(match.kickoffIso),
+      kickoffLabel: kickoffLabel(match.kickoffIso, input.timezone),
       matchdayLabel: match.periodLabel ?? match.round ?? null,
       periodKind: match.periodKind,
       hasFantasyOverlay: match.periodId !== null,

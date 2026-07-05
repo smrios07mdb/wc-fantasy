@@ -59,7 +59,16 @@ describe("dashboard — page.tsx hub branch renders Dashboard (non-hub states by
 describe("dashboard — loadDashboard reuses loadDraftRoom (no second draft source)", () => {
   it("imports and calls loadDraftRoom directly (no re-derivation)", () => {
     expect(loader).toContain('from "../draft/loadDraftRoom"');
-    expect(loader).toContain("await loadDraftRoom(sessionManagerId)");
+    // Called inside a Promise.all alongside the league-timezone read (T15-6) — still the direct reuse.
+    expect(loader).toContain("loadDraftRoom(sessionManagerId)");
+  });
+
+  it("resolves the league timezone server-side WITHOUT widening DraftRoomState (T15-6)", () => {
+    // The tz rides DashboardData (this loader's own one-field league read), never the /draft
+    // Realtime patch contract; the waivers-exemplar "UTC" fallback applies.
+    expect(loader).toContain("league: { select: { timezone: true } }");
+    expect(loader).toContain('tzRow?.league?.timezone ?? "UTC"');
+    expect(loader).toContain("timezone: string");
   });
 
   it("imports selectDashboardPhase to resolve the phase", () => {
@@ -340,7 +349,11 @@ describe("dashboard — PrimaryBanner extended for tournament phases (P38)", () 
 
   it("pre-kickoff banner renders the real kickoff datetime (earliestGroupKickoff prop)", () => {
     expect(banner).toContain("earliestGroupKickoff");
-    expect(banner).toContain("formatKickoffDate");
+    // T15-6: both kickoff labels come from the SHARED league-tz formatters (canon + short variant),
+    // threaded the loader-resolved tz — the local getUTC* formatters are retired.
+    expect(banner).toContain("formatInLeagueTz(new Date(earliestGroupKickoff), timezone)");
+    expect(banner).toContain("formatInLeagueTzShort(new Date(earliestGroupKickoff), timezone)");
+    expect(banner).not.toContain("getUTC");
   });
 
   it("group banner uses vsField season data for rank + record", () => {

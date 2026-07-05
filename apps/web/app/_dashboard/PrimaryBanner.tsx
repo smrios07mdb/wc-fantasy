@@ -10,6 +10,7 @@
  *
  * Server component — no "use client" needed; all data comes from the server loader.
  */
+import { formatInLeagueTz, formatInLeagueTzShort } from "@app/shared";
 import type { DashboardPhase } from "../../src/dashboard/selectDashboardPhase";
 import type { DraftRoomState } from "../../src/draft/types";
 import type { VsFieldView } from "@app/vsfield";
@@ -74,6 +75,7 @@ function bannerContent(
   vsField: VsFieldView | null,
   playoffs: PlayoffsView | null,
   earliestGroupKickoff: string | null,
+  timezone: string,
 ): BannerContent {
   const N = draft?.managers.length ?? 0;
 
@@ -150,8 +152,9 @@ function bannerContent(
     const myPickCount =
       draft?.picks.filter((p) => p.managerId === draft.sessionManagerId).length ?? 0;
     // Real kickoff datetime from fifa_match (unlike P37's draft countdown which had no datetime).
+    // League-local via the shared canon formatter (T15-6) — tz threaded from the loader, never local.
     const kickoffLabel = earliestGroupKickoff
-      ? formatKickoffDate(earliestGroupKickoff)
+      ? formatInLeagueTz(new Date(earliestGroupKickoff), timezone)
       : "fixtures loading…";
     return {
       eyebrow: PHASE_EYEBROW["pre-kickoff"],
@@ -165,7 +168,9 @@ function bannerContent(
         { l: "Your squad", v: `${myPickCount} / 15` },
         {
           l: "First kick",
-          v: earliestGroupKickoff ? formatKickoffShort(earliestGroupKickoff) : "TBD",
+          v: earliestGroupKickoff
+            ? formatInLeagueTzShort(new Date(earliestGroupKickoff), timezone)
+            : "TBD",
         },
       ],
     };
@@ -313,68 +318,23 @@ function bannerContent(
   };
 }
 
-/** Format a UTC ISO string as "Thu 12 Jun · 17:00 UTC" for the banner big display. */
-function formatKickoffDate(iso: string): string {
-  const d = new Date(iso);
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const day = days[d.getUTCDay()];
-  const mon = months[d.getUTCMonth()];
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${day} ${d.getUTCDate()} ${mon} · ${hh}:${mm}`;
-}
-
-/** Shorter kickoff label for the secondary stat: "12 Jun 17:00". */
-function formatKickoffShort(iso: string): string {
-  const d = new Date(iso);
-  const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const mon = months[d.getUTCMonth()];
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${d.getUTCDate()} ${mon} ${hh}:${mm}`;
-}
-
 export function PrimaryBanner({
   phase,
   draft,
   vsField,
   playoffs,
   earliestGroupKickoff,
+  timezone,
 }: {
   phase: DashboardPhase;
   draft: DraftRoomState | null;
   vsField: VsFieldView | null;
   playoffs: PlayoffsView | null;
   earliestGroupKickoff: string | null;
+  /** League IANA tz (T15-6) — server-resolved by loadDashboard; drives every kickoff label here. */
+  timezone: string;
 }) {
-  const content = bannerContent(phase, draft, vsField, playoffs, earliestGroupKickoff);
+  const content = bannerContent(phase, draft, vsField, playoffs, earliestGroupKickoff, timezone);
   const phcColor = PHASE_COLOR[phase];
 
   return (

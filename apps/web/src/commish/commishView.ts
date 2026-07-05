@@ -304,6 +304,12 @@ export function buildAdvanceLadder(
 export interface CommishConsoleView {
   leagueId: string;
   leagueName: string;
+  /**
+   * The league's IANA timezone (T15-6) — read-only display input for the console's league-local
+   * timestamps (tap-visible audit instants, frozen-since dates) via the shared `formatInLeagueTz*`
+   * formatters. Server-resolved with the "UTC" fallback (the waivers-exemplar pattern).
+   */
+  timezone: string;
   /** The viewing commissioner's display name (for the ribbon/"your seat"). */
   commissionerName: string;
   status: CommishSystemStatus;

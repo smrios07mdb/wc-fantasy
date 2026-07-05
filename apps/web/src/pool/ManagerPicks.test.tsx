@@ -106,6 +106,7 @@ function poolView(): PoolView {
       leader({ managerId: "zoe", managerName: "Zoe", played: 1, correct: 0, points: 0 }),
     ],
     nowIso: NOW,
+    timezone: "UTC",
   };
 }
 

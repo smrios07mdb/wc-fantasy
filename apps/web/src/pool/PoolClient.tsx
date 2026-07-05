@@ -23,7 +23,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { PoolPrediction } from "@app/shared";
+import { formatInLeagueTz, type PoolPrediction } from "@app/shared";
 import { isFixtureLocked } from "./poolView";
 import {
   LEADERBOARD_POLL_MS,
@@ -132,17 +132,9 @@ export function PoolClient({ view }: { view: PoolView }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [openManagerId]);
 
-  // Deterministic kickoff formatter (explicit locale + fixed ET zone ⇒ identical SSR + client output, no mismatch).
-  const fmtKickoff = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: "America/New_York",
-    });
-    return (iso: string) => `${fmt.format(new Date(iso))} ET`;
-  }, []);
+  // Deterministic kickoff formatter (T15-6): the shared canon over the SERVER-RESOLVED league tz —
+  // dynamic EDT/EST zone label, identical SSR + client output (supersedes the hardcoded ET literal).
+  const fmtKickoff = (iso: string) => formatInLeagueTz(new Date(iso), view.timezone);
 
   async function handlePick(matchId: string, prediction: PoolPrediction) {
     setBusyMatchId(matchId);

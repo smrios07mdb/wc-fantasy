@@ -90,7 +90,8 @@ export async function loadCommish(
 
   const [league, managerRows, periodCount, frozenPeriodCount, auditEntryCount, auditRows] =
     await Promise.all([
-      prisma.league.findUnique({ where: { id: leagueId }, select: { name: true } }),
+      // timezone (T15-6): read-only display input for the console's league-local timestamps.
+      prisma.league.findUnique({ where: { id: leagueId }, select: { name: true, timezone: true } }),
       prisma.manager.findMany({
         where: { leagueId },
         select: { id: true, displayName: true, isCommissioner: true, faabBudget: true },
@@ -149,6 +150,7 @@ export async function loadCommish(
   return {
     leagueId,
     leagueName: league?.name ?? "League",
+    timezone: league?.timezone ?? "UTC",
     commissionerName: me.displayName,
     status: {
       managerCount: managerRows.length,

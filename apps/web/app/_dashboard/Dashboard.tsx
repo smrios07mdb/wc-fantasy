@@ -24,7 +24,7 @@
  * — the earlier read-model gap is CLOSED (ChampionModule podium + MyFinishModule below; DECISIONS).
  */
 import type { Position } from "@app/shared";
-import { SQUAD_COMPOSITION } from "@app/shared";
+import { SQUAD_COMPOSITION, formatInLeagueTzTime } from "@app/shared";
 import type { VsFieldView, FieldEntry, SeasonEntry, MatchView } from "@app/vsfield";
 import { toIso2 } from "../../src/draft/flag";
 import { Flag } from "../draft/Flag";
@@ -371,7 +371,7 @@ function StandingsModule({ vsField }: { vsField: VsFieldView }) {
  * Data: view.matches, view.currentPeriod, view.field (my entry starters).
  * CSS: .db-matchday-* (new rules added to dashboard.css).
  */
-function MatchdayModule({ vsField }: { vsField: VsFieldView }) {
+function MatchdayModule({ vsField, timezone }: { vsField: VsFieldView; timezone: string }) {
   const { matches, currentPeriod } = vsField;
   const meField: FieldEntry | undefined = vsField.field.find((e) => e.isMe);
   const myStarters = meField?.starters ?? [];
@@ -404,7 +404,7 @@ function MatchdayModule({ vsField }: { vsField: VsFieldView }) {
       ) : (
         <div className="db-match-list">
           {matches.map((m) => (
-            <MatchRow key={m.matchId} match={m} />
+            <MatchRow key={m.matchId} match={m} timezone={timezone} />
           ))}
         </div>
       )}
@@ -420,7 +420,7 @@ function MatchStatusPill({ status }: { status: MatchView["status"] }) {
   return null; // scheduled — no pill
 }
 
-function MatchRow({ match }: { match: MatchView }) {
+function MatchRow({ match, timezone }: { match: MatchView; timezone: string }) {
   const isLive = match.status === "in_progress";
   const isDone = match.status === "completed";
   const hasScore = match.homeScore !== null && match.awayScore !== null;
@@ -448,7 +448,7 @@ function MatchRow({ match }: { match: MatchView }) {
               ? "KO"
               : match.startsInMinutes < 60
                 ? `${match.startsInMinutes}m`
-                : formatKickoffTime(match.kickoffAt)}
+                : formatInLeagueTzTime(new Date(match.kickoffAt), timezone)}
           </span>
         ) : (
           <span className="text-tertiary">vs</span>
@@ -458,12 +458,6 @@ function MatchRow({ match }: { match: MatchView }) {
       <MatchStatusPill status={match.status} />
     </a>
   );
-}
-
-/** Format an ISO datetime string as "HH:mm" (UTC) for scheduled match display. */
-function formatKickoffTime(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 // ─── playoff phase modules ──────────────────────────────────────────────────────────────────
@@ -699,6 +693,7 @@ function renderModule(
   draft: DraftRoomState | null,
   vsField: VsFieldView | null,
   playoffs: PlayoffsView | null,
+  timezone: string,
 ) {
   switch (key) {
     case "info":
@@ -714,7 +709,7 @@ function renderModule(
     case "standings":
       return vsField ? <StandingsModule key={key} vsField={vsField} /> : null;
     case "matchday":
-      return vsField ? <MatchdayModule key={key} vsField={vsField} /> : null;
+      return vsField ? <MatchdayModule key={key} vsField={vsField} timezone={timezone} /> : null;
     case "survival":
       return playoffs ? <SurvivalModule key={key} playoffs={playoffs} /> : null;
     case "reinforce":
@@ -747,7 +742,7 @@ function PlayerPoolModule() {
 // ─── main export ─────────────────────────────────────────────────────────────────────────
 
 export function Dashboard({ data }: { data: DashboardData }) {
-  const { phase, draft, vsField, playoffs, earliestGroupKickoff } = data;
+  const { phase, draft, vsField, playoffs, earliestGroupKickoff, timezone } = data;
   const keys = modulesFor(phase);
 
   // The group layout uses the spotlight (wider main + rail) for standings prominence.
@@ -760,7 +755,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
   const gridCells =
     keys.length > 0 && !useSpotlight
       ? keys
-          .map((k) => [k, renderModule(k, draft, vsField, playoffs)] as const)
+          .map((k) => [k, renderModule(k, draft, vsField, playoffs, timezone)] as const)
           .filter(([, mod]) => mod !== null)
       : [];
 
@@ -772,6 +767,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
         vsField={vsField}
         playoffs={playoffs}
         earliestGroupKickoff={earliestGroupKickoff}
+        timezone={timezone}
       />
 
       {phase === "pre-kickoff" && keys.length === 0 && (
@@ -792,11 +788,11 @@ export function Dashboard({ data }: { data: DashboardData }) {
         <div className="db-spotlight">
           <div className="db-spot-main">
             {/* Standings gets the wide column */}
-            {renderModule("standings", draft, vsField, playoffs)}
+            {renderModule("standings", draft, vsField, playoffs, timezone)}
           </div>
           <div className="db-spot-rail">
-            {renderModule("record", draft, vsField, playoffs)}
-            {renderModule("matchday", draft, vsField, playoffs)}
+            {renderModule("record", draft, vsField, playoffs, timezone)}
+            {renderModule("matchday", draft, vsField, playoffs, timezone)}
           </div>
         </div>
       )}

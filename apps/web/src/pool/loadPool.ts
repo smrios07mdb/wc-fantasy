@@ -56,10 +56,13 @@ function team(t: { name: string; country: string | null } | null): PoolTeam | nu
 export async function loadPool(viewerManagerId: string): Promise<PoolView | null> {
   const manager = await prisma.manager.findUnique({
     where: { id: viewerManagerId },
-    select: { id: true, leagueId: true },
+    // league.timezone (T15-6): read-only display input for the client's kickoff labels — the shared
+    // formatter renders the league-local wall clock with a real EDT/EST label (never a hardcoded zone).
+    select: { id: true, leagueId: true, league: { select: { timezone: true } } },
   });
   if (!manager) return null;
   const leagueId = manager.leagueId;
+  const timezone = manager.league?.timezone ?? "UTC";
 
   const store = createPrismaPoolPickStore(prisma);
   const now = new Date();
@@ -187,5 +190,6 @@ export async function loadPool(viewerManagerId: string): Promise<PoolView | null
       viewerManagerId,
     ),
     nowIso: now.toISOString(),
+    timezone,
   };
 }

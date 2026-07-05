@@ -55,6 +55,13 @@ export interface DashboardData {
    * Used for the real countdown display in the PrimaryBanner. Null = no fixtures loaded yet.
    */
   earliestGroupKickoff: string | null;
+  /**
+   * The league's IANA timezone (T15-6) — read-only display input threaded to every dashboard surface
+   * that renders an instant (MatchdayModule kickoff times, PrimaryBanner kickoff labels) via the shared
+   * `formatInLeagueTz*` formatters. Resolved SERVER-SIDE (never the machine's local zone) so SSR and
+   * hydration render identically. Falls back to "UTC" (the waivers-exemplar pattern).
+   */
+  timezone: string;
 }
 
 /**
@@ -66,7 +73,18 @@ export interface DashboardData {
  * `loadPlayoffs` for the playoff/complete module data.
  */
 export async function loadDashboard(sessionManagerId: string): Promise<DashboardData> {
-  const draft = await loadDraftRoom(sessionManagerId);
+  // League timezone (T15-6): resolved here — the dashboard's own loader — via the session manager's
+  // league, NOT by widening `DraftRoomState` (that shape is the /draft Realtime patch contract; a
+  // display-only field doesn't belong on it). One-field read-only select, in parallel with the draft read.
+  const [draft, tzRow] = await Promise.all([
+    loadDraftRoom(sessionManagerId),
+    prisma.manager.findUnique({
+      where: { id: sessionManagerId },
+      select: { league: { select: { timezone: true } } },
+    }),
+  ]);
+  const timezone = tzRow?.league?.timezone ?? "UTC";
+
   if (!draft) {
     // No draft row: treat as pre-draft (the draft hasn't been configured yet).
     return {
@@ -75,6 +93,7 @@ export async function loadDashboard(sessionManagerId: string): Promise<Dashboard
       vsField: null,
       playoffs: null,
       earliestGroupKickoff: null,
+      timezone,
     };
   }
 
@@ -82,7 +101,14 @@ export async function loadDashboard(sessionManagerId: string): Promise<Dashboard
 
   // Pre-tournament phases don't need match data — return immediately.
   if (draftPhase !== "post-draft") {
-    return { phase: draftPhase, draft, vsField: null, playoffs: null, earliestGroupKickoff: null };
+    return {
+      phase: draftPhase,
+      draft,
+      vsField: null,
+      playoffs: null,
+      earliestGroupKickoff: null,
+      timezone,
+    };
   }
 
   // Draft complete — derive tournament phase from fifa_match rows.
@@ -113,6 +139,7 @@ export async function loadDashboard(sessionManagerId: string): Promise<Dashboard
       vsField: null,
       playoffs: null,
       earliestGroupKickoff: earliest?.kickoffAt.toISOString() ?? null,
+      timezone,
     };
   }
 
@@ -120,7 +147,14 @@ export async function loadDashboard(sessionManagerId: string): Promise<Dashboard
     // Load the full vs-the-field snapshot: standings, current-period scores, starters, matches.
     // READ-ONLY — no scoring/engine touch. The same data /vsfield shows.
     const vsField = await loadVsField(sessionManagerId);
-    return { phase: "group", draft, vsField, playoffs: null, earliestGroupKickoff: null };
+    return {
+      phase: "group",
+      draft,
+      vsField,
+      playoffs: null,
+      earliestGroupKickoff: null,
+      timezone,
+    };
   }
 
   // playoff or complete (the knockout window): load the playoff view READ-ONLY — the same PlayoffsView
@@ -131,5 +165,5 @@ export async function loadDashboard(sessionManagerId: string): Promise<Dashboard
   // by the worker/state-machine thread (DECISIONS).
   const playoffs = await loadPlayoffs(sessionManagerId);
   const phase = resolveKnockoutPhase(tournamentPhase, playoffs?.complete ?? null);
-  return { phase, draft, vsField: null, playoffs, earliestGroupKickoff: null };
+  return { phase, draft, vsField: null, playoffs, earliestGroupKickoff: null, timezone };
 }

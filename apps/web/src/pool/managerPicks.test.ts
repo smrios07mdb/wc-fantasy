@@ -73,6 +73,7 @@ function view(over: {
     },
     leaderboard: over.leaderboard,
     nowIso: ISO,
+    timezone: "UTC",
   };
 }
 
@@ -288,6 +289,7 @@ describe("selectManagerPicks — keeps full history through the live playoff sel
       picks,
       leaderboard: [leader({ managerId: "me", managerName: "Me", isMe: true })],
       nowIso: now.toISOString(),
+      timezone: "UTC",
     };
     const rows = selectManagerPicks(v, "me")
       .rows.map((r) => r.matchId)

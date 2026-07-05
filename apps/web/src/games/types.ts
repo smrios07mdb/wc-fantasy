@@ -3,8 +3,9 @@
  * fantasy layer. PURE: no DB, no Supabase, no Next, no process.env, no clock. All inputs are injected;
  * {@link buildGameDetail} is a pure function (mirrors `@app/player-box` + the web pure-view modules).
  *
- * Dates cross the server→client boundary as ISO strings; the builder ALSO emits a deterministic UTC
- * `kickoffLabel` so the client never re-formats a Date (no hydration mismatch).
+ * Dates cross the server→client boundary as ISO strings; the builder ALSO emits a deterministic
+ * league-local `kickoffLabel` (via the shared `formatInLeagueTz` over the injected `timezone` input —
+ * T15-6) so the client never re-formats a Date (no hydration mismatch).
  */
 import type { MatchStatus, PeriodKind, Position, RatingSource } from "@app/shared";
 
@@ -447,4 +448,11 @@ export interface BuildGameDetailInput {
   readonly ownerByPlayer: Readonly<Record<string, OwnerTag>>;
   /** Participants the loader could not resolve to a `player` row (outside the pool). */
   readonly unresolvedFromPool: number;
+  /**
+   * The league's IANA timezone (T15-6) — read-only display input for the server-computed
+   * `header.kickoffLabel` (league-local wall clock via the shared `formatInLeagueTz`). The loader
+   * supplies `league.timezone ?? "UTC"`; the builder never resolves a zone itself (a machine-local
+   * zone would fork SSR vs hydration).
+   */
+  readonly timezone: string;
 }

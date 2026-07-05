@@ -52,6 +52,7 @@ function viewWithGoals() {
     ],
     ownerByPlayer: {},
     unresolvedFromPool: 0,
+    timezone: "UTC",
   };
   return buildGameDetail(input);
 }
@@ -95,6 +96,7 @@ function viewRich() {
     ],
     ownerByPlayer: {},
     unresolvedFromPool: 0,
+    timezone: "UTC",
   };
   return buildGameDetail(input);
 }

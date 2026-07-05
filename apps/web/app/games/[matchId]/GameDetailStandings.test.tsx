@@ -74,6 +74,7 @@ function view(standings: GdStandingInput[]) {
     events: [],
     ownerByPlayer: {},
     unresolvedFromPool: 0,
+    timezone: "UTC",
   };
   return buildGameDetail(input);
 }

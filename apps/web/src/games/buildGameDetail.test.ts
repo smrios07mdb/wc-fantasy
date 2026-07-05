@@ -286,6 +286,7 @@ function fullInput(): BuildGameDetailInput {
       p3: owner("M2", "owned"),
     },
     unresolvedFromPool: 1,
+    timezone: "UTC",
   };
 }
 
@@ -492,11 +493,18 @@ describe("buildGameDetail — assembly", () => {
     expect(ids).not.toContain("p7");
   });
 
-  it("emits a deterministic UTC kickoff label and the canonical matchday label", () => {
+  it("emits a deterministic league-local kickoff label (shared canon shape) and the canonical matchday label", () => {
     const v = buildGameDetail(fullInput());
-    expect(v.header.kickoffLabel).toBe("Sun 21 Jun · 18:00");
+    // The fixture's tz input is "UTC" → the canon shape with an explicit UTC zone label (T15-6).
+    expect(v.header.kickoffLabel).toBe("Sun, Jun 21, 6:00 PM UTC");
     expect(v.header.matchdayLabel).toBe("Group A · MD1"); // period.label, NOT round
     expect(v.header.hasFantasyOverlay).toBe(true);
+  });
+
+  it("renders the kickoff label in the INJECTED league tz — never hardcoded UTC (T15-6)", () => {
+    const v = buildGameDetail({ ...fullInput(), timezone: "America/New_York" });
+    // 18:00Z on Jun 21 = 2:00 PM EDT — the wall clock shifts and the zone label follows the league.
+    expect(v.header.kickoffLabel).toBe("Sun, Jun 21, 2:00 PM EDT");
   });
 
   it("never surfaces a team UUID — an unnamed team falls back to UNNAMED_OPPONENT", () => {
@@ -544,6 +552,7 @@ describe("buildGameDetail — assembly", () => {
       events: [],
       ownerByPlayer: {},
       unresolvedFromPool: 0,
+      timezone: "UTC",
     });
     expect(v.empty).toBe(true);
     expect(v.home.starters).toEqual([]);
@@ -646,6 +655,7 @@ function homeOnly(over: {
     events: over.events ? [...over.events] : [],
     ownerByPlayer: {},
     unresolvedFromPool: 0,
+    timezone: "UTC",
   };
 }
 
@@ -958,6 +968,7 @@ function eventsInput(over: Partial<BuildGameDetailInput> = {}): BuildGameDetailI
     events: [],
     ownerByPlayer: {},
     unresolvedFromPool: 0,
+    timezone: "UTC",
     ...over,
   };
 }

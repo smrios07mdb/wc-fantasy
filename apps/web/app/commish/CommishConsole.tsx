@@ -14,7 +14,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Position } from "@app/shared";
+import { formatInLeagueTz, formatInLeagueTzDate, type Position } from "@app/shared";
 import "./commish.css";
 import type { AdvancePlan } from "@app/commish-core";
 import {
@@ -108,14 +108,14 @@ export function CommishConsole({
               ) : tab === "repair" ? (
                 <RepairPanel view={view.repair} managers={view.managers} />
               ) : tab === "ops" ? (
-                <OpsPanel view={view.ops} />
+                <OpsPanel view={view.ops} timezone={view.timezone} />
               ) : (
                 <AdvancePanel view={view.advance} />
               )}
             </div>
             <div className="adm-rail">
               <SystemStatusCard status={view.status} leagueName={view.leagueName} />
-              <AuditLogCard audit={view.audit} />
+              <AuditLogCard audit={view.audit} timezone={view.timezone} />
             </div>
           </div>
         </>
@@ -133,7 +133,7 @@ export function CommishConsole({
 
 const FREEZE_CONFIRM_WORD = "FREEZE";
 
-function OpsPanel({ view }: { view: CommishOpsView }) {
+function OpsPanel({ view, timezone }: { view: CommishOpsView; timezone: string }) {
   const router = useRouter();
   // One inline confirm open at a time: the period being acted on + which action.
   const [confirm, setConfirm] = useState<{ periodId: string; mode: "freeze" | "unfreeze" } | null>(
@@ -172,6 +172,7 @@ function OpsPanel({ view }: { view: CommishOpsView }) {
             <FreezeRow
               key={p.periodId}
               period={p}
+              timezone={timezone}
               confirmMode={confirm?.periodId === p.periodId ? confirm.mode : null}
               onToggleConfirm={openConfirm}
               onClose={() => setConfirm(null)}
@@ -193,12 +194,14 @@ function OpsPanel({ view }: { view: CommishOpsView }) {
 
 function FreezeRow({
   period,
+  timezone,
   confirmMode,
   onToggleConfirm,
   onClose,
   onResult,
 }: {
   period: CommishFreezePeriodView;
+  timezone: string;
   confirmMode: "freeze" | "unfreeze" | null;
   onToggleConfirm: (periodId: string, mode: "freeze" | "unfreeze") => void;
   onClose: () => void;
@@ -206,7 +209,10 @@ function FreezeRow({
 }) {
   const frozen = period.frozenAtIso != null;
   const kindLabel = period.kind === "group_md" ? "Group" : "Knockout";
-  const frozenSince = period.frozenAtIso ? period.frozenAtIso.slice(0, 10) : null;
+  // League-local calendar date (T15-6) — a bare UTC slice put an evening-ET freeze on the NEXT day.
+  const frozenSince = period.frozenAtIso
+    ? formatInLeagueTzDate(new Date(period.frozenAtIso), timezone)
+    : null;
 
   return (
     <div className={frozen ? "adm-freeze is-frozen" : "adm-freeze"}>
@@ -2140,7 +2146,7 @@ function actionMeta(actionType: string): { label: string; tone: "info" | "warn" 
   );
 }
 
-function AuditLogCard({ audit }: { audit: CommishAuditView[] }) {
+function AuditLogCard({ audit, timezone }: { audit: CommishAuditView[]; timezone: string }) {
   return (
     <section className="adm-card adm-auditcard">
       <div className="adm-card-h">
@@ -2156,7 +2162,7 @@ function AuditLogCard({ audit }: { audit: CommishAuditView[] }) {
         ) : (
           <div className="adm-auditlog">
             {audit.map((e) => (
-              <AuditEntry key={e.id} entry={e} />
+              <AuditEntry key={e.id} entry={e} timezone={timezone} />
             ))}
           </div>
         )}
@@ -2165,8 +2171,12 @@ function AuditLogCard({ audit }: { audit: CommishAuditView[] }) {
   );
 }
 
-function AuditEntry({ entry }: { entry: CommishAuditView }) {
+function AuditEntry({ entry, timezone }: { entry: CommishAuditView; timezone: string }) {
   const meta = actionMeta(entry.actionType);
+  // Tap-visible exact instant (F-P2-G4): the relative whenLabel stays the default; a tap swaps in the
+  // league-local absolute (shared canon over the already-present ISO — pure client render, no new read).
+  // The hover title keeps the raw ISO for desktop; touch gets the toggle.
+  const [showExact, setShowExact] = useState(false);
   return (
     <div className={`adm-audit tone-${meta.tone}`}>
       <span className="adm-audit-ico" aria-hidden="true">
@@ -2183,9 +2193,23 @@ function AuditEntry({ entry }: { entry: CommishAuditView }) {
           <span className="adm-audit-sep">·</span>
           <span className="adm-audit-actor">{entry.actorLabel ?? "System"}</span>
           <span className="adm-audit-sep">·</span>
-          <span className="adm-audit-when" title={entry.createdAtIso}>
-            {entry.whenLabel}
-          </span>
+          <button
+            type="button"
+            className="adm-audit-when"
+            title={entry.createdAtIso}
+            aria-label="Toggle exact time"
+            onClick={() => setShowExact((v) => !v)}
+            style={{
+              background: "none",
+              border: 0,
+              padding: 0,
+              font: "inherit",
+              color: "inherit",
+              cursor: "pointer",
+            }}
+          >
+            {showExact ? formatInLeagueTz(new Date(entry.createdAtIso), timezone) : entry.whenLabel}
+          </button>
           {entry.reversible ? (
             <button
               type="button"

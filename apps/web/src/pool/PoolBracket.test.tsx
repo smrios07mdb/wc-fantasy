@@ -131,6 +131,7 @@ function playoffView(): PoolView {
     },
     leaderboard: [],
     nowIso: NOW,
+    timezone: "UTC",
   };
 }
 

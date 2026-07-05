@@ -89,6 +89,14 @@ describe("loadGameDetail — assembly contract", () => {
     expect(codeOnly).toContain("if (match.periodId)");
   });
 
+  it("threads the league timezone (read-only) into the pure builder for the league-local kickoff label (T15-6)", () => {
+    // One-field select widening on the existing viewer read + the waivers-exemplar fallback — the tz is
+    // resolved SERVER-SIDE and injected, so the builder never touches a machine-local zone.
+    expect(codeOnly).toContain("league: { select: { timezone: true } }");
+    expect(codeOnly).toContain('viewer.league?.timezone ?? "UTC"');
+    expect(codeOnly).toContain("timezone,");
+  });
+
   it("is READ-ONLY — no writes, no engine re-run, no dirty-marking", () => {
     for (const write of [
       ".create(",

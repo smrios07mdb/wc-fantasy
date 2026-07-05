@@ -25,13 +25,15 @@ export async function loadGameDetail(
   viewerManagerId: string,
   matchId: string,
 ): Promise<GameDetailView | null> {
-  // Viewer's league (ownership scope) + identity (isMe on the owner tags).
+  // Viewer's league (ownership scope) + identity (isMe on the owner tags) + the league timezone —
+  // the read-only display input the pure builder needs for the league-local kickoff label (T15-6).
   const viewer = await prisma.manager.findUnique({
     where: { id: viewerManagerId },
-    select: { leagueId: true },
+    select: { leagueId: true, league: { select: { timezone: true } } },
   });
   if (!viewer) return null;
   const leagueId = viewer.leagueId;
+  const timezone = viewer.league?.timezone ?? "UTC";
 
   const match = await prisma.fifaMatch.findUnique({
     where: { id: matchId },
@@ -310,6 +312,7 @@ export async function loadGameDetail(
     })),
     ownerByPlayer,
     unresolvedFromPool,
+    timezone,
   });
 
   // Safety net (read-only): the kickoff-XI reconciliation cascade flagged a side whose computed XI ≠ 11.

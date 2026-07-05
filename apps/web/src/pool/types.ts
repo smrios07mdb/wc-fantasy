@@ -108,4 +108,10 @@ export interface PoolView {
   readonly leaderboard: readonly PoolLeaderRow[];
   /** Server render time (ISO) — seeds the client's live clock so SSR + hydration agree (no mismatch). */
   readonly nowIso: string;
+  /**
+   * The league's IANA timezone (T15-6) — read-only display input for the kickoff labels, rendered via
+   * the shared `formatInLeagueTz` (dynamic EDT/EST zone label; supersedes the hardcoded
+   * America/New_York + literal "ET"). Server-resolved with the "UTC" fallback, so SSR + hydration agree.
+   */
+  readonly timezone: string;
 }
