@@ -13,7 +13,19 @@
  */
 import { redirect } from "next/navigation";
 import { getSessionManager } from "@/lib/auth/manager";
-import { EXAMPLE_CARDS, type ExampleLine } from "@/src/scoring/scoringData";
+import {
+  EXAMPLE_CARDS,
+  RATING_LADDER,
+  ACCUMULATORS,
+  accumulatorRate,
+  accumulatorExample,
+  RED_CARD_BANDS,
+  SECOND_YELLOW_BANDS,
+  YELLOW_CARD_PTS,
+  OWN_GOAL_PTS,
+  bandPtsLabel,
+  type ExampleLine,
+} from "@/src/scoring/scoringData";
 import "./scoring.css";
 
 /** Render a points value with the green/red/muted convention and an explicit sign. */
@@ -50,7 +62,7 @@ export default async function ScoringPage() {
         <h1>Scoring rules</h1>
         <p>
           How every fantasy point is earned. Scoring keys off the role a player actually played in a
-          match — not their draft position — across ~25 categories. The example games at the bottom
+          match — not their draft position — across 33 categories. The example games at the bottom
           turn the rules into intuition.
         </p>
       </header>
@@ -73,50 +85,20 @@ export default async function ScoringPage() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>9.0+</td>
-                <td className="sc-num">
-                  <Pts value={5} />
-                </td>
-              </tr>
-              <tr>
-                <td>8.5 – 8.9</td>
-                <td className="sc-num">
-                  <Pts value={4} />
-                </td>
-              </tr>
-              <tr>
-                <td>7.5 – 8.4</td>
-                <td className="sc-num">
-                  <Pts value={3} />
-                </td>
-              </tr>
-              <tr>
-                <td>7.0 – 7.4</td>
-                <td className="sc-num">
-                  <Pts value={2} />
-                </td>
-              </tr>
-              <tr>
-                <td>6.5 – 6.9</td>
-                <td className="sc-num">
-                  <Pts value={1} />
-                </td>
-              </tr>
-              <tr>
-                <td>6.0 – 6.4</td>
-                <td className="sc-num">
-                  <Pts value={-1} />
-                </td>
-              </tr>
-              <tr>
-                <td>Below 6.0</td>
-                <td className="sc-num">
-                  <Pts value={-2} />
-                </td>
-              </tr>
+              {RATING_LADDER.map((b) => (
+                <tr key={b.band}>
+                  <td>{b.band}</td>
+                  <td className="sc-num">
+                    <Pts value={b.pts} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+          <p className="sc-note">
+            The 6.5 – 6.9 band scores 0, and the rating line is shown even then — a rated player is
+            never left looking un-rated.
+          </p>
         </section>
 
         {/* §2 — Appearance */}
@@ -221,72 +203,14 @@ export default async function ScoringPage() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>Key passes</td>
-                <td>All</td>
-                <td>+1 / 2</td>
-                <td className="text-tertiary">6 → floor(6/2) = +3</td>
-              </tr>
-              <tr>
-                <td>Was fouled</td>
-                <td>All</td>
-                <td>+1 / 3</td>
-                <td className="text-tertiary">4 → floor(4/3) = +1</td>
-              </tr>
-              <tr>
-                <td>Possession lost</td>
-                <td>All</td>
-                <td>−1 / 3</td>
-                <td className="text-tertiary">5 → floor(5/3) = −1</td>
-              </tr>
-              <tr>
-                <td>Clearances</td>
-                <td>Outfield</td>
-                <td>+1 / 5</td>
-                <td className="text-tertiary">8 → floor(8/5) = +1</td>
-              </tr>
-              <tr>
-                <td>Shots blocked</td>
-                <td>Outfield</td>
-                <td>+1 / 2</td>
-                <td className="text-tertiary">2 → floor(2/2) = +1</td>
-              </tr>
-              <tr>
-                <td>Interceptions</td>
-                <td>Outfield</td>
-                <td>+1 / 3</td>
-                <td className="text-tertiary">4 → floor(4/3) = +1</td>
-              </tr>
-              <tr>
-                <td>Tackles won</td>
-                <td>Outfield</td>
-                <td>+1 / 3</td>
-                <td className="text-tertiary">5 → floor(5/3) = +1</td>
-              </tr>
-              <tr>
-                <td>Dribbles completed</td>
-                <td>All</td>
-                <td>+1 / 2</td>
-                <td className="text-tertiary">4 → floor(4/2) = +2</td>
-              </tr>
-              <tr>
-                <td>Duels won</td>
-                <td>All</td>
-                <td>+1 / 3</td>
-                <td className="text-tertiary">4 → floor(4/3) = +1</td>
-              </tr>
-              <tr>
-                <td>Accurate passes</td>
-                <td>All</td>
-                <td>+1 / 15</td>
-                <td className="text-tertiary">54 → floor(54/15) = +3</td>
-              </tr>
-              <tr>
-                <td>Accurate long balls</td>
-                <td>All</td>
-                <td>+1 / 2</td>
-                <td className="text-tertiary">4 → floor(4/2) = +2</td>
-              </tr>
+              {ACCUMULATORS.map((a) => (
+                <tr key={a.category}>
+                  <td>{a.stat}</td>
+                  <td>{a.eligible}</td>
+                  <td>{accumulatorRate(a)}</td>
+                  <td className="text-tertiary">{accumulatorExample(a)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </section>
@@ -411,21 +335,21 @@ export default async function ScoringPage() {
               <tr>
                 <td>Yellow card</td>
                 <td className="sc-num">
-                  <Pts value={-1} />
+                  <Pts value={YELLOW_CARD_PTS} />
                 </td>
               </tr>
               <tr>
                 <td>Second yellow (min 0–29 / 30–59 / ≥60)</td>
-                <td className="sc-num">−3 / −2 / −1</td>
+                <td className="sc-num">{bandPtsLabel(SECOND_YELLOW_BANDS)}</td>
               </tr>
               <tr>
                 <td>Straight red (min 0–29 / 30–59 / ≥60)</td>
-                <td className="sc-num">−5 / −4 / −3</td>
+                <td className="sc-num">{bandPtsLabel(RED_CARD_BANDS)}</td>
               </tr>
               <tr>
                 <td>Own goal</td>
                 <td className="sc-num">
-                  <Pts value={-4} />
+                  <Pts value={OWN_GOAL_PTS} />
                 </td>
               </tr>
             </tbody>
