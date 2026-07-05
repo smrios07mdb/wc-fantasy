@@ -122,11 +122,21 @@ in existing test files), and the new `verify-nav-link.mjs` + this notes file.
 
 ---
 
-## Staged brain-doc updates (apply at merge)
+## Close-out — on-device gate PASSED, merged + deployed (2026-07-05)
 
-These are DRAFTS. They apply only AFTER Sergio's on-device gate passes, as docs commits `[skip render]`
-(the NAV-LAT precedent). Do not commit to the brain files before the gate. Verify each cited SHA is an
-ancestor of `origin/main` at apply-time (the "status is derived" rule).
+**On-device gate: PASSED, no findings** (Sergio's live pass — the F-P0-A1 closing-evidence precedent:
+the clean live pass itself is the closing evidence for a nav-feel change). Cleared to merge.
+
+**Merged + deployed:** `feat/nav-link-conversion` → `main@909cecf`, `--ff-only`, pushed. Render web
+deploy fired and went healthy (public Next build hash changed from the pre-push baseline and settled
+stable; `/api/health` 200). The staged brain-doc updates below were applied to `main` as a docs commit
+`[skip render]` (BACKLOG NAV-LINK row, PROJECT.md session entry, DECISIONS.md entry, SEQUENCE
+derived-status correction). Worktree + branch torn down.
+
+## Staged brain-doc updates (APPLIED at merge, 2026-07-05)
+
+These were DRAFTS pre-gate; APPLIED to the brain files verbatim (dates/SHA/verdict finalized) as a
+`[skip render]` docs commit after the on-device gate passed. Retained here as the thread record.
 
 ### BACKLOG.md — new NAV-LINK row (insert directly under the NAV-LAT row)
 

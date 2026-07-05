@@ -14,6 +14,14 @@
 - Launch INV-1 (UCL feed) is **RESOLVED** (balldontlie `/ucl/v1` exists). Residuals: pricing (Sergio, in DEC-0) + `/ucl/v1`-vs-WC schema diff (folds into UCL-1/UCL-3).
 - F-P0-B1/E1/F1 **demoted to 360-conditional** (§6c); T15-6 **promoted** (step-58 live-confirmed FAIL).
 
+## Derived-status corrections (2026-07-05)
+
+- **F-P0-A1 CLOSED** (Sergio's live on-device pass, verdict A) — the tap-reliability finding that drove A1/T15-2 is resolved; no residual dead-tap case survives the T15-2 + NAV-LAT fix set.
+- **A1 (T15-2) DONE/MERGED** (2026-07-04, `1a8c36d`) — the `TODO` / `FIRST THREAD` label in the Window-A table is stale.
+- **NAV-LAT DONE/MERGED+DEPLOYED** (2026-07-04) — the route `loading.tsx` skeleton layer shipped.
+- **NAV-LINK DONE/MERGED+DEPLOYED** (2026-07-05, `feat/nav-link-conversion` → `main@909cecf`) — the `<Link>`+`prefetch={false}` conversion (§5 recommendation); merged after Sergio's on-device gate PASSED. Not a Window-A blocker.
+- **Remaining Window A order UNCHANGED:** T15-3 → T15-1 → T15-5 → T15-7, with **T15-6 promoted** and T15-13 still `PROPOSED` (gated on Sergio accepting the thread).
+
 ## Model & effort rubric (for every Code prompt)
 
 | Class of work | Model | Effort |
