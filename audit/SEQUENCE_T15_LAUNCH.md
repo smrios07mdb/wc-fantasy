@@ -21,6 +21,12 @@
 - **NAV-LAT DONE/MERGED+DEPLOYED** (2026-07-04) — the route `loading.tsx` skeleton layer shipped.
 - **NAV-LINK DONE/MERGED+DEPLOYED** (2026-07-05, `feat/nav-link-conversion` → `main@909cecf`) — the `<Link>`+`prefetch={false}` conversion (§5 recommendation); merged after Sergio's on-device gate PASSED. Not a Window-A blocker.
 - **Remaining Window A order UNCHANGED:** T15-3 → T15-1 → T15-5 → T15-7, with **T15-6 promoted** and T15-13 still `PROPOSED` (gated on Sergio accepting the thread).
+- **PUSH-KEYS + AUTOFIRE_CUTS_ENABLED CLOSED** (2026-07-05, operator-confirmed DONE; struck below — see also `[[t15-3-keyboards-form-attrs]]` docs pass that first recorded them CLOSED).
+- **INV-11 (stray second `league` row check) PASS** — exactly 1 row: id `7b30166f-ec55-4ce8-b133-beddc4f6eb90` / name "WC Fantasy League" / `created_at` 2026-06-08 17:56:29.343+00. Single-tenancy holds; `findFirst()` singletons are safe as-is. De-risks the DEC-0 one-DB / singleton call.
+- **INV-4 (heartbeat/attention env vars + connection flags) resolves into three parts:**
+  - **INV-4a (`DATABASE_URL` flags) PASS** — `pgbouncer=true` (Supavisor transaction pooler, prepared statements correctly disabled); `connection_limit` UNSET → Prisma default (1+2×CPU) applies. Persistent-container architecture ⇒ not serverless, so the default is safe today at current scale. **DECISION (F-A07 close):** pin an explicit modest `connection_limit` per service (web/worker/period-close), summed under the Supavisor Pool Size, tuned against Observability → Database Connections. Tracked as OPEN follow-up **F-A07-pin** (operator, dashboard — no code).
+  - **INV-4b (period-close dead-man switch) PARTIAL/OPEN** — `PERIOD_CLOSE_ATTENTION_URL` + `PERIOD_CLOSE_HEARTBEAT_URL` both SET on the `wc-fantasy-period-close` cron; cron last ran 2026-07-05 11:00 EDT (heartbeat source live). No external monitor is watching the heartbeat and no alert sink is wired yet, so the switch is currently unwatched (a hung/crashed cron would be silent). Remediation: external uptime check on the heartbeat + attention webhook → a channel Sergio reads. Stays OPEN (operator).
+  - **INV-4c (retired services) PASS** — `wc-fantasy-scraper` + `wc-fantasy-faab-batch` both SUSPENDED-by-owner (inert, not deleted). Retire intent satisfied; confirms the render.yaml-removal-didn't-auto-delete-faab-batch note.
 
 ## Model & effort rubric (for every Code prompt)
 
@@ -48,7 +54,7 @@
 | A9 | **T15-1 — 360-conditional P0 hotfixes** (demoted) | F-P0-B1+F-P1-B1, F-P0-E1, F-P0-F1, F-P2-G2 | contained · implementation (delegable, if calendar permits) | Sonnet 5 / medium | `TODO` |
 | A10 | **T15-9 — per-screen passes, delegable subsets (9d–9i)** | per audit §4 row T15-9; HOLD subsets 9a/9b/9c only if a live gap forces them | contained · implementation | Opus 4.8 / medium per sub-thread | `TODO` |
 
-**Operator steps this week (Sergio, no code):** PUSH-KEYS (VAPID on both services + web rebuild) · INV-4 (heartbeat/attention env vars actually set — else the existing dead-man switch is inert) · INV-11 (stray second `league` row check) · AUTOFIRE_CUTS_ENABLED live verification.
+**Operator steps this week (Sergio, no code):** ~~PUSH-KEYS~~ CLOSED · ~~AUTOFIRE_CUTS_ENABLED live verification~~ CLOSED · ~~INV-11~~ PASS · INV-4 PARTIAL — **INV-4b (external monitor on the heartbeat) remains the sole OPEN item**, plus new operator follow-up **F-A07-pin** (explicit `connection_limit` per service).
 
 **Explicitly excluded from Window A:** MT-1/2, UCL-1..4 (migration-class, gated-on DEC-0, zero present value, max live blast radius) · STORE-1/2/3 · HARD-2 · T15-10 (wide-radius CSS regression risk mid-live) · T15-11 (L) · T15-12 · F-P3-A3 top-chrome mini-decision.
 
@@ -78,7 +84,7 @@
 - [ ] **Convene DEC-0**: UCL feed pricing (WC tier doesn't carry; UCL tier vs ALL-ACCESS $499.99/mo) · membership model (join table vs `manager.user_id`) · commissioner model (per-league vs global) · wrapper tech (Capacitor recommended) · pool two-legged-tie semantics + guillotine "round" = leg or tie · FAAB replenishment over a 10-month season · one shared DB vs DB-per-league (decides whether F-C01 needs a migration at all).
 - [ ] **HARD-1 mid-tournament authorization** — additive-only worker-adjacent deploy in a match-free window now, vs ~2 more weeks of unobservable auto-fired irreversible cuts.
 - [ ] **Accept/reject T15-13** as a thread; **confirm T15-6 promotion**.
-- [ ] Operator steps: PUSH-KEYS · INV-4 · INV-11 · AUTOFIRE_CUTS_ENABLED check.
+- [x] Operator steps: ~~PUSH-KEYS~~ · ~~INV-11~~ · ~~AUTOFIRE_CUTS_ENABLED check~~ — all CLOSED 2026-07-05. INV-4 still open: INV-4a/INV-4c PASS, **INV-4b (external monitor wiring) OPEN**, F-A07-pin OPEN (new operator follow-up).
 
 ## Standing constraints (apply to every thread)
 
