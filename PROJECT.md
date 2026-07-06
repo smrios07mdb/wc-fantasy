@@ -1242,6 +1242,10 @@ The T15-2 **F-P0-A1 residual** (SHELL_STACKING_NOTES §5/§6): MPA navigation la
 
 **Fences held.** `packages/*`, every loader/API/schema/RLS/Realtime/migration, `crossNav.ts` item arrays, `shell.css`, all `ds.css` copies, the T15-2 surfaces, and T15-CUT+Theater behavior are all **byte-untouched** (`loading.tsx` are additive UI files only). **MERGED `--ff-only` + DEPLOYED** (2026-07-04, Sergio cleared merge+push+deploy — the T15-2 precedent). **F-P0-A1 CLOSED + Link-conversion clearance CLEARED 2026-07-05** (Sergio's live on-device pass — see below). See DECISIONS.md → 2026-07-04 (NAV-LAT) + `audit/NAV_LATENCY_NOTES.md` + BACKLOG → NAV-LAT.
 
+### 2026-07-05 — PII-BACKFILL DONE: live `--apply` run, Q1 `email_shaped_rows` = 0 (docs-only)
+
+The slot-keyed `display_name` PII scrub script (merged `97649aa`) was run live by Sergio with `--apply`; the post-run verification query 1 printed `email_shaped_rows = 0`, confirming every email-shaped `manager.display_name` was scrubbed. One-shot operator run, **not** a migration. BACKLOG `PII-BACKFILL` → `DONE`. Residual = `commish_audit` free-text (tracked separately). See BACKLOG → PII-BACKFILL + [[t15-14r-displayname-root-cause]].
+
 ### 2026-07-05 — F-P0-A1 closed + Link-conversion clearance granted (docs-only, Sergio's live on-device pass)
 
 Sergio ran the live on-device pass this thread had been waiting on (T15-2 + NAV-LAT both flagged it as owed). **Skeleton visual pass: PASS, no issues** — every route's `loading.tsx` skeleton rendered cleanly, no Safari-vs-PWA discrepancy. **F-P0-A1 on-device verdict: A — closed** — the T15-2 `:active` press state registers on every tap and navigation completes; no residual "registered tap, dead nav" case survived across the pass. **Link-conversion clearance: CLEARED** — the `<Link>`+prefetch conversion analyzed in `audit/NAV_LATENCY_NOTES.md §5` (NAV-LAT, ANALYZE-only) is now cleared to be built as its own thread; nothing routing-related was touched by this docs pass itself.
