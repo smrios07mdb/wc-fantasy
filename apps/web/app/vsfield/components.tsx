@@ -801,52 +801,61 @@ export function SeasonTable({ season }: { season: SeasonEntry[] }) {
           points.
         </div>
       </div>
-      <table className="dtable">
-        <thead>
-          <tr>
-            <th style={{ width: 36 }}>#</th>
-            <th>Manager</th>
-            <th className="num">Record</th>
-            <th className="num">Win%</th>
-            <th className="num">Points</th>
-            <th>By period</th>
-          </tr>
-        </thead>
-        <tbody>
-          {season.map((s) => (
-            <tr key={s.managerId} className={s.isMe ? "row-me" : ""}>
-              <td className="mono">{s.seed ?? s.rank}</td>
-              <td>
-                <div className="v2-st-mgr">
-                  <Avatar name={s.displayName} isMe={s.isMe} />
-                  <b>{s.isMe ? "You" : s.displayName}</b>
-                </div>
-              </td>
-              <td className="num">
-                <b className="mono">
-                  {s.allPlayAllW}-{s.allPlayAllL}-{s.allPlayAllD}
-                </b>
-              </td>
-              <td className="num mono">{Math.round(s.winPct * 100)}%</td>
-              <td className="num mono">{s.totalPoints}</td>
-              <td>
-                <div className="v2-st-periods">
-                  {s.byPeriod.map((p, pi) => {
-                    const k = p.w > p.l ? "W" : p.w < p.l ? "L" : "D";
-                    const isLive = pi === s.byPeriod.length - 1;
-                    return (
-                      <span key={p.periodId} className={"v2-st-chip" + (isLive ? " is-live" : "")}>
-                        <span className={"wld wld-" + k}>{k}</span>
-                        <span className="mono t-micro">{p.points}</span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </td>
+      {/* T15-1 CLIP-4: scoped horizontal-scroll wrapper so the 6-col power-record table (un-truncated
+          displayName → auto min-width > 360px) scrolls on a phone instead of being clipped by the
+          document overflow-x backstop. Mirrors the .st-season-scroll / .sh-topnav-scroll idiom; the
+          shared base .dtable rule is left untouched. */}
+      <div className="v2-season-scroll">
+        <table className="dtable">
+          <thead>
+            <tr>
+              <th style={{ width: 36 }}>#</th>
+              <th>Manager</th>
+              <th className="num">Record</th>
+              <th className="num">Win%</th>
+              <th className="num">Points</th>
+              <th>By period</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {season.map((s) => (
+              <tr key={s.managerId} className={s.isMe ? "row-me" : ""}>
+                <td className="mono">{s.seed ?? s.rank}</td>
+                <td>
+                  <div className="v2-st-mgr">
+                    <Avatar name={s.displayName} isMe={s.isMe} />
+                    <b>{s.isMe ? "You" : s.displayName}</b>
+                  </div>
+                </td>
+                <td className="num">
+                  <b className="mono">
+                    {s.allPlayAllW}-{s.allPlayAllL}-{s.allPlayAllD}
+                  </b>
+                </td>
+                <td className="num mono">{Math.round(s.winPct * 100)}%</td>
+                <td className="num mono">{s.totalPoints}</td>
+                <td>
+                  <div className="v2-st-periods">
+                    {s.byPeriod.map((p, pi) => {
+                      const k = p.w > p.l ? "W" : p.w < p.l ? "L" : "D";
+                      const isLive = pi === s.byPeriod.length - 1;
+                      return (
+                        <span
+                          key={p.periodId}
+                          className={"v2-st-chip" + (isLive ? " is-live" : "")}
+                        >
+                          <span className={"wld wld-" + k}>{k}</span>
+                          <span className="mono t-micro">{p.points}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

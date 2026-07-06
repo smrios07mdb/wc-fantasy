@@ -75,7 +75,12 @@
   background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
-  overflow: hidden;
+  /* T15-1 CLIP-1/2: the matchday (.st-head-md/.st-mdrow, 344px) and cumulative (.st-head/.st-row-main,
+     358px at ≤720px) fixed-track grids exceed a 360px phone. A hard `overflow: hidden` here CLIPPED the
+     right edge (the matchday points column; the cumulative expand-chevron) with no way to reveal it.
+     `overflow-x: auto` keeps the border-radius crop but lets the over-budget rows scroll horizontally —
+     header and rows scroll in unison since they share this flex-column scroll port. */
+  overflow-x: auto;
 }
 .st-head,
 .st-head-md {

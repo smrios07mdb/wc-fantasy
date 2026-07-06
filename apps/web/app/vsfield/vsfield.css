@@ -1131,6 +1131,13 @@ button.vf-bench-tok:hover {
 .v2-season-note {
   margin-bottom: 14px;
 }
+/* T15-1 CLIP-4: the 6-column power-record .dtable (un-truncated displayName) has an auto min-width
+   that overflows a 360px phone with no overflow-x ancestor, so the document backstop clipped its tail.
+   A scoped scroll container makes the whole row reachable — same idiom as .st-season-scroll /
+   .sh-topnav-scroll. Scope stays on this wrapper; the shared base .dtable rule is not touched. */
+.v2-season-scroll {
+  overflow-x: auto;
+}
 .v2-st-mgr {
   display: flex;
   align-items: center;

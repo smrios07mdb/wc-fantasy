@@ -272,6 +272,14 @@
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
   padding: 5px;
+  /* T15-1 CLIP-3: a group match shows 5 tabs (Lineups·Statistics·Events·Ratings·Standings) whose
+     padded min-content (~398px) overflows a 360px phone (~336px) — the 5th tab was clipped (by the
+     document backstop, or by `.gd-app:has(.gd-lineups){overflow:hidden}` on the Lineups tab) and
+     unreachable. `min-width:0` lets the bar shrink inside its flex column and `overflow-x:auto` scrolls
+     the tabs internally so the tail stays reachable; it engages only when tabs overflow, so the 4-tab
+     knockout layout and desktop keep their flex:1 full-width stretch. */
+  min-width: 0;
+  overflow-x: auto;
 }
 .gd-tabbtn {
   flex: 1;
