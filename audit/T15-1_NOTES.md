@@ -113,3 +113,30 @@ The `d4df16c` note raised a possible "fence-CI-gap" on `timeTruthFence.test.ts` 
 - `.github/workflows/ci.yml:50-51` runs `pnpm test` as a plain step with **no `continue-on-error`** ⇒ blocking.
 
 **Verdict: the fence-CI-gap is NOT real.** `timeTruthFence.test.ts` runs inside the blocking `pnpm test` CI step; a fence violation fails CI. No action needed. (Flagged for Chat.)
+
+---
+
+## 5. CLOSEOUT — FIX delivered, CLOSED-pending-gate (2026-07-06)
+
+**Status:** implemented on `worktree-t15-1-viewport-clips` (branched from `4d29867`, the diagnosis tip). **MERGE HELD** for Sergio's on-device 360px gate (real iPhone width, incl. the CLIP-1/2 dynamic-viewport / notch ~12px margin called out in §3). CSS-only + one JSX-className wrap; no loader/engine/schema/RLS/migration/Realtime touched.
+
+**Per-clip before → after** (all mirror the existing repo scroll idiom — `.st-season-scroll` / `.sh-topnav-scroll` = `overflow-x:auto` + `min-width:0`; no new pattern invented):
+
+| Clip | File:rule changed | Before | After | Scope |
+|---|---|---|---|---|
+| CLIP-4 (P0) /vsfield Season | `vsfield/components.tsx` SeasonTable (JSX className only) + `vsfield.css` new `.v2-season-scroll` | 6-col `.dtable` (un-truncated displayName) clipped by document backstop | `.dtable` wrapped in `.v2-season-scroll{overflow-x:auto}` → row reachable by scroll | NEW wrapper; base `.dtable` untouched |
+| CLIP-1 (P0) /standings Matchday | `standings/standings.css` `.st-table` | `overflow:hidden` clipped the 344px fixed grid | `overflow-x:auto` → grid scrolls in unison (header+rows share the flex-column scroll port) | `.st-table` only (standings-scoped) |
+| CLIP-2 (P1) /standings Cumulative | same rule (`.st-table`) | expand-chevron / trend column clipped off right edge | same `overflow-x:auto` → 358px grid scrolls; chevron reachable | batched with CLIP-1 |
+| CLIP-3 (P0, phase-gated) /games tab bar | `src/games/games.css` `.gd-tabbar` | 5-tab group bar (~398px) clipped tail; 5th tab unreachable | `min-width:0` + `overflow-x:auto` → tabs scroll internally; engages only on overflow so 4-tab knockout + desktop keep flex:1 stretch | `.gd-tabbar` only |
+
+**Deviation from the proposed shape (deliberate, safer):** the CLIP-3 note suggested also removing the tab row from the `games.css:1344-1349` `.gd-app:has(.gd-lineups){overflow:hidden}` swallow. Not done — scoping the scroll to `.gd-tabbar` itself makes the bar scroll internally so it never overflows *any* ancestor (document backstop OR the lineups-tab clip), in every tab state. Touching the `:has(.gd-lineups)` rule was avoided because it is the load-bearing **vertical** overflow:hidden of the pitch-fill height model documented at `games.css:1314-1343`; leaving it intact removes risk with no loss of coverage.
+
+**Blast-radius guards held (asserted in the test):**
+- The shared base `.dtable` rule (`vsfield/ds.css:331`, also used by /waivers TeamBudgetsRail etc.) was **NOT** edited — scroll lives only on the new `.v2-season-scroll` wrapper.
+- The `html,body{max-width:100%;overflow-x:hidden}` document backstop (`ds.css:413`, replicated byte-identically across the 5 per-route `ds.css` copies — guarded by `appShell.test.ts`) was **NOT** touched. The byte-identical-ds.css test still passes.
+
+**Tests:** new `apps/web/src/mobile/viewport360Clips.test.ts` — 9 cases, red→green. Per clip it (a) proves the defect numerically from the CSS grid tracks / tab min-content vs a 360px budget, then (b) asserts the scoped scroll fallback exists; plus two blast-radius guards (base `.dtable` gains no overflow; `html,body` backstop preserved). Source-contract style per the repo precedent (`appShell.test.ts` — Vitest has no layout engine).
+
+**DoD gate (green):** typecheck ✓ · lint ✓ · format:check ✓ · `pnpm test` 3403 passed / 0 failed (+9 new) ✓ · `@app/web` build ✓. Fence verifiers GREEN **unmodified**: the-cut (43), players (14, incl. mobile360), playoffs-hero, pitch-layout (40, incl. 360/390). No DB/RLS/scoring touched → Postgres integration suite N/A.
+
+**Awaiting:** Sergio's on-device 360–390px eyeball on `/vsfield` Season, `/standings` (both tabs), and a past **group** `/games/[matchId]` (5-tab). Then merge.
