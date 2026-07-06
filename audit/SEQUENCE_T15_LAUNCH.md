@@ -105,3 +105,4 @@ T15-5/T15-3 are already `DONE`/CLOSED and were never part of this three-way conf
 - Visual verification on the **live Render deploy only** — every visual thread ships a Playwright render-proof script (the `verify-*.mjs` precedent) + screenshots as its pre-merge evidence.
 - Status is derived: start of every thread, cross-check the item against BACKLOG.md + the PROJECT.md session log before trusting any label (including this file's).
 - Brain files re-uploaded after each merge; docs commits `[skip render]`.
+- **Intra-Window-B ordering: F-D15 before MT-2's dual-write wave.** F-D15 (the UCL-2 enum rename, thread B5) must land **before** MT-2's ingest dual-write wave (thread B3) — both rewrite the SAME two `prismaStore` files, so landing them out of order forces a rebase conflict on shared lines. Sequence the enum rename first, then MT-2 dual-writes onto the renamed surface. (Recorded 2026-07-06.)
