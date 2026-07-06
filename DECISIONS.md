@@ -3881,3 +3881,9 @@ The T15-BACKFILL runner threw Postgres `42883` (operator does not exist: text = 
 **D-ROUND — a fantasy "round" = the entire two-legged tie.** Both legs aggregate into one scoring period (not one period per leg). Pool predictions score on the tie's advancer (aggregate), not per-leg 1X2 match winners. Resolves INV-10 (round=leg-or-tie → tie; per-leg-vs-aggregate → aggregate). Feeds UCL-2's period model + pool machinery; the guillotine overlay operates per-tie.
 
 **D-DB remains OPEN**, pending Sergio's ratification. Chat's recommendation on record: one shared DB. See [[per-league-db-fork-spec]] for the full axis-by-axis brief.
+
+### 2026-07-06 — guard-git: force-push block hardened via quoted `$CLAUDE_PROJECT_DIR` path (`fix/guard-git-path`, docs-only, **MERGED `--ff-only`** main `54061c0`)
+
+`.claude/hooks/guard-git.sh` blocks force-pushes to `main` (`--force`/`--force-with-lease`/`-f`/`+refspec` → exit 2; normal pushes and `--ff-only` pass). Wired in tracked `.claude/settings.json` via `"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git.sh"` — the quoting is load-bearing, since the project root path contains a space and an unquoted expansion word-splits and fails open.
+
+The guard is advisory, not hard enforcement: `PreToolUse` hooks fail OPEN and are not configurable to fail closed — only an exit code of 2 blocks the action, and a missing or erroring hook proceeds non-blocking. guard-git is defense-in-depth behind the manual derive-before-assert discipline (see "Status is derived, not narrated" in CLAUDE.md), not a substitute for it. Hard enforcement via the permission system is a deferred possible follow-up.
