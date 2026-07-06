@@ -33,12 +33,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { prisma, type PrismaClient, type Prisma } from "@app/db";
-import {
-  BACKFILL_MAP,
-  EMAIL_SHAPE_SQL,
-  MANAGER_LABEL_SQL,
-  resolveRename,
-} from "../src/backfillDisplayNamePii";
+import { BACKFILL_MAP, EMAIL_SHAPE_SQL, MANAGER_LABEL_SQL } from "../src/backfillDisplayNamePii";
 
 // Load repo-root .env for local runs; a no-op when the env is already provided (e.g. on Render).
 const here = dirname(fileURLToPath(import.meta.url));
@@ -85,11 +80,38 @@ function fmtRow(id: string, slot: number | null, current: string, proposed: stri
 }
 
 /**
+ * The single guarded WHERE the backfill writes behind, built once and shared by BOTH the dry-run
+ * preview (`previewGuarded`) and the `--apply` UPDATE (`UPDATE_SQL`). Because there is exactly one
+ * fragment, the `::uuid` cast and the email-shape guard can never be present in one predicate and
+ * missing from the other — the divergence class behind a `42883 text = uuid`. `idParam` is the bind
+ * placeholder for `manager.id`, ALWAYS cast to uuid; the email-shape body is a committed constant (no
+ * user input) matched against `trim(display_name)`.
+ */
+function guardedWhere(idParam: string): string {
+  return `id = ${idParam}::uuid AND trim(display_name) ~ '${EMAIL_SHAPE_SQL}'`;
+}
+
+/**
  * The exact parameterized write `--apply` runs, once per target ($1 = new display_name, $2 = manager id).
  * Single source of truth so the DRY-RUN echo is byte-identical to the statement actually executed; the
- * `id = $2::uuid` clause scopes each iteration to exactly one row.
+ * `id = $2::uuid` clause (from the shared `guardedWhere`) scopes each iteration to exactly one row.
  */
-const UPDATE_SQL = `UPDATE manager SET display_name = $1 WHERE id = $2::uuid AND trim(display_name) ~ '${EMAIL_SHAPE_SQL}'`;
+const UPDATE_SQL = `UPDATE manager SET display_name = $1 WHERE ${guardedWhere("$2")}`;
+
+/**
+ * Read-only rehearsal of the guarded WHERE for ONE target: runs the SAME `guardedWhere` fragment the
+ * UPDATE uses (same `::uuid` cast, same email-shape guard) as a SELECT, returning the row iff the guard
+ * matches (still email-shaped) and `null` otherwise (a no-op UPDATE — already backfilled, or renamed to
+ * a real name). Because the dry-run executes this identical predicate, a broken cast throws HERE exactly
+ * where `--apply` would, instead of surfacing only at write time.
+ */
+async function previewGuarded(db: Db, id: string): Promise<ManagerRow | null> {
+  const rows = await db.$queryRawUnsafe<ManagerRow[]>(
+    `SELECT id, draft_slot, display_name FROM manager WHERE ${guardedWhere("$1")}`,
+    id,
+  );
+  return rows[0] ?? null;
+}
 
 async function dryRun(): Promise<void> {
   console.log("T15-BACKFILL — DRY-RUN (no writes). Pass --apply to perform the UPDATE.\n");
@@ -110,16 +132,18 @@ async function dryRun(): Promise<void> {
       console.log(`  ${t.id}  ·  slot ${t.draftSlot}  ·  (NOT FOUND in prod)`);
       continue;
     }
-    const proposed = resolveRename(row.display_name, t.mappedName);
+    // Decide via the EXACT guarded WHERE `--apply` runs (shared `guardedWhere`, same ::uuid cast),
+    // executed read-only — so the preview is the write predicate itself, not a JS mirror of it.
+    const matched = await previewGuarded(prisma, t.id);
     console.log(
-      proposed === null
+      matched === null
         ? fmtRow(
             row.id,
             row.draft_slot,
             row.display_name,
-            "SKIP (not email-shaped — left untouched)",
+            "SKIP (guard did not match — left untouched)",
           )
-        : fmtRow(row.id, row.draft_slot, row.display_name, JSON.stringify(proposed)),
+        : fmtRow(row.id, row.draft_slot, row.display_name, JSON.stringify(t.mappedName)),
     );
     // Echo the LITERAL parameterized write --apply would run for this target (printing a string only —
     // no query executes). Operator sees the exact statement + bound values and can audit the WHERE scope.
