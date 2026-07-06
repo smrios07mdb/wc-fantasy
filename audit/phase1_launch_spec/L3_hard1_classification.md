@@ -1,0 +1,65 @@
+# LANE L3 — HARD-1 live-value classification (F-A01–A05, A09, A16)
+
+_Phase-1 launch-spec pass, 2026-07-06. Lane model: Opus (auditor, read-only). Inputs: audit/AUDIT_LAUNCH_readiness.md §3 (F-A01–A05 bodies lines 114–152, F-A09 378–384, F-A16 431–437), audit/SEQUENCE_T15_LAUNCH.md A7 + INV-4 notes. Verifier verdict appended at bottom after the independent re-check._
+
+Preamble: I re-read every cited path on this tree; the file:line claims hold (minor drift — scheduler sweep is at `scheduler.ts:223`, `log.debug` at 224, `log.warn` at 227). The worker liveness gap is real: `ping`/`safePing`/`reportPeriodClose*` in `apps/worker/src/jobs/heartbeat.ts` are fired ONLY by `jobs/periodClose.ts:176,189`; `scheduler.ts` and `index.ts` emit no heartbeat. That same, already-live, env-gated, never-throws ping infra (→ Healthchecks.io + confirmed email alerting) is directly reusable by the resident worker with zero new dependency. Live-critical = worker scoring pipeline; web-availability items are not.
+
+### F-A01 — SPLIT
+Verified: worker logger (`logger.ts:7-13`) is console-only; web routes (`faab/bid/route.ts:92-97`, `lineup/route.ts:39-49`) call handlers with no try/catch/log. Live sub-slice (a signal when the scoring pipeline silently breaks) is delivered more cheaply by A02+A03+A04 riding the existing heartbeat/Healthchecks channel — **no new SDK**. The finding's own fix theme ("Sentry, wired into worker+routes+loaders") adds a dependency + env + network egress = a **Sergio decision**, not slice-eligible. Verdict: the standalone exception-tracker is PUBLIC-WEB-ONLY (HARD-2); its only live-now content is subsumed by A02–A04.
+
+### F-A02 — LIVE-NOW
+The single process that turns live feed → fantasy scores can die or hang with zero external signal; `uncaughtException` (`index.ts:56`) covers a crash but not a stalled event loop. Highest-leverage live fix. Minimal additive slice: **edit** `apps/worker/src/scheduler.ts` only — one import of `ping` from `./jobs/heartbeat` + one `ping(process.env.WORKER_HEARTBEAT_URL,{label:"scheduler.liveness"})` at the end of a successful tick body (optionally a `${url}/fail` in the `scheduler.tick.error` catch). Read env at call-site (mirrors `periodClose.ts:45`) → no `config.ts` change needed. Env: new `WORKER_HEARTBEAT_URL` (sync:false) in the render.yaml worker block. Hot path is **only added-beside** — `ping` swallows every failure, never perturbs the tick. Worker redeploy REQUIRED. Reuse: rides existing heartbeat.ts pattern + live Healthchecks.io + email; no new infra. Residual risk: redeploy restarts the resident worker (drops in-process Maps `lastLivePoll`/`pulledLineups`/`peekedLineups` → re-arm, self-heal next tick) → land in a match-free window.
+
+### F-A03 — LIVE-NOW (scheduler-side sub-slice; engine refactor deferred)
+Verified: full `SweepResult` is `log.debug("scheduler.swept")` (224), suppressed at prod `LOG_LEVEL=info` (`logger.ts:8`, `render.yaml:39-40`); only `recompute.player_match.failures` warn survives; no dirty-backlog gauge. This is exactly the "sweep stalled, dirty rows piling, scores freeze" failure. Minimal live slice (scheduler-side, additive): bump `scheduler.swept` to `log.info` and emit a non-draining-backlog warn from `runRecomputeSweep()`'s returned counts — **edit** `scheduler.ts` only; that count also feeds A04's attention ping. **DEFER** the Phase-2/3 `onError` surfacing inside `packages/recompute/src/recompute.ts:186-203` — that edits the recompute engine (high-risk, hold-by-policy), not slice-eligible mid-tournament. Reuse: yes, via A04 channel. Worker redeploy REQUIRED (bundle with A02).
+
+### F-A04 — LIVE-NOW (route existing signals; persistence deferred)
+Verified: real detectors exist but all terminate at a log line — `poller.silent` (`scheduler.ts:146`), `recompute.player_match.failures` (227-229), `autofire.cut.error` (327), foreign/malformed skips in `packages/ingest`. Cheapest large live win: fire an attention `ping` beside those existing `log.warn`/`log.error` calls (reuse `heartbeat.ts` `safePing`; new `WORKER_ATTENTION_URL`, sync:false, Healthchecks/webhook → email). **Edit** `scheduler.ts` only (added-beside the log lines). **DEFER** the "persist poller-silent state across restart" sub-part — `lastLivePoll` is an in-process Map (`scheduler.ts:62`); durability needs a DB column = **schema change, out of slice**. Reuse: existing channel. Worker redeploy REQUIRED (bundle with A02/A03).
+
+### F-A05 — SPLIT
+Verified: `fireRescore` bare `catch{}` at `handleStatCorrection.ts:158` (no server log) downgrades to a 200 `restate_pending`; `createCommishRescore` (`commishStatStore.ts:211-237`) is the ONLY frozen-period restate path (worker sweep runs without `allowFrozen`). Softener: the acting commissioner DOES get an in-app warning (`outcomeFields` returns `warning`+`message`), so it is not zero-signal to the operator taking the action. Live sub-slice: add one server-side `console.error` in the bare catch so a repeated silent failure is greppable — **edit** `apps/web/src/commish/handleStatCorrection.ts`, additive, web-side (separate web redeploy, NOT the worker slice). DEFER the "tracked restate queue." Low live urgency; include the log-line only if a web deploy is already bundled.
+
+### F-A09 — PUBLIC-WEB-ONLY
+Verified: `healthCheckPath: /api/health` (`render.yaml:57`) → static `{ok:true}` (`health/route.ts:6-8`); `db-check/route.ts:14-38` (SELECT 1 + `league.count()`, 503) exists unwired. Protects web-instance availability, not the worker scoring pipeline — hits none of the live-window targets. Worse, the fix has live-window RISK: pointing the probe at db-check lets a transient Supabase-pooler blip fail the healthcheck and cycle the web instance mid-match (the finding notes this liveness/readiness tension). Defer to HARD-2.
+
+### F-A16 — PUBLIC-WEB-ONLY
+Verified: same wiring as A09; framed as the deploy-promotion gate being blind to wrong-DB / schema-skew. Incidental live angle: a readiness gate would fail-closed a botched mid-tournament WEB deploy. But (a) the recommended slice has no schema change, so schema-skew isn't its risk; (b) it targets the web service, not the worker that runs scoring; (c) same transient-blip restart risk as A09. Net: not live-scoring-protective, risky to change mid-window. Defer to HARD-2.
+
+## HARD-2 boundary check (§3 items)
+
+| Finding | One-line live-WC verdict |
+|---|---|
+| F-A07 | Connection-budget/pgbouncer runbook gap; low at 12 users; F-A07-pin operator follow-up already tracked — acknowledge, don't re-open. Defer. |
+| F-A12 | Raw-500 on uncaught route throw = degraded error body, no corruption/leak; web-side. Safely deferred. |
+| F-A15 | No DB down-migrations = deploy-time irreversibility; the recommended slice has NO schema change, so inert for it. Defer. |
+| F-A17 | Web-only migrate + no deploy ordering = schema-skew across services; slice ships no migration → introduces no skew. Defer. |
+| F-A18 | Partial multi-migration advance; no migration in slice → cannot occur. Defer. |
+| F-A19 | Unauthenticated db-check, no rate limit = abuse at public scale; negligible at 12 users. Defer. |
+| F-A20 | In-process RPM limiter safe *only while exactly one worker runs* — a live CONSTRAINT to respect: do NOT scale the worker >1 during the window. Defer the fix. |
+| F-A21 | `loadWaivers` unbounded/serialized reads = perf at concurrency; trivial at current scale. Defer. |
+
+## RECOMMENDED SLICE (match-free-window, additive-only, one worker redeploy)
+Compose the deploy from the three worker-observability items that all ride the existing `heartbeat.ts` ping + live Healthchecks.io + email channel, no new SDK, no schema change, all edits confined to `apps/worker/src/scheduler.ts` + two sync:false env vars in the render.yaml worker block: (1) **F-A02** first — the liveness heartbeat anchor (`WORKER_HEARTBEAT_URL`); (2) **F-A03** — surface sweep counts at info + a non-draining-backlog warn, so there is something to alert on; (3) **F-A04** — route the existing `poller.silent`/`recompute.failures`/`autofire.cut.error` warns to an attention ping (`WORKER_ATTENTION_URL`). Defer inside-A03/A04 the recompute-engine `onError` refactor and the schema-backed poller-silent persistence. The F-A05 one-line server log is a separate optional web deploy. Single riskiest step: the **worker redeploy itself** — it restarts the resident process, briefly halting the 60s ingestion/recompute tick and resetting in-process guard Maps; the ping calls are fire-and-forget (`safePing` swallows all) and cannot perturb the tick, so the only real hazard is deploy timing → require a confirmed no-live-match window and Sergio's authorization.
+
+---
+
+# V3 — Independent verifier verdict (Opus, adversarial re-check)
+
+All cited paths independently re-read. **6 CONFIRMED / 1 CORRECTED (F-A03, mechanism).**
+
+- **F-A01 — CONFIRMED.** Worker `logger.ts` console-only; web routes call handlers with no try/catch/log. Standalone Sentry-style tracker = new SDK/dep = Sergio decision; live content subsumed by A02–A04. SPLIT holds.
+- **F-A02 — CONFIRMED.** `ping`/`safePing` exist in `heartbeat.ts` and are fired ONLY by `periodClose.ts:176,189` (grep: no other non-test caller — premise intact). `ping` swallows every failure and never throws (`heartbeat.ts:65-94,105-118`). Import `scheduler→jobs/heartbeat→logger` creates NO cycle. Env read at call-site mirrors `periodClose.ts:45` → no `config.ts` change. Tick errors are caught at `scheduler.ts:334` (never reach `index.ts:56` uncaughtException), so a silent-stall gap is real. LIVE-NOW.
+- **F-A03 — CORRECTED.** debug/info drop (`logger.ts:8`), `scheduler.swept` at :224, failures warn :227-229 all confirmed; debug→info at a 60s tick = ~60 lines/hr = zero volume risk. BUT a "non-draining-backlog warn from returned counts" is NOT derivable from `SweepResult` alone: `claimDirtyPlayerMatches` drains EVERY dirty row per sweep, so the only cross-tick "not draining" signal in the return value is `playerMatchFailures` — already warned at :227. A true dirty-DEPTH gauge needs a NEW `COUNT(*) WHERE dirty` query (additive, but a different claim, and NOT scheduler.ts-only). LIVE-NOW classification stands; mechanism restated.
+- **F-A04 — CONFIRMED.** `poller.silent`:146, `recompute.player_match.failures`:227-229, `autofire.cut.error`:327 all terminate at a log line; `lastLivePoll` is in-process Map :62 → persistence deferral correct. Route-to-ping is additive scheduler-side. LIVE-NOW.
+- **F-A05 — CONFIRMED.** Bare `catch{}` at `handleStatCorrection.ts:158` (no server log) → 200 `restate_pending`; `outcomeFields` :166-175 returns `warning`+`message`, so the acting commissioner DOES get an in-app warning (softener holds). One-line web-side `console.error` is additive, separate web deploy. SPLIT.
+- **F-A09 — CONFIRMED.** `health/route.ts:6-7` static `{ok:true}` (no deps); `db-check/route.ts:14-38` (SELECT 1 + `league.count()`, 503) exists but unwired (`healthCheckPath:/api/health`, render.yaml:57). Fix has live-window restart risk; not worker-scoring-protective.
+- **F-A16 — CONFIRMED.** Same wiring; deploy-promotion gate is genuinely blind to wrong-DB/schema-skew, but slice ships no migration, targets web not worker, same restart risk. PUBLIC-WEB-ONLY.
+
+### Fact-check corrections (deltas only)
+- **A03 return-value claim (substantive):** backlog-DEPTH is NOT in `SweepResult` (`recompute.ts:37-47` = `playerMatches`/`playerMatchFailures`/`managerPeriods`/`skippedFrozen`/`standings` — all per-tick throughput/failures, no residual gauge). `playerMatchFailures` is already surfaced at `scheduler.ts:227`. A depth alert = new COUNT query.
+- **Cosmetic:** L3 calls `pulledLineups`/`peekedLineups` "in-process Maps" — they are `Set`s (`scheduler.ts:63,66`); only `lastLivePoll` is a `Map` (:62). Non-durable point is correct.
+- **Path:** health routes live at `apps/web/app/api/{health,db-check}/route.ts`; L3 cited bare filenames.
+
+### Challenges that stuck
+- **A03 is not "scheduler.ts-only" for its distinct value.** Bumping `scheduler.swept` debug→info (zero-risk) plus A04 routing the existing :227 failures warn is genuinely scheduler.ts-only — but that yields NO new "backlog piling" signal beyond A04. The only genuinely-new A03 signal (a dirty-depth gauge) requires an additive `COUNT(*) WHERE dirty` read in the worker recompute seam (`apps/worker/src/recompute.ts` / a new store method), which mildly widens the RECOMMENDED SLICE's "all edits confined to `scheduler.ts`" claim. Recommendation: either narrow A03 to the info-bump only, or explicitly scope the COUNT query in. Still additive, still low-risk, still one redeploy — but the slice's edit-surface claim needs this footnote.
+- **A09/A16 gate is truly blind, but doesn't move the slice.** A wrong-DB/schema-skew WEB deploy TODAY passes the static-200 `/api/health` gate and gets promoted with nothing catching it — a real live-tournament availability gap. It is NOT scoring-corruption (worker keeps computing), and the naive fix (point gate at `db-check`) risks a transient-pooler 503 cycling the live web instance. L3 already notes this; classification and slice unchanged.
