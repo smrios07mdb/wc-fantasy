@@ -67,6 +67,7 @@ Adjudicated against repo truth — see `audit/DESIGN_PLAN_reconciliation.md` §3
 - **CONFIRMED** — single ranking engine: pure `computeStandings` → sole writer `recomputeStanding` → one persisted `standing` table. Consumers differ only in read path (`/standings` recomputes on the fly from the same pure helper; `/vsfield` reads the persisted table; the dashboard re-sorts a precomputed rank) — no forked math.
 - **Nuance:** `/standings` has three tabs (Matchday · Cumulative · Season), not two; `/vsfield`'s primary rail answers "live now" with season standing on a secondary tab, so the three surfaces aren't identical at default state.
 **Open decision (unchanged in kind, sharpened in §6):** pick ONE canonical standings surface for the UCL league phase.
+**Resolution:** see §6 D2 — absorbed into `/vsfield`; `/standings` retired.
 
 ### R3 — Player browsing overlaps: `/players` vs `/waivers` — CONFIRMED on 3 of 4 sub-claims
 - **CONFIRMED** — waivers runs an independent FA list; `/players` inlines its own copy of the live-owned predicate (not exported from `@app/faab`) — parallel logic, zero shared list-layer code.
@@ -102,8 +103,8 @@ Sequenced; ties to the existing Window-B threads. Sergio makes the sequencing/au
 
 1. **Reconcile this inventory against repo truth (REQUIRED FIRST).** Derive the actual `app/` route tree, confirm each screen's real entry points, and confirm/refute R1–R5. Nothing below acts on a knowledge-derived claim until this lands. *(Code, read-only, docs-only.)*
 2. **Resolve the design-gating DEC-0 decisions** (membership model → onboarding shape; pool-tie semantics → two-legged UI; crest/kit **licensing posture** → club identity). These block screens 3, 6, and parts of 5. *(Chat/Sergio.)*
-3. **UCL club-identity visual system** (F-D08) — the design long pole; grounded in a locked decision, no DEC-0 gate for the visual exploration. *(Claude Design → UCL-4.)*
-4. **Consolidate the redundant surfaces** per R1–R5 — a design decision per finding (canonical owner), then implement in UCL-4 / T15-10.
+3. **UCL club-identity visual system** (F-D08) — the design long pole; grounded in a locked decision, no DEC-0 gate for the visual exploration. Carries D4(a): draft's bespoke nation grid migrates onto the shared filter bundled into this rebuild, including the `<span onClick>`→keyboard/AT a11y fix. *(Claude Design → UCL-4.)*
+4. **Consolidate the redundant surfaces** per R1–R5 — a design decision per finding (canonical owner), then implement in UCL-4 / T15-10. Per D2, this consolidation is `/vsfield` absorbing standings (league-phase segmented control Table ↔ My position) and retiring `/standings` — not a pick-a-canonical-surface-among-three open call.
 5. **Swiss-table standings + two-legged knockout surfaces** — the new core competitive visuals (resolves R1/R2 for UCL). Partially DEC-0-dependent; design the format-locked parts, flag the tie-semantics forks. *(Claude Design → UCL-4.)*
 6. **Multi-league onboarding** — create / invite / join / league-switcher (new screens; none exist today). Membership-model-dependent → gated on the DEC-0 call in step 2. *(Claude Design → MT-1/UCL-4.)*
 7. **Store presence + reviewer path** — screenshots, app-preview, icon, the reviewer-reachable demo path (F-B01), privacy/ToS pages. *(Claude Design + STORE-1.)*
@@ -113,12 +114,14 @@ Sequenced; ties to the existing Window-B threads. Sergio makes the sequencing/au
 
 ## 6. Open decisions that gate the design (DEC-0)
 
+**D1–D4 below graduate into `DECISIONS.md` when the UCL-4 thread opens.**
+
 Reachability is no longer at stake for any of these (§3, reconciliation §3/§5) — all four are now pure product/design calls on confirmed facts:
 
-- **Theater fold-vs-keep (R1):** either (a) fold the champion-endgame choreography into `/vsfield`'s final state and retire `/playoffs`, or (b) keep Theater as a deliberate ceremonial destination it already reliably reaches (nav + contextual CTAs on both viewports). Not an "unreachable route" rescue — a choreography/ownership call.
-- **Canonical standings owner (R2):** the three surfaces already share one computation engine (`computeStandings`) — the open call is which surface is *the* canonical display for the UCL league phase (`/standings`'s 3-tab list, `/vsfield`'s live-now rail, or the dashboard module), with the other two linking to it rather than reimplementing.
-- **Mobile bottom-bar depth for Standings/Playoffs (R5, reframed):** both are already reachable via desktop strip + mobile More sheet on every viewport — the live question is whether either promotes to one of the 5 *primary* bottom tabs for the UCL retarget, not whether either is reachable at all.
-- **R3/R4 cleanups:** (R3) drop the MoreSheet's redundant hardcoded "Browse players" link, and decide whether `/waivers` composes the `/players` browse list instead of maintaining its own; (R4) the UCL club-identity pass (F-D08) is confirmed as the forcing function to consolidate draft's bespoke nation grid onto shared `NationFilter`/`<Flag>` — scope now includes the `<span onClick>` a11y fix and the `PlayerAvatar` SVG-vs-`<Flag>` markup dedup.
+- **D1 · Theater fold-vs-keep (R1) — DECIDED: KEEP.** `/playoffs` stays a distinct ceremonial destination through the UCL retarget. The guillotine/elimination metaphor belongs to the UCL knockout stage (two-legged R16/QF/SF + single-leg final), not the Swiss league phase. Model: `/vsfield` = the functional competitive surface; `/playoffs` = the ceremonial payoff on top.
+- **D2 · Canonical standings owner (R2) — DECIDED: ABSORB INTO `/vsfield`.** `/vsfield` becomes the single phase-aware competitive surface — league-phase standings table (with qualification cut-lines) morphing into the knockout guillotine bracket. `/standings` is retired as a separate destination; the dashboard module stays a preview/launcher into `/vsfield`. Implementation detail: a league-phase segmented control within `/vsfield` (Table ↔ My position), mobile defaulting to "My position" with the full table one tap away. Window-B consolidation; deletes the `/standings` route + its desktop-strip/More-sheet entries; validate on both viewports.
+- **D3 · Mobile bottom-bar depth (R5, reframed) — DECIDED: NO promotion.** Bottom bar stays 5 tabs + More; `/standings` and `/playoffs` remain desktop-strip + More-sheet only.
+- **D4 · Cleanups (R3/R4) — DECIDED: AUTHORIZED.** (a) Draft's bespoke nation grid migrates onto the shared filter bundled into the F-D08 crest rebuild, carrying the `<span onClick>`→keyboard/AT a11y fix. (b) Drop the hardcoded MoreSheet `MoreSheet.tsx:114` "Browse players" link — rides the next T15 live thread (trivial live nav change, gated on Sergio's on-device merge gate), not a standalone deploy.
 - **Membership model** (join-table vs `manager.user_id`; per-league vs global commissioner) → shapes onboarding screens (step 6).
 - **Pool-tie semantics** (per-leg 1X2 vs aggregate advancer; round = leg or tie) → shapes the two-legged UI (step 5).
 - **Crest/kit licensing posture** (INV-10) → whether club identity uses licensed marks or a neutral system; the visual system (step 3) is designed to accept real assets either way, but the sourcing decision is Sergio's.
