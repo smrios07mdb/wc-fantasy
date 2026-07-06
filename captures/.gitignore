@@ -1,0 +1,6 @@
+# The injected authenticated session (cookies/tokens) — NEVER commit. Produced by
+# apps/web/scripts/capture-login.mjs, consumed read-only by capture-screens.mjs.
+.auth/
+
+# The PNG captures themselves ARE the deliverable and are tracked (Sergio waived synthetic
+# identities; real live-league captures are authorized). INDEX.md is tracked too.
