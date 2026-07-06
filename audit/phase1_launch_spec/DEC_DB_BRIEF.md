@@ -75,6 +75,7 @@ These gate admissibility, not preference (`plan_per_league/DESIGN_NOTES.md` §5)
 3. **S term** (platform services + `reserved_connections` consuming direct slots against X=60) — read off the dashboard; tightens every V-b/V-c server budget. (P2 §2.)
 4. **Render cross-service deploy ordering** (INV-2 caveat) — dashboard-unverified; affects F-1 severity (partial-fleet schema skew). (P4 §3.)
 5. **Platform constants** (M=200 / P=15 / X=60 Micro-class; $25+$10 pricing; pause-on-Pro unavailability) are cited at 2026-07-06 and parameterized — **re-instantiate the formulas at decision time; do not reuse the constants.**
+6. **Per-PrismaClient RSS on a Render starter.** Measure real resident memory per cached PrismaClient on a 512 MB starter instance. Gates V-a×R-1 admissibility: its ~N≈20–30 league ceiling (§2.2) currently rests on a guessed ~10 MB/client, not a measurement — §6 flags this as the brief's one evidence-quality gap. V-a×R-1 cannot be treated as a bounded, sized option until this is measured.
 
 ---
 
