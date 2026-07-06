@@ -11,6 +11,9 @@ packages/db/prisma/migrations
 .claude/
 **/.claude/
 
+# The blessed capture session (gitignored, disk-only) — never reformat or touch it.
+captures/.auth/
+
 # Source-of-truth brain files + prompts + audit reports + design handoff: hand-authored, do NOT reflow
 # (tables, line breaks).
 PROJECT.md

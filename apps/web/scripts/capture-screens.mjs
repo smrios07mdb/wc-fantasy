@@ -17,8 +17,9 @@
  *
  * Output: captures/<route>__<state>__<viewport>.png  (deterministic names) + an INDEX.md row each.
  *
- *   Run:  node apps/web/scripts/capture-screens.mjs [surfaceKey…] [--base=https://host]
- *         (no surfaceKey → every ACTIVE surface below)
+ *   Run:  node apps/web/scripts/capture-screens.mjs [surfaceKey…] [--base=https://host] [--no-auth]
+ *         (no surfaceKey → every ACTIVE surface below; --no-auth → only the signed-out set,
+ *          captured in a FRESH no-state context where landing on /sign-in is the target, not a bounce)
  */
 /* eslint-disable no-undef */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -178,6 +179,108 @@ const SURFACES = [
     source: "live",
     fullPage: true,
   },
+  // ── Wave 1.5 — authed default/reachable states (manifest §6 remainder) ──────────────────────────
+  // Standings Cumulative tab and the playoffs board↔ladder toggle read NO searchParams (client
+  // onClick only) → DEFERRED. /commish DOES honor a read-only ?tab= (app/commish/page.tsx:33) but
+  // Wave 1.5 scope is the default tab only; non-default tabs defer by scope, not by fence.
+  {
+    key: "dashboard",
+    active: true,
+    route: "/",
+    state: "hub-live", // authed `/` = Dashboard hub (selectLandingView `ok`), CURRENT live phase
+    phase: "knockout",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+  },
+  {
+    key: "standings",
+    active: true,
+    route: "/standings",
+    state: "matchday-tab", // default tab; Cumulative is client-onClick → deferred
+    phase: "knockout",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+  },
+  {
+    key: "playoffs",
+    active: true,
+    route: "/playoffs",
+    state: "theater-default", // Chocoyo theater hero, current round
+    phase: "knockout",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+    suppressCeremony: true, // fresh context = new device; keep the latch quiet here too
+  },
+  {
+    key: "scoring",
+    active: true,
+    route: "/scoring",
+    state: "rulebook", // trust surface — F-D12 rebrand copy sweep input
+    phase: "knockout",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+  },
+  {
+    key: "settings",
+    active: true,
+    route: "/settings",
+    state: "profile", // profile/preferences (display-name rename surface)
+    phase: "knockout",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+  },
+  {
+    key: "commish",
+    active: true,
+    route: "/commish",
+    state: "console-default", // commissioner console, default tab (?tab= exists but deferred)
+    phase: "knockout",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+  },
+  // ── Wave 1.5 — signed-out set (fresh context, NO storageState) ─────────────────────────────────
+  // noAuth INVERTS the session guard: these render in a no-state context, and the landed pathname
+  // must equal the requested route (a bounce = mislabeled capture = loud failure). The sign-in
+  // "check your email" confirmation is post-submit (a fill) → deferred.
+  {
+    key: "public-landing",
+    active: true,
+    route: "/",
+    state: "marketing-landing", // signed-out `/` (selectLandingView signed-out branch)
+    phase: "n/a",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+    noAuth: true,
+  },
+  {
+    key: "public-signin",
+    active: true,
+    route: "/sign-in",
+    state: "request-view", // magic-link REQUEST view only
+    phase: "n/a",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+    noAuth: true,
+  },
+  {
+    key: "public-denied",
+    active: true,
+    route: "/auth/denied",
+    state: "denied", // dual-cause denied screen — direct goto renders it
+    phase: "n/a",
+    viewports: ALL_VPS,
+    source: "live",
+    fullPage: true,
+    noAuth: true,
+  },
 ];
 
 function baseUrl() {
@@ -192,6 +295,9 @@ function selectedKeys() {
   return keys.length ? keys : null;
 }
 
+// --no-auth → run ONLY the signed-out (noAuth) surfaces; no session file required.
+const noAuthOnly = process.argv.includes("--no-auth");
+
 const captured = []; // { route, state, viewport, source, phase, file }
 const failures = [];
 
@@ -199,7 +305,9 @@ async function captureSurface(base, storageState, surface) {
   for (const vp of surface.viewports) {
     const viewportCfg = VIEWPORTS[vp];
     const ctx = await browser.newContext({
-      storageState, // ← the injected authenticated session (read-only)
+      // noAuth surfaces get a FRESH no-state context (authed `/` renders the Dashboard, not the
+      // landing); everything else gets the injected authenticated session (read-only either way).
+      ...(surface.noAuth ? {} : { storageState }),
       viewport: { width: viewportCfg.width, height: viewportCfg.height },
       isMobile: viewportCfg.isMobile,
       hasTouch: viewportCfg.hasTouch,
@@ -224,8 +332,20 @@ async function captureSurface(base, storageState, surface) {
     await page.goto(target, { waitUntil: "networkidle", timeout: 45000 });
 
     // Session-expiry / gate guard — never save a signed-out screen mislabeled as the surface.
+    // INVERTED for noAuth surfaces: /sign-in and /auth/denied ARE the targets there; instead the
+    // landed pathname must equal the requested route (a bounce = mislabeled capture = failure).
     const landed = page.url();
-    if (/\/sign-in/.test(landed) || /\/auth\/denied/.test(landed)) {
+    if (surface.noAuth) {
+      const wantPath = new URL(`${base}${surface.route}`).pathname;
+      const gotPath = new URL(landed).pathname;
+      if (gotPath !== wantPath) {
+        failures.push(
+          `${surface.key} [${vp}]: expected ${wantPath}, landed on ${gotPath} — signed-out render bounced.`,
+        );
+        await ctx.close();
+        continue;
+      }
+    } else if (/\/sign-in/.test(landed) || /\/auth\/denied/.test(landed)) {
       failures.push(
         `${surface.key} [${vp}]: gated route bounced to ${landed} — session missing/expired. Re-run capture-login.mjs.`,
       );
@@ -255,6 +375,38 @@ async function captureSurface(base, storageState, surface) {
 let browser;
 
 function writeIndex() {
+  const rows = captured.map(
+    (c) =>
+      `| \`${c.route}\` | ${c.state} | ${c.viewport} | ${c.source} | ${c.phase} | \`${c.file}\` |`,
+  );
+
+  // MERGE, never clobber: an existing INDEX.md keeps its header, prior rows, and everything after
+  // the table (the "Reading notes for Claude Design" section). New rows replace a same-file row
+  // in place or append after the last table row.
+  if (existsSync(indexPath)) {
+    const lines = readFileSync(indexPath, "utf8").split("\n");
+    const sepIdx = lines.findIndex((l) => /^\|\s*---/.test(l));
+    if (sepIdx !== -1) {
+      let end = sepIdx + 1;
+      while (end < lines.length && lines[end].startsWith("|")) end++;
+      const existing = lines.slice(sepIdx + 1, end);
+      const fileOf = (row) => (row.match(/`([^`]+\.png)`/) || [])[1];
+      const merged = existing.map((row) => {
+        const f = fileOf(row);
+        const replacement = rows.find((r) => fileOf(r) === f);
+        return replacement ?? row;
+      });
+      for (const r of rows) if (!merged.some((row) => fileOf(row) === fileOf(r))) merged.push(r);
+      writeFileSync(
+        indexPath,
+        [...lines.slice(0, sepIdx + 1), ...merged, ...lines.slice(end)].join("\n"),
+        "utf8",
+      );
+      console.log(`  · INDEX.md → merged ${rows.length} row(s) into ${merged.length}-row table`);
+      return;
+    }
+  }
+
   const header = [
     "# captures/ — INDEX",
     "",
@@ -266,10 +418,6 @@ function writeIndex() {
     "| Route | State | Viewport | Source | Phase | File |",
     "| --- | --- | --- | --- | --- | --- |",
   ];
-  const rows = captured.map(
-    (c) =>
-      `| \`${c.route}\` | ${c.state} | ${c.viewport} | ${c.source} | ${c.phase} | \`${c.file}\` |`,
-  );
   writeFileSync(indexPath, header.concat(rows, "").join("\n"), "utf8");
   console.log(`  · INDEX.md → ${captured.length} row(s)`);
 }
@@ -277,20 +425,29 @@ function writeIndex() {
 async function main() {
   const base = baseUrl();
   const only = selectedKeys();
-  const surfaces = SURFACES.filter((s) => s.active && (!only || only.includes(s.key)));
+  const surfaces = SURFACES.filter(
+    (s) => s.active && (!only || only.includes(s.key)) && (!noAuthOnly || s.noAuth),
+  );
 
-  if (!existsSync(statePath)) {
-    console.log(`FAILED: no session at ${statePath}.`);
-    console.log("Run the one-time bootstrap first:  node apps/web/scripts/capture-login.mjs");
-    process.exit(1);
-  }
-  const storageState = JSON.parse(readFileSync(statePath, "utf8"));
-  // An empty/authless state file means the login bootstrap saved a signed-out context (seen once:
-  // a URL-probe race against the streamed client-side gate redirect). Fail before burning a run.
-  if (!(storageState.cookies || []).some((c) => /^sb-.+-auth-token/.test(c.name))) {
-    console.log(`FAILED: session at ${statePath} has no Supabase auth cookie (signed-out state).`);
-    console.log("Re-run the bootstrap:  node apps/web/scripts/capture-login.mjs");
-    process.exit(1);
+  // The session is required only when an AUTHED surface is selected — the signed-out set runs
+  // in a no-state context and must not demand (or touch) the blessed session.
+  let storageState = null;
+  if (surfaces.some((s) => !s.noAuth)) {
+    if (!existsSync(statePath)) {
+      console.log(`FAILED: no session at ${statePath}.`);
+      console.log("Run the one-time bootstrap first:  node apps/web/scripts/capture-login.mjs");
+      process.exit(1);
+    }
+    storageState = JSON.parse(readFileSync(statePath, "utf8"));
+    // An empty/authless state file means the login bootstrap saved a signed-out context (seen once:
+    // a URL-probe race against the streamed client-side gate redirect). Fail before burning a run.
+    if (!(storageState.cookies || []).some((c) => /^sb-.+-auth-token/.test(c.name))) {
+      console.log(
+        `FAILED: session at ${statePath} has no Supabase auth cookie (signed-out state).`,
+      );
+      console.log("Re-run the bootstrap:  node apps/web/scripts/capture-login.mjs");
+      process.exit(1);
+    }
   }
 
   if (!surfaces.length) {

@@ -22,7 +22,6 @@
  * The saved session expires (Supabase refresh-token lifetime). Re-run this helper when capture-screens
  * reports a session-expired redirect.
  */
-/* eslint-disable no-undef */
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
