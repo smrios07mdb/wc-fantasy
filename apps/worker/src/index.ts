@@ -6,6 +6,7 @@
  */
 import { config } from "./config";
 import { log } from "./logger";
+import { sentryCaptureException, sentryFlush } from "./sentry";
 import { startScheduler } from "./scheduler";
 import { startDraftTicker } from "./draft";
 import { notifyStore, draftStore } from "./wiring";
@@ -48,13 +49,19 @@ function main(): void {
     log.info("worker.shutdown", { reason });
     scheduler.stop();
     draftTicker.stop();
-    process.exit(code);
+    // HARD-1 F-A01: drain buffered Sentry events (≤2s; an immediate no-op when SENTRY_DSN is unset,
+    // so shutdown timing is unchanged wherever Sentry is off) before exiting. `sentryFlush` never
+    // rejects, and the exit code is passed through untouched.
+    void sentryFlush().finally(() => process.exit(code));
   }
 
   process.on("SIGINT", () => shutdown("SIGINT", 0));
   process.on("SIGTERM", () => shutdown("SIGTERM", 0));
   process.on("uncaughtException", (err) => {
     log.error("worker.uncaughtException", { message: err.message });
+    // HARD-1 F-A01: the fatal crash is the one event that must reach Sentry WITH its stack — capture
+    // the real Error (never throws) before shutdown()'s flush-and-exit.
+    sentryCaptureException(err);
     shutdown("uncaughtException", 1);
   });
 

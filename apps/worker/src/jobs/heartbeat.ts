@@ -101,8 +101,12 @@ type PingFn = typeof ping;
  * practice; it exists so a hypothetical contract violation can neither escape into the job path nor
  * suppress a sibling signal. Normal network failures are caught and logged INSIDE `ping` and never
  * reach here, so this does not double-log them.
+ *
+ * Exported for the scheduler's per-tick dead-man switch (HARD-1 F-A02), which reuses this exact
+ * double-wrapped, swallow-all contract so the liveness ping is provably incapable of perturbing or
+ * failing the tick.
  */
-async function safePing(
+export async function safePing(
   pingImpl: PingFn,
   url: string | undefined,
   opts: PingOptions,

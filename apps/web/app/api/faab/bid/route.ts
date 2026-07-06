@@ -19,6 +19,7 @@
  * equal the session manager) — RLS is the defence-in-depth backstop for any future JWT-scoped reads.
  */
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@app/db";
 import { createPrismaFaabBidStore } from "@app/faab/prisma";
 import { getSessionManager } from "@/lib/auth/manager";
@@ -89,23 +90,47 @@ function deps() {
   };
 }
 
+/**
+ * HARD-1 F-A01: a handler/store throw (DB down, pooler exhausted) was an opaque, unrecorded
+ * Next.js 500. Capture with the route tag + write a structured server log, then RETHROW — the
+ * response the client sees is byte-identical to before (no swallowing). Sentry marks the captured
+ * Error, so the instrumentation-level `onRequestError` does not report it a second time.
+ */
+function reportRouteError(method: string, err: unknown): never {
+  Sentry.captureException(err, { tags: { route: "api/faab/bid", method } });
+  console.error(`[api.faab.bid] ${method} handler threw:`, err);
+  throw err;
+}
+
 export async function POST(request: Request) {
   const body = parseSubmit(await request.json().catch(() => null));
   if (!body) return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  const result = await handleSubmitBid(deps(), body);
-  return NextResponse.json(result.body, { status: result.status });
+  try {
+    const result = await handleSubmitBid(deps(), body);
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (err) {
+    reportRouteError("POST", err);
+  }
 }
 
 export async function PATCH(request: Request) {
   const body = parseEdit(await request.json().catch(() => null));
   if (!body) return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  const result = await handleEditBid(deps(), body);
-  return NextResponse.json(result.body, { status: result.status });
+  try {
+    const result = await handleEditBid(deps(), body);
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (err) {
+    reportRouteError("PATCH", err);
+  }
 }
 
 export async function DELETE(request: Request) {
   const body = parseCancel(await request.json().catch(() => null));
   if (!body) return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  const result = await handleCancelBid(deps(), body);
-  return NextResponse.json(result.body, { status: result.status });
+  try {
+    const result = await handleCancelBid(deps(), body);
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (err) {
+    reportRouteError("DELETE", err);
+  }
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   ping,
+  safePing,
   reportPeriodCloseSuccess,
   reportPeriodCloseFailure,
   type FetchLike,
@@ -252,5 +253,44 @@ describe("reportPeriodCloseFailure — the immediate /fail crash signal", () => 
     await expect(
       reportPeriodCloseFailure({ heartbeatUrl: URL_HB }, pingImpl),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("safePing — exported for the scheduler's per-tick dead-man switch (HARD-1 F-A02)", () => {
+  it("delegates to the ping impl with the URL + opts", async () => {
+    const pingImpl = vi.fn<typeof ping>(async () => {});
+
+    await expect(
+      safePing(pingImpl, URL_HB, { label: "worker.tick.liveness" }),
+    ).resolves.toBeUndefined();
+
+    expect(pingImpl).toHaveBeenCalledTimes(1);
+    expect(pingImpl).toHaveBeenCalledWith(URL_HB, { label: "worker.tick.liveness" });
+  });
+
+  it("swallows a contract-violating async rejection (can never fail the tick) and warns", async () => {
+    const pingImpl = vi.fn<typeof ping>(async () => {
+      throw new Error("ping exploded");
+    });
+
+    await expect(safePing(pingImpl, URL_HB, { label: "t" })).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("swallows a SYNCHRONOUS throw from the ping impl (never escapes into the tick path)", async () => {
+    const pingImpl = vi.fn<typeof ping>(() => {
+      throw new Error("sync explosion");
+    });
+
+    await expect(safePing(pingImpl, URL_HB, { label: "t" })).resolves.toBeUndefined();
+  });
+
+  it("passes an unset URL through untouched — ping no-ops it (unset env var = signal off)", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => ({ ok: true, status: 200 }));
+
+    await expect(safePing(ping, undefined, { fetchImpl, label: "t" })).resolves.toBeUndefined();
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

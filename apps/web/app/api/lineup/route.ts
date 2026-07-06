@@ -6,6 +6,7 @@
  * this thin wrapper just parses the body, builds the real deps, and maps the result to a NextResponse.
  */
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@app/db";
 import { createPrismaLineupStore } from "@app/lineup/prisma";
 import { getSessionManager } from "@/lib/auth/manager";
@@ -40,10 +41,19 @@ export async function POST(request: Request) {
   const body = parseBody(await request.json().catch(() => null));
   if (!body) return NextResponse.json({ error: "bad_request" }, { status: 400 });
 
-  const store = createPrismaLineupStore(prisma);
-  const result = await handleSetLineup(
-    { resolveManager: getSessionManager, store, now: new Date() },
-    body,
-  );
-  return NextResponse.json(result.body, { status: result.status });
+  try {
+    const store = createPrismaLineupStore(prisma);
+    const result = await handleSetLineup(
+      { resolveManager: getSessionManager, store, now: new Date() },
+      body,
+    );
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (err) {
+    // HARD-1 F-A01: capture + structured log, then RETHROW — the opaque 500 the client saw before is
+    // byte-identical; it just stops being unrecorded. Sentry marks the captured Error, so the
+    // instrumentation-level `onRequestError` does not report it a second time.
+    Sentry.captureException(err, { tags: { route: "api/lineup", method: "POST" } });
+    console.error("[api.lineup] POST handler threw:", err);
+    throw err;
+  }
 }

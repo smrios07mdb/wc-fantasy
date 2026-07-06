@@ -23,6 +23,13 @@ function boolEnv(name: string): boolean {
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   logLevel: (process.env.LOG_LEVEL ?? "info") as "debug" | "info" | "warn" | "error",
+  /** Sentry DSN (HARD-1 F-A01). Unset ⇒ error tracking is off: init is skipped and every capture is
+   *  a no-op — the worker is behaviorally byte-identical. sync:false; set in the Render dashboard. */
+  sentryDsn: process.env.SENTRY_DSN,
+  /** Healthchecks.io-style ping URL for the RESIDENT worker's per-tick dead-man switch (HARD-1
+   *  F-A02). A SEPARATE check from PERIOD_CLOSE_HEARTBEAT_URL — that one watches the hourly cron;
+   *  this one watches the ~60s scheduler tick. Unset ⇒ the signal is silently off. */
+  workerTickHeartbeatUrl: process.env.WORKER_TICK_HEARTBEAT_URL,
   /** No-op scheduler tick interval (ms). The live ~60s poll cadence lands in a later prompt. */
   tickMs: intEnv("WORKER_TICK_MS", 60_000),
   /** When set, stop + exit cleanly after this many ticks (used by smoke tests / CI). */

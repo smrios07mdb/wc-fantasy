@@ -54,10 +54,21 @@ services:
     # reads the datasource `directUrl` (DIRECT_URL, :5432) — the txn pooler cannot carry migrations.
     preDeployCommand: pnpm db:migrate:deploy
     startCommand: pnpm --filter @app/web start
+    # LIVENESS only (HARD-1 F-A09/F-A16 resolution): Render restarts the service on a failing
+    # healthCheckPath, so it must stay the dependency-free /api/health — pointing it at a DB-touching
+    # probe would restart-loop the web service on a Supabase blip. READINESS lives at GET /api/db-check
+    # (connectivity + right-schema, 503 on failure): wire THAT to an EXTERNAL HTTP monitor
+    # (UptimeRobot-style, expect 200) so a wrong-DB deploy or lost Postgres pages the operator instead
+    # of triggering restarts. db-check must NEVER be set as healthCheckPath.
     healthCheckPath: /api/health
     envVars:
       - fromGroup: wc-fantasy-shared
       - key: DATABASE_URL # pooled (PgBouncer, Supabase :6543) — app runtime
+        sync: false
+      # Server-side error tracking (HARD-1 F-A01). Unset ⇒ Sentry is off and the app is behaviorally
+      # byte-identical. sync:false — Sergio sets the real DSN in the Render dashboard (same var name on
+      # web + worker + crons; one shared Sentry project or per-service values, dashboard choice).
+      - key: SENTRY_DSN
         sync: false
       - key: DIRECT_URL # direct/session pooler (:5432) — Prisma Migrate (preDeployCommand)
         sync: false
@@ -100,6 +111,17 @@ services:
         sync: false
       # No Supabase keys here: the worker connects via Prisma as the table-owning role and BYPASSES RLS
       # (Theme F) — it never uses the anon/service-role key.
+      # Server-side error tracking (HARD-1 F-A01): worker logger warn/error + package console signals
+      # ship to Sentry. Unset ⇒ off, worker byte-identical. See the web service's SENTRY_DSN note.
+      - key: SENTRY_DSN
+        sync: false
+      # Resident-worker dead-man switch (HARD-1 F-A02): one liveness ping per completed scheduler tick.
+      # Point at a NEW Healthchecks.io check (expected period ≈ the 60s tick; grace ≈ 3–5 min) —
+      # SEPARATE from PERIOD_CLOSE_HEARTBEAT_URL (that one watches the hourly cron; this one the
+      # resident worker's event loop). A hung/crashed worker stops pinging and the monitor alerts.
+      # Unset ⇒ the signal is silently off and the tick is byte-identical.
+      - key: WORKER_TICK_HEARTBEAT_URL
+        sync: false
       - key: BALLDONTLIE_API_KEY
         sync: false
       - key: BALLDONTLIE_BASE_URL
@@ -178,6 +200,10 @@ services:
         sync: false
       - key: PERIOD_CLOSE_ATTENTION_URL
         sync: false
+      # Error tracking (HARD-1 F-A01): the job logs through the same worker logger, so warn/error ship
+      # to Sentry when set. Unset ⇒ off, byte-identical. See the web service's SENTRY_DSN note.
+      - key: SENTRY_DSN
+        sync: false
 
   # ── Cron: group-standings refresh (T18 — game-detail Standings tab) ──────────────────────────────
   # Daily re-pull of the WC `group_standings` table so the Standings tab reflects the latest positions /
@@ -199,6 +225,9 @@ services:
     envVars:
       - fromGroup: wc-fantasy-shared
       - key: DATABASE_URL # pooled (:6543) — runtime
+        sync: false
+      # Error tracking (HARD-1 F-A01): same worker logger → Sentry wiring as the period-close cron.
+      - key: SENTRY_DSN
         sync: false
       - key: BALLDONTLIE_API_KEY
         sync: false

@@ -135,13 +135,28 @@ async function settleAppliedResponse(args: {
   let auditPending = false;
   try {
     auditId = (await deps.store.recordAudit(audit)).id;
-  } catch {
+  } catch (err) {
+    // HARD-1 F-A05: record the swallowed ledger failure server-side (response behavior unchanged —
+    // the full payload is still surfaced below). Reaches Render logs AND Sentry via the web
+    // instrumentation's console capture; this module stays framework-agnostic (no Sentry import).
+    console.error(
+      "[commish.rosterRepair] audit-ledger write failed — returning auditPending:",
+      err,
+    );
     auditPending = true; // the mutation is durable; surface the full payload below
   }
   let restatePending = false;
   try {
     await deps.restate(args.managerId, args.restatePeriodIds);
-  } catch {
+  } catch (err) {
+    // HARD-1 F-A05: `deps.restate` is createCommishRestate — the ONLY path that recomputes a frozen
+    // period (allowFrozen). A silent failure here leaves the leaderboard stale with zero operator
+    // signal; record it server-side (response behavior unchanged).
+    console.error(
+      `[commish.rosterRepair] post-commit restate failed for manager=${args.managerId}` +
+        " — returning restatePending:",
+      err,
+    );
     restatePending = true;
   }
   return {

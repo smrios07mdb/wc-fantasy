@@ -32,6 +32,7 @@
     "@app/recompute": "workspace:*",
     "@app/scoring": "workspace:*",
     "@app/shared": "workspace:*",
+    "@sentry/node": "^10.63.0",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {

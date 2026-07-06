@@ -155,8 +155,17 @@ async function fireRescore(
   try {
     const { scored } = await rescore(matchId, playerId);
     return { scored, restatePending: false };
-  } catch {
+  } catch (err) {
     // The row + audit already committed above; only the derived re-score failed. Surface it, don't 500.
+    // HARD-1 F-A05: also record the swallowed error server-side — for a FROZEN period this re-score is
+    // the ONLY restate path, so a repeated silent failure leaves the leaderboard stale with zero
+    // operator signal. console.error reaches Render logs AND Sentry (the web instrumentation captures
+    // console errors); this module stays framework-agnostic (no Sentry import) by design.
+    console.error(
+      `[commish.statCorrection] post-commit re-score failed for match=${matchId} player=${playerId}` +
+        " — returning restatePending:",
+      err,
+    );
     return { scored: false, restatePending: true };
   }
 }

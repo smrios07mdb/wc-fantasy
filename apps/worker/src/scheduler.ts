@@ -17,7 +17,8 @@ import { dispatchFaabBatches } from "./faab/dispatch";
 import { dispatchPeriodStatusAdvance } from "./period/dispatch";
 import { dispatchTeamElimination } from "./elimination/dispatch";
 import { dispatchAutoFireCut } from "./autofire/dispatch";
-import { runRecomputeSweep } from "./recompute";
+import { runRecomputeSweep, countDirtyBacklog } from "./recompute";
+import { ping, safePing } from "./jobs/heartbeat";
 import {
   decideMatchModes,
   pollerSilentMatches,
@@ -221,11 +222,24 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
       }
 
       const result = await runRecomputeSweep();
-      log.debug("scheduler.swept", { ...result });
+      // info, not debug (HARD-1 F-A03): prod runs LOG_LEVEL=info, so at debug the SweepResult never
+      // reached the logs and "did recompute run / what did it do?" was unanswerable in prod.
+      log.info("scheduler.swept", { ...result });
       // Aggregate signal: per-key errors are logged by runRecomputeSweep's onPlayerMatchError; this is the
       // one-line "N player-matches failed and were re-dirtied for retry this tick" alert for monitoring.
       if (result.playerMatchFailures > 0) {
         log.warn("recompute.player_match.failures", { count: result.playerMatchFailures });
+      }
+
+      // Dirty-backlog gauge (HARD-1 F-A03): read-only counts of what is still queued AFTER this
+      // sweep (re-dirtied poison rows + writes that landed mid-sweep). Unconditional at info — a
+      // gauge that only logs when non-zero cannot prove "keeping up, backlog zero". Its own
+      // try/catch: observational, must never starve the tick.
+      try {
+        const backlog = await countDirtyBacklog();
+        log.info("recompute.backlog", { ...backlog });
+      } catch (err) {
+        log.error("recompute.backlog.error", { message: (err as Error).message });
       }
 
       // Per-period FAAB batch (Theme D "per-matchday acquisition window" amendment): clear every period
@@ -333,6 +347,13 @@ export function startScheduler(onDrained?: () => void): SchedulerHandle {
     } catch (err) {
       log.error("scheduler.tick.error", { message: (err as Error).message });
     } finally {
+      // Resident-worker dead-man switch (HARD-1 F-A02): one fire-and-forget liveness ping per
+      // COMPLETED tick. Deliberately inside tick(), not the interval callback — a hung await keeps
+      // `running` true, the overlap guard returns before this line, and the pings STOP, which is
+      // exactly the silence the external monitor alerts on. `safePing(ping, …)` is double-wrapped
+      // and never throws or rejects (heartbeat.ts invariant), and it is not awaited — provably
+      // incapable of perturbing or failing the tick. Unset URL ⇒ silent no-op.
+      void safePing(ping, config.workerTickHeartbeatUrl, { label: "worker.tick.liveness" });
       running = false;
       ticks += 1;
       if (config.maxTicks !== null && ticks >= config.maxTicks) {
