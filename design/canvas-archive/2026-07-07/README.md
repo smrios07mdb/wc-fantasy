@@ -20,10 +20,13 @@ pending DEC-0 ratification (D1–D8 decision sheet).
 - `t12/` — two captures of the unratified badge-sheet chapter:
   `12a-badge-sheet.png` (36 badges + construction rules),
   `12b-flip.png` (size ramp, registry flip, changelog).
-- `/DESIGN_QA_turns1-10.md` (repo root) — read-only audit of canvas
-  turns 1–10 as read pre-flip; the dated record of the pre-t12 state.
-- `SHA256SUMS` (repo root of this drop) — integrity manifest, generated
-  and verified at packaging time.
+- `DESIGN_QA_turns1-10.md` (this directory; relocated from repo root,
+  content byte-identical, original landing a55ad2f) — read-only audit
+  of canvas turns 1–10 as read pre-flip; the dated record of the
+  pre-t12 state.
+- `SHA256SUMS` (this directory; relocated from repo root, content
+  byte-identical, original landing a55ad2f) — integrity manifest,
+  generated and verified at packaging time.
 
 Pre-flip t10 canvas version: not captured. The Design artifact's version
 history may hold one; if ever retrieved, add it here as
