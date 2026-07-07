@@ -37,7 +37,13 @@ mkdirSync(capturesDir, { recursive: true });
 const VIEWPORTS = {
   "mobile-360": { width: 360, height: 800, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
   "mobile-390": { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 3 },
-  "desktop-1440": { width: 1440, height: 900, isMobile: false, hasTouch: false, deviceScaleFactor: 1 },
+  "desktop-1440": {
+    width: 1440,
+    height: 900,
+    isMobile: false,
+    hasTouch: false,
+    deviceScaleFactor: 1,
+  },
 };
 
 // ── Surface manifest ────────────────────────────────────────────────────────────────────────────
@@ -176,10 +182,9 @@ const SURFACES = [
 
 function baseUrl() {
   const arg = process.argv.find((a) => a.startsWith("--base="));
-  return (arg ? arg.split("=")[1] : process.env.CAPTURE_BASE_URL || "https://wc-fantasy-web.onrender.com").replace(
-    /\/$/,
-    "",
-  );
+  return (
+    arg ? arg.split("=")[1] : process.env.CAPTURE_BASE_URL || "https://wc-fantasy-web.onrender.com"
+  ).replace(/\/$/, "");
 }
 
 function selectedKeys() {
@@ -262,7 +267,8 @@ function writeIndex() {
     "| --- | --- | --- | --- | --- | --- |",
   ];
   const rows = captured.map(
-    (c) => `| \`${c.route}\` | ${c.state} | ${c.viewport} | ${c.source} | ${c.phase} | \`${c.file}\` |`,
+    (c) =>
+      `| \`${c.route}\` | ${c.state} | ${c.viewport} | ${c.source} | ${c.phase} | \`${c.file}\` |`,
   );
   writeFileSync(indexPath, header.concat(rows, "").join("\n"), "utf8");
   console.log(`  · INDEX.md → ${captured.length} row(s)`);
@@ -296,7 +302,9 @@ async function main() {
   try {
     ({ chromium } = await import("@playwright/test"));
   } catch {
-    console.log("FAILED: playwright not installed (run from apps/web where @playwright/test resolves).");
+    console.log(
+      "FAILED: playwright not installed (run from apps/web where @playwright/test resolves).",
+    );
     process.exit(1);
   }
 

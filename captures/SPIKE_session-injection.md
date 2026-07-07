@@ -55,7 +55,7 @@ Run against `https://wc-fantasy-web.onrender.com`, no real session:
    requires the injected session; an unauthenticated shot would be the wrong screen).
 3. **No-session guard** — `capture-screens.mjs` with no `state.json` exits 1 with the bootstrap
    instruction, writes nothing.
-4. **Injection + expiry-guard path** — with a *dummy invalid* `state.json`, the harness injected the
+4. **Injection + expiry-guard path** — with a _dummy invalid_ `state.json`, the harness injected the
    cookie, navigated prod `/lineup` at all three viewports, detected the bounce to `/sign-in`, failed
    loudly per viewport, and saved **zero** PNGs. Every line of the mechanism ran except "real data
    renders."
@@ -81,5 +81,5 @@ session-expired bounce (Supabase refresh-token lifetime).
 The Wave-1 remainder (`/vsfield` ladder + H2H XIs, `/players` table, `/games/[id]` Lineups pitch,
 `/waivers` KitChips, `/draft` board, `/pool` flags — manifest §6) drops in as additional `active`
 entries once these three samples pass Sergio's eyeball. States that need a tap-to-open sheet
-(FaPlayerCardSheet, KOSheet H2H, FormationPicker) will read-only `.click()` a *disclosure* control
+(FaPlayerCardSheet, KOSheet H2H, FormationPicker) will read-only `.click()` a _disclosure_ control
 only — still no write — and are added deliberately, not by default.

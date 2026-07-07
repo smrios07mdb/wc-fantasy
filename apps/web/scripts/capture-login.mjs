@@ -35,10 +35,9 @@ mkdirSync(authDir, { recursive: true });
 
 function baseUrl() {
   const arg = process.argv.find((a) => a.startsWith("--base="));
-  return (arg ? arg.split("=")[1] : process.env.CAPTURE_BASE_URL || "https://wc-fantasy-web.onrender.com").replace(
-    /\/$/,
-    "",
-  );
+  return (
+    arg ? arg.split("=")[1] : process.env.CAPTURE_BASE_URL || "https://wc-fantasy-web.onrender.com"
+  ).replace(/\/$/, "");
 }
 
 async function main() {
@@ -48,7 +47,9 @@ async function main() {
   try {
     ({ chromium } = await import("@playwright/test"));
   } catch {
-    console.log("FAILED: playwright not installed (run from apps/web where @playwright/test resolves).");
+    console.log(
+      "FAILED: playwright not installed (run from apps/web where @playwright/test resolves).",
+    );
     process.exit(1);
   }
 
@@ -57,9 +58,15 @@ async function main() {
   const page = await context.newPage();
 
   console.log(`\nOpening ${base}/sign-in in a visible browser.`);
-  console.log("→ Request a magic link there, then open the emailed link IN THAT WINDOW (paste the URL");
-  console.log("  into its address bar — a link clicked in your mail app lands in the wrong browser).");
-  console.log("→ No keyboard input needed here: I probe a gated route every 5s and save automatically.\n");
+  console.log(
+    "→ Request a magic link there, then open the emailed link IN THAT WINDOW (paste the URL",
+  );
+  console.log(
+    "  into its address bar — a link clicked in your mail app lands in the wrong browser).",
+  );
+  console.log(
+    "→ No keyboard input needed here: I probe a gated route every 5s and save automatically.\n",
+  );
   await page.goto(`${base}/sign-in`, { waitUntil: "domcontentloaded", timeout: 60000 });
 
   // Poll for the session instead of prompting. The probe runs in its own tab (cookies are shared
@@ -67,7 +74,9 @@ async function main() {
   const deadline = Date.now() + 15 * 60 * 1000;
   for (;;) {
     if (Date.now() > deadline) {
-      console.log("FAILED: no authenticated session appeared within 15 minutes. Re-run to try again.");
+      console.log(
+        "FAILED: no authenticated session appeared within 15 minutes. Re-run to try again.",
+      );
       await browser.close();
       process.exit(1);
     }
