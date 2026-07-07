@@ -3903,3 +3903,12 @@ All eight ratified as recommended (chat record 2026-07-07); settle applied by De
 - Spawned: NAV-R3 · ERR-D6B (both in BACKLOG.md).
 Process rules reaffirmed: audits receive static exports, never the live artifact; design fixes ship only through a ratified settle; canvas-archive is verbatim and format-gate-ignored.
 ADDENDUM (re-run): v5-settle/ archived EXCLUDING assets/crests/ucl/** — content classification found pictorial real-club marks (ars, ata, atm, avl, bar, bay, ben, bol, bre, bvb, cel, clu, czv, din, fey, gir, int, juv, lev, lil, liv, mci, mil, mon, psg, psv, rbl, rma, sal, scp, shk, spr, stg, stu, svb, ybo); excluded pending licensing-posture review; Design corrective required (11c renders real clubs as monograms only). The archive-anchor line above reads accordingly.
+
+---
+CORRECTION + CLOSURE (2026-07-07, corrective run):
+- Correction to the D7 note above: at the t12 snapshot badges were NOT procedural — the canvas file-references external SVGs (assets/crests|kits; 107 .svg refs). The "zero asset URLs (verified)" claim was a verification error: greps targeted the crestUrl field name and inline <svg> tags, not literal src paths. t12-era asset files were never captured; v5-settle-corrected assets are the nearest-equivalent set. FL-1 (oppCrestSrc null mechanism) and MG-4 (luma formula) verifications stand unaffected.
+- POSTURE-UCL1 CLOSED: Design corrective deleted uclTier/uclBadgeTier, uclSheet, uclTierLabel, the t13 interim-tier comment, and all pictorial real-club definitions (all verified pre-existing at t12 — settle and corrective ran scope-clean); uAt returns crestSrc:null unconditionally, so real clubs monogram through the locked 1d/3b chain in all states; ucl36 name/short/color registry retained (names are feed data). Pictorial files: ~/Downloads copy destroyed this run; Design-workspace deletion sanctioned separately.
+- ERR-D6B CLOSED: all ≥20px char-rule strings → ≥24px; 6a desktop rows + 9a hero → 3ch at 24px; stale 809 annotation rewritten.
+- Corrected bundle archived at design/canvas-archive/2026-07-07/v5-settle-corrected/ (58 files, gates passed). First v5-settle/ archive stands as the historical record, including its documented unresolvable ucl refs.
+- Process note (two confirmed instances): verification greps must target literal reference forms (src paths, bare tokens), not just field names, tags, or assumed formats — absence of a pattern is not absence of the thing.
+---

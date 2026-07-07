@@ -193,5 +193,5 @@ Earlier:
 - FAAB live-unowned free agency (`587b3ad`).
 
 - NAV-R3 — MoreSheet "Browse players" hardcoded outside MORE_SHEET_ITEMS (MoreSheet.tsx:114; ROUTES_TRUTH @ 9c16e3b). Fold into the UCL-4 nav pass.
-- ERR-D6B — D6b stragglers in canvas post-settle: t11 resolver + sub-caption "3ch≥20px" strings; 6a desktop rows + 9a hero at 24px render 2ch; one stale "post-review" annotation (Design ref "809"). Fold into the next sanctioned Design turn.
-- POSTURE-UCL1 — v5 export shipped pictorial real-club svgs (classification table in re-run report); Sergio call: destroy vs hold locally; Design corrective for 11c rendering path. BLOCKS: any public capture of 11c.
+- ERR-D6B — D6b stragglers in canvas post-settle: t11 resolver + sub-caption "3ch≥20px" strings; 6a desktop rows + 9a hero at 24px render 2ch; one stale "post-review" annotation (Design ref "809"). Fold into the next sanctioned Design turn. — CLOSED 2026-07-07 @ <pending-sha>: resolved by Design corrective, archived under v5-settle-corrected/.
+- POSTURE-UCL1 — v5 export shipped pictorial real-club svgs (classification table in re-run report); Sergio call: destroy vs hold locally; Design corrective for 11c rendering path. BLOCKS: any public capture of 11c. — CLOSED 2026-07-07 @ <pending-sha>: resolved by Design corrective, archived under v5-settle-corrected/.

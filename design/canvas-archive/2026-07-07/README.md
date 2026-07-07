@@ -8,9 +8,13 @@ pending DEC-0 ratification (D1–D8 decision sheet).
 ## Contents
 
 - `club-identity-system_t12.dc.html` — Claude Design canvas, turns 1–12,
-  as rewritten by the t11/t12 session (t12 is the on-disk tip). Badges
-  are procedural — rendered by the canvas construction system; no binary
-  crest assets exist anywhere in the arc.
+  as rewritten by the t11/t12 session (t12 is the on-disk tip). Badge/kit
+  artwork is file-referenced (assets/crests, assets/kits — 107 .svg refs
+  in this canvas); t12-era asset files were never captured, so this
+  record's image refs do not resolve. Nearest equivalents:
+  v5-settle-corrected/assets (the settle made no badge-art edits). This
+  t12 record also carries the since-removed uclTier→assets/crests/ucl
+  path — see v5-settle-corrected/ and DECISIONS D-IDR.
 - `handoff-spec_v4.dc.html` — Handoff Spec v4, synced to canvas t10.
   Pre-dates t11/t12; verified free of t11/t12 content.
 - `t11/` — four captures of the unratified consolidation chapter:
@@ -27,6 +31,10 @@ pending DEC-0 ratification (D1–D8 decision sheet).
 - `SHA256SUMS` (this directory; relocated from repo root, content
   byte-identical, original landing a55ad2f) — integrity manifest,
   generated and verified at packaging time.
+- `v5-settle/` — first settle export, archived minus excluded ucl/
+  artwork; superseded.
+- `v5-settle-corrected/` — posture-corrected export (POSTURE-UCL1 +
+  ERR-D6B applied); current.
 
 Pre-flip t10 canvas version: not captured. The Design artifact's version
 history may hold one; if ever retrieved, add it here as

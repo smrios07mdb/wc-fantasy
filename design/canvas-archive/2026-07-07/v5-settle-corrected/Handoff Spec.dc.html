@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<style>
+body{margin:0;background:#0A0D14;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#D7DCE7}
+a{color:#7FB0FF;text-decoration:none} a:hover{color:#AFCBFF;text-decoration:underline}
+@media print { body{background:#fff;color:#111} }
+</style>
+</helmet>
+<div style="max-width:860px;margin:0 auto;padding:48px 36px 80px;display:flex;flex-direction:column;gap:34px">
+
+<header style="border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:22px">
+  <div style="font:600 10px ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#7FB0FF;margin-bottom:8px">UCL-4 · WINDOW B · DESIGN HANDOFF · v5 — SYNCED TO CANVAS TURN 12 · RATIFICATION SETTLE (2026-07-07 · SERGIO · D1–D8)</div>
+  <h1 style="margin:0 0 8px;font:700 26px/1.2 system-ui">Club identity system — build spec</h1>
+  <p style="margin:0;font:400 13px/1.6 system-ui;color:#8B93A7">Replaces the flag-color kit generator (F-D08). <b style="color:#D7DCE7">v5 is the ratification settle (2026-07-07): D1–D8 adopted — t11 consolidation + t12 badge system enter the contract; MG-4/MG-1 errata fixed; chrome roles extended; the R1 IA and the §11 aggregate ban resolve as below.</b> Beneath it, v4's chapter settle stands: three canvas chapters in the contract — the <b style="color:#D7DCE7">manager knockout</b> (t8: two league-selectable formats, ManagerKONode + the node-name collision resolved, §6.2), the <b style="color:#D7DCE7">player chapter</b> (t9: card + /players + four states, the two-layer statline rule, §7.1), and the <b style="color:#D7DCE7">waivers chapter</b> (t10: composer + queue + lifecycle as a visual contract, §9.1) — with their open rules recorded as <b style="color:#F5A623">open</b>, not resolved into the spec: the five FAAB semantics are DEC-0 gates (§11), the 4a guard stays <b style="color:#F5A623">HOLD</b> (§10), UCL-1 <span style="font-family:ui-monospace,Menlo,monospace">appearance.clubId</span> and the P52 label source stay data-gated. The round=leg / round=tie fork is narrowed: settled for the fantasy knockout (one aggregate per two-GW round), surviving only for UCL-football-backdrop surfaces (§11). Rails unchanged and confirmed: cobalt <span style="font-family:ui-monospace,Menlo,monospace">#4D8DFF</span>, base <span style="font-family:ui-monospace,Menlo,monospace">#0A0D14</span>, <span style="font-family:ui-monospace,Menlo,monospace">surface.base</span> pin #0A0D12, crest.floor 16, gold only in trophy contexts. Coverage grows eight → thirteen → <b style="color:#D7DCE7">fifteen</b> applied surfaces (v5, §9). Visuals: <a href="Club Identity System.dc.html">canvas</a>.</p>
+</header>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">1 · Tokens</h2>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// identity.tokens — additive to the existing dark shell.
+// v2: rails re-pinned to BRAND.md (#4D8DFF cobalt, #0A0D14 base).
+// v3: rails confirmed; surface.base pinned #0A0D12 (below); chrome refs
+//     re-classed as swap-in inputs (HOLD, §10).
+kit.size:    16 (inline text) · 22 (list row) · 32 (bench) · 44 (pitch mobile)
+             56 (pitch desktop) · 96 (detail/anatomy)
+crest.size:  16 (chips/badges/trigger, events timeline — the floor edge)
+             18 (bracket node, matchday-module row) · 20 (row &lt;420, feed,
+             /pool mobile) · 24 (list row, sheet row, /pool desktop)
+             32 (page header) · 44–48 (match header, §8; the 40px case
+             is the 6c plinth header ONLY — SZ-2)
+crest.floor: 16            // LOCKED (canvas 3b) — below 16px the resolver
+                           // renders the monogram, ALWAYS, even when crestUrl
+                           // is set. Slots that were 14–15px either monogram
+                           // or grew to 16 (see §8).
+kit.dim:     0.45          // to-play / not-locked; tweakable 0.25–0.7
+crest.dimFloor: 0.55       // crest opacity = max(kit.dim, .55) — token math,
+                           // not convention (canvas 4a); kit + text follow kit.dim
+crest.plinth: rgba(255,255,255,.07) roundel, 1.33× crest slot — auto when the
+             asset's edge-luminance &lt; .16 (ingest-computed, §10; monograms exempt)
+surface.base: #0A0D12   // v3 PIN (canvas 5a) — the BRAND.md manifest PAGE value.
+                        // The plinth sink-check luminance threshold computes
+                        // against THIS token, NOT the #0A0D14 radial floor the
+                        // canvas mocks happen to sit on.
+ring.select: 0 0 0 2px #4D8DFF, radius 10
+ring.focus:  outline 2px #4D8DFF, offset 2px   // keyboard only (:focus-visible)
+mono.ring:   inset 0 0 0 1px rgba(255,255,255,.14)   // ≥16px only (v5, MG-2)
+badge.ring:  0 0 0 2px &lt;surface bg&gt;           // avatar crest badge cutout
+zone.direct: #4D8DFF (top 8)
+zone.playoff: slate — rgba(255,255,255,.25) divider + slate tag (9–24)
+             // NOT amber: gold-adjacent chrome is banned by the rail re-pin
+
+chrome.reserved — never club-tinted (canvas 4a, guard in §10):
+  --interactive   #4D8DFF   interactive · selection · links
+  --success       #2EC27E   success · synced · form-W
+  --live          #E5484D   live · loss · form-L
+  --locked/slate  #8B93A7   tags · neutral states
+  // v3: the four references above are SWAP-IN INPUTS, not constants
+  // (canvas 5a) — values shown are the v1 working set. The guard's
+  // numeric lock is HOLD pending real ds/ds.css tokens (§10).
+
+// v5 additions — ratified 2026-07-07 (D2 · D8):
+  --interactive   ALSO the fantasy-value data accent — engine points,
+                  aggregates, priority/count numerals; TEXT AND NUMERALS
+                  ONLY, never fills (CH-3).
+  --warn          soft-warning role: budget soft-hold, composer
+                  conflicts (CH-4). Hex = swap-in input; locks at
+                  token-land with the other four. Amber stays BANNED as
+                  decorative chrome (DEC-0/HOLD annotations excepted).
+  chrome shapes:  ring / pill / bar / divider + low-alpha row/banner
+                  STATE TINT, α ≤ .08 (CH-6).
+
+  STANDING RULE (D2): every color-carried state renders a NON-COLOR
+  signal — icon, label, shape, or position; color is never the sole
+  carrier. Release gate for new surfaces; the thirteen v4 surfaces
+  retrofit in this settle (canvas closing note).</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">2 · Data model + resolver contract</h2>
+  <p style="margin:0 0 10px;font:400 12.5px/1.6 system-ui;color:#8B93A7">Identity is rekeyed <b style="color:#D7DCE7">ISO2 → clubId</b>. This is the contract, not the data — registry contents ship separately once the DEC-0 licensing-posture sub-item (was INV-10) resolves. The registry must accept <span style="font-family:ui-monospace,Menlo,monospace">crestUrl: null</span> indefinitely.</p>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">type ClubId = string                      // stable slug, e.g. 'mer'
+type KitVariant = 'home' | 'away' | 'third' | 'gk'
+
+interface KitSpec {
+  pattern: 'solid' | 'stripes' | 'hoops'
+  body: Hex; pattern2?: Hex               // pattern2 required for stripes/hoops
+  sleeves: Hex; collar: Hex
+}
+
+interface ClubIdentity {
+  clubId: ClubId
+  name: string                            // "Meridian SC"
+  short: string                           // 3–4 chars, unique (rule §2.1) — feeds monogram + condensed UI
+  colors: { primary: Hex; secondary: Hex }
+  kits: Partial&lt;Record&lt;KitVariant, KitSpec&gt;&gt;  // home REQUIRED for full
+                                          // league-registry entries (D7);
+                                          // pool STUBS may omit kits —
+                                          // kit-less stubs → neutral kit
+  crestUrl: string | null                 // 1:1 SVG/PNG, ≥64px, transparent bg;
+                                          // null accepted INDEFINITELY (D7) —
+                                          // owned badges are procedural (§4.1),
+                                          // no asset URLs exist
+  flags?: { plinth: boolean; colorReview: boolean }  // ingest-computed, §10
+}
+
+// Sync, from a bundled registry. NEVER throws. The ONLY signature —
+// registry lookup is pure; there is no match-scoped overload.
+// v2: sizePx is REQUIRED — the crest floor lives in the resolver, not call sites.
+// v3: CONFIRMED LOCKED. The sub-16 → monogram floor is registry-blind
+// (crestUrl ignored below the floor), and the turn-3 retrofit list is
+// DONE across all applied surfaces (canvas 3b → §9).
+resolveClubIdentity(clubId: ClubId, sizePx: number): ClubIdentity
+
+// Match-scoped identity is the caller's responsibility — surfaces rendering
+// a match pass appearance.clubId as clubId; the resolver is club-agnostic
+// to match context. (Who passes what: §7 identity-source table.)
+
+// Fallbacks (in order, per field):
+//   sizePx &lt; crest.floor(16) → monogram — ALWAYS; crestUrl ignored (canvas 3b)
+//   crestUrl null      → monogram: short on colors.primary, auto-contrast
+//                        text — D6a ERRATUM: metric is LUMA
+//                        0.2126r + 0.7152g + 0.0722b on raw sRGB (0–1);
+//                        &gt; .55 → #10141C, else #FFFFFF. (Mocks already
+//                        comply, source-verified; "relative luminance"
+//                        wording deleted.)
+//   monoText (D6b)     → resolver-derived from sizePx: 3 chars ≥24px,
+//                        2 chars &lt;24px. Call sites LOSE the choice —
+//                        the short/mono2 free pick is removed.
+//   unknown clubId     → neutral: name "Unknown club", short '—',
+//                        dashed 50% circle, neutral slate kit (dashed outline)
+//   kits[variant] missing → kits.home → neutral kit</pre>
+  <p style="margin:10px 0 0;font:400 12.5px/1.6 system-ui;color:#8B93A7"><b style="color:#D7DCE7">Migration:</b> <span style="font-family:ui-monospace,Menlo,monospace">&lt;Flag iso2&gt;</span> and <span style="font-family:ui-monospace,Menlo,monospace">flag.ts</span> are deleted, not adapted — every call site moves to <span style="font-family:ui-monospace,Menlo,monospace">&lt;Crest clubId&gt;</span> / <span style="font-family:ui-monospace,Menlo,monospace">&lt;KitToken clubId&gt;</span>. The draft's copy of Flag.tsx dies in the same change (single identity path).</p>
+  <h3 style="margin:18px 0 8px;font:700 13px system-ui">2.1 · Short codes at 36 clubs — collision rule (mechanical)</h3>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// Production pool is 36 clubs (Decision (b)); the placeholder registry
+// proves 12 + 24 layout stubs (canvas 3a). 3-char shorts WILL collide at 36.
+// Deterministic — no product call.
+
+- Validation: shorts unique per registry, checked at registry BUILD.
+  CI fails the bundle on collision — collisions are never a runtime state.
+- Derivation on collision:
+  1. the lexicographically-first clubId keeps its 3-char short; every other
+     collider extends to 4 chars using the next significant character of
+     `name` (skip spaces + generic tokens FC/SC/CF/AC/FK/SK/SV/XI/United):
+     MER / MERD
+  2. still colliding → 4th char becomes a digit 2–9 by clubId order: MER2
+  3. pathological (&gt;9 colliders) → crest-only + full name; short renders
+     '—'. Never ship an ambiguous short.
+- Layout: every short slot reserves 4ch in the mono font, so 4-char shorts
+  never reflow or truncate a surface.
+
+// Where the short is load-bearing vs. decorative (v2 — floor-aware)
+- Short is SOLE identity (must render the full, possibly 4-char short):
+  mobile bracket rows, condensed row sublabels (&lt;420px), opponent slots
+  ("@ OST") — those slots sit under crest.floor, so the roundel is a
+  monogram and the SHORT is the identifier.
+- Crest alone carries identity at ≥18px ONLY when crestUrl is set (real
+  silhouette). A monogram is a hint, not an identifier — any monogram-only
+  context keeps name or short in the same row.
+- &lt;16px: the crest asset never renders (crest.floor) — monogram + adjacent
+  short carry identity together.</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">3 · KitToken</h2>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">&lt;KitToken clubId size={44} variant="home"
+          dim?          // boolean → opacity kit.dim (to-play / unlocked)
+          selected? /&gt;  // boolean → ring.select
+
+// No matchId prop. The calling surface selects clubId per the §7
+// identity-source table (player.clubId vs appearance.clubId) and passes
+// the result — the token renders whatever club it is given.
+
+// Rendering rules
+- SVG component (not &lt;img&gt;): body clip + pattern from KitSpec; collar, sleeve
+  cuffs, hem shade fixed geometry. No sponsor, no number — by contract.
+- Outline auto-contrast: body luminance &lt; .22 → light stroke, else dark stroke.
+  (Covers the white-kit CAD and near-black COR edge cases.)
+- variant='gk' when slotPosition === 'GK' and kits.gk exists, else home.
+- Below 16px NEVER render a kit — swap to Crest (pattern is illegible; see 1c).
+- a11y: role="img", aria-label "&#123;club.name&#125; &#123;variant&#125; kit".
+States: default · dim · selected · fallback (neutral, dashed) · clash-swapped
+
+// Kit clash — LOCKED (canvas 3c); v3 confirms unchanged, applied
+// end-to-end on the full box score (canvas 6c). Shared MATCH surfaces only.
+resolveKitVariant(homeClub, awayClub):
+- Δ = OKLCH distance of the two torso colors
+- Δ &lt; .18 → away side tries away → third; home side NEVER swaps
+- still &lt; .18 → away wears the neutral fallback kit
+- GK kits are checked against BOTH outfield torsos
+- Scope: game box score + match headers. Fantasy pitches (/lineup,
+  /vsfield compare) always render home — a squad spans many clubs and
+  stable identity beats matchup accuracy there.</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">4 · Crest</h2>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">&lt;Crest clubId size={24} dim? /&gt;
+
+// No matchId prop — the calling surface selects clubId per the §7
+// identity-source table and passes the result.
+
+- size &lt; crest.floor(16) → monogram, resolver-enforced (§2). The component
+  dev-asserts on sizes below 12 — nothing in the system renders there.
+- crestUrl → &lt;img src alt="&#123;club.name&#125; crest"&gt; — raw asset, NO circle crop,
+  no bg plate; asset owns its silhouette. Reserve a square size×size slot.
+- plinth (canvas 3c, LOCKED): registry flags.plinth → wrap in crest.plinth
+  roundel so dark marks don't sink into surface.base (#0A0D12 pin, §1 —
+  the sink check runs against the page token, not the mock floor).
+  Ingest-computed (§10), never a per-surface decision. Monograms exempt
+  at every size (mono.ring carries the edge ≥16; sub-16 discs ride their
+  fill — v5/MG-2), incl. the 40px 6c match header.
+- dim (v2, canvas 4a): opacity = max(kit.dim, crest.dimFloor) — the crest
+  stops dimming at .55 while kit + text follow the token.
+- fallback → monogram roundel: bg colors.primary, mono.ring (≥16px ONLY —
+  v5/MG-2, matches all mocks + t12), text short (3 chars ≥24px, 2 chars
+  &lt;24px — D6b), auto-contrast fg (LUMA metric, §2 D6a), font 700, ~size×0.34.
+- unknown → dashed 50% circle, no text; alt "Unknown club".
+- onError of the img swaps to monogram at runtime (bad/missing asset ≠ broken UI).
+- Never emoji, never a flag. Decorative repeats (same row) → alt="".</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">4.1 · Badge construction — owned assets (t12 · D7 — NEW in v5)</h2>
+  <p style="margin:0 0 10px;font:400 12.5px/1.6 system-ui;color:#8B93A7">The 12a construction system, ratified as the registry baseline: all 36 fictional clubs ship crests (<span style="font-family:ui-monospace,Menlo,monospace">crest:true</span> for the four gap clubs CAD · LUM · COR · HEL + the 24 pool stubs). <b style="color:#D7DCE7">Scope: the owned/fictional registry ONLY</b> — the real-club ingest path (§10) is unchanged, and no licensed artwork ships. MG-5 and MG-6 are ratified retroactively as drawn. <span style="font-family:ui-monospace,Menlo,monospace">crestOutage</span> stays the honest mid-licensing rehearsal state.</p>
+  <pre style="margin:0 0 22px;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// the 12a rules — verbatim, now contract:
+- canvas 64×64, FLAT fills only — no gradients, no letters (monograms
+  own letters), no detail that dies under 24px
+- silhouettes: 3, reused verbatim from t1 — shield · circle r28 · hexagon
+- anatomy: field = club primary · ONE motif = club secondary · keyline
+- keyline: dark field → rgba(255,255,255,.14–.18) 1.5–2 OR the secondary
+  (KRY, COR); light field → secondary keyline (CAD gold, HEL ink, SOL ink)
+- motif vocabulary: geometric only — bands · chevrons · sashes · stars ·
+  rays · waves · arcs · posts; name-derived when the name gives one free
+- uniqueness gate at INGEST: no silhouette+motif pair repeats across the
+  registry — runs with the 5a ΔOKLCH chrome guard
+- sink check (3c): edge-luminance &lt; .16 vs --surface-base → plinth. For
+  OWNED art prefer a keyline that clears (COR); the plinth is reserved
+  for licensed assets we can't edit
+- floor + fallback unchanged: &lt;16px never an asset (3b) · outage →
+  monogram (1d) · monogram text = luma metric · 3ch ≥24px / 2ch below</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">5 · ClubFilter (D4a consolidation)</h2>
+  <p style="margin:0 0 10px;font:400 12.5px/1.6 system-ui;color:#8B93A7">One shared component, two presentations. NationFilter call sites (<span style="font-family:ui-monospace,Menlo,monospace">/players</span>, <span style="font-family:ui-monospace,Menlo,monospace">/waivers</span>) rekey to clubs; the draft room drops its bespoke grid and mounts this — carrying the <span style="font-family:ui-monospace,Menlo,monospace">&lt;span onClick&gt;</span> → keyboard/AT fix with it.</p>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">&lt;ClubFilter clubs selected onChange
+            presentation="panel" | "sheet"   // desktop panel · mobile sheet
+            defaultExpanded?   // panel: desktop true, mobile false
+            activeOnly? onActiveOnlyChange? /&gt;  // "Active clubs" toggle retained
+
+// Markup contract (the a11y fix — non-negotiable)
+- Panel chip = &lt;button aria-pressed=&#123;selected&#125;&gt;, crest 16px (floor) + short.
+- Container role="group" aria-label="Filter by club".
+- Roving tabindex: Tab enters/leaves the group once; ←→ move, Space/Enter
+  toggle, Esc collapses back to trigger. Home/End jump.
+- ring.focus on :focus-visible only.
+- Trigger: label + overlapping crest stack (max 4, -5px, 16px) + "+N"
+  overflow roundel + count + chevron.
+
+// At 36 clubs (v2 — canvas 3a):
+- search input appears ≥16 clubs; matches name OR short
+- selected pins to a SELECTED band at top; the rest stays strictly A–Z
+- panel body max-height ~250px, scrolls — the filter never pushes the
+  list it filters off-screen
+- monogram-heavy registries are the expected state, not an edge case
+
+// Mobile = bottom sheet (v2 — canvas 4c): same state contract
+- 44px full-width ROWS, not chips: crest 24 + full name + short + check
+- search + pinned SELECTED band carry over unchanged
+- sheet caps ~70% viewport; list scrolls inside; footer stays reachable:
+  Clear all (ghost) + Apply·N — Apply is the ONLY cobalt fill on the sheet</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">6 · Competition identity primitives — club cells (D2) + manager knockout (t8)</h2>
+  <h3 style="margin:0 0 8px;font:700 13px system-ui">6.1 · Club cells (D2) — league-phase table + UCL bracket</h3>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// These two cells are the ONLY /vsfield deliverables this window.
+// The standings⇄bracket morph layout itself: next pass, DEC-0 gated —
+// shape flags in canvas 2c (Swiss bands, MD cockpit, agg strip, playoff→R16).
+
+&lt;TableRowIdentity clubId /&gt;      // league-phase standings cell
+- desktop ≥420px: crest 24 + full name; badges (PLAYOFF etc., slate) inline.
+- &lt;420px: crest 20 + full name if it fits, else short; W/D/L cols drop,
+  form trims to last 3.
+- zone dividers: after row 8 (zone.direct cobalt) and row 24 (zone.playoff
+  slate) — divider owns the color; rows stay neutral.
+
+&lt;BracketNodeIdentity clubId score state /&gt;   // guillotine bracket node
+- row: crest 18 + name (desktop) / short mono (mobile, crest 16) + score.
+- winner: 2px left accent #4D8DFF, full opacity.
+- loser (v2 — split opacity, canvas 4a): text + score at kit.dim;
+  crest at max(kit.dim, crest.dimFloor) — identity never fully dims.
+- TBD: dashed border card, dashed neutral circles, no scores.
+- state chip: FT / KO / LIVE — mono 8px, top-right; LIVE is #E5484D chrome.
+- v5 (D5): a football bracket node MAY carry ONE aggregate score + a
+  leg-context sub. The round=leg / round=tie fork now governs GAME-DETAIL
+  and match-header presentation only (§11) — it no longer bans node
+  aggregates.</pre>
+  <h3 style="margin:18px 0 8px;font:700 13px system-ui">6.2 · ManagerKONode + the manager knockout (t8 — NEW in v4)</h3>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// NAME COLLISION RESOLVED (v4). The t8 canvas drafted its knockout node
+// under the §6 bracket name. Two primitives now, two data domains —
+// neither renders the other's identity type:
+//   BracketNodeIdentity — CLUB data cell (§6.1). UCL-football-backdrop
+//     brackets only: crest 18/16 + name/short + match score.
+//   ManagerKONode — MANAGER node. Fantasy knockout only: initials disc +
+//     manager name + seed — NEVER a crest, NEVER a kit.
+// The manager fence, stated once for competition surfaces: club artwork
+// belongs to clubs; managers are initials discs, everywhere, including
+// their own bracket.
+
+&lt;ManagerKONode manager seed score state /&gt;
+- identity: initials disc (slate #2A3140 disc / #B9C0D0 text) + manager
+  name; seed tag mono slate, canonical compressed format "S3" (v5, MF-2)
+  — seeded from the group table at cut.
+- v5 (D3): the VIEWING manager's own disc renders cobalt #4D8DFF with
+  MANDATORY "YOU" pairing — a selection state, the single sanctioned
+  exception. All other manager discs stay slate; no other identity disc
+  may take reserved chrome.
+- score: ONE aggregate fantasy total per two-GW round. No legs, no away
+  goals, no per-GW split inside the node. Settled at t8 — supersedes the
+  round=leg fork for this surface (§11).
+- states mirror §6.1, manager-flavored: advancing = 2px cobalt accent;
+  eliminated = split opacity (text + score at kit.dim, disc floors at
+  crest.dimFloor); TBD = dashed card, dashed disc, no score.
+- state chip: GW WINDOW / FINAL — mono 8px; LIVE stays #E5484D chrome.
+
+// Format contract — league-selectable; the SELECTOR surface is DEC-0
+// membership (§11):
+knockout.format: 'bracket' | 'cut'
+- shared: seeded from the group-table order at the cut; every round =
+  two GWs · one aggregate · one outcome; scores are engine totals,
+  display-only.
+- 'bracket': head-to-head tree; one advancer per pairing.
+- 'cut': the whole field scores every round; the bottom of the table
+  falls at the blade line each round until the final.
+- qualifiers = koQualifiers — stated param, not a product decision:
+  default 8 · 6 → top-2 byes in round one · 4 → collapses to SF + final.</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">7 · PlayerAvatar + historical identity (F-D07)</h2>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">&lt;PlayerAvatar player size={32|40} clubId /&gt;
+
+// No matchId prop — the calling surface resolves WHICH club per the table
+// below (player.clubId vs appearance.clubId) and passes it as clubId.
+- disc: initials on position color (unchanged from live app).
+- crest badge: bottom-right, 16px @ size 32 / 18px @ size 40, badge.ring
+  cutout. Replaces the emoji flag in the same corner.
+  (v2: 15px grew to 16 at the crest floor — badges stay REAL crest slots;
+  monogramming them was rejected, the badge is the identity payoff.)
+
+// Identity source by context — appearance wins in any match scope:
+rosters / pool / filter / lineup   → player.clubId (current)
+live + completed match surfaces    → appearance.clubId (club at that match)
+season totals                      → group per appearance, never remapped
+
+// Affordance when appearance.clubId !== player.clubId (post-transfer):
+- dense rows: correct crest only, no extra chrome; tooltip
+  "Played this match for &#123;name&#125;".
+- detail rows / drill-ins: club name + AS-OF tag: mono 7.5px, slate —
+  #B9C0D0 on rgba(255,255,255,.08). (v2: was amber; gold-adjacent chrome
+  is banned by the rail re-pin.)
+- the tag is informational, not interactive; never shown when clubs match.
+
+// Data requirement: every appearance row carries clubId at write time.
+// UI never derives "club then" from transfer-window math.</pre>
+  <div style="margin-top:10px;background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.3);border-radius:10px;padding:12px 16px;font:400 12px/1.65 system-ui;color:#D7DCE7">
+    <b style="color:#F5A623">UPSTREAM DEPENDENCY — UCL-1.</b> <span style="font-family:ui-monospace,Menlo,monospace">appearance.clubId</span> is the team-of-record snapshot from F-D07 and is a <b>UCL-1 deliverable</b>. It does <b>not</b> exist in today's schema — there is no <span style="font-family:ui-monospace,Menlo,monospace">teamId</span> column on <span style="font-family:ui-monospace,Menlo,monospace">StatPlayerMatch</span>, <span style="font-family:ui-monospace,Menlo,monospace">ManualStatPlayerMatch</span>, or <span style="font-family:ui-monospace,Menlo,monospace">ScorePlayerMatch</span>. The AS-OF primitive above is specified against the UCL-1 contract and <b>cannot be validated against live data until UCL-1 lands it</b>. This spec does not design the snapshot.
+  </div>
+  <h3 style="margin:18px 0 8px;font:700 13px system-ui">7.1 · Player surfaces (t9 — NEW in v4): statline layers + card states</h3>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// The player card (canvas 9a), /players page (9b + 10d hardening) and
+// row/card states (9c) are captured surfaces — §9 rows 9–10. Two contract
+// rules ride with them.
+
+// RULE 1 — the statline is TWO display layers, never mixed:
+provider facts     minutes · starts · goals · assists · cards — vendor
+                   data, display-only. Derived values (PTS/90, form avg)
+                   COMPUTE at render from engine totals; never stored,
+                   never asserted as facts.
+                   v5 (ST-1/ST-2): a layer HEADER must never assert
+                   computed tiles as provider facts; computed tiles carry
+                   a COMPUTED tag. The same tagging extends to compare
+                   surfaces (10c) wherever computed rows interleave with
+                   provider rows.
+scoring breakdown  SCORING.md §1–§8, engine-sourced. UI renders
+                   breakdown_json VERBATIM — group keys, labels, signed
+                   values. NO point value, category label, or multiplier
+                   is hardcoded in UI copy. Zero → em-dash slate;
+                   negative → functional red (chrome, never club color).
+// P52 LABEL DEPENDENCY (§11): until the P52 artifact is sourced, the
+// breakdown renders engine-label SLOTS (dashed on canvas). Labels
+// resolve from the rulebook at runtime — a UI string table for scoring
+// categories would fork the rulebook and is banned.
+
+// RULE 2 — one card object, four ownership/availability states; the
+// trailing ownership block is the ONLY state-dependent region:
+free-agent        claim entry, cobalt outline → /waivers?claim=:playerId
+                  — entry ONLY (R3: /players browses, /waivers claims)
+rostered-by-you   cobalt chip; routes to /lineup, never /waivers
+owned-by-another  owning manager = initials disc + name (manager fence —
+                  a player surface never renders a manager crest)
+unavailable/OUT   text dims kit.dim; identity floors crest.dimFloor
+                  (4a split opacity); claim entry dims, never hides.
+                  NOTE: the OUT chip currently shares --live #E5484D —
+                  confirm or split at the §10 token-land review.
+
+// Identity on the card: hero crest 24 (20 mobile) — above the floor,
+// crest where licensed; avatar badge 18 (§7); match-log opponents 18;
+// the NEXT-fixture chip renders at 14 → monogram, always (floor).</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">8 · Responsive + states summary</h2>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">surface              360/390 (mobile)              ≥1024 (desktop)
+lineup pitch card    kit 40, opp = mono 12+short   kit 44–48, same card
+vsfield compare      kit 44 + pts pill             kit 56 + pts pill
+box score row        kit 22 (variant + clash-aware) kit 22–24
+your-XI ribbon       mono 14 chips (floor)         mono 14 chips (floor)
+players pool row     crest 20 + short sublabel     crest 24 + club name
+waivers row          crest 24, opp mono 12+short   crest 24, opp mono 14+short
+draft board          feed: crest 20/row (4b)       grid: crest 16/pick card
+                                                    · squad-rail avatar 32 (SZ-1)
+standings row        crest 20, form 3, no W/D/L    crest 24, full stat row
+bracket node         crest 16 + short              crest 18 + full name
+match header         crest 44 + short + agg strip  crest 48 + full name + agg
+                     (40 = the 6c-plinth case ONLY — SZ-2)
+kit-clash demo strip kit 44 (SZ-3 — pinned; 48 off  kit 44 (SZ-3 — pinned)
+                     the token scale is retired)
+avatar badge         16 @ 32 disc (floor-grown)    18 @ 40 disc
+club filter          bottom sheet, 44px rows       panel, chips w/ crest 16
+quiniela pick row    crest 20 + shorts (6a)        crest 24 + full names (6a)
+quiniela slip chip   mono 14 — floor, ALWAYS       mono 14 — floor, ALWAYS
+matchday module      presence flagged (§11)        crest 18 + shorts (6b)
+box score, full      1c mobile 390 card stands     6c: header 40 + plinth ·
+                                                   events 16 (floor edge) · kit 22
+player card (9a)     hero 20 + badge 18 · log 18   hero 24 + badge 18 · log 18
+                     stats 4-col · 40px log rows   stats 8-col strip
+players page (9b/10d) crest 20 · 48px rows         crest 24 rows · opp mono 14
+waivers composer     sheet hdr 18 · 44px targets   composer 24 · queue rows 20
+ + queue (10a)       (dialog, focus-trapped)       · budget bar
+compare (10c)        (next pass)                   crest 24 both sides
+manager knockout     initials discs ONLY — no club identity at any size
+ (8a–8c)             (§6.2 fence)
+
+kit states:   default · dim(kit.dim) · selected(ring) · fallback(neutral dashed)
+              · clash-swapped (away → third → neutral, §3)
+crest states: img · img+plinth · monogram (incl. forced &lt;16 by floor) ·
+              neutral-unknown · (img onError → monogram)
+chip states:  idle · hover(border .3) · selected(accent bg+border+✓) ·
+              focus-visible(ring) · disabled(.4, e.g. club eliminated)
+owner states: free-agent · rostered-by-you · owned-by-another ·
+              unavailable/OUT (split opacity — §7.1)
+claim states: pending(queued) · won · lost-outbid · invalid-skipped —
+              chrome green/slate/red, never club-tinted (§9.1)</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">9 · Applied-surface coverage — fifteen surfaces (v5)</h2>
+  <p style="margin:0 0 10px;font:400 12.5px/1.6 system-ui;color:#8B93A7">The identity layer is <b style="color:#D7DCE7">applied, not just specified</b>. Every crest size below is stated on-canvas; the floor column is where §2's sub-16 rule bites. Thirteen resolve through the one <span style="font-family:ui-monospace,Menlo,monospace">resolveClubIdentity(clubId, sizePx)</span> chain — no surface carries bespoke identity logic; two (the manager knockout and the 11b fantasy side) resolve <b style="color:#D7DCE7">no club identity at all, by design</b> (§6.2 fence).</p>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">surface (canvas)         stated crest/kit sizes         floor behavior
+1 draft board (2a/4b)    16 pick card · 20 feed row     16 = at floor, crest legal;
+                                                        avatar badges GREW 15→16 to
+                                                        keep real crest slots
+2 player pool (5b)       24 row · 14 fixture-opp slot   14 → monogram, always
+3 waivers (2b)           24 row · 12–14 opp slots       opp under floor → monogram
+4 lineup pitch (1c)      40–44 kit · 12 opp line        12 → monogram
+5 game detail (1c, 390)  22 kit rows · 14 ribbon chips  ribbon 14 → monogram
+6 /pool quiniela (6a)    24 desktop · 20 mobile row     both ≥16 → crests hold;
+                                                        14 slip chips → monogram,
+                                                        ALWAYS, crest asset or not
+7 matchday module (6b)   18 row                         ≥16 → crests render
+8 full box score (6c)    40 header (plinth) · 22 kits   events at EXACTLY 16 —
+                         · 16 events timeline           the floor edge; one px
+                                                        less and chips monogram
+9 player card (9a)       24 hero (20 mobile) · 18       NEXT-fixture chip 14 →
+                         badge · 18 match-log opp       monogram, always
+10 /players page (9b/10d) 24 row · 20 mobile · 14 opp   14 → monogram; states +
+                                                        search/paging, same sizes
+11 waivers composer      24 composer hero · 20 queue    all slots ≥16 → crests
+   + queue (10a)         · 18 sheet header              hold where licensed
+12 compare (10c)         24 both sides                  ≥16; OUT side keeps
+                                                        split-opacity dim
+13 manager knockout      — initials discs only          n/a BY DESIGN — the
+   (8a–8c)                                              fence: no club identity
+                                                        on manager nodes
+14 /vsfield fantasy      — initials discs only (§6.2);  n/a BY DESIGN — the
+   side (11b · v5)       self disc = cobalt + "YOU"     manager fence extends
+                         (D3); seed tags "S3"           to the whole surface
+15 /vsfield football     24 table row (20 &lt;420) · 18    all slots ≥16 → owned
+   backdrop (11c · v5)   bracket node · 18 matchday     crests render (t12);
+                         row · news/event chips ≥16     feed ships clubIds,
+                                                        NEVER crest artwork</pre>
+  <h3 style="margin:18px 0 8px;font:700 13px system-ui">9.1 · Waiver surfaces (t10 — NEW in v4): visual contract only</h3>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// Captured here: what the surfaces look like and how identity behaves.
+// The RULES are open — five DEC-0 gates (§11), deferred to Sergio.
+- R3 boundary: /players browses, /waivers claims. Claim affordances on
+  player surfaces are ENTRIES only (→ /waivers?claim=:playerId); no bid
+  state renders outside /waivers.
+- composer: claimed player resolves through the chain (crest 24); bid is
+  a spinbutton (min/max wired to remaining budget); drop REQUIRED at
+  full roster, named per claim; sealed-bid framing in the surface copy.
+- queue: priority-ordered, reorderable, cancellable; per-claim bid + drop
+  shown to the owner only.
+- budget bar: spent · held · free segments + a dashed preview segment for
+  the un-queued composer bid. Soft-hold DISPLAY model: holds may exceed
+  free; the bar warns (amber), never blocks composition. Whether process
+  validates soft or hard belongs to the gated rules.
+- lifecycle: window → seal → process → results. Result states WON /
+  LOST·OUTBID / INVALID·SKIPPED — chrome green/slate/red, never
+  club-tinted. Blind visibility: claim COUNTS are public; targets and
+  amounts stay sealed.
+- manager fence: every manager on these surfaces, including the bidder,
+  is an initials disc. Crests appear only on claimed players.
+- EVERY NUMBER IN THE MOCKS IS A PROPOSAL: budget 100, min bid 1, THU
+  12:00 cadence, winner+amount reveal, no rollover — each maps to a §11
+  DEC-0 gate. This section locks pixels, not policy.</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">10 · Build + ingest guards — calibration state (v3 · re-confirmed v4)</h2>
+  <pre style="margin:0;background:#10141D;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:16px 18px;font:400 11.5px/1.7 ui-monospace,Menlo,monospace;color:#B9C0D0;overflow-x:auto">// registry BUILD (CI — fails the bundle):
+- short collision (rule §2.1)
+
+// asset INGEST (computed once, stored as ClubIdentity.flags):
+- crest edge-luminance &lt; .16 vs surface.base (#0A0D12 pin, §1)
+                                  → flags.plinth = true (§4)
+- ΔOKLCH(colors.primary, each chrome.reserved) &lt; gate
+                                  → flags.colorReview = true — a design-
+                                    review GATE, never a mutation. Club
+                                    color is never auto-shifted (canvas 4a).
+
+// v3 CALIBRATION STATE — the ONE HOLD in this contract (canvas 5a):
+- the four chrome references (--interactive, --live, --success,
+  --locked/slate) AND the ΔOKLCH gate (working value .12) are SWAP-IN
+  INPUTS, not constants. The numeric lock is HOLD pending real ds/ds.css
+  tokens. When they land: paste the four hexes into the 5a audit, and act
+  ONLY on the verdict-flips panel — flips are the action list; everything
+  that doesn't flip stands as reviewed.
+
+// The structural rule the guard protects:
+- identity paints ARTWORK only: crest, kit, monogram fill
+- chrome colors appear only on ring / pill / bar / divider shapes
+  (+ v5: low-alpha row/banner state tint, α ≤ .08 — CH-6)
+- known near-misses in the seed registry, all legible by shape:
+  KRY cyan↔cobalt · MER red↔live · ATN green↔success
+
+// v3 KNOWN RESIDUAL — documented, NOT solved; review at token-land:
+- the color-filled monogram roundel is the DOMINANT render mid-licensing,
+  and a disc ≈ a state pill in silhouette. The MER↔live-red and
+  ATN↔success-green near-misses therefore carry a SHAPE-proximity edge
+  the hue-based OKLCH gate does not cover: a red monogram disc beside a
+  red LIVE pill leans on size + typography alone. Fold this into the same
+  review pass as the token calibration above — no rule change proposed.
+
+// v4: HOLD RE-CONFIRMED, unchanged — with ONE item folded into the same
+// token-land review: the player-surface OUT/availability chip (§7.1)
+// currently shares --live #E5484D. Confirm the share or split an
+// availability token when ds/ds.css lands. No rule change proposed.
+
+// v5 — FL-1 recorded as ACCEPTED LEGACY (source-verified 2026-07-07):
+// the t1–t5 mocks are pre-v2-shaped — size-blind resolve() at call
+// sites — but output-compliant; their sub-16 &lt;img&gt; branches are
+// unarmed. No remock. New surfaces MUST use the sizePx chain.
+
+// v5 — token-land carry list, restated (one review, one sitting):
+// four chrome hexes + the ΔOKLCH gate (working .12) · the --warn hex
+// (§1) · CH-5 position-palette ≡ chrome-hex collision · the monogram-
+// disc SHAPE residual (now D2-mitigated — review confirms sufficiency) ·
+// NB-1: one plinth-threshold visual validation on the real #0A0D12 ·
+// the §7.1 OUT-chip --live share.
+
+// runtime (not ingest):
+- kit clash → resolved per render, §3</pre>
+</section>
+
+<section>
+  <h2 style="margin:0 0 12px;font:700 16px system-ui">11 · Open / deferred — the boundary of this contract (for Code)</h2>
+  <p style="margin:0 0 10px;font:400 12.5px/1.6 system-ui;color:#8B93A7">Captured and buildable now: the identity layer (§1–§8), fifteen applied surfaces (§9), the manager-knockout format contract + ManagerKONode (§6.2), the player statline layers + card states (§7.1), the waiver surfaces' visual contract (§9.1), the owned-badge construction system (§4.1), and the football-backdrop visual contract (§9.2 — pixels locked, shipping gated D4). Treat §1–§10 as buildable. Everything below is <b style="color:#D7DCE7">not in this contract</b> — each is decision-gated, not an oversight, and nothing buildable depends on how it resolves.</p>
+  <ul style="margin:0;padding-left:18px;font:400 12.5px/1.8 system-ui;color:#8B93A7">
+    <li><b style="color:#F5A623">HOLD — 4a guard calibration (§10).</b> Chrome references + ΔOKLCH gate are swap-in inputs pending real <span style="font-family:ui-monospace,Menlo,monospace">ds/ds.css</span> tokens; on landing, the 5a flips panel is the action list. The same review carries the monogram-disc shape residual (§10) and the §7.1 OUT-chip <span style="font-family:ui-monospace,Menlo,monospace">--live</span> share.</li>
+    <li><b style="color:#F5A623">OPEN DEC-0 — the five FAAB gates, deferred to Sergio:</b> tie-break · min bid · cadence · reveal · rollover. The waiver visual contract (§9.1) is buildable behind them; the canvas 10b "proposed defaults" (reverse-standings tie-break, min 0, weekly THU, winner+amount reveal, no rollover) are <b style="color:#D7DCE7">proposals only</b>. Build nothing that hardcodes a rule.</li>
+    <li><b style="color:#D7DCE7">Commissioner format selector</b> — DEC-0 membership. <span style="font-family:ui-monospace,Menlo,monospace">knockout.format</span> ('bracket' | 'cut', §6.2) is league-selectable by contract; the selection surface (commissioner settings) is undesigned.</li>
+    <li><b style="color:#D7DCE7">Game-detail leg/tie presentation — the 2c fork (RE-NARROWED, v5).</b> D5 sanctioned the bracket-node aggregate (§6.1), so the round=leg vs round=tie fork now governs <b style="color:#D7DCE7">game-detail + match-header presentation only</b>; canvas <a href="Club Identity System.dc.html#2c">2c</a>'s agg header keeps the fork-sketch label. A D4 shipping gate (§9.2).</li>
+    <li><b style="color:#D7DCE7">UCL-1 — <span style="font-family:ui-monospace,Menlo,monospace">appearance.clubId</span></b> — unchanged (§7 amber). The player card draws the AS-OF primitive against the UCL-1 contract; the snapshot is absent from today's schema and is never derived from transfer-window math.</li>
+    <li><b style="color:#D7DCE7">P52 label source</b> — the §7.1 breakdown renders engine-label slots until the P52 artifact is sourced; scoring labels resolve from the rulebook at runtime, never from UI copy.</li>
+    <li><b style="color:#D7DCE7">D4 shipping gates — football backdrop (§9.2).</b> Pixels are locked on canvas <a href="Club Identity System.dc.html#11c">11c</a> (D1/D4 resolved the R1 IA and F-P3-B2 — the matchday module IS present under league phase); build NOTHING behind the gates: UCL-1 schema · the 2c leg/tie fork (game detail) · the feed adapter (INV-1).</li>
+    <li><b style="color:#D7DCE7">Onboarding / store + licensing posture</b> — DEC-0 membership + the licensing sub-item (was INV-10); no identity surfaces designed there. Registry accepts <span style="font-family:ui-monospace,Menlo,monospace">crestUrl: null</span> indefinitely; monogram/neutral paths are permanent, not temporary scaffolding — canvas 3a is the honest mid-licensing state at 36.</li>
+    <li><b style="color:#D7DCE7">Closed, for the record</b> — <span style="font-family:ui-monospace,Menlo,monospace">short</span> collisions: mechanical, §2.1. Kit clash: §3, end-to-end in <a href="Club Identity System.dc.html#6c">6c</a>. Crest floor: §2/§4, retrofit done; sole follow-up is re-verifying 16px against real licensed assets. NEW in v4: the t8 node-name collision (resolved — two primitives, §6.2) and the t9 statline-mixing risk (resolved — two layers, §7.1). NEW in v5 (D1–D8): the R1 IA — /playoffs retired into one phase-aware /vsfield (D1) · the D2 non-color-signal standing rule (§1) · the D3 self-disc exception (§6.2) · F-P3-B2 + backdrop presence (D4, §9.2) · the bracket-node aggregate scope (D5, §6.1) · the MG-4/MG-1 spec-vs-canvas errata (D6, §2/§4) · the t12 badge system + registry flip (D7, §4.1) · the chrome-role extensions (D8, §1).</li>
+  </ul>
+</section>
+
+</div>
+</x-dc>
+</body>
+</html>
