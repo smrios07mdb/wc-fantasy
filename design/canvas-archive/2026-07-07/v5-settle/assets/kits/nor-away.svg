@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><clipPath id="tc"><path d="M17,15 L24,9 C27,14.5 37,14.5 40,9 L47,15 L47,54 Q32,59.5 17,54 Z"></path></clipPath></defs>
+  <path d="M17,15 L8.5,19 L3.5,32 L14,35.5 L17,27 Z" fill="#3E7CB1"></path>
+  <path d="M47,15 L55.5,19 L60.5,32 L50,35.5 L47,27 Z" fill="#3E7CB1"></path>
+  <path d="M17,15 L24,9 C27,14.5 37,14.5 40,9 L47,15 L47,54 Q32,59.5 17,54 Z" fill="#3E7CB1"></path>
+  <path d="M4.6,29.3 L14.6,32.7" stroke="#F4F5F7" stroke-width="2.6" fill="none"></path>
+  <path d="M49.4,32.7 L59.4,29.3" stroke="#F4F5F7" stroke-width="2.6" fill="none"></path>
+  <g clip-path="url(#tc)"><path d="M16,52.5 Q32,58 48,52.5" stroke="rgba(0,0,0,.22)" stroke-width="2" fill="none"></path></g>
+  <path d="M24,9 C27,14.5 37,14.5 40,9" stroke="#F4F5F7" stroke-width="3.2" fill="none"></path>
+  <path d="M17,15 L24,9 C27,14.5 37,14.5 40,9 L47,15 L47,54 Q32,59.5 17,54 Z" fill="none" stroke="rgba(9,12,19,.92)" stroke-width="1.6" stroke-linejoin="round"></path>
+  <path d="M17,15 L8.5,19 L3.5,32 L14,35.5 L17,27 Z" fill="none" stroke="rgba(9,12,19,.92)" stroke-width="1.6" stroke-linejoin="round"></path>
+  <path d="M47,15 L55.5,19 L60.5,32 L50,35.5 L47,27 Z" fill="none" stroke="rgba(9,12,19,.92)" stroke-width="1.6" stroke-linejoin="round"></path>
+</svg>
