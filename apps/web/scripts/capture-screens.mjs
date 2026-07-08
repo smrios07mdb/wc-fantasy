@@ -363,11 +363,7 @@ const WAVE2_SURFACES = [
     source: "live",
     fullPage: false, // viewport takeover
     // NO suppressCeremony — the unseeded first-open latch fires the ceremony deliberately.
-    steps: [
-      { waitFor: "div.koc" },
-      { click: '.koc button:has-text("Skip")' },
-      { waitMs: 600 },
-    ],
+    steps: [{ waitFor: "div.koc" }, { click: '.koc button:has-text("Skip")' }, { waitMs: 600 }],
     trigger: "/vsfield unseeded → ceremony fires → click Skip",
     note: "KOCeremony aftermath panel: settled verdict + 'reinforce via waivers' FAAB CTA. Wave 1 shot the entrance; this is the resting end-state.",
   },
@@ -395,10 +391,7 @@ const WAVE2_SURFACES = [
     viewports: W2_VPS,
     source: "live",
     fullPage: true,
-    steps: [
-      { click: "button.nf-toggle" },
-      { click: '.nf-grid button.chip:has-text("Spain")' },
-    ],
+    steps: [{ click: "button.nf-toggle" }, { click: '.nf-grid button.chip:has-text("Spain")' }],
     trigger: "/players → open Nations → select Spain chip",
     note: "Open grid with one active nation chip (component is SINGLE-select: value is one token or ALL) filtering the pool table.",
   },
@@ -611,11 +604,7 @@ const WAVE2_SURFACES = [
     viewports: W2_VPS,
     source: "live",
     fullPage: false,
-    steps: [
-      { click: "button.mt-idc >> nth=0" },
-      { waitFor: ".pc-scrim" },
-      { waitMs: 500 },
-    ],
+    steps: [{ click: "button.mt-idc >> nth=0" }, { waitFor: ".pc-scrim" }, { waitMs: 500 }],
     trigger: "/players → click first player row",
     note: "FaPlayerCardSheet (waivers-owned, R3's one cross-module dependency) on Points tab.",
   },
@@ -673,10 +662,7 @@ const WAVE2_SURFACES = [
     viewports: DESK,
     source: "live",
     fullPage: true,
-    steps: [
-      { click: '.sl-formation-tabs button:has-text("3-2-1")' },
-      { waitMs: 300 },
-    ],
+    steps: [{ click: '.sl-formation-tabs button:has-text("3-2-1")' }, { waitMs: 300 }],
     trigger: "/lineup → click 3-2-1 formation tab",
     note: "Pitch reshaped to an unsaved formation + 'Unsaved changes' hero pill. Client-only working state; nothing submitted, context discarded.",
   },
@@ -851,11 +837,7 @@ const WAVE2_SURFACES = [
     viewports: W2_VPS,
     source: "live",
     fullPage: false,
-    steps: [
-      { click: "button.gd-tok >> nth=0" },
-      { waitFor: ".sl-scoremodal" },
-      { waitMs: 500 },
-    ],
+    steps: [{ click: "button.gd-tok >> nth=0" }, { waitFor: ".sl-scoremodal" }, { waitMs: 500 }],
     trigger: "/games/<R16 id> → click a pitch player token",
     note: "PlayerScoreSheet points-breakdown modal (info-only host: no forfeit button here by design).",
   },
