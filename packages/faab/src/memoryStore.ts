@@ -235,12 +235,6 @@ export class MemoryFaabBidStore implements FaabBidStore {
     };
   }
 
-  async sumOtherPendingBids(managerId: string, exceptBidId: string | null): Promise<number> {
-    return this.rows
-      .filter((r) => r.managerId === managerId && r.status === "pending" && r.bidId !== exceptBidId)
-      .reduce((sum, r) => sum + r.amount, 0);
-  }
-
   async getPlayerFacts(playerId: string): Promise<PlayerFacts | null> {
     return this.players[playerId] ?? null;
   }

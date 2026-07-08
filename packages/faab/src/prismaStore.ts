@@ -342,18 +342,6 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
       return locked.has(playerDropId);
     },
 
-    async sumOtherPendingBids(managerId, exceptBidId): Promise<number> {
-      const agg = await prisma.faabBid.aggregate({
-        where: {
-          managerId,
-          status: "pending",
-          ...(exceptBidId ? { id: { not: exceptBidId } } : {}),
-        },
-        _sum: { amount: true },
-      });
-      return agg._sum.amount ?? 0;
-    },
-
     async getPlayerFacts(playerId): Promise<PlayerFacts | null> {
       const p = await prisma.player.findUnique({
         where: { id: playerId },

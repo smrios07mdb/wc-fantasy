@@ -94,7 +94,6 @@ export async function handleSubmitBid(
   // has cleared, the sealed phase is over and this route rejects (`bid-window-closed`, 409) — the manager
   // uses the dedicated $0 first-come FA route (`/api/faab/free-agent`, `handleFaGrant`) instead. (A sealed
   // $0 bid accepted in the post-clear gap was stranded behind the latch in MD1 — this closes that gap.)
-  const pendingTotal = await deps.store.sumOtherPendingBids(g.managerId, null);
   const submission: BidSubmission = {
     managerId: g.managerId,
     playerAddId: body.playerAddId,
@@ -106,7 +105,6 @@ export async function handleSubmitBid(
   const error = validateBidSubmission(submission, {
     now: deps.now,
     faabBudget: ctx.faabBudget,
-    pendingTotal,
     counts: ctx.counts,
     squadSize: ctx.squadSize,
     rosterCap: ctx.rosterCap,
@@ -163,8 +161,6 @@ export async function handleEditBid(
     dropLocked = await deps.store.isDropLocked(g.managerId, body.playerDropId);
   }
 
-  // Exclude THIS bid from the pending total so a raise is measured against the manager's other claims.
-  const pendingTotal = await deps.store.sumOtherPendingBids(g.managerId, body.bidId);
   const error = validateBidSubmission(
     {
       managerId: g.managerId,
@@ -177,7 +173,6 @@ export async function handleEditBid(
     {
       now: deps.now,
       faabBudget: ctx.faabBudget,
-      pendingTotal,
       counts: ctx.counts,
       squadSize: ctx.squadSize,
       rosterCap: ctx.rosterCap,

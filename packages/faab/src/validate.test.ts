@@ -23,7 +23,6 @@ function ctx(over: Partial<BidValidationContext> = {}): BidValidationContext {
   return {
     now: new Date("2026-06-10T06:00:00Z"),
     faabBudget: 100,
-    pendingTotal: 0,
     counts: FULL,
     squadSize: 15,
     rosterCap: 15, // group phase by default; playoff cases override to 9
@@ -61,17 +60,18 @@ describe("validateBidSubmission", () => {
     expect(validateBidSubmission(sub({ amount: -1 }), ctx())?.code).toBe("amount-negative");
   });
 
-  it("rejects an amount over (budget − other pending bids) — no over-commit", () => {
-    // budget 100, already 80 committed across other pending bids → only 20 left; a 30 bid over-commits.
-    const e = validateBidSubmission(
-      sub({ amount: 30 }),
-      ctx({ faabBudget: 100, pendingTotal: 80 }),
-    );
+  it("accepts a bid that fits the CURRENT budget even when other pending bids over-commit (speculative)", () => {
+    // A 30 bid is legal on a $100 budget even if the manager's other pending bids already commit more
+    // than the budget — the SUM of pending bids MAY exceed the budget by design (2026-07-07 amendment).
+    // The batch's per-award budget-exhausted skip is the enforcement, not submission-time rejection.
+    expect(validateBidSubmission(sub({ amount: 30 }), ctx({ faabBudget: 100 }))).toBeNull();
+  });
+
+  it("rejects a single bid that exceeds the current budget", () => {
+    const e = validateBidSubmission(sub({ amount: 200 }), ctx({ faabBudget: 100 }));
     expect(e?.code).toBe("over-budget");
-    // the boundary is allowed: exactly 20 is fine.
-    expect(
-      validateBidSubmission(sub({ amount: 20 }), ctx({ faabBudget: 100, pendingTotal: 80 })),
-    ).toBeNull();
+    // the boundary is allowed: exactly the full budget is fine.
+    expect(validateBidSubmission(sub({ amount: 100 }), ctx({ faabBudget: 100 }))).toBeNull();
   });
 
   it("rejects an add target already owned league-wide", () => {

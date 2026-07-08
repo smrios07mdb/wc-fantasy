@@ -48,42 +48,39 @@ export function computeBudget(faabBudget: number, claims: readonly WvClaim[]): W
 }
 
 /**
- * The most a single bid may be, matching the engine's over-budget rule: budget minus the manager's
- * OTHER pending bids. When editing, the bid being edited is excluded (a raise is measured against the
- * rest), so its own amount is effectively freed back into the cap.
+ * The most a single bid may be: the manager's full CURRENT budget. A single bid may not exceed the
+ * budget, but the SUM of a manager's pending bids MAY exceed it — speculative bidding (2026-07-07
+ * amendment). The batch's per-award budget-exhausted skip is the real enforcement, so the composer no
+ * longer subtracts other pending claims from the cap. Kept as a named function (the single source for
+ * the per-bid cap, and the symbol the composer's smoke test pins) though it is now the budget itself.
  */
-export function composerMaxBid(
-  faabBudget: number,
-  claims: readonly WvClaim[],
-  editingBidId: string | null,
-): number {
-  const others = claims.filter((c) => c.bidId !== editingBidId);
-  return Math.max(0, faabBudget - pendingTotal(others));
+export function composerMaxBid(faabBudget: number): number {
+  return faabBudget;
 }
 
 /**
- * The free agents a manager may still CLAIM in the composer: cutoff still open (his match hasn't kicked
- * off), not already named in another pending claim (unless editing THAT claim), matching the optional
- * position + search query. Sorted by season points desc (nulls last), then name.
+ * The free agents a manager may still CLAIM in the composer / FA panel: cutoff still open (his match
+ * hasn't kicked off), matching the optional position + search query. Sorted by season points desc (nulls
+ * last), then name.
+ *
+ * S3 (speculative bids, 2026-07-07): the pool is CLAIMS-AGNOSTIC — a player the manager already has a
+ * pending bid on stays visible (the UI badges the row "Your bid ×N" via {@link pendingBidCountByPlayer}),
+ * so a second, different bid can be placed on him. The old "hide own-bid targets" exclusion is retired.
  */
 export function claimableFreeAgents(
   freeAgents: readonly WvPlayer[],
-  claims: readonly WvClaim[],
   now: Date,
   opts: {
     query?: string;
     position?: "ALL" | WvPlayer["position"];
     /** Selected nation from the collapsible country filter; "ALL" (or omitted) is a no-op. */
     nation?: string | "ALL";
-    editingBidId?: string | null;
   } = {},
 ): WvPlayer[] {
-  const { query = "", position = "ALL", nation = "ALL", editingBidId = null } = opts;
-  const takenAddIds = new Set(claims.filter((c) => c.bidId !== editingBidId).map((c) => c.add.id));
+  const { query = "", position = "ALL", nation = "ALL" } = opts;
   const q = query.trim().toLowerCase();
   return freeAgents
     .filter((p) => {
-      if (takenAddIds.has(p.id)) return false;
       if (isPlayerCutoffPassed(p, now)) return false;
       if (position !== "ALL" && p.position !== position) return false;
       if (nation !== "ALL" && p.nation !== nation) return false;
@@ -93,6 +90,17 @@ export function claimableFreeAgents(
     .sort(
       (a, b) => (b.seasonPoints ?? -1) - (a.seasonPoints ?? -1) || a.name.localeCompare(b.name),
     );
+}
+
+/**
+ * Count of the viewer's live pending claims per add-target player id — drives the pool row's "Your bid
+ * ×N" indicator (S2 speculative bids). Pure. In the free-agency phase there are no pending sealed claims,
+ * so this is empty there and the badge never renders.
+ */
+export function pendingBidCountByPlayer(claims: readonly WvClaim[]): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const c of claims) counts.set(c.add.id, (counts.get(c.add.id) ?? 0) + 1);
+  return counts;
 }
 
 /**
@@ -174,22 +182,22 @@ export function buildBatchWindowView(input: {
  *     `free-agency` → the FA panel's row selection is seeded) — `locked`/no-window → null;
  *   • the viewer may act (D4: playoff non-participants get no acquisition surface at all);
  *   • the player is STILL CLAIMABLE per the same {@link claimableFreeAgents} rule the pickers
- *     enforce (live-unowned pool, cutoff not passed, not already named in a pending claim).
- * Anything else — unknown id, owned since, kicked off, already claimed — resolves null and the
- * screen renders exactly as if the param were absent (graceful no-op, never a throw).
+ *     enforce (live-unowned pool, cutoff not passed). Since S3 (speculative bids) the pool is
+ *     claims-agnostic, so a player the viewer ALREADY has a pending bid on preselects for a SECOND bid.
+ * Anything else — unknown id, owned since, kicked off — resolves null and the screen renders exactly as
+ * if the param were absent (graceful no-op, never a throw).
  */
 export function resolveBidDeepLink(input: {
   playerId: string | null;
   phase: AcquisitionWindow | null;
   canAct: boolean;
   freeAgents: readonly WvPlayer[];
-  claims: readonly WvClaim[];
   now: Date;
 }): { mode: "sealed-bid" | "free-agency"; player: WvPlayer } | null {
-  const { playerId, phase, canAct, freeAgents, claims, now } = input;
+  const { playerId, phase, canAct, freeAgents, now } = input;
   if (!playerId || !canAct) return null;
   if (phase !== "sealed-bid" && phase !== "free-agency") return null;
-  const player = claimableFreeAgents(freeAgents, claims, now).find((p) => p.id === playerId);
+  const player = claimableFreeAgents(freeAgents, now).find((p) => p.id === playerId);
   return player ? { mode: phase, player } : null;
 }
 

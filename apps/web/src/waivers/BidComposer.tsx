@@ -16,6 +16,7 @@ import {
   composerMaxBid,
   droppableRoster,
   freeAgentNations,
+  pendingBidCountByPlayer,
   watchedFreeAgents,
 } from "./waiversLogic";
 import {
@@ -95,15 +96,16 @@ export function BidComposer({
   const [nation, setNation] = useState<string | "ALL">("ALL");
   const [watchedOnly, setWatchedOnly] = useState(false);
 
-  const editingBidId = editClaim?.bidId ?? null;
   const nations = editClaim ? [] : freeAgentNations(freeAgents);
   const baseFas = editClaim
     ? []
-    : claimableFreeAgents(freeAgents, claims, now, { query, position, nation, editingBidId });
+    : claimableFreeAgents(freeAgents, now, { query, position, nation });
   // "Watched only" narrows the (already cutoff/position/nation-filtered) pool to the viewer's stars.
   const fas = watchedOnly ? watchedFreeAgents(baseFas, watched) : baseFas;
   const drops = droppableRoster(roster, lockedPlayerIds);
-  const maxBid = composerMaxBid(faabBudget, claims, editingBidId);
+  const maxBid = composerMaxBid(faabBudget);
+  // S2 (speculative bids): badge each pool row with the viewer's live claim count on that player.
+  const bidCounts = pendingBidCountByPlayer(claims);
   // A drop is required only once the squad is at the PHASE cap (15 group / 9 playoff) — parity with the
   // engine's `drop-required` rule + FreeAgentPanel. Below cap, a bid may reinforce an open slot.
   const squadFull = roster.length >= rosterCap;
@@ -203,6 +205,7 @@ export function BidComposer({
                       player={p}
                       selected={selected?.id === p.id}
                       watched={watched.has(p.id)}
+                      pendingBidCount={bidCounts.get(p.id) ?? 0}
                       onSelect={setSelected}
                       onOpen={onOpen}
                       onToggleStar={onToggleStar}

@@ -2,7 +2,7 @@
 /**
  * The /players → /waivers?bid= hand-off (PLAYERS-1). Two layers:
  *   1. the PURE `resolveBidDeepLink` matrix (open+claimable → preselect; closed / owned / unknown /
- *      cutoff-passed / already-claimed / no-act → null, never throws);
+ *      cutoff-passed / no-act → null, never throws); S3 — an already-bid target now PRESELECTS (2nd bid);
  *   2. the INTEGRATION — mounting the real {@link WaiversClient} with `deepLinkBidPlayerId` and proving
  *      it preselects via the EXISTING setSelected path (sealed-bid → composer opens on the player;
  *      free-agency → the FA panel's "Add" is armed) and is a graceful no-op otherwise.
@@ -53,7 +53,6 @@ describe("resolveBidDeepLink — the matrix", () => {
     playerId: "mbappe",
     canAct: true,
     freeAgents: [fa],
-    claims: [] as WvClaim[],
     now: NOW,
   };
 
@@ -89,9 +88,13 @@ describe("resolveBidDeepLink — the matrix", () => {
     const kicked = wvPlayer("mbappe", { kickoffAt: PAST });
     expect(resolveBidDeepLink({ ...base, phase: "sealed-bid", freeAgents: [kicked] })).toBeNull();
   });
-  it("already named in a pending claim ⇒ null", () => {
-    const claim: WvClaim = { bidId: "b1", amount: 5, add: fa, drop: null };
-    expect(resolveBidDeepLink({ ...base, phase: "sealed-bid", claims: [claim] })).toBeNull();
+  it("S3: an already-bid target still resolves — the pool is claims-agnostic (preselects a 2nd bid)", () => {
+    // The resolver no longer consults the viewer's claims, so a player he already bid on stays claimable
+    // and preselects. The user-facing second-bid flow is asserted end-to-end in the integration block.
+    expect(resolveBidDeepLink({ ...base, phase: "sealed-bid" })).toEqual({
+      mode: "sealed-bid",
+      player: fa,
+    });
   });
 });
 
@@ -160,6 +163,31 @@ describe("WaiversClient — deep-link preselection (open + claimable)", () => {
     const fa = within(screen.getByRole("region", { name: /free agents/i }));
     // Selected ⇒ the "Add free agent" CTA is present (absent when nothing is selected).
     expect(fa.getByRole("button", { name: /^Add free agent$/i })).toBeTruthy();
+  });
+
+  it("S2/S3: sealed-bid preselects a player the viewer ALREADY has a pending bid on, badged 'Your bid ×1'", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+    const existing: WvClaim = {
+      bidId: "b1",
+      amount: 5,
+      add: wvPlayer("mbappe", { name: "Kylian Mbappé", shortName: "K. Mbappé", kickoffAt: FUTURE }),
+      drop: null,
+    };
+    render(
+      <WaiversClient
+        view={view("sealed-bid", { claims: [existing] })}
+        deepLinkBidPlayerId="mbappe"
+      />,
+    );
+    const dialog = screen.getByRole("dialog", { name: /waiver claim/i });
+    // Preselected DESPITE the existing bid ⇒ the placeholder is gone and the player shows in the picker.
+    expect(within(dialog).queryByText(/pick a free agent to configure/i)).toBeNull();
+    expect(within(dialog).getAllByText(/K\. Mbappé/).length).toBeGreaterThan(0);
+    // S2 indicator: the composer's pool row shows the viewer's existing bid count on this player.
+    expect(within(dialog).getByText(/Your bid ×1/)).toBeTruthy();
   });
 });
 

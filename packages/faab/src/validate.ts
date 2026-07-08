@@ -7,7 +7,10 @@
  * The rules, in order (DECISIONS §D "$0 bids / out-of-budget" + the Theme-D "per-matchday acquisition
  * window" amendment):
  *  1. amount ≥ 0 ($0 is legal; negative is not).
- *  2. amount ≤ faabBudget − (sum of the manager's OTHER pending bids) — no over-commit across claims.
+ *  2. amount ≤ faabBudget — a single bid may not exceed the manager's CURRENT budget. The SUM of a
+ *     manager's pending bids MAY exceed the budget by design — speculative bidding (commissioner
+ *     amendment 2026-07-07). The real enforcement is the batch's per-award `budget-exhausted` skip
+ *     (`resolve.ts`), which awards highest-first from the live budget and skips a bid that no longer fits.
  *  3. the add target is unowned league-wide AND its PERIOD is still in its SEALED-BID phase at `now`.
  *     The window is the shared `acquisitionWindowState` (single source of truth): "locked" once the
  *     league-wide period first kickoff passes (`add-kicked-off` — the outer bound, NOT the player's own
@@ -56,8 +59,6 @@ export interface BidSubmission {
 export interface BidValidationContext {
   now: Date;
   faabBudget: number;
-  /** Sum of the amounts of the manager's OTHER pending bids (exclude the one being edited). */
-  pendingTotal: number;
   /** The manager's active per-position roster counts. */
   counts: PositionCounts;
   /** The manager's active squad size (≥ `rosterCap` ⇒ full ⇒ a drop is required). */
@@ -103,9 +104,11 @@ export function validateBidSubmission(
   // (1) amount ≥ 0 — $0 is the legal minimum.
   if (sub.amount < 0) return amountNegative(sub.amount);
 
-  // (2) no over-commit: amount ≤ budget − other pending bids.
-  const available = ctx.faabBudget - ctx.pendingTotal;
-  if (sub.amount > available) return overBudget(sub.amount, available);
+  // (2) per-bid cap: a single bid may not exceed the manager's CURRENT budget. The SUM of a manager's
+  //     pending bids MAY exceed the budget by design — speculative bidding (commissioner amendment
+  //     2026-07-07). The real enforcement is the batch's per-award `budget-exhausted` skip (resolve.ts),
+  //     which awards highest-first from the live budget and skips a bid that no longer fits.
+  if (sub.amount > ctx.faabBudget) return overBudget(sub.amount, ctx.faabBudget);
 
   // (3) add availability + the acquisition WINDOW. The shared `acquisitionWindowState` is the single
   //     source of truth (it keys the sealed→free-agency boundary on the period's batch-clear LATCH, not a

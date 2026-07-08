@@ -23,6 +23,7 @@ import {
   claimableFreeAgents,
   droppableRoster,
   freeAgentNations,
+  pendingBidCountByPlayer,
   watchedFreeAgents,
 } from "./waiversLogic";
 import { CutoffTag, FaPickRow, IconStar, KitChip, NationFlag, Pos } from "./components";
@@ -85,7 +86,9 @@ export function FreeAgentPanel({
   const [watchedOnly, setWatchedOnly] = useState(false);
 
   const nations = freeAgentNations(freeAgents);
-  const base = claimableFreeAgents(freeAgents, claims, now, { query, position, nation });
+  const base = claimableFreeAgents(freeAgents, now, { query, position, nation });
+  // S2 (speculative bids): badge each pool row with the viewer's live claim count (empty in FA phase).
+  const bidCounts = pendingBidCountByPlayer(claims);
   // "Watched only" narrows the (already cutoff/position/nation-filtered) pool to the viewer's stars.
   const fas = watchedOnly ? watchedFreeAgents(base, watched) : base;
   const drops = droppableRoster(roster, lockedPlayerIds);
@@ -156,6 +159,7 @@ export function FreeAgentPanel({
                 player={p}
                 selected={selected?.id === p.id}
                 watched={watched.has(p.id)}
+                pendingBidCount={bidCounts.get(p.id) ?? 0}
                 onSelect={setSelected}
                 onOpen={onOpen}
                 onToggleStar={onToggleStar}

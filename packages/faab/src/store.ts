@@ -103,8 +103,6 @@ export interface PersistedBid {
 export interface FaabBidStore {
   /** The manager's budget + roster slice, or null if the manager does not exist. */
   loadManagerBidContext(managerId: string): Promise<ManagerBidContext | null>;
-  /** Sum of the amounts of the manager's OTHER pending bids (excluding `exceptBidId` when editing). */
-  sumOtherPendingBids(managerId: string, exceptBidId: string | null): Promise<number>;
   /** Resolve a player's position + add-target kickoff, or null if the player is unknown. */
   getPlayerFacts(playerId: string): Promise<PlayerFacts | null>;
   /** Is the manager's drop target LOCKED by play (lineup_slot.locked_at in a still-active matchday)? A

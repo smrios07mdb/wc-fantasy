@@ -9,6 +9,7 @@ import {
   freeAgentNations,
   isClaimVoid,
   isPlayerCutoffPassed,
+  pendingBidCountByPlayer,
   sortClaims,
   watchedFreeAgents,
 } from "./waiversLogic";
@@ -72,26 +73,21 @@ describe("claim ordering (engine own-bid resolution order)", () => {
   });
 });
 
-describe("budget math (engine-consistent: reserves every pending bid)", () => {
-  it("available / pending / after reflect all pending claims", () => {
+describe("budget math (speculative bids: pending may exceed budget)", () => {
+  it("available / pending / after reflect all pending claims (computeBudget unchanged)", () => {
     const claims = [claim({ bidId: "1", amount: 24 }), claim({ bidId: "2", amount: 7 })];
     expect(computeBudget(51, claims)).toEqual({ available: 51, pending: 31, after: 20 });
   });
 
-  it("composer cap for a NEW bid = budget − all other pending", () => {
-    const claims = [claim({ bidId: "1", amount: 24 })];
-    expect(composerMaxBid(51, claims, null)).toBe(27);
+  it("computeBudget's `after` goes negative when pending over-commits (never clamped — S2 overage)", () => {
+    const claims = [claim({ bidId: "1", amount: 40 }), claim({ bidId: "2", amount: 30 })];
+    expect(computeBudget(51, claims)).toEqual({ available: 51, pending: 70, after: -19 });
   });
 
-  it("composer cap when EDITING frees the bid's own amount back into the cap", () => {
-    const claims = [claim({ bidId: "1", amount: 24 }), claim({ bidId: "2", amount: 7 })];
-    // editing bid "1": cap = 51 − (only bid "2" = 7) = 44
-    expect(composerMaxBid(51, claims, "1")).toBe(44);
-  });
-
-  it("never returns a negative cap", () => {
-    const claims = [claim({ bidId: "1", amount: 80 })];
-    expect(composerMaxBid(51, claims, null)).toBe(0);
+  it("composer cap for a bid = the manager's full CURRENT budget (a single bid can't exceed it)", () => {
+    // S1: the per-bid cap is the whole budget regardless of other pending claims — the SUM may exceed it.
+    expect(composerMaxBid(51)).toBe(51);
+    expect(composerMaxBid(0)).toBe(0);
   });
 });
 
@@ -103,30 +99,22 @@ describe("claimable free agents (composer left panel)", () => {
   ];
 
   it("excludes players whose cutoff has passed", () => {
-    const ids = claimableFreeAgents(fas, [], NOW).map((p) => p.id);
+    const ids = claimableFreeAgents(fas, NOW).map((p) => p.id);
     expect(ids).not.toContain("closed");
   });
 
-  it("excludes a player already named in another pending claim", () => {
-    const claims = [claim({ bidId: "1", add: player({ id: "open-1" }) })];
-    const ids = claimableFreeAgents(fas, claims, NOW).map((p) => p.id);
-    expect(ids).not.toContain("open-1");
-  });
-
-  it("re-includes the player when editing THAT claim", () => {
-    const claims = [claim({ bidId: "1", add: player({ id: "open-1" }) })];
-    const ids = claimableFreeAgents(fas, claims, NOW, { editingBidId: "1" }).map((p) => p.id);
+  it("S3: no longer hides a player the manager already has a pending bid on (pool is claims-agnostic)", () => {
+    // The old own-bid exclusion is retired — the row stays visible (the UI badges it "Your bid ×N")
+    // so a second, different bid can be placed on him. claimableFreeAgents no longer takes the claims.
+    const ids = claimableFreeAgents(fas, NOW).map((p) => p.id);
     expect(ids).toContain("open-1");
+    expect(ids).toContain("open-2");
   });
 
   it("filters by position and query, sorts by season points desc", () => {
-    expect(claimableFreeAgents(fas, [], NOW, { position: "MID" }).map((p) => p.id)).toEqual([
-      "open-2",
-    ]);
-    expect(claimableFreeAgents(fas, [], NOW, { query: "two" }).map((p) => p.id)).toEqual([
-      "open-2",
-    ]);
-    expect(claimableFreeAgents(fas, [], NOW).map((p) => p.id)).toEqual(["open-2", "open-1"]);
+    expect(claimableFreeAgents(fas, NOW, { position: "MID" }).map((p) => p.id)).toEqual(["open-2"]);
+    expect(claimableFreeAgents(fas, NOW, { query: "two" }).map((p) => p.id)).toEqual(["open-2"]);
+    expect(claimableFreeAgents(fas, NOW).map((p) => p.id)).toEqual(["open-2", "open-1"]);
   });
 
   it("filters by nation (the collapsible country filter), ALL is a no-op", () => {
@@ -136,15 +124,33 @@ describe("claimable free agents (composer left panel)", () => {
       player({ id: "es-2", nation: "Spain" }),
     ];
     expect(
-      claimableFreeAgents(pool, [], NOW, { nation: "Spain" })
+      claimableFreeAgents(pool, NOW, { nation: "Spain" })
         .map((p) => p.id)
         .sort(),
     ).toEqual(["es-1", "es-2"]);
-    expect(claimableFreeAgents(pool, [], NOW, { nation: "ALL" }).length).toBe(3);
+    expect(claimableFreeAgents(pool, NOW, { nation: "ALL" }).length).toBe(3);
     // the nation filter composes with position
     expect(
-      claimableFreeAgents(pool, [], NOW, { nation: "France", position: "GK" }).map((p) => p.id),
+      claimableFreeAgents(pool, NOW, { nation: "France", position: "GK" }).map((p) => p.id),
     ).toEqual([]);
+  });
+});
+
+describe("pendingBidCountByPlayer (the 'Your bid ×N' pool-row indicator)", () => {
+  it("counts the viewer's live pending claims per add-target player id", () => {
+    const claims = [
+      claim({ bidId: "1", add: player({ id: "open-1" }) }),
+      claim({ bidId: "2", add: player({ id: "open-1" }) }),
+      claim({ bidId: "3", add: player({ id: "open-2" }) }),
+    ];
+    const counts = pendingBidCountByPlayer(claims);
+    expect(counts.get("open-1")).toBe(2);
+    expect(counts.get("open-2")).toBe(1);
+    expect(counts.get("nobody")).toBeUndefined();
+  });
+
+  it("is empty for no claims (the free-agency phase — the badge never renders)", () => {
+    expect(pendingBidCountByPlayer([]).size).toBe(0);
   });
 });
 

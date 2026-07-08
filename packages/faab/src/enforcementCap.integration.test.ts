@@ -277,7 +277,6 @@ describe.skipIf(!SAFE)(
       const error = validateBidSubmission(submission, {
         now,
         faabBudget: ctx!.faabBudget,
-        pendingTotal: 0,
         counts: ctx!.counts,
         squadSize: ctx!.squadSize,
         rosterCap: ctx!.rosterCap, // ← the DB-derived cap under test (9 after migration, 15 before)

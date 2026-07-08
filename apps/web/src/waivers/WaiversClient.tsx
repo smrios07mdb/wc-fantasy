@@ -19,6 +19,7 @@ import {
   FaabBar,
   Refund,
   ResultsBatch,
+  Sealed,
   TeamBudgetsRail,
   WaiverOrderRail,
 } from "./components";
@@ -33,7 +34,7 @@ const FAAB_ALLOTMENT = 100; // the $100 budget — the FAAB bar's track denomina
 /** Clean, user-facing messages for the rejections the route can return (the raw engine messages name
  *  player UUIDs). Falls back to the server `message` then a generic line. */
 const ERROR_MESSAGES: Record<string, string> = {
-  "over-budget": "Over budget — lower your bid or cancel another claim.",
+  "over-budget": "Over budget — a bid can’t exceed your current budget.",
   "add-owned": "That player is already owned in the league.",
   "add-kicked-off": "Too late — his match has already kicked off.",
   "bid-window-closed":
@@ -93,7 +94,6 @@ export function WaiversClient({
       phase: view.batchWindow?.phase ?? null,
       canAct: !view.isPlayoffPhase || view.isParticipant,
       freeAgents: view.freeAgents,
-      claims: view.claims,
       now: new Date(view.nowIso),
     }),
   )[0];
@@ -359,6 +359,18 @@ export function WaiversClient({
                 <span>
                   <b>{voidCount}</b> of your claims target a player whose match already kicked off —
                   they&rsquo;ll be <b>voided and refunded</b> at the batch.
+                </span>
+              </div>
+            )}
+
+            {/* S2 (speculative bids): pending bids may exceed the budget by design. A persistent, soft
+                notice — the batch pays highest-first from the live budget, so not every bid can win. */}
+            {budget.after < 0 && (
+              <div className="wv-overage">
+                <Sealed />
+                <span>
+                  <b>Pending bids exceed your budget</b> — not all can win. The batch pays
+                  highest-first from your live budget.
                 </span>
               </div>
             )}

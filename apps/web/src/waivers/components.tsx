@@ -207,6 +207,7 @@ export function FaPickRow({
   player,
   selected,
   watched,
+  pendingBidCount = 0,
   onSelect,
   onOpen,
   onToggleStar,
@@ -215,6 +216,9 @@ export function FaPickRow({
   selected: boolean;
   /** Whether the viewer has starred this player (T2 — private watchlist). */
   watched: boolean;
+  /** S2 (speculative bids): the viewer's live pending-claim count on this player; > 0 renders a
+   *  "Your bid ×N" badge on the row. 0 / omitted ⇒ no badge (the FA-panel pool passes 0). */
+  pendingBidCount?: number;
   onSelect: (player: WvPlayer) => void;
   onOpen: (player: WvPlayer) => void;
   /** Toggle the private star — a sibling control; its `stopPropagation` never selects for acquisition. */
@@ -235,6 +239,11 @@ export function FaPickRow({
             {player.seasonPoints === null ? "—" : `${player.seasonPoints} pts`}
           </span>
           <OpponentLine opponent={player.opponent ?? null} />
+          {pendingBidCount > 0 && (
+            <span className="wv-fa-yourbid" title="You already have a pending bid on this player">
+              Your bid ×{pendingBidCount}
+            </span>
+          )}
         </div>
         <Pos p={player.position} />
       </button>
@@ -311,6 +320,9 @@ export function FaabBar({
 }) {
   const leftPct = Math.min(100, Math.max(0, (available / budget) * 100));
   const pendPct = Math.min(100, Math.max(0, (pending / budget) * 100));
+  // S2 (speculative bids): pending may exceed the budget → `after` goes negative. Warn tone, NEVER clamp
+  // the number (the manager must see the true overage). The batch still pays highest-first from budget.
+  const over = after < 0;
   const low = after <= budget * 0.2;
   return (
     <div className={"wv-faab" + (compact ? " is-compact" : "")}>
@@ -321,7 +333,9 @@ export function FaabBar({
         </div>
         <div className="wv-faab-stat is-right">
           <span className="t-label">After pending</span>
-          <b className={"wv-faab-big mono" + (low ? " is-low" : "")}>${after}</b>
+          <b className={"wv-faab-big mono" + (over ? " is-over" : low ? " is-low" : "")}>
+            ${after}
+          </b>
         </div>
       </div>
       <div className="wv-faab-track">

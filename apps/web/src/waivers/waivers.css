@@ -627,7 +627,9 @@
 }
 /* F-P1-I2: 16px floor on touch — under 16px, iOS Safari zooms on focus and never resets. */
 @media (pointer: coarse) {
-  .wv-comp-input { font-size: 16px; }
+  .wv-comp-input {
+    font-size: 16px;
+  }
 }
 .wv-comp-seg {
   display: inline-flex;
@@ -1293,4 +1295,51 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 12px;
+}
+
+/* ── S2/S3 speculative bids ─────────────────────────────────────────────────────
+   Pending bids may exceed the budget by design; duplicate/own-bid targets stay in the pool. */
+
+/* Soft, persistent overage notice — mirrors .wv-voidnote layout in the danger palette (a stronger
+   signal than the near-empty .is-low tint). Full-width banner, so no <44px tap-target concern; text
+   wraps freely at 360px (no fixed width, no horizontal scroll). */
+.wv-overage {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 13px;
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.wv-overage svg {
+  color: var(--danger);
+  flex: none;
+}
+.wv-overage b {
+  color: var(--danger);
+}
+
+/* Negative "after pending" (overage) — never clamped, shown in the danger tone so the true overage
+   reads at a glance (distinct from the yellow near-empty .is-low tint). */
+.wv-faab-big.is-over {
+  color: var(--danger);
+}
+
+/* Pool-row badge: the viewer's live pending-bid count on a still-claimable player. A small accent chip
+   inside the picker row's id column — display-only, never a tap target (the row button owns the tap). */
+.wv-fa-yourbid {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
