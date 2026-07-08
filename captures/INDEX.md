@@ -153,3 +153,34 @@ Viewports: desktop-1440 + mobile-390 wherever the state exists on both.
 | `/games/743423ed-f9c6-4d6f-8665-d5b6b7f44ef8?from=vsfield` | ratings-tab | desktop-1440 | /games/<R16 id> → click Ratings tab | `games-ratings__ratings-tab__desktop-1440.png` | Player ratings tab (T16's sole additive contract read). |
 | `/games/743423ed-f9c6-4d6f-8665-d5b6b7f44ef8?from=vsfield` | scoresheet-open | mobile-390 | /games/<R16 id> → click a pitch player token | `games-scoresheet__scoresheet-open__mobile-390.png` | PlayerScoreSheet points-breakdown modal (info-only host: no forfeit button here by design). |
 | `/games/743423ed-f9c6-4d6f-8665-d5b6b7f44ef8?from=vsfield` | scoresheet-open | desktop-1440 | /games/<R16 id> → click a pitch player token | `games-scoresheet__scoresheet-open__desktop-1440.png` | PlayerScoreSheet points-breakdown modal (info-only host: no forfeit button here by design). |
+
+### Wave 2 — reading notes for Claude Design
+
+- **One shot per state, fresh context each**: every row above is an isolated browser context (goto → scripted pure-client steps → screenshot). No state carries between rows; nothing was saved or submitted anywhere.
+- **NationFilter live truth (D4a input)**: the shared `NationFilter` is a SINGLE inline collapsible on BOTH viewports — there is no desktop-panel vs mobile-bottom-sheet variant and no internal search input (search lives on the host surface). Selection is single-select (`value: one nation | ALL`); the "selected band" is the collapsed header chip + ✕ clear control. The focus-visible shot documents the browser-default outline — `.chip` has no custom `:focus-visible` ring (only `.btn` does).
+- **Ceremony aftermath**: reached by letting the first-open latch fire in an unseeded context, then clicking Skip — the resting end-state (verdict + FAAB carry-over CTA), complementing Wave 1's entrance shot.
+- **`/lineup` MD1 row fills the Wave 1 gap**: the group-phase lineup snapshot (11 starters, read-only) that Wave 1's no-click fence barred is now captured via the period tab.
+- **fullPage scroll artifact** (same as Wave 1): fixed bottom nav paints at its mid-image offset on fullPage shots — a Playwright artifact, not a layout bug. Sheet/modal states were shot viewport-only instead.
+
+### Wave 2 — BLOCKED / unavailable states (recorded, never attempted)
+
+| State | Trigger | Why blocked |
+| --- | --- | --- |
+| Draft-room bespoke nation grid open (D4a target) | Expand "Nations" in the live-draft rail | Control is NOT in the DOM post-draft-complete — the live rail (`AvailableList` + nation grid + queue) renders only while the draft is active. Unreachable until a future live draft. |
+| Waivers FreeAgentPanel states (open / search / footer / grant) | FA panel mounts only when the batch phase is `free-agency`/`locked` | Time-gated: current phase is sealed-bid (QF batch pending at capture time); the panel is not mounted. Not a click restriction. |
+| Waivers claims-queue reorder / drag handles at rest | — | Void target: no reorder interaction exists in the code (priority reorder deferred pending a `faab_bid.priority` migration). Claims render amount-descending, static. |
+| Waivers claim Edit / Cancel states | Click Edit/✕ on a pending claim row | Touches the viewer's REAL pending QF bids: Cancel is a POST; Edit opens the composer over a live claim. Blocked by the read-only policy. |
+| Lineup forfeit-confirm sheet | Bench a starter whose match has kicked off | Requires a locked-on-play starter — none exists pre-kickoff (QF starts Jul 9); prior periods are read-only and block swaps. Time-gated to a live round. |
+| Pool pick selected/pending chip states | Click a pick chip | `POST /api/pool/pick` — mutating. |
+| Commish write confirms (freeze word-confirm, cut/advance, repair apply, stat corrections) | Any write control on `/commish` | All mutating (some irreversible). Tabs captured at rest only. |
+| Sign-in "check your email" confirmation | Submit the magic-link form | Form submit (POST) that sends a real email — carried over from the Wave 1 deferral list. |
+| Sign-out / MoreSheet sign-out pressed | Click Sign out | `POST /auth/sign-out` — would destroy the blessed capture session. |
+| Dashboard expandable modules / menus / toasts | — | N/A: the dashboard is a pure server component — zero client-side interactive states exist. |
+| `/playoffs` interactions (board↔ladder toggle etc.) | — | N/A: the Chocoyo re-skin left `/playoffs` with NO interactive controls; blade phases are auto-timed. See contradictions below. |
+
+### Wave 2 — live DOM vs docs contradictions (report only, nothing fixed)
+
+1. **NationFilter framing**: the Wave 2 brief's D4a targets ("panel open desktop + bottom sheet mobile + search") don't match the component — it is one inline collapsible, both viewports, single-select, no internal search. Captured what exists.
+2. **`/playoffs` board↔ladder toggle**: the Wave 1.5 INDEX note defers a "board↔ladder toggle (client onClick)" — that control no longer exists after the Chocoyo re-skin; `/playoffs` has no interactive controls at all.
+3. **Draft nation grid (D4a)**: the grid the D4a consolidation names still exists in code (`span.dr-nation-toggle`, `<span onClick>` a11y issue intact) but is dead in the live DOM post-draft-complete — it cannot be captured from production in its current state.
+4. **Waivers "drag handles at rest"**: the brief's queue-reorder target has no DOM counterpart — reorder was never implemented (deferred on the priority migration).
