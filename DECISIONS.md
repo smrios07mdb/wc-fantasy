@@ -911,6 +911,44 @@ knocked out — which is exactly what *forces* reinforcement each round.
   flagged here, owned/resolved in Theme C.
 - Exact batch clock time is a config knob (06:00 default).
 
+#### ⚠️ AMENDMENT (2026-07-07 — speculative bidding: over-commit retired; duplicate / own-bid targets allowed)
+**Commissioner amendment (`feat/faab-speculative-bids`, submission + pool-UI only — the §D resolver is
+byte-UNCHANGED).** Sealed bidding is relaxed to allow *speculation*:
+- **The submission-time over-commit rejection is RETIRED.** A single bid still may not exceed the
+  manager's **current** budget, but the **SUM** of a manager's pending bids **MAY exceed the budget by
+  design**. The batch's per-award **`budget-exhausted` skip** — awarding highest-first from the live
+  budget and skipping a bid that no longer fits — was always the real enforcement; the clearing outcome
+  is unchanged. (`validateBidSubmission` clause 2 now compares against `faabBudget`, not
+  `faabBudget − Σ other pending`; `BidValidationContext.pendingTotal` + the store's `sumOtherPendingBids`
+  are removed, having no other caller.)
+- **Multiple pending bids by one manager on the SAME add target are allowed** (same or different drops /
+  amounts). **No server rule ever blocked them** — the only gate was the client pool filter
+  (`claimableFreeAgents`'s `takenAddIds`); there is **no `faab_bid` unique index, so NO migration**.
+  Batch-time skip semantics arbitrate exactly as before.
+- **Equal-amount own duplicates on one target resolve DETERMINISTICALLY by `bidId`** (the resolver's
+  existing within-player tiebreak) — i.e. **arbitrary with respect to submission order**. Distinct
+  **amounts** are the preference mechanism; the reorderable-`priority` column stays **deferred** (no
+  `faab_bid.priority` today → it would need a migration first).
+- **The `/waivers` pool no longer hides own-bid targets.** A player the manager already bid on stays in
+  the pool, its row badged **"Your bid ×N"**; the composer cap is the full budget, and a soft persistent
+  **overage notice** (+ an unclamped negative "after pending") shows when pending > budget. The
+  `/players` deep-link now **preselects an already-bid target** (the second-bid flow).
+- **Unchanged:** `packages/faab/src/resolve.ts` (the §D resolver) is **byte-identical**; the purity
+  matrix, cron, `validateFaGrant` / `claimFreeAgent` / the $0 FA route, `@app/lineup`, scoring, auth,
+  RLS, and `schema.prisma` + migrations are all untouched. Every other submission clause (amount ≥ 0;
+  add unowned + not-kicked-off + team-not-eliminated; drop owned + ≠ add + required-when-full + drop-lock;
+  the 2/5/5/3-lifted total roster cap) is byte-identical. **Merge HELD** pending Sergio's on-device gate.
+- Repo hygiene (same merge): `design/canvas-archive/**` added to the eslint flat-config
+  ignores — the 2026-07-07 canvas-archive snapshot carries ancestor-committed browser
+  scripts (113 Node-globals `no-undef`) that made full-repo `eslint .` red on main; frozen
+  artifacts are excluded rather than rewritten.
+- Process (same merge): briefs must never spec `--force`/`--force-with-lease`/`-f`/
+  `+refspec` pushes — guard-git blocks them repo-wide, branch-agnostic, by design. The
+  standard remedy for locally rewritten history is merge-from-local (main fast-forwards to
+  the local SHAs via normal pushes; the stale remote feature branch is deleted at teardown)
+  or stacking new commits without rewrite. The guard's block on this merge was the system
+  working.
+
 ### E. World Cup attrition  ✅ RESOLVED (folded into playoffs + FAAB)
 Handled by the **playoff transition itself**: not all managers advance (freeing their players
 back to the pool); lineup requirements shrink (reduced roster, Theme B); guillotine
