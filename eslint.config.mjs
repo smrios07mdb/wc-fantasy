@@ -20,6 +20,7 @@ export default tseslint.config(
       // Nested git worktrees (e.g. `.claude/worktrees/<branch>/`) are full repo
       // checkouts — never lint into them, and never copy/inherit the root config there.
       "**/.claude/**",
+      "design/canvas-archive/**",
     ],
   },
   js.configs.recommended,
