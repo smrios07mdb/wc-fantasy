@@ -82,3 +82,28 @@ Wave 1.5 additions (same fence — goto + screenshot only):
 - **Dashboard is the CURRENT live phase** (knockouts, R16): pre-draft/draft/group dashboard phases derive from server state (`draft.status` / period kind), not a read-only param → not capturable in this pass.
 - **Wave-1.5 deferrals (client-`onClick`, no `searchParams` read)**: `/standings` Cumulative tab (Matchday default captured), `/playoffs` board↔ladder toggle (Theater default captured). `/commish` non-default tabs ARE `?tab=`-reachable (`app/commish/page.tsx` honors an explicit `?tab`), but Wave 1.5 scope captured the default (Playoff cuts) only — the other tabs defer by scope, not by fence.
 - **`/playoffs` was captured ceremony-suppressed** (same client-local `localStorage` shim as `/vsfield` — fresh contexts look like new devices).
+
+## Wave 2 — interaction states
+
+Click-gated states (branch `capture/wave-2`): the same read-only harness plus a HARD network
+fence — every capture context aborts ALL non-GET requests at the Playwright driver layer, so no
+write can leave the browser. Interactions are pure client state (open sheet/panel/tab,
+client-side filter, selection), classified against component source before scripting; mutating
+controls (save/submit/claim/pick/star/sign-out/commish writes) were never activated.
+Viewports: desktop-1440 + mobile-390 wherever the state exists on both.
+
+| Route | State | Viewport | Trigger path | File | Note |
+| --- | --- | --- | --- | --- | --- |
+| `/standings` | cumulative-tab | mobile-390 | /standings → click Cumulative tab | `standings-cumulative__cumulative-tab__mobile-390.png` | Cumulative standings table (Wave 1.5 deferral now captured). |
+| `/standings` | cumulative-tab | desktop-1440 | /standings → click Cumulative tab | `standings-cumulative__cumulative-tab__desktop-1440.png` | Cumulative standings table (Wave 1.5 deferral now captured). |
+| `/standings` | season-tab | mobile-390 | /standings → click Season tab | `standings-season__season-tab__mobile-390.png` | Season grid panel (third tab — inventory said 3 tabs, not 2). |
+| `/standings` | season-tab | desktop-1440 | /standings → click Season tab | `standings-season__season-tab__desktop-1440.png` | Season grid panel (third tab — inventory said 3 tabs, not 2). |
+| `/standings` | cumulative-row-expanded | desktop-1440 | /standings → Cumulative → click first manager row | `standings-expanded__cumulative-row-expanded__desktop-1440.png` | Expanded per-manager breakdown row inside the cumulative table. |
+| `/vsfield` | fallen-expanded | desktop-1440 | /vsfield → click THE FALLEN header | `vsfield-fallen__fallen-expanded__desktop-1440.png` | Eliminated-managers fold expanded under the ladder; rows carry cut-round tags. |
+| `/vsfield` | season-tab | mobile-390 | /vsfield → click Season view tab | `vsfield-season__season-tab__mobile-390.png` | SeasonTable replaces the KO ladder — cumulative season standing inside The Cut chrome. |
+| `/vsfield` | season-tab | desktop-1440 | /vsfield → click Season view tab | `vsfield-season__season-tab__desktop-1440.png` | SeasonTable replaces the KO ladder — cumulative season standing inside The Cut chrome. |
+| `/vsfield` | r16-settled-ladder | mobile-390 | /vsfield → click R16 period tab | `vsfield-r16__r16-settled-ladder__mobile-390.png` | Historical settled cut round — completed R16 ladder with the cut applied. Perishable. |
+| `/vsfield` | r16-settled-ladder | desktop-1440 | /vsfield → click R16 period tab | `vsfield-r16__r16-settled-ladder__desktop-1440.png` | Historical settled cut round — completed R16 ladder with the cut applied. Perishable. |
+| `/vsfield` | ceremony-aftermath | mobile-390 | /vsfield unseeded → ceremony fires → click Skip | `vsfield-aftermath__ceremony-aftermath__mobile-390.png` | KOCeremony aftermath panel: settled verdict + 'reinforce via waivers' FAAB CTA. Wave 1 shot the entrance; this is the resting end-state. |
+| `/vsfield` | ceremony-aftermath | desktop-1440 | /vsfield unseeded → ceremony fires → click Skip | `vsfield-aftermath__ceremony-aftermath__desktop-1440.png` | KOCeremony aftermath panel: settled verdict + 'reinforce via waivers' FAAB CTA. Wave 1 shot the entrance; this is the resting end-state. |
+| `/vsfield` | fallen-expanded | mobile-390 | /vsfield → click THE FALLEN header | `vsfield-fallen__fallen-expanded__mobile-390.png` | Eliminated-managers fold expanded under the ladder; rows carry cut-round tags. |

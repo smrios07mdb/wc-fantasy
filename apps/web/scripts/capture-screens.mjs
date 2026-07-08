@@ -319,7 +319,9 @@ const WAVE2_SURFACES = [
     source: "live",
     fullPage: true,
     suppressCeremony: true,
-    steps: [{ click: "button.ko-fallen-hd" }],
+    // TWO KOFallen mounts exist (desktop cockpit + mobile column, CSS-gated at 760px) — target
+    // the visible one for the active viewport.
+    steps: [{ click: "button.ko-fallen-hd >> visible=true" }],
     trigger: "/vsfield → click THE FALLEN header",
     note: "Eliminated-managers fold expanded under the ladder; rows carry cut-round tags.",
   },
