@@ -44,6 +44,7 @@ function bid(
     dropLocked?: boolean;
     eliminated?: boolean;
     id?: string;
+    priority?: number | null;
   } = {},
 ): BidInput {
   const drop = opts.drop === undefined ? `${managerId}-drop` : opts.drop;
@@ -58,6 +59,7 @@ function bid(
     dropPosition: drop === null ? null : (opts.dropPos ?? "MID"),
     dropLocked: opts.dropLocked ?? false,
     amount,
+    priority: opts.priority ?? null,
   };
 }
 
@@ -677,5 +679,98 @@ describe("non-participant backstop (playoff)", () => {
     const aLo = bid("A", "STAR", 10);
     const out = resolveFaabBatch(input([a, b], [bHi, aLo])); // no participant set
     expect(resolutionFor(out, bHi.bidId).outcome).toBe("won"); // B wins on amount, never voided
+  });
+});
+
+// ── §D amendment: intra-manager equal-amount priority ───────────────────────────
+describe("resolveFaabBatch — intra-manager equal-amount priority (§D amendment)", () => {
+  it("CROSS-TARGET: the same manager's two tied-top players process by priority ASC, not player id", () => {
+    // Alphabetical playerId order would process AAA first; priority INVERTS it (ZZZ carries priority 1).
+    // Budget covers only one claim, so the processing order is directly observable in the outcomes.
+    const a = mgr("A", 1, { budget: 10, owned: ["A-d1", "A-d2"] });
+    const onAaa = bid("A", "AAA", 10, { drop: "A-d1", priority: 2 });
+    const onZzz = bid("A", "ZZZ", 10, { drop: "A-d2", priority: 1 });
+    const out = resolveFaabBatch(input([a], [onAaa, onZzz]));
+    expect(resolutionFor(out, onZzz.bidId).outcome).toBe("won");
+    expect(resolutionFor(out, onAaa.bidId)).toMatchObject({
+      outcome: "lost",
+      reason: "budget-exhausted",
+    });
+  });
+
+  it("CROSS-TARGET null-priority fallback: without priorities the deterministic player id decides (pre-column byte-identical)", () => {
+    const a = mgr("A", 1, { budget: 10, owned: ["A-d1", "A-d2"] });
+    const onAaa = bid("A", "AAA", 10, { drop: "A-d1" });
+    const onZzz = bid("A", "ZZZ", 10, { drop: "A-d2" });
+    const out = resolveFaabBatch(input([a], [onAaa, onZzz]));
+    expect(resolutionFor(out, onAaa.bidId).outcome).toBe("won"); // AAA < ZZZ
+    expect(resolutionFor(out, onZzz.bidId)).toMatchObject({
+      outcome: "lost",
+      reason: "budget-exhausted",
+    });
+  });
+
+  it("SAME-TARGET duplicates: the same manager's equal duplicate bids on one player resolve by priority ASC, not bid id", () => {
+    // bidId order would pick "dup-1"; priority hands the win to "dup-2".
+    const a = mgr("A", 1, { owned: ["A-d1", "A-d2"] });
+    const first = bid("A", "STAR", 7, { drop: "A-d1", id: "dup-1", priority: 2 });
+    const second = bid("A", "STAR", 7, { drop: "A-d2", id: "dup-2", priority: 1 });
+    const out = resolveFaabBatch(input([a], [first, second]));
+    expect(resolutionFor(out, "dup-2").outcome).toBe("won");
+    expect(resolutionFor(out, "dup-1")).toMatchObject({ outcome: "lost", reason: "lost-tiebreak" });
+  });
+
+  it("SAME-TARGET null fallback: duplicate bids without priority resolve by the deterministic bid id (pre-column byte-identical)", () => {
+    const a = mgr("A", 1, { owned: ["A-d1", "A-d2"] });
+    const first = bid("A", "STAR", 7, { drop: "A-d1", id: "dup-1" });
+    const second = bid("A", "STAR", 7, { drop: "A-d2", id: "dup-2" });
+    const out = resolveFaabBatch(input([a], [first, second]));
+    expect(resolutionFor(out, "dup-1").outcome).toBe("won");
+    expect(resolutionFor(out, "dup-2")).toMatchObject({ outcome: "lost", reason: "lost-tiebreak" });
+  });
+
+  it("a NUMBERED priority beats a null one at equal amount (null sorts last, then the deterministic key)", () => {
+    const a = mgr("A", 1, { owned: ["A-d1", "A-d2"] });
+    const nullBid = bid("A", "STAR", 7, { drop: "A-d1", id: "dup-1" }); // bidId order favors it
+    const numbered = bid("A", "STAR", 7, { drop: "A-d2", id: "dup-2", priority: 5 });
+    const out = resolveFaabBatch(input([a], [nullBid, numbered]));
+    expect(resolutionFor(out, "dup-2").outcome).toBe("won");
+  });
+
+  it("priority NEVER compares across managers: two UNSEEDED managers tied on a player still break on bid id", () => {
+    // Both unseeded → positionOf ties at HUGE. B carries the better (lower) priority, but priority is
+    // strictly intra-manager, so the deterministic bidId ("a-bid" < "b-bid") must still decide.
+    const a = mgr("A", null, { owned: ["A-d1"] });
+    const b = mgr("B", null, { owned: ["B-d1"] });
+    const aBid = bid("A", "STAR", 7, { drop: "A-d1", id: "a-bid", priority: 9 });
+    const bBid = bid("B", "STAR", 7, { drop: "B-d1", id: "b-bid", priority: 1 });
+    const out = resolveFaabBatch(input([a, b], [aBid, bBid]));
+    expect(resolutionFor(out, "a-bid").outcome).toBe("won");
+    expect(resolutionFor(out, "b-bid")).toMatchObject({ outcome: "lost", reason: "lost-tiebreak" });
+  });
+
+  it("AMOUNT stays primary: a higher bid beats a better priority (priority is the equal-amount tiebreak only)", () => {
+    const a = mgr("A", 1, { budget: 20, owned: ["A-d1", "A-d2"] });
+    const bigLate = bid("A", "AAA", 12, { drop: "A-d1", priority: 2 });
+    const smallFirst = bid("A", "ZZZ", 8, { drop: "A-d2", priority: 1 });
+    const out = resolveFaabBatch(input([a], [bigLate, smallFirst]));
+    // both legal and both win — but the $12 processes first (budget deltas prove nothing here, so
+    // pin the emergent highest-first order via the resolutions sequence)
+    const wonIds = out.resolutions.filter((r) => r.outcome === "won").map((r) => r.bidId);
+    expect(wonIds).toEqual([bigLate.bidId, smallFirst.bidId]);
+  });
+
+  it("budget-exhausted interplay at equal amounts: priority decides WHICH claim consumes the last dollars", () => {
+    // $15 budget, two $10 equal bids: the priority-1 claim wins, the other exhausts.
+    const a = mgr("A", 1, { budget: 15, owned: ["A-d1", "A-d2"] });
+    const preferred = bid("A", "ZZZ", 10, { drop: "A-d2", priority: 1 });
+    const other = bid("A", "AAA", 10, { drop: "A-d1", priority: 2 });
+    const out = resolveFaabBatch(input([a], [other, preferred]));
+    expect(resolutionFor(out, preferred.bidId).outcome).toBe("won");
+    expect(resolutionFor(out, other.bidId)).toMatchObject({
+      outcome: "lost",
+      reason: "budget-exhausted",
+    });
+    expect(out.budgetDeltas).toEqual([{ managerId: "A", spent: 10, newBudget: 5 }]);
   });
 });

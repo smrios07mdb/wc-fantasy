@@ -105,6 +105,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
       select: {
         id: true,
         amount: true,
+        priority: true,
         playerAdd: { select: PLAYER_SELECT },
         playerDrop: { select: PLAYER_SELECT },
       },
@@ -267,6 +268,7 @@ export async function loadWaivers(viewerManagerId: string): Promise<WaiversView 
   const claims: WvClaim[] = pendingBids.map((b) => ({
     bidId: b.id,
     amount: b.amount,
+    priority: b.priority,
     add: toPlayer(b.playerAdd),
     drop: b.playerDrop ? toPlayer(b.playerDrop) : null,
   }));

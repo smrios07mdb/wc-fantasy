@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MemoryFaabBidStore, type FaabBidStore } from "@app/faab";
 import type { SessionManagerOutcome } from "@app/auth";
-import { handleSubmitBid, handleEditBid, handleCancelBid } from "./handleBid";
+import { handleSubmitBid, handleEditBid, handleCancelBid, handleReorderBids } from "./handleBid";
 
 /**
  * The gated bid route handlers (the `/api/draft/pick` template): identity FIRST — reject 401 (no
@@ -350,5 +350,123 @@ describe("handleEditBid / handleCancelBid — self-scoped bid mutations", () => 
       { managerId: "A", bidId: "whatever" },
     );
     expect(res.status).toBe(401);
+  });
+});
+
+// ── PUT reorder (§D amendment: pending-claim priority) ──────────────────────────
+describe("handleReorderBids — auth gating (401/403 BEFORE any read or write)", () => {
+  it("401 when there is no session — store untouched", async () => {
+    const res = await handleReorderBids(
+      { resolveManager: async () => ({ kind: "no-session" }), store: explodingStore, now: NOW },
+      { managerId: "A", orderedBidIds: [] },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("403 when acting as a DIFFERENT manager (scope self) — store untouched", async () => {
+    const res = await handleReorderBids(
+      { resolveManager: async () => okOutcome, store: explodingStore, now: NOW },
+      { managerId: "SOMEONE-ELSE", orderedBidIds: [] },
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("handleReorderBids — permutation guard + batch-clear latch + persistence", () => {
+  async function seedTwoBids(store: MemoryFaabBidStore) {
+    const deps = { resolveManager: async () => okOutcome, store, now: NOW };
+    const r1 = await handleSubmitBid(deps, { ...submitBody, amount: 5 });
+    const r2 = await handleSubmitBid(deps, { ...submitBody, amount: 5 });
+    const id = (r: Awaited<ReturnType<typeof handleSubmitBid>>) =>
+      (r.body as { bid: { bidId: string } }).bid.bidId;
+    return { deps, first: id(r1), second: id(r2) };
+  }
+
+  it("persists the permutation as priority 1..N (submit appends, reorder rewrites)", async () => {
+    const store = freshStore();
+    const { deps, first, second } = await seedTwoBids(store);
+    // submit appended 1 then 2; invert them
+    expect(store.priorityOf(first)).toBe(1);
+    expect(store.priorityOf(second)).toBe(2);
+    const res = await handleReorderBids(deps, { managerId: "A", orderedBidIds: [second, first] });
+    expect(res.status).toBe(200);
+    expect(store.priorityOf(second)).toBe(1);
+    expect(store.priorityOf(first)).toBe(2);
+  });
+
+  it("409 reorder_conflict when the permutation is stale (missing a pending bid) — nothing written", async () => {
+    const store = freshStore();
+    const { deps, first, second } = await seedTwoBids(store);
+    const res = await handleReorderBids(deps, { managerId: "A", orderedBidIds: [second] });
+    expect(res).toMatchObject({ status: 409, body: { error: "reorder_conflict" } });
+    expect(store.priorityOf(first)).toBe(1); // untouched
+    expect(store.priorityOf(second)).toBe(2);
+  });
+
+  it("409 reorder_conflict on a duplicated bidId (not a true permutation) — nothing written", async () => {
+    const store = freshStore();
+    const { deps, first, second } = await seedTwoBids(store);
+    const res = await handleReorderBids(deps, {
+      managerId: "A",
+      orderedBidIds: [second, second],
+    });
+    expect(res).toMatchObject({ status: 409, body: { error: "reorder_conflict" } });
+    expect(store.priorityOf(first)).toBe(1);
+    expect(store.priorityOf(second)).toBe(2);
+  });
+
+  it("409 reorder_conflict on a foreign bidId smuggled into the permutation", async () => {
+    const store = freshStore();
+    const { deps, second } = await seedTwoBids(store);
+    const res = await handleReorderBids(deps, {
+      managerId: "A",
+      orderedBidIds: [second, "not-mine"],
+    });
+    expect(res).toMatchObject({ status: 409, body: { error: "reorder_conflict" } });
+  });
+
+  it("409 bid-window-closed once a pending bid's add-period batch has CLEARED (the edit latch, same read)", async () => {
+    const store = freshStore();
+    const deps = { resolveManager: async () => okOutcome, store, now: NOW };
+    // Seed a pending bid on X while sealed, then flip X's period to cleared (free-agency) — the
+    // stranded-pending shape the latch exists for.
+    const r = await handleSubmitBid(deps, { ...submitBody, amount: 5 });
+    const bidId = (r.body as { bid: { bidId: string } }).bid.bidId;
+    store.setPlayerFacts("X", {
+      position: "MID",
+      periodFirstKickoffAt: new Date("2026-06-10T15:00:00Z"),
+      periodBatchClearedAt: new Date("2026-06-10T05:30:00Z"),
+    });
+    const res = await handleReorderBids(deps, { managerId: "A", orderedBidIds: [bidId] });
+    expect(res).toMatchObject({ status: 409, body: { error: "bid-window-closed" } });
+    expect(store.priorityOf(bidId)).toBe(1); // untouched
+  });
+
+  it("a KICKED-OFF add target does NOT block the reorder (void-bound — order can never matter)", async () => {
+    const store = freshStore();
+    const deps = { resolveManager: async () => okOutcome, store, now: NOW };
+    const r1 = await handleSubmitBid(deps, { ...submitBody, amount: 5 });
+    const r2 = await handleSubmitBid(deps, { ...submitBody, amount: 5 });
+    const id = (r: Awaited<ReturnType<typeof handleSubmitBid>>) =>
+      (r.body as { bid: { bidId: string } }).bid.bidId;
+    // Flip X to already-kicked-off (period still sealed: batch not cleared) — the S2 speculative shape.
+    store.setPlayerFacts("X", {
+      position: "MID",
+      periodFirstKickoffAt: new Date("2026-06-10T05:00:00Z"),
+      periodBatchClearedAt: null,
+    });
+    const res = await handleReorderBids(deps, {
+      managerId: "A",
+      orderedBidIds: [id(r2), id(r1)],
+    });
+    expect(res.status).toBe(200);
+    expect(store.priorityOf(id(r2))).toBe(1);
+  });
+
+  it("an empty pending set reorders trivially (200, no-op)", async () => {
+    const store = freshStore();
+    const deps = { resolveManager: async () => okOutcome, store, now: NOW };
+    const res = await handleReorderBids(deps, { managerId: "A", orderedBidIds: [] });
+    expect(res.status).toBe(200);
   });
 });

@@ -129,6 +129,12 @@ export interface FaabBidStore {
   ): Promise<PersistedBid | null>;
   /** Cancel (delete) a still-`pending` bid (guarded). Returns true if a row was removed. */
   cancelBid(bidId: string): Promise<boolean>;
+  /** The manager's own still-`pending` bids (id + add target) — the reorder handler's set/latch read. */
+  listPendingBids(managerId: string): Promise<{ bidId: string; playerAddId: string }[]>;
+  /** Rewrite the manager's own pending-claim `priority` to the given permutation (1..N by list index)
+   *  in ONE serialized transaction. Returns false — nothing written — when the permutation no longer
+   *  matches the manager's pending set (a concurrent submit/cancel/settle); the caller 409s. */
+  reorderPendingBids(managerId: string, orderedBidIds: readonly string[]): Promise<boolean>;
 }
 
 // ── the $0 free-agency route's port (Prompt 48) ────────────────────────────────────

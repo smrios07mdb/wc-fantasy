@@ -19,13 +19,14 @@
  *  7. Every won claim is add/drop + a budget debit (`applyAward`).
  *  8. Contiguity (1..N) is preserved by `moveToBottom`, which renumbers the whole seeded order.
  *
- * TODO(confirm): priority vs. amount. The Waivers design shows reorderable pending-claim *priority*,
- * but §D locks "a manager's own winning bids resolve highest-first (by AMOUNT)". This resolver honors
- * the locked rule — own bids are ordered by amount, never by a UI priority — and a same-amount own-bid
- * cross-player tie falls to the deterministic playerId order. Treat the design's `priority` as the
- * intra-manager tiebreak for EQUAL-amount own bids (+ a UI apply-order hint) only once confirmed. Note
- * `faab_bid` has NO `priority` column today, so honoring it at all needs a migration first — until
- * then there is nothing to thread through here.
+ * PRIORITY (§D amendment, ratified — the Prompt-25 "priority vs. amount" deferral lifted): a manager's
+ * reorderable `faab_bid.priority` is honored as the INTRA-manager EQUAL-AMOUNT tiebreak ONLY — both the
+ * cross-target case (same manager leads two tied-top players) and the same-target duplicate case (same
+ * manager, same player, equal amount) resolve by priority ASC. Amount remains the primary ordering and
+ * §D's "own winning bids resolve highest-first (by AMOUNT)" is untouched. Priority NEVER compares across
+ * managers (the comparator is gated on managerId equality — two unseeded managers tie on waiver position,
+ * not on priority). The previous deterministic keys (playerId / bidId) remain strictly BENEATH priority
+ * as the null/equal fallback, so a null-priority batch is byte-identical to the pre-column resolver.
  */
 import { POSITIONS, type Position } from "@app/shared";
 
@@ -66,6 +67,11 @@ export interface BidInput {
    *  drop is invalid — the IO layer resolves this from `lineup_slot.locked_at` via @app/lineup. */
   dropLocked: boolean;
   amount: number;
+  /** Manager-set processing priority among their OWN pending claims (1 = first; §D amendment). The
+   *  intra-manager EQUAL-AMOUNT tiebreak only — never compared across managers. Null/absent (pre-column
+   *  rows, or a rare concurrent-submit duplicate) sorts AFTER any numbered priority and falls to the
+   *  deterministic keys beneath, keeping every priority-less batch byte-identical. */
+  priority?: number | null;
 }
 
 export interface ResolveBatchInput {
@@ -204,9 +210,11 @@ export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
     // The next player to resolve is the one carrying the highest live bid (step 2). When several
     // DIFFERENT players are tied at the top amount, they are processed in WAIVER ORDER — by the
     // leading bidder's current waiver position (lower = first), NOT by player id / insertion order —
-    // because move-to-bottom sequencing depends on it. (Waiver positions are unique per league, so the
-    // only way two candidates' leaders tie is the SAME manager leading both at equal amount; that lone
-    // intra-manager case falls back to a deterministic player id — the priority-confirm seam.)
+    // because move-to-bottom sequencing depends on it. When the SAME manager leads several tied
+    // players at equal amount (the §D-amendment seam), their own `priority` ASC decides which claim
+    // processes first; the deterministic player id stays strictly beneath as the null/equal fallback.
+    // `intraManagerPriority` returns 0 across DIFFERENT managers (incl. two unseeded ones tying at
+    // positionOf = HUGE), so priority never leaks into a cross-manager comparison.
     const topAmount = Math.max(...live.map((b) => b.amount));
     const playersAtTop = [
       ...new Set(live.filter((b) => b.amount === topAmount).map((b) => b.playerAddId)),
@@ -215,7 +223,9 @@ export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
       .map((p) => ({ p, winner: winnerForPlayer(live, p, positionOf) }))
       .sort(
         (a, b) =>
-          positionOf(a.winner.managerId) - positionOf(b.winner.managerId) || (a.p < b.p ? -1 : 1),
+          positionOf(a.winner.managerId) - positionOf(b.winner.managerId) ||
+          intraManagerPriority(a.winner, b.winner) ||
+          (a.p < b.p ? -1 : 1),
       )[0]!.p;
 
     // Among this player's live bids, the winner is highest amount, then lowest waiver position (step 3).
@@ -305,9 +315,25 @@ export function resolveFaabBatch(inputArg: ResolveBatchInput): BatchOutcome {
   return { resolutions, budgetDeltas, waiverOrder, waiverOrderChanged };
 }
 
+/** The §D-amendment tiebreak: the manager's own `priority` ASC, applied ONLY when both bids belong to
+ *  the SAME manager (cross-manager ordering is waiver position's job — and two UNSEEDED managers tie at
+ *  positionOf = HUGE, so an unguarded compare would leak priority across managers there). Null/absent
+ *  priority sorts AFTER any numbered one; both-null (or equal — the rare concurrent-submit duplicate)
+ *  returns 0 and falls to the deterministic key beneath, keeping priority-less inputs byte-identical. */
+function intraManagerPriority(a: BidInput, b: BidInput): number {
+  if (a.managerId !== b.managerId) return 0;
+  const pa = a.priority ?? null;
+  const pb = b.priority ?? null;
+  if (pa === null && pb === null) return 0;
+  if (pa === null) return 1;
+  if (pb === null) return -1;
+  return pa - pb;
+}
+
 /** The prospective winner of `player` among the LIVE bids: highest amount, then lowest current waiver
- *  position, then a deterministic bid id. Used both to pick the winner and to order tied-top players by
- *  their leading bidder's waiver position. */
+ *  position, then the same manager's own `priority` ASC (the §D-amendment same-target duplicate case),
+ *  then a deterministic bid id. Used both to pick the winner and to order tied-top players by their
+ *  leading bidder's waiver position. */
 function winnerForPlayer(
   live: readonly BidInput[],
   player: string,
@@ -316,7 +342,10 @@ function winnerForPlayer(
   const onPlayer = live.filter((b) => b.playerAddId === player);
   const top = Math.max(...onPlayer.map((b) => b.amount));
   return [...onPlayer.filter((b) => b.amount === top)].sort(
-    (a, b) => positionOf(a.managerId) - positionOf(b.managerId) || (a.bidId < b.bidId ? -1 : 1),
+    (a, b) =>
+      positionOf(a.managerId) - positionOf(b.managerId) ||
+      intraManagerPriority(a, b) ||
+      (a.bidId < b.bidId ? -1 : 1),
   )[0]!;
 }
 

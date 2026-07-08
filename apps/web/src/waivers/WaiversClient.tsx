@@ -12,7 +12,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WaiversView, WvClaim, WvPlayer } from "./types";
-import { computeBudget, isClaimVoid, resolveBidDeepLink, sortClaims } from "./waiversLogic";
+import {
+  canMoveClaim,
+  computeBudget,
+  isClaimVoid,
+  moveClaim,
+  resolveBidDeepLink,
+  sortClaims,
+} from "./waiversLogic";
 import {
   BatchBar,
   ClaimRow,
@@ -57,6 +64,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   "release-locked": "That player has played this round and can’t be released yet.",
   "release-below-floor": "That would leave too few players to field a lineup — keep at least 7.",
   "release-unfillable": "The players left can’t field a legal XI — confirm to release anyway.",
+  reorder_conflict:
+    "Your claims changed while reordering — the list has been refreshed, try again.",
   bid_not_pending: "This claim was already processed.",
   bid_not_found: "That claim no longer exists.",
   not_your_manager: "You can only manage your own claims.",
@@ -170,7 +179,7 @@ export function WaiversClient({
     setComposerError(null);
   }
 
-  async function callBid(method: "POST" | "PATCH" | "DELETE", body: unknown) {
+  async function callBid(method: "POST" | "PATCH" | "PUT" | "DELETE", body: unknown) {
     const res = await fetch("/api/faab/bid", {
       method,
       headers: { "content-type": "application/json" },
@@ -222,6 +231,21 @@ export function WaiversClient({
     setBusyBidId(bidId);
     setListError(null);
     const { ok, data } = await callBid("DELETE", { managerId: view.managerId, bidId });
+    setBusyBidId(null);
+    if (ok) router.refresh();
+    else setListError(friendly(data));
+  }
+
+  // Reorder a pending claim one step among its EQUAL-AMOUNT neighbors (§D amendment): PUT the full
+  // displayed permutation (persisted as priority 1..N), then router.refresh() like every other mutation.
+  // A 409 reorder_conflict just means the list moved under us — the refresh reconciles it.
+  async function handleMove(index: number, dir: "up" | "down") {
+    const orderedBidIds = moveClaim(sortedClaims, index, dir);
+    if (orderedBidIds === null) return;
+    const bidId = sortedClaims[index]!.bidId;
+    setBusyBidId(bidId);
+    setListError(null);
+    const { ok, data } = await callBid("PUT", { managerId: view.managerId, orderedBidIds });
     setBusyBidId(null);
     if (ok) router.refresh();
     else setListError(friendly(data));
@@ -430,10 +454,11 @@ export function WaiversClient({
               </div>
             ) : (
               <div className="wv-claims-list">
-                {sortedClaims.map((claim) => (
+                {sortedClaims.map((claim, index) => (
                   <ClaimRow
                     key={claim.bidId}
                     claim={claim}
+                    ordinal={index + 1}
                     now={now}
                     voided={isClaimVoid(claim, now)}
                     busy={busyBidId === claim.bidId}
@@ -442,14 +467,18 @@ export function WaiversClient({
                       setComposer({ open: true, editClaim: claim });
                     }}
                     onCancel={() => handleCancel(claim.bidId)}
+                    canMoveUp={canMoveClaim(sortedClaims, index, "up")}
+                    canMoveDown={canMoveClaim(sortedClaims, index, "down")}
+                    onMoveUp={() => handleMove(index, "up")}
+                    onMoveDown={() => handleMove(index, "down")}
                   />
                 ))}
               </div>
             )}
 
             <div className="wv-claims-foot t-micro text-tertiary">
-              Higher claims process first — once a claim wins, its FAAB is spent before the next is
-              evaluated.
+              Higher bids process first — your equal bids follow your order (the arrows). Once a
+              claim wins, its FAAB is spent before the next is evaluated.
             </div>
           </div>
 

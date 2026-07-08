@@ -173,6 +173,7 @@ describe("WaiversClient — deep-link preselection (open + claimable)", () => {
     const existing: WvClaim = {
       bidId: "b1",
       amount: 5,
+      priority: null,
       add: wvPlayer("mbappe", { name: "Kylian Mbappé", shortName: "K. Mbappé", kickoffAt: FUTURE }),
       drop: null,
     };

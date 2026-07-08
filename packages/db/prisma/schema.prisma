@@ -642,6 +642,12 @@ model FaabBid {
   /// case where a slot is open. TODO(prompt-NN): enforce add+drop pairing in the FAAB transaction.
   playerDropId String?   @map("player_drop_id")
   amount       Int
+  /// Manager-set processing priority among their OWN pending claims (§D amendment; the Prompt-25
+  /// deferral lifted): the resolver's intra-manager EQUAL-AMOUNT tiebreak only — amount stays the
+  /// primary ordering. Backfilled/appended contiguous 1..N per manager; cancel leaves gaps (the
+  /// comparator uses relative order, so deliberately NO unique index — a rare concurrent-submit
+  /// duplicate degrades to the deterministic key beneath). Null = pre-column or settled row.
+  priority     Int?
   submittedAt  DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(6)
   batchId      String?   @map("batch_id")
   status       BidStatus @default(pending)

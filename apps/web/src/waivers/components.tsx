@@ -417,27 +417,82 @@ export function TeamBudgetsRail({ budgets }: { budgets: readonly WvTeamBudget[] 
   );
 }
 
+/** Chevron for the pending-claim reorder arrows (§D amendment). */
+function IconChevron({ dir }: { dir: "up" | "down" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="13"
+      height="13"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {dir === "up" ? <path d="M5 15l7-7 7 7" /> : <path d="M5 9l7 7 7-7" />}
+    </svg>
+  );
+}
+
+const REORDER_HINT = "Raise the bid to process earlier.";
+
 // ── a single pending claim ───────────────────────────────────────────────────────
 export function ClaimRow({
   claim,
+  ordinal,
   now,
   voided,
   onEdit,
   onCancel,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   busy,
 }: {
   claim: { bidId: string; amount: number; add: WvPlayer; drop: WvPlayer | null };
+  /** Effective processing position (#n) within the pending list — amount DESC, then the manager's own
+   *  priority ASC (§D amendment). One list = one batch group (all pending claims clear together). */
+  ordinal: number;
   now: Date;
   voided: boolean;
   onEdit: () => void;
   onCancel: () => void;
+  /** Arrows swap ONLY adjacent EQUAL-AMOUNT claims (priority is the equal-amount tiebreak — a move
+   *  across an amount boundary can never change processing order, so it is disabled with the hint). */
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   busy: boolean;
 }) {
   return (
     <div className={"wv-claim" + (voided ? " is-void" : "")}>
-      {/* TODO(confirm): pending-claim reorder (the design's up/down arrows) needs a `faab_bid.priority`
-          migration — deferred with the engine's priority-vs-amount tiebreak (Prompt 25). Claims render
-          amount-descending (the engine's own-bid resolution order) until then. */}
+      <div className="wv-claim-order">
+        <span className="wv-claim-ord mono" title="Your processing order at the batch">
+          #{ordinal}
+        </span>
+        <button
+          className="wv-icon-btn wv-order-arrow"
+          onClick={onMoveUp}
+          disabled={busy || !canMoveUp}
+          title={canMoveUp ? "Process earlier" : REORDER_HINT}
+          aria-label="Move claim earlier"
+        >
+          <IconChevron dir="up" />
+        </button>
+        <button
+          className="wv-icon-btn wv-order-arrow"
+          onClick={onMoveDown}
+          disabled={busy || !canMoveDown}
+          title={canMoveDown ? "Process later" : REORDER_HINT}
+          aria-label="Move claim later"
+        >
+          <IconChevron dir="down" />
+        </button>
+      </div>
       <div className="wv-claim-body">
         <div className="wv-claim-line">
           <span className="wv-claim-tag wv-tag-add">ADD</span>

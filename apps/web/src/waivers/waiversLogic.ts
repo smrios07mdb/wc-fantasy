@@ -29,11 +29,54 @@ export function isClaimVoid(claim: WvClaim, now: Date): boolean {
   return isPlayerCutoffPassed(claim.add, now);
 }
 
-/** Pending claims sorted by sealed amount descending (the engine's own-bid resolution order). */
+/** The §D-amendment tiebreak, mirrored from the resolver's `intraManagerPriority` (every claim here is
+ *  the SAME manager's, so no managerId gate): priority ASC, null after any numbered priority, both-null
+ *  falls through to the deterministic tail. */
+function comparePriority(a: WvClaim, b: WvClaim): number {
+  if (a.priority === null && b.priority === null) return 0;
+  if (a.priority === null) return 1;
+  if (b.priority === null) return -1;
+  return a.priority - b.priority;
+}
+
+/** Pending claims sorted in EFFECTIVE PROCESSING ORDER: sealed amount descending (the engine's primary
+ *  ordering), then the manager's own priority ASC (§D amendment — the batch's intra-manager equal-amount
+ *  tiebreak), then the stable bidId tail for pre-column rows. All pending claims clear at the SAME next
+ *  batch run (the batch loads league-wide pending, even when submissions spanned add-periods), so this
+ *  single list IS the one batch group — no per-batch sub-grouping exists to render. */
 export function sortClaims(claims: readonly WvClaim[]): WvClaim[] {
-  // Stable tiebreak on bidId keeps the order deterministic when amounts are equal (the intra-manager
-  // equal-amount tiebreak is the deferred priority column — see WaiversClient TODO(confirm)).
-  return [...claims].sort((a, b) => b.amount - a.amount || a.bidId.localeCompare(b.bidId));
+  return [...claims].sort(
+    (a, b) => b.amount - a.amount || comparePriority(a, b) || a.bidId.localeCompare(b.bidId),
+  );
+}
+
+/** May the sorted claim at `index` swap with its `dir` neighbor? Only between ADJACENT EQUAL-AMOUNT
+ *  claims — amount is the primary ordering, so crossing an amount boundary can never change processing
+ *  order (the UI disables the arrow with the "raise the bid" hint instead). */
+export function canMoveClaim(
+  sorted: readonly WvClaim[],
+  index: number,
+  dir: "up" | "down",
+): boolean {
+  const j = dir === "up" ? index - 1 : index + 1;
+  if (index < 0 || index >= sorted.length || j < 0 || j >= sorted.length) return false;
+  return sorted[j]!.amount === sorted[index]!.amount;
+}
+
+/** The FULL permutation of pending bidIds after swapping `index` with its `dir` neighbor — exactly what
+ *  `PUT /api/faab/bid` persists as priority 1..N by position. The whole DISPLAYED order is sent (not
+ *  just the swapped pair) so the stored priorities converge onto the effective processing order the
+ *  manager is looking at. Null when the swap is not allowed. */
+export function moveClaim(
+  sorted: readonly WvClaim[],
+  index: number,
+  dir: "up" | "down",
+): string[] | null {
+  if (!canMoveClaim(sorted, index, dir)) return null;
+  const j = dir === "up" ? index - 1 : index + 1;
+  const ids = sorted.map((c) => c.bidId);
+  [ids[index], ids[j]] = [ids[j]!, ids[index]!];
+  return ids;
 }
 
 /** Sum of every pending bid amount — what the engine reserves against the budget. */

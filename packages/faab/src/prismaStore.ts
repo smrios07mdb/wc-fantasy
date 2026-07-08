@@ -94,6 +94,7 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
             playerAddId: true,
             playerDropId: true,
             amount: true,
+            priority: true,
             playerAdd: {
               select: { position: true, teamId: true, team: { select: { eliminated: true } } },
             },
@@ -164,6 +165,9 @@ export function createPrismaFaabBatchStore(prisma: Db): FaabBatchStore {
           b.playerDropId !== null &&
           (lockedByManager.get(b.managerId)?.has(b.playerDropId) ?? false),
         amount: b.amount,
+        // §D amendment: the manager's own processing priority — the resolver's intra-manager
+        // equal-amount tiebreak (null falls to the deterministic keys beneath).
+        priority: b.priority,
       }));
 
       // D4 (trim-down): in the playoff phase the batch competes ONLY the `alive` playoff_entry holders —
@@ -363,25 +367,36 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
     },
 
     async createBid(bid): Promise<PersistedBid> {
-      const row = await prisma.faabBid.create({
-        data: {
-          leagueId: bid.leagueId,
-          managerId: bid.managerId,
-          playerAddId: bid.playerAddId,
-          playerDropId: bid.playerDropId,
-          amount: bid.amount,
-          note: bid.note,
-          submittedAt: bid.submittedAt,
-          status: "pending",
-        },
-        select: {
-          id: true,
-          managerId: true,
-          playerAddId: true,
-          playerDropId: true,
-          amount: true,
-          note: true,
-        },
+      // Append at the bottom of the manager's own priority queue (§D amendment): MAX(priority)+1 over
+      // their still-pending bids, read + written in ONE interactive transaction. Deliberately NO unique
+      // index backs this — a same-instant concurrent submit can produce a duplicate priority, which the
+      // resolver resolves via the deterministic key beneath (a benign tie, not a P2002 failure).
+      const row = await prisma.$transaction(async (tx) => {
+        const agg = await tx.faabBid.aggregate({
+          where: { managerId: bid.managerId, status: "pending" },
+          _max: { priority: true },
+        });
+        return tx.faabBid.create({
+          data: {
+            leagueId: bid.leagueId,
+            managerId: bid.managerId,
+            playerAddId: bid.playerAddId,
+            playerDropId: bid.playerDropId,
+            amount: bid.amount,
+            priority: (agg._max.priority ?? 0) + 1,
+            note: bid.note,
+            submittedAt: bid.submittedAt,
+            status: "pending",
+          },
+          select: {
+            id: true,
+            managerId: true,
+            playerAddId: true,
+            playerDropId: true,
+            amount: true,
+            note: true,
+          },
+        });
       });
       return { bidId: row.id, ...row };
     },
@@ -419,6 +434,40 @@ export function createPrismaFaabBidStore(prisma: Db): FaabBidStore {
     async cancelBid(bidId): Promise<boolean> {
       const deleted = await prisma.faabBid.deleteMany({ where: { id: bidId, status: "pending" } });
       return deleted.count > 0;
+    },
+
+    async listPendingBids(managerId): Promise<{ bidId: string; playerAddId: string }[]> {
+      const rows = await prisma.faabBid.findMany({
+        where: { managerId, status: "pending" },
+        select: { id: true, playerAddId: true },
+      });
+      return rows.map((r) => ({ bidId: r.id, playerAddId: r.playerAddId }));
+    },
+
+    async reorderPendingBids(managerId, orderedBidIds): Promise<boolean> {
+      // Tx-serialized resequence (the race-safety choice — see the migration header for why NOT the
+      // waiver-order partial-unique + two-phase dance): lock the manager's pending rows in a
+      // DETERMINISTIC order (`ORDER BY id FOR UPDATE` — same-order acquisition means two concurrent
+      // reorders serialize instead of deadlocking), re-verify the permutation matches the set INSIDE
+      // the transaction (a concurrent submit/cancel/settle flips the set → clean false, the caller
+      // 409s), then rewrite the full contiguous 1..N. No unique index → no transient collisions.
+      return prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "faab_bid"
+          WHERE "manager_id" = ${managerId} AND "status" = 'pending'
+          ORDER BY "id" FOR UPDATE
+        `;
+        // A true permutation: same cardinality, no duplicates, every id an own-pending row. A repeated
+        // id would otherwise pass the two count checks while silently skipping a row.
+        if (locked.length !== orderedBidIds.length) return false;
+        if (new Set(orderedBidIds).size !== orderedBidIds.length) return false;
+        const lockedIds = new Set(locked.map((r) => r.id));
+        if (!orderedBidIds.every((id) => lockedIds.has(id))) return false;
+        for (const [idx, bidId] of orderedBidIds.entries()) {
+          await tx.faabBid.update({ where: { id: bidId }, data: { priority: idx + 1 } });
+        }
+        return true;
+      });
     },
   };
 }

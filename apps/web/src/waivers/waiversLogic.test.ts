@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { WvClaim, WvPlayer } from "./types";
 import {
   buildBatchWindowView,
+  canMoveClaim,
   claimableFreeAgents,
   composerMaxBid,
   computeBudget,
@@ -9,6 +10,7 @@ import {
   freeAgentNations,
   isClaimVoid,
   isPlayerCutoffPassed,
+  moveClaim,
   pendingBidCountByPlayer,
   sortClaims,
   watchedFreeAgents,
@@ -36,6 +38,7 @@ function player(over: Partial<WvPlayer> & { id: string }): WvPlayer {
 function claim(over: Partial<WvClaim> & { bidId: string }): WvClaim {
   return {
     amount: over.amount ?? 10,
+    priority: over.priority ?? null,
     add: over.add ?? player({ id: `add-${over.bidId}` }),
     drop: over.drop ?? null,
     ...over,
@@ -70,6 +73,55 @@ describe("claim ordering (engine own-bid resolution order)", () => {
       claim({ bidId: "c", amount: 20 }),
     ];
     expect(sortClaims(claims).map((c) => c.bidId)).toEqual(["a", "c", "b"]);
+  });
+
+  it("breaks equal amounts on the manager's own priority ASC (§D amendment), amount still primary", () => {
+    const claims = [
+      claim({ bidId: "a", amount: 20, priority: 2 }),
+      claim({ bidId: "b", amount: 5, priority: 1 }), // better priority but a lower bid — stays last
+      claim({ bidId: "c", amount: 20, priority: 1 }),
+    ];
+    expect(sortClaims(claims).map((c) => c.bidId)).toEqual(["c", "a", "b"]);
+  });
+
+  it("null priority sorts AFTER any numbered one at equal amount; both-null falls to bidId (pre-column order)", () => {
+    const claims = [
+      claim({ bidId: "b", amount: 20, priority: null }),
+      claim({ bidId: "a", amount: 20, priority: null }),
+      claim({ bidId: "z", amount: 20, priority: 7 }),
+    ];
+    expect(sortClaims(claims).map((c) => c.bidId)).toEqual(["z", "a", "b"]);
+  });
+});
+
+describe("claim reorder affordances (arrows only between ADJACENT EQUAL-AMOUNT claims)", () => {
+  // sorted: a($20,p1) c($20,p2) b($5,p1) — one equal-amount pair + a lone lower bid.
+  const sorted = sortClaims([
+    claim({ bidId: "b", amount: 5, priority: 1 }),
+    claim({ bidId: "a", amount: 20, priority: 1 }),
+    claim({ bidId: "c", amount: 20, priority: 2 }),
+  ]);
+
+  it("enables the swap within the equal-amount pair, both directions", () => {
+    expect(canMoveClaim(sorted, 0, "down")).toBe(true);
+    expect(canMoveClaim(sorted, 1, "up")).toBe(true);
+  });
+
+  it("disables any move across an amount boundary or off the list edges", () => {
+    expect(canMoveClaim(sorted, 0, "up")).toBe(false); // top edge
+    expect(canMoveClaim(sorted, 1, "down")).toBe(false); // $20 → $5 boundary
+    expect(canMoveClaim(sorted, 2, "up")).toBe(false); // $5 → $20 boundary
+    expect(canMoveClaim(sorted, 2, "down")).toBe(false); // bottom edge
+  });
+
+  it("moveClaim returns the FULL displayed permutation with the pair swapped (what PUT persists as 1..N)", () => {
+    expect(moveClaim(sorted, 1, "up")).toEqual(["c", "a", "b"]);
+    expect(moveClaim(sorted, 0, "down")).toEqual(["c", "a", "b"]);
+  });
+
+  it("moveClaim is null for a disallowed move (boundary/edge) — nothing to send", () => {
+    expect(moveClaim(sorted, 1, "down")).toBeNull();
+    expect(moveClaim(sorted, 0, "up")).toBeNull();
   });
 });
 

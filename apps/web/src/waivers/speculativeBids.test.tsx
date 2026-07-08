@@ -106,7 +106,7 @@ function claimOn(
   bidId: string,
   over: Partial<WvPlayer> = {},
 ): WvClaim {
-  return { bidId, amount, add: player(playerId, over), drop: null };
+  return { bidId, amount, priority: null, add: player(playerId, over), drop: null };
 }
 
 const dialog = () => screen.getByRole("dialog", { name: /waiver claim/i });

@@ -173,6 +173,9 @@ interface MemBidRow {
   playerAddId: string;
   playerDropId: string | null;
   amount: number;
+  /** Manager-set processing priority (§D amendment) — appended MAX+1 on create, rewritten 1..N on
+   *  reorder, exactly as the Prisma adapter does. */
+  priority: number | null;
   note: string | null;
   status: Status;
 }
@@ -252,12 +255,21 @@ export class MemoryFaabBidStore implements FaabBidStore {
     note: string | null;
     submittedAt: Date;
   }): Promise<PersistedBid> {
+    // Append at the bottom of the manager's own priority queue (MAX+1 over their pending rows) —
+    // mirrors the Prisma adapter's transactional append.
+    const maxPriority = Math.max(
+      0,
+      ...this.rows
+        .filter((r) => r.managerId === bid.managerId && r.status === "pending")
+        .map((r) => r.priority ?? 0),
+    );
     const row: MemBidRow = {
       bidId: `bid-${++this.seq}`,
       managerId: bid.managerId,
       playerAddId: bid.playerAddId,
       playerDropId: bid.playerDropId,
       amount: bid.amount,
+      priority: maxPriority + 1,
       note: bid.note,
       status: "pending",
     };
@@ -291,6 +303,36 @@ export class MemoryFaabBidStore implements FaabBidStore {
     if (row.status !== "pending") return false; // guard: only a still-pending bid is cancellable
     this.rows.splice(i, 1);
     return true;
+  }
+
+  async listPendingBids(managerId: string): Promise<{ bidId: string; playerAddId: string }[]> {
+    return this.rows
+      .filter((r) => r.managerId === managerId && r.status === "pending")
+      .map((r) => ({ bidId: r.bidId, playerAddId: r.playerAddId }));
+  }
+
+  async reorderPendingBids(managerId: string, orderedBidIds: readonly string[]): Promise<boolean> {
+    // Mirrors the Prisma adapter's in-transaction permutation guard: same cardinality, no
+    // duplicates, every id an own-pending row — else nothing is written and the caller 409s.
+    const pending = this.rows.filter((r) => r.managerId === managerId && r.status === "pending");
+    if (pending.length !== orderedBidIds.length) return false;
+    if (new Set(orderedBidIds).size !== orderedBidIds.length) return false;
+    const pendingIds = new Set(pending.map((r) => r.bidId));
+    if (!orderedBidIds.every((id) => pendingIds.has(id))) return false;
+    for (const [idx, bidId] of orderedBidIds.entries()) {
+      this.rows.find((r) => r.bidId === bidId)!.priority = idx + 1;
+    }
+    return true;
+  }
+
+  /** The manager's pending priorities keyed by bidId — for assertions. */
+  priorityOf(bidId: string): number | null | undefined {
+    return this.rows.find((r) => r.bidId === bidId)?.priority;
+  }
+
+  /** Test seam: flip a player's facts mid-test (e.g. a period's batch clearing under pending bids). */
+  setPlayerFacts(playerId: string, facts: PlayerFacts): void {
+    this.players[playerId] = facts;
   }
 
   private toPersisted(r: MemBidRow): PersistedBid {

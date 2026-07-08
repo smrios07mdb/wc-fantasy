@@ -8,9 +8,9 @@
  *   POST   — submit a new pending bid (add / drop / amount / note)
  *   PATCH  — edit a still-pending bid's amount / drop / note (the add target is fixed)
  *   DELETE — cancel a still-pending bid
- *
- * Reorder of pending claims is intentionally NOT exposed here — it depends on the unresolved
- * priority-vs-amount confirm + a missing `faab_bid.priority` column (see the prompt's TODO(confirm)).
+ *   PUT    — reorder the manager's own pending claims (§D amendment: `faab_bid.priority`, the
+ *            resolver's intra-manager equal-amount tiebreak). Body carries the FULL permutation of
+ *            their pending bidIds; same gate + the same batch_cleared_at latch as edits.
  *
  * RLS (confirmed present, NOT a gap): the `faab_bid` policies were migrated in
  * `20260603223500_invariants` — own-pending SELECT/INSERT/UPDATE/DELETE keyed on auth.uid() =
@@ -27,9 +27,11 @@ import {
   handleSubmitBid,
   handleEditBid,
   handleCancelBid,
+  handleReorderBids,
   type SubmitBidBody,
   type EditBidBody,
   type CancelBidBody,
+  type ReorderBidsBody,
 } from "@/src/faab/handleBid";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +73,15 @@ function parseEdit(raw: unknown): EditBidBody | null {
   if (!managerId || !bidId || !drop.ok || !note.ok) return null;
   if (typeof b.amount !== "number" || !Number.isInteger(b.amount)) return null;
   return { managerId, bidId, amount: b.amount, playerDropId: drop.value, note: note.value };
+}
+
+function parseReorder(raw: unknown): ReorderBidsBody | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const b = raw as Record<string, unknown>;
+  const managerId = str(b.managerId);
+  if (!managerId || !Array.isArray(b.orderedBidIds)) return null;
+  if (!b.orderedBidIds.every((id): id is string => typeof id === "string")) return null;
+  return { managerId, orderedBidIds: b.orderedBidIds };
 }
 
 function parseCancel(raw: unknown): CancelBidBody | null {
@@ -121,6 +132,17 @@ export async function PATCH(request: Request) {
     return NextResponse.json(result.body, { status: result.status });
   } catch (err) {
     reportRouteError("PATCH", err);
+  }
+}
+
+export async function PUT(request: Request) {
+  const body = parseReorder(await request.json().catch(() => null));
+  if (!body) return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  try {
+    const result = await handleReorderBids(deps(), body);
+    return NextResponse.json(result.body, { status: result.status });
+  } catch (err) {
+    reportRouteError("PUT", err);
   }
 }
 

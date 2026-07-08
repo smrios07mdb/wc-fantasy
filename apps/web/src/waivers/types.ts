@@ -48,6 +48,9 @@ export interface WvPlayer {
 export interface WvClaim {
   readonly bidId: string;
   readonly amount: number;
+  /** Manager-set processing priority (§D amendment) — the batch's intra-manager EQUAL-AMOUNT tiebreak
+   *  only (amount stays primary). Null = pre-column row; sorts after any numbered priority. */
+  readonly priority: number | null;
   readonly add: WvPlayer;
   /** Every full-squad claim names a drop; null only for the open-slot reinforcement case. */
   readonly drop: WvPlayer | null;

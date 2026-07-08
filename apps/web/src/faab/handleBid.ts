@@ -52,6 +52,12 @@ export interface CancelBidBody {
   bidId: string;
 }
 
+export interface ReorderBidsBody {
+  managerId: string;
+  /** The FULL permutation of the manager's own pending bidIds, top priority first (1..N by index). */
+  orderedBidIds: readonly string[];
+}
+
 /** A submission rejection is a domain conflict with the rules (identity is already verified) → 409. */
 function bidErrorResult(error: FaabBidError): FaabHandlerResult {
   return { status: 409, body: { error: error.code, message: error.message } };
@@ -214,5 +220,48 @@ export async function handleCancelBid(
 
   const cancelled = await deps.store.cancelBid(body.bidId);
   if (!cancelled) return { status: 409, body: { error: "bid_not_pending" } };
+  return { status: 200, body: { ok: true } };
+}
+
+/**
+ * Reorder the manager's own pending-claim `priority` (§D amendment): the body carries the FULL
+ * permutation of their pending bidIds, persisted as priority 1..N by list index. Same gate chain as
+ * submit/edit/cancel (401/403 BEFORE any read or write; strict SELF op). Closed by the same
+ * `batch_cleared_at` latch as edits (`bid-window-closed`) — checked per add target's period, since
+ * pending claims can span add-periods. A KICKED-OFF target does NOT block the reorder: that claim is
+ * void-bound (its order can never matter), and a dead speculative bid must not freeze the manager's
+ * live-claim ordering. Any set drift (concurrent submit/cancel/settle) is a clean 409 — the store
+ * re-verifies the permutation inside its serialized transaction, so nothing is ever half-written.
+ */
+export async function handleReorderBids(
+  deps: FaabBidDeps,
+  body: ReorderBidsBody,
+): Promise<FaabHandlerResult> {
+  const g = await gate(deps, body.managerId);
+  if (!g.ok) return g.result;
+
+  const pending = await deps.store.listPendingBids(g.managerId);
+  if (
+    pending.length !== body.orderedBidIds.length ||
+    new Set(body.orderedBidIds).size !== body.orderedBidIds.length ||
+    !body.orderedBidIds.every((id) => pending.some((p) => p.bidId === id))
+  ) {
+    return { status: 409, body: { error: "reorder_conflict" } };
+  }
+
+  // The batch-clear latch, per distinct add target (the SAME window read edits validate against): a
+  // period that left sealed-bid for free agency no longer accepts any sealed-phase mutation.
+  for (const playerAddId of new Set(pending.map((p) => p.playerAddId))) {
+    const facts = await deps.store.getPlayerFacts(playerAddId);
+    if (facts && facts.periodBatchClearedAt !== null) {
+      return {
+        status: 409,
+        body: { error: "bid-window-closed", message: "The blind-bid window has closed." },
+      };
+    }
+  }
+
+  const ok = await deps.store.reorderPendingBids(g.managerId, body.orderedBidIds);
+  if (!ok) return { status: 409, body: { error: "reorder_conflict" } };
   return { status: 200, body: { ok: true } };
 }

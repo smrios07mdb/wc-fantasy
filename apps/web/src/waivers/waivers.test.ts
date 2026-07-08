@@ -79,8 +79,12 @@ describe("BidComposer — place + edit, engine-consistent validation", () => {
     expect(composer).toContain("droppableRoster");
   });
 
-  it("leaves the deferred reorder seam as a TODO(confirm) on the priority migration", () => {
-    expect(read("components.tsx")).toMatch(/TODO\(confirm\):[\s\S]*priority/);
+  it("the reorder seam is LIVE (§D amendment) — the TODO(confirm) deferral is gone, arrows render", () => {
+    const components = read("components.tsx");
+    expect(components).not.toMatch(/TODO\(confirm\):[\s\S]*priority/);
+    expect(components).toMatch(/Move claim earlier/);
+    expect(components).toMatch(/Move claim later/);
+    expect(components).toMatch(/Raise the bid to process earlier/);
   });
 });
 
