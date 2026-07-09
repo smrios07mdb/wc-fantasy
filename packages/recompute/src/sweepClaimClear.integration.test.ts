@@ -109,8 +109,8 @@ describe.skipIf(!TEST_URL)("recompute sweep — claim-then-clear (real Postgres)
           if (!injected && matchId === MATCH && playerId === PLAYER) {
             injected = true;
             await db.ratingPlayerMatch.upsert({
-              where: { matchId_playerId_source: { matchId, playerId, source: "scrape" } },
-              create: { matchId, playerId, source: "scrape", rating: RATING, dirty: true },
+              where: { matchId_playerId_source: { matchId, playerId, source: "balldontlie" } },
+              create: { matchId, playerId, source: "balldontlie", rating: RATING, dirty: true },
               update: { rating: RATING, dirty: true },
             });
           }
@@ -121,7 +121,9 @@ describe.skipIf(!TEST_URL)("recompute sweep — claim-then-clear (real Postgres)
 
     const readState = async () => {
       const rating = await db.ratingPlayerMatch.findUnique({
-        where: { matchId_playerId_source: { matchId: MATCH, playerId: PLAYER, source: "scrape" } },
+        where: {
+          matchId_playerId_source: { matchId: MATCH, playerId: PLAYER, source: "balldontlie" },
+        },
       });
       const score = await db.scorePlayerMatch.findUnique({
         where: { matchId_playerId: { matchId: MATCH, playerId: PLAYER } },
