@@ -1720,11 +1720,36 @@ is Prompt 26). Merged to `main` @ `2145700`. The decisions of record:
   move-to-bottom reorder preserving the non-deferrable `manager_waiver_order_uq`, stamp `batchId` +
   terminal status, batch → `complete`). **Idempotent**: guarded `updateMany WHERE status='pending'` + a
   no-pending-bids run creates no batch row, so a re-run is a clean no-op.
-- **`faab_bid.priority` is DEFERRED to Prompt 26.** DECISIONS §D locks own-bid resolution by **amount**;
-  the design's reorderable pending-claim *priority* would be the **intra-manager tiebreak for equal-amount
-  own bids** (+ a UI apply-order hint) — but there is **no `priority` column** today, so the engine
-  resolves purely by amount and the route does **not** expose reorder. Honoring priority needs a migration
-  (Prompt 26). The submission/cancel/edit-amount paths are wired now.
+- **`faab_bid.priority` is LIVE — the Prompt-26 deferral lifted (§D amendment, 2026-07-08, `3b0cae7`).**
+  `priority Int?` is a manager-set, reorderable ordinal (1 = first) honored **strictly as the
+  intra-manager EQUAL-AMOUNT tiebreak** — applied only when two bids belong to the SAME manager at
+  the SAME top amount, whether racing the **same player** (a direct duplicate-target collision) or
+  **cross target** (the manager's own bids on different players competing for limited roster/budget
+  capacity once both would otherwise win). Amount remains the sole primary ordering and priority is
+  **never compared across managers** — the cross-player equal-amount ordering above (waiver order) is
+  unaffected and still resolves first; priority only breaks what's left after that.
+  - **Null sorts after any numbered priority.** Pre-column rows and settled bids carry `priority =
+    NULL` by design (never backfilled once a batch clears them) and fall through to the deterministic
+    key beneath (player id), keeping a priority-less batch byte-identical to the pre-amendment
+    resolver.
+  - **Backfill migration (`20260708120000_faab_bid_priority`) numbers existing PENDING rows 1..N per
+    manager by `created_at ASC`; settled rows stay `NULL`.** Contiguous per-manager, not global.
+  - **Reorder is a transaction-serialized resequence** (`PUT` route), not a swap of two values — every
+    row in the affected manager's pending set is renumbered inside one transaction so the permutation
+    stays contiguous 1..N even after a cancel leaves a gap. Deliberately **no unique index** on
+    `(manager_id, priority)` — the comparator uses relative order, not identity, so a rare
+    concurrent-submit duplicate just degrades to the deterministic player-id fallback rather than
+    erroring.
+  - **A kicked-off target does not block reordering.** The claim on it still occupies its priority slot
+    (voided at resolution via the existing acquisition-cutoff check) but a manager can freely resequence
+    around it before the batch fires.
+  - UI: `/waivers` shows ▲▼ ordinals only on a manager's own pending claims; footer copy reads "higher
+    bids process first; your equal bids follow your order." Live-fire validated 2026-07-09 (QF period,
+    batch `a467ef43…`) — priority persisted and read back exactly as set; the batch's own outcomes
+    happened to be decided by amount alone (no equal-amount race landed on the validating manager's
+    two headline claims), so the tiebreak PATH is proven end-to-end (UI → persisted priority →
+    resolver read) while the tiebreak MATH is proven by `claimPriority.integration.test.ts` (5/5,
+    controlled equal-amount fixtures).
 - **Out of scope (flagged, not built):** the free-agency **FA `Acquire` route does not exist** (sibling
   concern); the **playoff waiver carry-forward** belongs to the group→playoff transition prompt
   (budgets carry forward — never reset; this engine only READS current budget/order). `faab_bid` **RLS is already present** (Theme F invariants
@@ -3962,3 +3987,7 @@ CORRECTION + CLOSURE (2026-07-07, corrective run):
 **Cron Sentry coverage verified, not assumed (correcting an initial "3 crons" framing).** `render.yaml` declares exactly **two** cron services — `wc-fantasy-period-close` and `wc-fantasy-group-standings` — not three; there is no third cron in this repo. Neither cron job file (`periodClose.ts`, `ingestGroupStandings.ts`) imports `apps/worker/src/sentry.ts` directly, but both import `log` from `logger.ts`, and `logger.ts` imports `sentryCapture` from `./sentry.ts` — so `Sentry.init()`, a module-top-level statement gated on `if (config.sentryDsn)`, fires as an import-graph side effect the first time either cron process loads `logger.ts`. Combined with both crons declaring `SENTRY_DSN` sync:false in `render.yaml`, error tracking is complete across all four declared services (web, worker, both crons) once the operator sets the DSN — there is no cron-specific residual to track.
 
 **Operator debt, explicit (Sergio, Render dashboard — not resolvable in code).** `SENTRY_DSN` unset on all four services; `WORKER_TICK_HEARTBEAT_URL` → provision a new Healthchecks.io check (~60s expected period, 3–5 min grace — tighter than `PERIOD_CLOSE_HEARTBEAT_URL`'s ~hourly/~15min because the tick cadence is much faster); external HTTP monitor on `GET /api/db-check` (F-A09/F-A16 residual, carried from the T15-5 close-out where it was flagged "sole remaining"); F-A07-pin `connection_limit` (same dashboard session as the others — unrelated finding, bundled for operator convenience only). None of these block the code from being live; Sentry/heartbeat/readiness-monitoring are simply dark until configured. Related: [[hard1-observability-fix]], [[period-status-cron-fa-window]] (the A-lite precedent this pattern extends), [[t15-5-error-loading-boundaries]] (where F-A07-pin was first flagged as the sole INV-4 residual).
+
+**PROCESS — a device gate is valid only with derived proof the gated commit is the deployed tip; services-green is never that proof (2026-07-08, FAAB-priority merge).** The prior FAAB-priority thread's device gate ran against prod pre-merge and diagnosed a false alarm ("code absent from tip") purely because "services show green" was mistaken for "the gated commit is live." Render dashboard green reflects the LAST successful deploy of whatever was pushed — it says nothing about whether the commit under test is that deploy. The corrected procedure (used for this merge's Step 3): read the deployed release SHA directly off each service's deploy card (or release/migration logs) and diff it against the pushed tip before treating any device-side check as meaningful. No exceptions for "it's probably still building" — confirm the SHA, then gate.
+
+**PROCESS — commissioner clock moves execute in the SQL editor via guarded `UPDATE … RETURNING`; agent threads hold zero prod-write capability (2026-07-08, FAAB-priority merge).** Moving `faab_batch.waiver_batch_at` (or any commissioner-clock mutation) is Sergio's action alone, run by hand in the Supabase SQL editor with a `RETURNING`/confirming `SELECT` pasted back into the thread as the derivation of record. Agent threads on this repo do not hold prod database credentials by design (confirmed empirically this thread — a `Bash` call to inspect env for Render/DB credentials was denied by the permission classifier) and must never attempt to acquire or route around that gap; the fallback for a missed clock window is always "tell Sergio," never "find another way to write it."

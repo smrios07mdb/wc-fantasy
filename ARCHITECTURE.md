@@ -554,7 +554,27 @@ not by hopeful application code:
 
 **FAAB / waivers (Theme D)**
 - `faab_bid` — manager_id, player_add_id, player_drop_id, amount, submitted_at, batch_id,
-  status (`pending`/`won`/`lost`/`voided_refunded`), note. **RLS-protected.**
+  status (`pending`/`won`/`lost`/`voided_refunded`), note, **`priority` (nullable Int, §D amendment
+  — migration `20260708120000_faab_bid_priority`)**. **RLS-protected.**
+  - **`priority`** is a manager-set, reorderable ordinal (1 = first) over a manager's OWN pending
+    claims — the **intra-manager equal-amount tiebreak only** (same player, direct collision, OR
+    cross-target when the manager's own bids compete for limited roster/budget capacity). Amount
+    stays the sole primary ordering; priority is never compared across managers. Null (pre-column
+    rows, and every settled row — never backfilled after clearing) sorts after any numbered priority
+    and falls to the deterministic player-id key beneath, so a priority-less batch stays byte-identical
+    to the pre-amendment resolver. No unique index on `(manager_id, priority)` — the comparator uses
+    relative order, not identity, so a rare concurrent-submit duplicate just degrades to the
+    deterministic fallback.
+  - Two comparator seams in `packages/faab/src/resolve.ts`: the existing cross-manager waiver-order
+    tiebreak (`positionOf`, unchanged, resolves first) and the new `comparePriority` intra-manager
+    seam (applied only when both bids are the SAME manager), guarded so priority never leaks across
+    the manager boundary.
+  - `PUT /api/faab/bid/priority` (thin route → `packages/faab` store primitive) is a **transaction-
+    serialized full resequence** of a manager's pending set, not a two-row swap — every row in the
+    affected manager's pending queue is renumbered 1..N inside one transaction so the permutation
+    stays contiguous even after a cancel leaves a gap. A claim on an already-kicked-off target can
+    still be freely reordered (it's voided at resolution via the existing acquisition-cutoff check,
+    not blocked from reordering).
 - `faab_batch` — league_id, run_at, status. Processing writes bid outcomes + ownership changes
   atomically, highest-bid-first player-by-player, applying the move-to-bottom tiebreak only when
   used, voiding+refunding bids on already-kicked-off players. **Now fired once per scoring period**
