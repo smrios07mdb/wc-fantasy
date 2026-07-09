@@ -56,6 +56,7 @@ function view(players: PlPlayer[], over: Partial<PlayersView> = {}): PlayersView
     viewerManagerId: ME,
     players,
     windowPhase: over.windowPhase ?? "free-agency",
+    batchAtIso: over.batchAtIso ?? null,
     windowLabel: over.windowLabel ?? "R16",
     timezone: "UTC",
     nowIso: "2026-06-11T17:30:00.000Z",

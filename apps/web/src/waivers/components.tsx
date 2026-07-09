@@ -19,7 +19,7 @@ import type {
   WvResultGroup,
   WvTeamBudget,
 } from "./types";
-import { groupResultsByPlayer, isPlayerCutoffPassed } from "./waiversLogic";
+import { effectiveCutoff, groupResultsByPlayer } from "./waiversLogic";
 
 // ── icons (ported 1:1 from the design glyphs) ──────────────────────────────────
 function Sealed() {
@@ -182,17 +182,42 @@ function fmtCountdown(ms: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** Acquisition-cutoff status for a player: countdown to his kickoff, or "cutoff passed". */
-export function CutoffTag({ player, now }: { player: WvPlayer; now: Date }) {
-  if (player.kickoffAt === null) return null;
-  if (isPlayerCutoffPassed(player, now)) {
+/**
+ * The player's ACTIONABLE acquisition cutoff (W2-06 / spec v6): a countdown to the GOVERNING bound — the
+ * EARLIER of the period's waiver batch fire and his kickoff-void boundary — NOT the bare kickoff. The
+ * label names WHICH bound governs, and that text IS the non-color signal (the is-urgent / is-closed
+ * classes only echo the same state):
+ *   • "to batch"          — the batch fires first; bidding closes then.
+ *   • "voids at kickoff"  — his match kicks off before the batch, so a bid voids + refunds (mirrors the
+ *                           composer's "Voided + refunded if his match kicks off before the batch").
+ *   • "to kickoff"        — no batch scheduled (free-agency / locked); his kickoff is the plain bound.
+ * `batchAt` is the current period's `effectiveBatchAt`, reused from the "Waivers process at" line (null
+ * outside the sealed-bid phase → the kickoff is the sole bound).
+ */
+export function CutoffTag({
+  player,
+  now,
+  batchAt = null,
+}: {
+  player: WvPlayer;
+  now: Date;
+  /** The current period's effective waiver batch instant; null in free-agency / locked / no window. */
+  batchAt?: Date | null;
+}) {
+  const eff = effectiveCutoff({ kickoffAt: player.kickoffAt, batchAt, now });
+  if (eff === null) return null;
+  if (eff.passed) {
     return <span className="wv-cutoff is-closed">cutoff passed</span>;
   }
-  const ms = new Date(player.kickoffAt).getTime() - now.getTime();
+  const ms = eff.at.getTime() - now.getTime();
   const urgent = ms <= 18 * 60000;
-  return (
-    <span className={"wv-cutoff" + (urgent ? " is-urgent" : "")}>{fmtCountdown(ms)} to cutoff</span>
-  );
+  const label =
+    eff.bound === "batch"
+      ? `${fmtCountdown(ms)} to batch`
+      : eff.bound === "kickoff-void"
+        ? `voids at kickoff · ${fmtCountdown(ms)}`
+        : `${fmtCountdown(ms)} to kickoff`;
+  return <span className={"wv-cutoff" + (urgent ? " is-urgent" : "")}>{label}</span>;
 }
 
 // ── free-agent picker row ────────────────────────────────────────────────────────
@@ -443,6 +468,7 @@ export function ClaimRow({
   claim,
   ordinal,
   now,
+  batchAt = null,
   voided,
   onEdit,
   onCancel,
@@ -457,6 +483,9 @@ export function ClaimRow({
    *  priority ASC (§D amendment). One list = one batch group (all pending claims clear together). */
   ordinal: number;
   now: Date;
+  /** The current period's effective batch instant — drives the add target's actionable `CutoffTag`
+   *  (a claim whose add kicks off before the batch reads "voids at kickoff"). Null outside sealed-bid. */
+  batchAt?: Date | null;
   voided: boolean;
   onEdit: () => void;
   onCancel: () => void;
@@ -500,7 +529,7 @@ export function ClaimRow({
           <NationFlag nation={claim.add.nation} />
           <b className="wv-name">{claim.add.shortName}</b>
           <Pos p={claim.add.position} />
-          <CutoffTag player={claim.add} now={now} />
+          <CutoffTag player={claim.add} now={now} batchAt={batchAt} />
         </div>
         {claim.drop && (
           <div className="wv-claim-line is-drop">

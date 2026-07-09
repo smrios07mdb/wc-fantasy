@@ -89,6 +89,13 @@ export interface PlayersView {
    * `sealed-bid` / `free-agency`. null when no period is live (nothing open).
    */
   readonly windowPhase: AcquisitionWindow | null;
+  /**
+   * The current period's effective waiver batch instant (ISO) — the SAME `effectiveBatchAt` loadWaivers
+   * shows in its "Waivers process at" line, exposed ONLY in the sealed-bid phase (null otherwise, exactly
+   * like loadWaivers' `countdownToIso`). Threads to the shared player card's `CutoffTag` so /players
+   * shows the ACTIONABLE acquisition deadline — min(batch fire, kickoff) — not the bare kickoff.
+   */
+  readonly batchAtIso: string | null;
   /** The current period label (e.g. "R16") — the calm closed-window status line names it. */
   readonly windowLabel: string | null;
   /** IANA tz (league-local display of any time). */

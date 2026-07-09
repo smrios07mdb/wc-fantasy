@@ -23,7 +23,7 @@
  *     uses; never re-derived) — gates the bid trailer.
  */
 import { prisma } from "@app/db";
-import { acquisitionWindowState } from "@app/faab";
+import { acquisitionWindowState, DEFAULT_FAAB_BATCH_LEAD_MIN, effectiveBatchAt } from "@app/faab";
 // DISPLAY-ONLY reuse of the shared card classifier (@app/recompute, exported per T-CARD1) so the /players
 // Yellow-card column counts a booking with the SAME predicate the game-detail Events timeline + the
 // scoring engine use — one source of truth. Importing an EXISTING pure export is NOT an engine touch:
@@ -158,6 +158,9 @@ export async function loadPlayers(viewerManagerId: string): Promise<PlayersView 
         label: true,
         status: true,
         batchClearedAt: true,
+        // waiverBatchAt = the commissioner's batch-time override; feeds `effectiveBatchAt` (the SAME
+        // batch instant loadWaivers shows) so the shared card's cutoff reads "to batch" in sealed-bid.
+        waiverBatchAt: true,
         matches: { orderBy: { kickoffAt: "asc" }, take: 1, select: { kickoffAt: true } },
       },
       orderBy: [{ opensAt: "asc" }, { label: "asc" }],
@@ -262,10 +265,31 @@ export async function loadPlayers(viewerManagerId: string): Promise<PlayersView 
       )
     : null;
 
+  // The effective batch instant — the SAME `effectiveBatchAt` (override ?? firstKickoff − lead) loadWaivers
+  // anchors its "Waivers process at" line to, using the SAME env-lead resolution so the two surfaces can
+  // never drift. Exposed ONLY in the sealed-bid phase (mirrors loadWaivers' `countdownToIso`, which is null
+  // in free-agency / locked); the shared card then shows the actionable cutoff — min(batch, kickoff).
+  const leadMin = Number(process.env.FAAB_BATCH_LEAD_MIN);
+  const leadMs = (Number.isFinite(leadMin) ? leadMin : DEFAULT_FAAB_BATCH_LEAD_MIN) * 60_000;
+  const batchAtIso =
+    windowPhase === "sealed-bid" && currentPeriodRow
+      ? (effectiveBatchAt(
+          {
+            id: currentPeriodRow.id,
+            leagueId,
+            batchClearedAt: currentPeriodRow.batchClearedAt,
+            waiverBatchAt: currentPeriodRow.waiverBatchAt,
+            firstKickoffAt: currentPeriodRow.matches[0]?.kickoffAt ?? null,
+          },
+          leadMs,
+        )?.toISOString() ?? null)
+      : null;
+
   return {
     viewerManagerId,
     players,
     windowPhase,
+    batchAtIso,
     windowLabel: currentPeriodRow?.label ?? null,
     timezone: league?.timezone ?? "UTC",
     nowIso: now.toISOString(),

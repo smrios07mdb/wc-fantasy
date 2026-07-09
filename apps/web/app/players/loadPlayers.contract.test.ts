@@ -99,9 +99,22 @@ describe("loadPlayers — data-discipline contract", () => {
   });
 
   it("derives the FA-window phase from acquisitionWindowState (not re-derived)", () => {
-    expect(loader).toContain('import { acquisitionWindowState } from "@app/faab"');
+    expect(loader).toContain("acquisitionWindowState");
+    expect(loader).toContain('from "@app/faab"');
     expect(loader).toContain("acquisitionWindowState(");
     expect(loader).toContain("selectCurrentPeriod(periodRows");
+  });
+
+  it("CUTOFF-TAG: exposes the effective batch instant via effectiveBatchAt, sealed-bid ONLY (mirrors loadWaivers)", () => {
+    // Reuse the SAME shared `effectiveBatchAt` (override ?? firstKickoff − lead) loadWaivers uses — no new
+    // query shape (waiverBatchAt just joins the existing period select), and the lead resolves via the
+    // SAME env fallback so the two surfaces can never drift.
+    expect(loader).toContain("effectiveBatchAt");
+    expect(loader).toContain("DEFAULT_FAAB_BATCH_LEAD_MIN");
+    expect(loader).toContain("waiverBatchAt: true");
+    // Sealed-bid gate — batchAtIso is null in free-agency / locked (exactly loadWaivers' countdownToIso).
+    expect(loader).toContain('windowPhase === "sealed-bid"');
+    expect(loader).toContain("batchAtIso");
   });
 
   it("is READ-ONLY — no mutation or raw query of any kind", () => {

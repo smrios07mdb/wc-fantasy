@@ -26,6 +26,7 @@ import { useSheetChrome } from "@/components/useSheetChrome";
 export function FaPlayerCardSheet({
   player,
   now,
+  batchAt = null,
   watched = false,
   onClose,
   onToggleStar,
@@ -34,6 +35,10 @@ export function FaPlayerCardSheet({
   player: WvPlayer;
   /** The client's live clock — drives the Acquisition `CutoffTag` (no separate ticker). */
   now: Date;
+  /** The current period's effective waiver batch instant — threaded so the Acquisition `CutoffTag`
+   *  shows the ACTIONABLE deadline ("to batch" / "voids at kickoff"), not the bare kickoff. Both
+   *  /waivers and /players pass their loader's batch time; null → the kickoff is the sole bound. */
+  batchAt?: Date | null;
   /** Whether the viewer has starred this player (T2 — private watchlist). Ignored without
    *  `onToggleStar`. */
   watched?: boolean;
@@ -133,7 +138,7 @@ export function FaPlayerCardSheet({
                 {player.kickoffAt === null ? (
                   <span className="t-sm text-tertiary">No upcoming fixture</span>
                 ) : (
-                  <CutoffTag player={player} now={now} />
+                  <CutoffTag player={player} now={now} batchAt={batchAt} />
                 )}
               </div>
             </div>

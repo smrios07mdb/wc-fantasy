@@ -46,6 +46,7 @@ export function BidComposer({
   initialSelected = null,
   rosterCap,
   now,
+  batchAt = null,
   freeAgents,
   claims,
   roster,
@@ -70,6 +71,9 @@ export function BidComposer({
    *  an unnecessary 1-for-1. Group squads are always exactly full, so group behaviour is unchanged. */
   rosterCap: number;
   now: Date;
+  /** The current period's effective waiver batch instant — threaded to the edit view's `CutoffTag` so
+   *  the claimed player's actionable deadline reads "to batch" / "voids at kickoff" (null → kickoff). */
+  batchAt?: Date | null;
   freeAgents: readonly WvPlayer[];
   claims: readonly WvClaim[];
   roster: readonly WvPlayer[];
@@ -146,7 +150,7 @@ export function BidComposer({
                     <b className="wv-name">{editClaim.add.shortName}</b>
                     <div className="wv-comp-selmeta">
                       <Pos p={editClaim.add.position} />
-                      <CutoffTag player={editClaim.add} now={now} />
+                      <CutoffTag player={editClaim.add} now={now} batchAt={batchAt} />
                     </div>
                   </div>
                 </div>

@@ -24,6 +24,75 @@ export function isPlayerCutoffPassed(player: WvPlayer, now: Date): boolean {
   return new Date(player.kickoffAt).getTime() <= now.getTime();
 }
 
+/** Which bound governs a player's ACTIONABLE acquisition cutoff — drives the tag's label copy. */
+export type CutoffBound =
+  /** The period's waiver batch fires first → bidding closes at the batch ("to batch"). */
+  | "batch"
+  /** His match kicks off strictly before the batch → a bid voids + refunds ("voids at kickoff"). */
+  | "kickoff-void"
+  /** No batch scheduled (free-agency / locked / no window) → his kickoff is the plain bound. */
+  | "kickoff";
+
+/** The resolved actionable cutoff for a player: the governing instant, which bound it is, and whether
+ *  it has already passed. */
+export interface EffectiveCutoff {
+  /** The governing instant — the EARLIER of (period batch fire, player kickoff). */
+  readonly at: Date;
+  /** Which bound governs (the LABEL, a non-color signal, is keyed on this). */
+  readonly bound: CutoffBound;
+  /** True once the governing instant is at/behind `now` (→ the tag reads "cutoff passed"). */
+  readonly passed: boolean;
+}
+
+/**
+ * The ACTIONABLE acquisition cutoff for a player (W2-06 / spec v6): the displayed deadline is the EARLIER
+ * of the period's waiver batch fire and the player's kickoff-void boundary — NEVER the bare per-player
+ * kickoff. Both instants are already loaded upstream: `batchAt` is the current period's `effectiveBatchAt`
+ * (the SAME time the "Waivers process at" line shows — non-null only in the sealed-bid phase), and
+ * `kickoffAt` is the player's next still-acquirable fixture. PURE — the caller passes `now`.
+ *
+ * The four cases (mirrored by the unit suite):
+ *  • batch fires strictly BEFORE kickoff (or kickoff unknown)  → the BATCH governs — bidding closes then.
+ *  • kickoff strictly BEFORE the batch                         → the KICKOFF governs — a bid on him would
+ *    VOID + refund (matches the composer's "Voided + refunded if his match kicks off before the batch").
+ *  • no batch scheduled (FA / locked / no window)             → the KICKOFF governs as a plain bound.
+ *  • the governing instant is already at/behind `now`         → passed (the tag reads "cutoff passed").
+ *
+ * A kickoff EXACTLY equal to the batch is NOT "before the batch" → the batch governs (no void), aligning
+ * with the void rule's strict "before". Returns null when neither bound exists (no kickoff, no batch).
+ */
+export function effectiveCutoff(input: {
+  kickoffAt: string | null;
+  batchAt: Date | null;
+  now: Date;
+}): EffectiveCutoff | null {
+  const { kickoffAt, batchAt, now } = input;
+  const kickoff = kickoffAt !== null ? new Date(kickoffAt) : null;
+
+  if (kickoff === null && batchAt === null) return null;
+
+  let at: Date;
+  let bound: CutoffBound;
+  if (kickoff === null) {
+    // No fixture to void against — only the batch bounds the action.
+    at = batchAt!;
+    bound = "batch";
+  } else if (batchAt === null) {
+    // No batch scheduled (free-agency / locked / no window): his kickoff is the plain availability bound.
+    at = kickoff;
+    bound = "kickoff";
+  } else if (kickoff.getTime() < batchAt.getTime()) {
+    // His match kicks off strictly before the batch → a bid on him voids + refunds at the batch.
+    at = kickoff;
+    bound = "kickoff-void";
+  } else {
+    // The batch fires at/before his kickoff → it is the actionable deadline (bidding closes at the batch).
+    at = batchAt;
+    bound = "batch";
+  }
+  return { at, bound, passed: at.getTime() <= now.getTime() };
+}
+
 /** A pending claim is void (→ refund at the batch) once its ADD target's match has kicked off. */
 export function isClaimVoid(claim: WvClaim, now: Date): boolean {
   return isPlayerCutoffPassed(claim.add, now);

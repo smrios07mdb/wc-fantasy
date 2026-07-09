@@ -136,6 +136,16 @@ export function WaiversClient({
   const phase = view.batchWindow?.phase ?? null;
   const faMode = phase === "free-agency" || phase === "locked";
 
+  // The current period's effective waiver batch instant — REUSED from the "Waivers process at" line the
+  // BatchBar already renders (`batchWindow.countdownToIso`, stamped from `effectiveBatchAt`; NO new
+  // query). Non-null only in the sealed-bid phase; in free-agency / locked / no window it is null, so a
+  // player's kickoff becomes the sole bound. Feeds every `CutoffTag` so the shown acquisition deadline is
+  // the ACTIONABLE cutoff — min(batch fire, kickoff) — never the bare kickoff (W2-06 / spec v6).
+  const batchAt = useMemo(
+    () => (view.batchWindow?.countdownToIso ? new Date(view.batchWindow.countdownToIso) : null),
+    [view.batchWindow?.countdownToIso],
+  );
+
   // Live clock — seeded from the server time (no hydration mismatch), then ticked every 30s so a
   // claim's void+refund state appears the moment its add target kicks off.
   const [now, setNow] = useState(() => new Date(view.nowIso));
@@ -409,6 +419,7 @@ export function WaiversClient({
                 roster={view.roster}
                 lockedPlayerIds={view.lockedPlayerIds}
                 now={now}
+                batchAt={batchAt}
                 submitting={submitting}
                 errorMessage={faError}
                 onGrant={handleGrant}
@@ -460,6 +471,7 @@ export function WaiversClient({
                     claim={claim}
                     ordinal={index + 1}
                     now={now}
+                    batchAt={batchAt}
                     voided={isClaimVoid(claim, now)}
                     busy={busyBidId === claim.bidId}
                     onEdit={() => {
@@ -541,6 +553,7 @@ export function WaiversClient({
           initialSelected={composer.seededPlayer ?? null}
           rosterCap={view.rosterCap}
           now={now}
+          batchAt={batchAt}
           freeAgents={view.freeAgents}
           claims={view.claims}
           roster={view.roster}
@@ -562,6 +575,7 @@ export function WaiversClient({
         <FaPlayerCardSheet
           player={cardPlayer}
           now={now}
+          batchAt={batchAt}
           watched={watchedIds.has(cardPlayer.id)}
           onClose={() => setCardPlayer(null)}
           onToggleStar={handleToggleStar}

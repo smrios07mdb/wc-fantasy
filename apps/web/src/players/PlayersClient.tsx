@@ -70,6 +70,10 @@ export function PlayersClient({ view }: { view: PlayersView }) {
 
   const patch = (p: Partial<PlayersFilter>) => setFilter((f) => ({ ...f, ...p }));
   const windowOpen = isWindowOpen(view.windowPhase);
+  // The current period's effective batch instant (sealed-bid only; null otherwise) — threaded to the
+  // shared card's `CutoffTag` so /players shows the ACTIONABLE deadline (min(batch, kickoff)), matching
+  // /waivers. Parsed once from the server ISO; a null stays null (kickoff becomes the sole bound).
+  const batchAt = view.batchAtIso ? new Date(view.batchAtIso) : null;
 
   return (
     <div className="pl-app">
@@ -160,6 +164,7 @@ export function PlayersClient({ view }: { view: PlayersView }) {
         <FaPlayerCardSheet
           player={cardPlayer}
           now={now}
+          batchAt={batchAt}
           onClose={() => setCardPlayer(null)}
           footNote="View only · acquire from Waivers."
         />

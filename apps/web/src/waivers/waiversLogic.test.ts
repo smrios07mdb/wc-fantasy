@@ -7,6 +7,7 @@ import {
   composerMaxBid,
   computeBudget,
   droppableRoster,
+  effectiveCutoff,
   freeAgentNations,
   isClaimVoid,
   isPlayerCutoffPassed,
@@ -44,6 +45,70 @@ function claim(over: Partial<WvClaim> & { bidId: string }): WvClaim {
     ...over,
   };
 }
+
+describe("effectiveCutoff — the ACTIONABLE acquisition deadline (W2-06 / CUTOFF-TAG)", () => {
+  // NOW = 12:00. Batch at 14:00 (+2h). Kickoffs chosen either side of the batch.
+  const BATCH = new Date("2026-06-08T14:00:00.000Z");
+  const KO_BEFORE_BATCH = "2026-06-08T13:00:00.000Z"; // +1h — kicks off BEFORE the batch
+  const KO_AFTER_BATCH = "2026-06-08T15:00:00.000Z"; // +3h — kicks off AFTER the batch
+
+  it("batch-before-kickoff → the BATCH governs (bidding closes at the batch)", () => {
+    const eff = effectiveCutoff({ kickoffAt: KO_AFTER_BATCH, batchAt: BATCH, now: NOW });
+    expect(eff).not.toBeNull();
+    expect(eff!.bound).toBe("batch");
+    expect(eff!.at.toISOString()).toBe(BATCH.toISOString());
+    expect(eff!.passed).toBe(false);
+  });
+
+  it("kickoff-before-batch → the KICKOFF governs, flagged as a void (a bid would refund)", () => {
+    const eff = effectiveCutoff({ kickoffAt: KO_BEFORE_BATCH, batchAt: BATCH, now: NOW });
+    expect(eff!.bound).toBe("kickoff-void");
+    expect(eff!.at.toISOString()).toBe(new Date(KO_BEFORE_BATCH).toISOString());
+    expect(eff!.passed).toBe(false);
+  });
+
+  it("kickoff EXACTLY equal to the batch is NOT 'before' → the batch governs (no void)", () => {
+    const eff = effectiveCutoff({
+      kickoffAt: BATCH.toISOString(),
+      batchAt: BATCH,
+      now: NOW,
+    });
+    expect(eff!.bound).toBe("batch");
+  });
+
+  it("no-batch-scheduled (FA / locked / no window) → the KICKOFF governs as a plain bound", () => {
+    const eff = effectiveCutoff({ kickoffAt: KO_AFTER_BATCH, batchAt: null, now: NOW });
+    expect(eff!.bound).toBe("kickoff");
+    expect(eff!.at.toISOString()).toBe(new Date(KO_AFTER_BATCH).toISOString());
+    expect(eff!.passed).toBe(false);
+  });
+
+  it("already-kicked-off → passed (regardless of a future batch)", () => {
+    const eff = effectiveCutoff({ kickoffAt: PAST, batchAt: BATCH, now: NOW });
+    expect(eff!.bound).toBe("kickoff-void"); // PAST < BATCH → the kickoff is the governing bound
+    expect(eff!.passed).toBe(true);
+  });
+
+  it("no fixture + no batch → null (nothing to bound)", () => {
+    expect(effectiveCutoff({ kickoffAt: null, batchAt: null, now: NOW })).toBeNull();
+  });
+
+  it("no fixture but a batch is scheduled → the batch is the sole bound", () => {
+    const eff = effectiveCutoff({ kickoffAt: null, batchAt: BATCH, now: NOW });
+    expect(eff!.bound).toBe("batch");
+    expect(eff!.at.toISOString()).toBe(BATCH.toISOString());
+  });
+
+  it("a passed BATCH bound also reads passed (defensive — sealed-bid keeps batch in the future)", () => {
+    const eff = effectiveCutoff({
+      kickoffAt: KO_AFTER_BATCH,
+      batchAt: new Date(PAST),
+      now: NOW,
+    });
+    expect(eff!.bound).toBe("batch");
+    expect(eff!.passed).toBe(true);
+  });
+});
 
 describe("cutoff + void derivation (the live void+refund state)", () => {
   it("a future kickoff is open; a past kickoff has passed the cutoff", () => {

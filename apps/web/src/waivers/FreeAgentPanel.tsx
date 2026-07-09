@@ -46,6 +46,7 @@ export function FreeAgentPanel({
   roster,
   lockedPlayerIds,
   now,
+  batchAt = null,
   submitting,
   errorMessage,
   onGrant,
@@ -68,6 +69,9 @@ export function FreeAgentPanel({
   roster: readonly WvPlayer[];
   lockedPlayerIds: readonly string[];
   now: Date;
+  /** The current period's effective batch instant. In the FA phase there is no sealed batch, so the
+   *  parent passes null and each player's kickoff is the sole bound ("to kickoff") — kept for parity. */
+  batchAt?: Date | null;
   submitting: boolean;
   errorMessage: string | null;
   onGrant: (payload: FaGrantPayload) => void;
@@ -185,7 +189,7 @@ export function FreeAgentPanel({
                     <b className="wv-name">{selected.shortName}</b>
                     <div className="wv-comp-selmeta">
                       <Pos p={selected.position} />
-                      <CutoffTag player={selected} now={now} />
+                      <CutoffTag player={selected} now={now} batchAt={batchAt} />
                     </div>
                   </div>
                 </div>
